@@ -16,10 +16,16 @@
 """ Tokenization classes for BERTweet """
 
 
+import html
+import json
 import logging
+import os
+import re
 from typing import List, Optional
+
+import regex
+
 from .tokenization_utils import PreTrainedTokenizer
-import os, re, regex, html, json
 
 
 logger = logging.getLogger(__name__)

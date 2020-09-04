@@ -279,6 +279,15 @@ if is_torch_available():
         BertPreTrainedModel,
         load_tf_weights_in_bert,
     )
+    from .modeling_bertweet import (
+        BERTWEET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BertweetForMaskedLM,
+        BertweetForMultipleChoice,
+        BertweetForQuestionAnswering,
+        BertweetForSequenceClassification,
+        BertweetForTokenClassification,
+        BertweetModel,
+    )
     from .modeling_camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -384,6 +393,15 @@ if is_torch_available():
         load_tf_weights_in_openai_gpt,
     )
     from .modeling_pegasus import PegasusForConditionalGeneration
+    from .modeling_phobert import (
+        PHOBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        PhobertForMaskedLM,
+        PhobertForMultipleChoice,
+        PhobertForQuestionAnswering,
+        PhobertForSequenceClassification,
+        PhobertForTokenClassification,
+        PhobertModel,
+    )
     from .modeling_reformer import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerAttention,
@@ -404,46 +422,6 @@ if is_torch_available():
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
         RobertaModel,
-    )
-    from .modeling_distilbert import (
-        DistilBertPreTrainedModel,
-        DistilBertForMaskedLM,
-        DistilBertModel,
-        DistilBertForMultipleChoice,
-        DistilBertForSequenceClassification,
-        DistilBertForQuestionAnswering,
-        DistilBertForTokenClassification,
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_bertweet import (
-        BertweetForMaskedLM,
-        BertweetModel,
-        BertweetForSequenceClassification,
-        BertweetForMultipleChoice,
-        BertweetForTokenClassification,
-        BertweetForQuestionAnswering,
-        BERTWEET_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_phobert import (
-        PhobertForMaskedLM,
-        PhobertModel,
-        PhobertForSequenceClassification,
-        PhobertForMultipleChoice,
-        PhobertForTokenClassification,
-        PhobertForQuestionAnswering,
-        PHOBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_camembert import (
-        CamembertForMaskedLM,
-        CamembertModel,
-        CamembertForSequenceClassification,
-        CamembertForMultipleChoice,
-        CamembertForTokenClassification,
-        CamembertForQuestionAnswering,
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -570,11 +548,11 @@ if is_tf_available():
     from .modeling_tf_bertweet import (
         TF_BERTWEET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertweetForMaskedLM,
-        TFBertweetModel,
-        TFBertweetForSequenceClassification,
         TFBertweetForMultipleChoice,
-        TFBertweetForTokenClassification,
         TFBertweetForQuestionAnswering,
+        TFBertweetForSequenceClassification,
+        TFBertweetForTokenClassification,
+        TFBertweetModel,
     )
     from .modeling_tf_camembert import (
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -669,11 +647,11 @@ if is_tf_available():
     from .modeling_tf_phobert import (
         TF_PHOBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFPhobertForMaskedLM,
-        TFPhobertModel,
-        TFPhobertForSequenceClassification,
         TFPhobertForMultipleChoice,
-        TFPhobertForTokenClassification,
         TFPhobertForQuestionAnswering,
+        TFPhobertForSequenceClassification,
+        TFPhobertForTokenClassification,
+        TFPhobertModel,
     )
     from .modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

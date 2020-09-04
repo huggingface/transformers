@@ -16,9 +16,14 @@
 """ Tokenization classes for PhoBERT """
 
 
-import logging, os, json, re
+import json
+import logging
+import os
+import re
 from typing import List, Optional
+
 from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 

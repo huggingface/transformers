@@ -18,7 +18,6 @@
 import logging
 
 from .configuration_phobert import PhobertConfig
-
 from .file_utils import add_start_docstrings
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
