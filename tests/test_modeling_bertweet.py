@@ -244,13 +244,18 @@ class BertweetModelTest(ModelTesterMixin, unittest.TestCase):
             multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
             multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
             multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            result = model(
+            loss, logits = model(
                 multiple_choice_inputs_ids,
                 attention_mask=multiple_choice_input_mask,
                 token_type_ids=multiple_choice_token_type_ids,
                 labels=choice_labels,
             )
-            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
