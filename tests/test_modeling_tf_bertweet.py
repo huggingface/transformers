@@ -226,7 +226,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
             result = {
                 "logits": logits.numpy(),
             }
-            self.parent.assertEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.parent.assertEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
