@@ -74,7 +74,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
             The token used for padding, for example when batching sequences of different lengths.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
+        additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
     """
 

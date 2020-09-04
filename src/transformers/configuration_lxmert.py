@@ -85,25 +85,25 @@ class LxmertConfig(PretrainedConfig):
         num_attr_labels (:obj:`int`, optional, defaults to 400):
             This represents the total number of semantically unique attributes that lxmert will be able to classify a pooled-object feature
             as possessing.
-        task_matched (:obj:`bool`, optional, defaults to True):
+        task_matched (:obj:`bool`, optional, defaults to :obj:`True`):
             This task is used for sentence-image matching. If the sentence correctly describes the image the label will be 1.
             If the sentence does not correctly describe the image, the label will be 0.
-        task_mask_lm (:obj:`bool`, optional, defaults to True):
+        task_mask_lm (:obj:`bool`, optional, defaults to :obj:`True`):
             This task is the defacto masked langauge modeling used in pretraining models such as BERT.
-        task_obj_predict (:obj:`bool`, optional, defaults to True):
+        task_obj_predict (:obj:`bool`, optional, defaults to :obj:`True`):
             This task is set to true if the user would like to perform one of the following loss objectives:
             object predicition, atrribute predicition, feature regression
-        task_qa (:obj:`bool`, optional, defaults to True):
+        task_qa (:obj:`bool`, optional, defaults to :obj:`True`):
             This task specifies whether or not Lxmert will calculate the question-asnwering loss objective
-        visual_obj_loss (:obj:`bool`, optional, defaults to True):
+        visual_obj_loss (:obj:`bool`, optional, defaults to :obj:`True`):
             This task specifies whether or not Lxmert will calculate the object-prediction loss objective
-        visual_attr_loss (:obj:`bool`, optional, defaults to True):
+        visual_attr_loss (:obj:`bool`, optional, defaults to :obj:`True`):
             This task specifies whether or not Lxmert will calculate the attribute-prediction loss objective
-        visual_feat_loss (:obj:`bool`, optional, defaults to True):
+        visual_feat_loss (:obj:`bool`, optional, defaults to :obj:`True`):
             This task specifies whether or not Lxmert will calculate the feature-regression loss objective
-        output_attentions (:obj:`bool`, optional, defaults to False):
+        output_attentions (:obj:`bool`, optional, defaults to :obj:`False`):
                 if True, the vision, langauge, and cross-modality layers will be returned
-        output_hidden_states (:obj:`bool`, optional, defaults to False):
+        output_hidden_states (:obj:`bool`, optional, defaults to :obj:`False`):
                 if True, final cross-modality hidden states for language and vision features will be returned
 
     """
