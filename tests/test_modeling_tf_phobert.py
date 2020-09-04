@@ -32,9 +32,10 @@ class TFPhobertModelIntegrationTest(unittest.TestCase):
     def test_output_embeds_base_model(self):
         model = TFPhobertModel.from_pretrained("vinai/phobert-base")
 
-        input_ids = tf.convert_to_tensor([[   0,  218,    8,  649,  212,  956, 2413,    5,    2]],
+        input_ids = tf.convert_to_tensor(
+            [[0, 218, 8, 649, 212, 956, 2413, 5, 2]],
             dtype=tf.int32,
-        ) # Tôi là sinh_viên trường đại_học Công_nghệ .
+        )  # Tôi là sinh_viên trường đại_học Công_nghệ .
 
         output = model(input_ids)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 9, 768))

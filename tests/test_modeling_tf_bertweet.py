@@ -32,11 +32,10 @@ class TFBertweetModelIntegrationTest(unittest.TestCase):
     def test_output_embeds_base_model(self):
         model = TFBertweetModel.from_pretrained("vinai/bertweet-base")
 
-        input_ids = tf.convert_to_tensor([[    0,  4040,    90,   160,   255, 35006, 26940,  2612,    15,  1456,
-            7,   429,  6814,   499, 12952,    10,   156,     5,     3,    22,
-            2]],
+        input_ids = tf.convert_to_tensor(
+            [[0, 4040, 90, 160, 255, 35006, 26940, 2612, 15, 1456, 7, 429, 6814, 499, 12952, 10, 156, 5, 3, 22, 2]],
             dtype=tf.int32,
-        ) # SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:
+        )  # SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:
 
         output = model(input_ids)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 21, 768))
