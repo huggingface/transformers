@@ -24,7 +24,18 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-_model_names = ["small", "small-base", "intermediate", "intermediate-base", "medium", "medium-base", "large", "large-base", "xlarge", "xlarge-base"]
+_model_names = [
+    "small",
+    "small-base",
+    "intermediate",
+    "intermediate-base",
+    "medium",
+    "medium-base",
+    "large",
+    "large-base",
+    "xlarge",
+    "xlarge-base",
+]
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {

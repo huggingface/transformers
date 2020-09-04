@@ -789,12 +789,13 @@ class FunnelClassificationHead(nn.Module):
         self.linear_hidden = nn.Linear(config.d_model, config.d_model)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.linear_out = nn.Linear(config.d_model, n_labels)
-    
+
     def forward(self, hidden):
         hidden = self.linear_hidden(hidden)
         hidden = F.tanh(hidden)
         hidden = self.dropout(hidden)
         return self.linear_out(hidden)
+
 
 @dataclass
 class FunnelForPreTrainingOutput(ModelOutput):
