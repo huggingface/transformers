@@ -335,8 +335,9 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "model.encoder_embed_tokens.weight",
         "model.decoder_embed_tokens.weight",
     ]
+    # XXX: this experiment isn't working - needs more investigation
     # let's save a lot of space, by not saving unneeded keys - lots of them!
-    ignore_keys.extend(get_authorized_missing_keys())
+    # ignore_keys.extend(get_authorized_missing_keys())
     for k in ignore_keys:
         model_state_dict.pop(k, None)
 
