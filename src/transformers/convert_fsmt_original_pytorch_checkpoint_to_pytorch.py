@@ -79,7 +79,7 @@ from fairseq.data.dictionary import Dictionary
 
 from transformers import WEIGHTS_NAME
 from transformers.configuration_fsmt import FSMTConfig
-from transformers.modeling_fsmt import FSMTForConditionalGeneration, get_authorized_missing_keys
+from transformers.modeling_fsmt import FSMTForConditionalGeneration  # , get_authorized_missing_keys
 from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
 
 

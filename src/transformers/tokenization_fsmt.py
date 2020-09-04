@@ -79,11 +79,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 # XXX: temp workaround to be able to run local models with run_eval.py, etc.
-LOCALIZE=1
+LOCALIZE = 1
 if LOCALIZE:
-    old, new  = ("stas/", "/code/huggingface/transformers-fair-wmt/data/")
+    old, new = ("stas/", "/code/huggingface/transformers-fair-wmt/data/")
 
-    def localize(buf): return buf.replace(old, new)
+    def localize(buf):
+        return buf.replace(old, new)
 
     for d in [PRETRAINED_INIT_CONFIGURATION, PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES]:
         for k, v in d.copy().items():
@@ -93,6 +94,7 @@ if LOCALIZE:
         for tk, tv in d.items():
             for k, v in tv.copy().items():
                 tv[localize(k)] = v
+
 
 def get_pairs(word):
     """
