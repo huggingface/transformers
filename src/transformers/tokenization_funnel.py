@@ -24,46 +24,16 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
+_model_names = ["small", "small-base", "intermediate", "intermediate-base", "medium", "medium-base", "large", "large-base", "xlarge", "xlarge-base"]
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "funnel-small": "https://s3.amazonaws.com/models.huggingface.co/bert/huggingface/funnel-small/vocab.txt",
-        "funnel-small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/huggingface/funnel-small-base/vocab.txt",
-        # "funnel-medium": "",
-        # "funnel-medium-base": "",
-        # "funnel": "",
-        # "funnel-base": "",
-        # "funnel-large": "",
-        # "funnel-large-base": "",
-        # "funnel-xlarge": "",
-        # "funnel-xlarge-base": "",
+        f"funnel-transformer/{name}": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/{name}/vocab.txt"
+        for name in _model_names
     }
 }
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "funnel-small": 512,
-    "funnel-small-base": 512,
-    # "funnel-medium": 512,
-    # "funnel-medium-base": 512,
-    # "funnel": 512,
-    # "funnel-base": 512,
-    # "funnel-large": 512,
-    # "funnel-large-base": 512,
-    # "funnel-large": 512,
-    # "funnel-large-base": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "funnel-small": {"do_lower_case": True},
-    "funnel-small-base": {"do_lower_case": True},
-    # "funnel-medium": {"do_lower_case": True},
-    # "funnel-medium-base": {"do_lower_case": True},
-    # "funnel": {"do_lower_case": True},
-    # "funnel-base": {"do_lower_case": True},
-    # "funnel-large": {"do_lower_case": True},
-    # "funnel-large-base": {"do_lower_case": True},
-    # "funnel-xlarge": {"do_lower_case": True},
-    # "funnel-xlarge-base": {"do_lower_case": True},
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
+PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case": True} for name in _model_names}
 
 
 class FunnelTokenizer(BertTokenizer):

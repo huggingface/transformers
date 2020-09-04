@@ -21,16 +21,16 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "funnel-small": "https://s3.amazonaws.com/models.huggingface.co/bert/huggingface/funnel-small/config.json",
-    "funnel-small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/huggingface/funnel-small-base/config.json",
-    # "funnel-medium": "",
-    # "funnel-medium-base": "",
-    # "funnel": "",
-    # "funnel-base": "",
-    # "funnel-large": "",
-    # "funnel-large-base": "",
-    # "funnel-xlarge": "",
-    # "funnel-xlarge-base": "",
+    "funnel-transformer/small": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small/config.json",
+    "funnel-transformer/small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small-base/config.json",
+    "funnel-transformer/medium": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium/config.json",
+    "funnel-transformer/medium-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium-base/config.json",
+    "funnel-transformer/intermediate": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediare/config.json",
+    "funnel-transformer/intermediate-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate-base/config.json",
+    "funnel-transformer/large": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large/config.json",
+    "funnel-transformer/large-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/config.json",
+    "funnel-transformer/xlarge": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge/config.json",
+    "funnel-transformer/xlarge-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge-base/config.json",
 }
 
 
@@ -39,8 +39,7 @@ class FunnelConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.FunnelModel`.
     It is used to instantiate an Funnel Transformer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Funnel Transformer `funnel-small <https://s3.amazonaws.com/models.huggingface.co/bert/huggingface/funnel-small>`__
-    architecture.
+    the Funnel Transformer `funnel-transformer/small <https://huggingface.co/funnel-transformer/small>`__ architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
