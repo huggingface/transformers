@@ -171,7 +171,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             if pretrained_vocab_file is not None:
                 # Hack because, honestly this tokenizer was not made to be used
                 # in a library like ours, at all.
-                vocab_dict = torch.load(pretrained_vocab_file)
+                with open(pretrained_vocab_file, "rb") as fp:
+                    vocab_dict = pickle.load(fp)
                 for key, value in vocab_dict.items():
                     if key not in self.__dict__:
                         self.__dict__[key] = value
