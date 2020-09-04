@@ -78,6 +78,21 @@ PRETRAINED_INIT_CONFIGURATION = {
     },
 }
 
+# XXX: temp workaround to be able to run local models with run_eval.py, etc.
+LOCALIZE=1
+if LOCALIZE:
+    old, new  = ("stas/", "/code/huggingface/transformers-fair-wmt/data/")
+
+    def localize(buf): return buf.replace(old, new)
+
+    for d in [PRETRAINED_INIT_CONFIGURATION, PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES]:
+        for k, v in d.copy().items():
+            d[localize(k)] = v
+
+    for d in [PRETRAINED_VOCAB_FILES_MAP]:
+        for tk, tv in d.items():
+            for k, v in tv.copy().items():
+                tv[localize(k)] = v
 
 def get_pairs(word):
     """
@@ -268,9 +283,10 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self.cache_moses_tokenizer = dict()
         self.cache_moses_detokenizer = dict()
 
-        if len(langs) != 2:
+        if langs and len(langs) == 2:
+            self.src_lang, self.tgt_lang = langs
+        else:
             raise ValueError(f"langs arg needs to be a list of 2 langs, e.g. ['en', 'ru'], but got f{langs}")
-        self.src_lang, self.tgt_lang = langs[0], langs[1]
 
         with open(src_vocab_file, encoding="utf-8") as src_vocab_handle:
             self.encoder = json.load(src_vocab_handle)
