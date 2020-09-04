@@ -940,13 +940,13 @@ LXMERT_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
@@ -955,7 +955,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
         visual_feats: (:obj:`tf.Tensor` of shape :obj:՝(batch_size, num_visual_features, visual_feat_dim)՝):
             This input represents visual features. They ROI pooled object features from bounding boxes using a faster-RCNN model)
             These are currently not provided by the transformers library
-        visual_attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        visual_attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -1246,7 +1246,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        masked_lm_labels (``tf.Tensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        masked_lm_labels (``tf.Tensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -1255,7 +1255,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             ``(batch_size, num_features)`` and ``(batch_size, num_features, visual_feature_dim)``
             for each the label id and the label score respectively
-        matched_label (``tf.Tensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+        matched_label (``tf.Tensor`` of shape ``(batch_size,)``, `optional`):
             Labels for computing the whether or not the text input matches the image (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
             Indices should be in ``[0, 1]``.
             ``0`` indicates that the sentence does not match the image
