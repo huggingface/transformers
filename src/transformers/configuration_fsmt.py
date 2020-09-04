@@ -123,6 +123,7 @@ class FSMTConfig(PretrainedConfig):
     # update the defaults from config file
     def __init__(
         self,
+        langs=None,
         src_vocab_size=None,
         tgt_vocab_size=None,
         activation_function="relu",
@@ -176,6 +177,7 @@ class FSMTConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **common_kwargs,
         )
+        self.langs = langs
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
