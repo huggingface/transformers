@@ -39,16 +39,16 @@ _model_names = [
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        f"funnel-transformer/small": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small/vocab.txt",
-        f"funnel-transformer/small-base": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small-base/vocab.txt",
-        f"funnel-transformer/medium": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium/vocab.txt",
-        f"funnel-transformer/medium-base": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium-base/vocab.txt",
-        f"funnel-transformer/intemediate": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate/vocab.txt",
-        f"funnel-transformer/intermediate-base": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate-base/vocab.txt",
-        f"funnel-transformer/large": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large/vocab.txt",
-        f"funnel-transformer/large-base": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/vocab.txt",
-        f"funnel-transformer/xlarge": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge/vocab.txt",
-        f"funnel-transformer/xlarge-base": f"https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge-base/vocab.txt",
+        "funnel-transformer/small": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small/vocab.txt",
+        "funnel-transformer/small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small-base/vocab.txt",
+        "funnel-transformer/medium": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium/vocab.txt",
+        "funnel-transformer/medium-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium-base/vocab.txt",
+        "funnel-transformer/intemediate": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate/vocab.txt",
+        "funnel-transformer/intermediate-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate-base/vocab.txt",
+        "funnel-transformer/large": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large/vocab.txt",
+        "funnel-transformer/large-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/vocab.txt",
+        "funnel-transformer/xlarge": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge/vocab.txt",
+        "funnel-transformer/xlarge-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge-base/vocab.txt",
     }
 }
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
