@@ -51,10 +51,10 @@ PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoin
 
 # upload
 cd data
-transformers-cli upload fsmt-wmt19-ru-en
-transformers-cli upload fsmt-wmt19-en-ru
-transformers-cli upload fsmt-wmt19-de-en
-transformers-cli upload fsmt-wmt19-en-de
+yes Y | transformers-cli upload fsmt-wmt19-ru-en
+yes Y | transformers-cli upload fsmt-wmt19-en-ru
+yes Y | transformers-cli upload fsmt-wmt19-de-en
+yes Y | transformers-cli upload fsmt-wmt19-en-de
 cd -
 
 # force cache invalidation, which will now download the new models
