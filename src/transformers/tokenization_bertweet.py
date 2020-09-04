@@ -42,6 +42,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "vinai/bertweet-base": 128,
 }
 
+
 def get_pairs(word):
     """Return set of symbol pairs in a word.
 
@@ -55,6 +56,7 @@ def get_pairs(word):
 
     pairs = set(pairs)
     return pairs
+
 
 class BertweetTokenizer(PreTrainedTokenizer):
     """
@@ -136,9 +138,12 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
         try:
             from emoji import demojize
+
             self.demojizer = demojize
         except ImportError:
-            logger.warning("emoji is not installed, thus not converting emoticons or emojis into text. Please install emoji: pip3 install emoji")
+            logger.warning(
+                "emoji is not installed, thus not converting emoticons or emojis into text. Please install emoji: pip3 install emoji"
+            )
             self.demojizer = None
 
         self.encoder = {}
@@ -160,10 +165,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self.normalization = normalization
         self.tweetPreprocessor = TweetTokenizer()
 
-        self.special_puncts = {
-            "’": "'",
-            "…": "..."
-        }
+        self.special_puncts = {"’": "'", "…": "..."}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -300,9 +302,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
-        """ Tokenize a string.
-        """
-        if self.normalization: # Perform Tweet normalization before performing BPE
+        """Tokenize a string."""
+        if self.normalization:  # Perform Tweet normalization before performing BPE
             text = self.normalizeTweet(text)
 
         split_tokens = []
@@ -321,9 +322,27 @@ class BertweetTokenizer(PreTrainedTokenizer):
         tokens = self.tweetPreprocessor.tokenize(tweet)
         normTweet = " ".join([self.normalizeToken(token) for token in tokens])
 
-        normTweet = normTweet.replace("cannot ", "can not ").replace("n't ", " n't ").replace("n 't ", " n't ").replace("ca n't", "can't").replace("ai n't", "ain't")
-        normTweet = normTweet.replace("'m ", " 'm ").replace("'re ", " 're ").replace("'s ", " 's ").replace("'ll ", " 'll ").replace("'d ", " 'd ").replace("'ve ", " 've ")
-        normTweet = normTweet.replace(" p . m .", "  p.m.").replace(" p . m ", " p.m ").replace(" a . m .", " a.m.").replace(" a . m ", " a.m ")
+        normTweet = (
+            normTweet.replace("cannot ", "can not ")
+            .replace("n't ", " n't ")
+            .replace("n 't ", " n't ")
+            .replace("ca n't", "can't")
+            .replace("ai n't", "ain't")
+        )
+        normTweet = (
+            normTweet.replace("'m ", " 'm ")
+            .replace("'re ", " 're ")
+            .replace("'s ", " 's ")
+            .replace("'ll ", " 'll ")
+            .replace("'d ", " 'd ")
+            .replace("'ve ", " 've ")
+        )
+        normTweet = (
+            normTweet.replace(" p . m .", "  p.m.")
+            .replace(" p . m ", " p.m ")
+            .replace(" a . m .", " a.m.")
+            .replace(" a . m ", " a.m ")
+        )
 
         return " ".join(normTweet.split())
 
@@ -407,19 +426,18 @@ class BertweetTokenizer(PreTrainedTokenizer):
         """
         if isinstance(f, str):
             try:
-                with open(f, 'r', encoding='utf-8') as fd:
+                with open(f, "r", encoding="utf-8") as fd:
                     self.add_from_file(fd)
             except FileNotFoundError as fnfe:
                 raise fnfe
             except UnicodeError:
-                raise Exception("Incorrect encoding detected in {}, please "
-                                "rebuild the dataset".format(f))
+                raise Exception("Incorrect encoding detected in {}, please " "rebuild the dataset".format(f))
             return
 
         lines = f.readlines()
         for lineTmp in lines:
             line = lineTmp.strip()
-            idx = line.rfind(' ')
+            idx = line.rfind(" ")
             if idx == -1:
                 raise ValueError("Incorrect dictionary format, expected '<token> <cnt>'")
             word = line[:idx]
@@ -461,8 +479,8 @@ domains and tasks. The basic logic is this:
 
 ######################################################################
 #
-#import regex  # https://github.com/nltk/nltk/issues/2409
-#import html
+# import regex  # https://github.com/nltk/nltk/issues/2409
+# import html
 #
 ######################################################################
 # The following strings are components in the regular expression
@@ -722,9 +740,7 @@ class TweetTokenizer:
         words = WORD_RE.findall(safe_text)
         # Possibly alter the case, but avoid changing emoticons like :D into :d:
         if not self.preserve_case:
-            words = list(
-                map((lambda x: x if EMOTICON_RE.search(x) else x.lower()), words)
-            )
+            words = list(map((lambda x: x if EMOTICON_RE.search(x) else x.lower()), words))
         return words
 
 
@@ -762,10 +778,9 @@ def casual_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=Fa
     """
     Convenience function for wrapping the tokenizer.
     """
-    return TweetTokenizer(
-        preserve_case=preserve_case, reduce_len=reduce_len, strip_handles=strip_handles
-    ).tokenize(text)
+    return TweetTokenizer(preserve_case=preserve_case, reduce_len=reduce_len, strip_handles=strip_handles).tokenize(
+        text
+    )
 
 
 ###############################################################################
-

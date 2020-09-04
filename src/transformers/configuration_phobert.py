@@ -29,6 +29,7 @@ PHOBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "vinai/phobert-large": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-large/config.json",
 }
 
+
 class PhobertConfig(RobertaConfig):
     """
     This class overrides :class:`~transformers.RobertaConfig`. Please check the

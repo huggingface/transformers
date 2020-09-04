@@ -39,7 +39,13 @@ if is_torch_available():
 class BertweetModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (BertweetModel, BertweetForMaskedLM, BertweetForQuestionAnswering, BertweetForSequenceClassification, BertweetForTokenClassification)
+        (
+            BertweetModel,
+            BertweetForMaskedLM,
+            BertweetForQuestionAnswering,
+            BertweetForSequenceClassification,
+            BertweetForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )

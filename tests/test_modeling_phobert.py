@@ -39,7 +39,13 @@ if is_torch_available():
 class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (PhobertModel, PhobertForMaskedLM, PhobertForQuestionAnswering, PhobertForSequenceClassification, PhobertForTokenClassification)
+        (
+            PhobertModel,
+            PhobertForMaskedLM,
+            PhobertForQuestionAnswering,
+            PhobertForSequenceClassification,
+            PhobertForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )

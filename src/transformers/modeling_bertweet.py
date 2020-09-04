@@ -67,7 +67,8 @@ class BertweetModel(RobertaModel):
 
 
 @add_start_docstrings(
-    """BERTweet Model with a `language modeling` head on top. """, BERTWEET_START_DOCSTRING,
+    """BERTweet Model with a `language modeling` head on top. """,
+    BERTWEET_START_DOCSTRING,
 )
 class BertweetForMaskedLM(RobertaForMaskedLM):
     """

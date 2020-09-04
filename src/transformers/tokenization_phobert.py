@@ -16,7 +16,7 @@
 """ Tokenization classes for PhoBERT """
 
 
-import logging, os, json,re
+import logging, os, json, re
 from typing import List, Optional
 from .tokenization_utils import PreTrainedTokenizer
 
@@ -43,6 +43,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "vinai/phobert-large": 256,
 }
 
+
 def get_pairs(word):
     """Return set of symbol pairs in a word.
 
@@ -56,6 +57,7 @@ def get_pairs(word):
 
     pairs = set(pairs)
     return pairs
+
 
 class PhobertTokenizer(PreTrainedTokenizer):
     """
@@ -283,8 +285,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
-        """ Tokenize a string.
-        """
+        """Tokenize a string."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
@@ -354,19 +355,18 @@ class PhobertTokenizer(PreTrainedTokenizer):
         """
         if isinstance(f, str):
             try:
-                with open(f, 'r', encoding='utf-8') as fd:
+                with open(f, "r", encoding="utf-8") as fd:
                     self.add_from_file(fd)
             except FileNotFoundError as fnfe:
                 raise fnfe
             except UnicodeError:
-                raise Exception("Incorrect encoding detected in {}, please "
-                                "rebuild the dataset".format(f))
+                raise Exception("Incorrect encoding detected in {}, please " "rebuild the dataset".format(f))
             return
 
         lines = f.readlines()
         for lineTmp in lines:
             line = lineTmp.strip()
-            idx = line.rfind(' ')
+            idx = line.rfind(" ")
             if idx == -1:
                 raise ValueError("Incorrect dictionary format, expected '<token> <cnt>'")
             word = line[:idx]

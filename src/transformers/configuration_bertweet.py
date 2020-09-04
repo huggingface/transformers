@@ -28,6 +28,7 @@ BERTWEET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "vinai/bertweet-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/bertweet-base/config.json",
 }
 
+
 class BertweetConfig(RobertaConfig):
     """
     This class overrides :class:`~transformers.RobertaConfig`. Please check the

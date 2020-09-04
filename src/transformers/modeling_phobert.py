@@ -67,7 +67,8 @@ class PhobertModel(RobertaModel):
 
 
 @add_start_docstrings(
-    """PhoBERT Model with a `language modeling` head on top. """, PHOBERT_START_DOCSTRING,
+    """PhoBERT Model with a `language modeling` head on top. """,
+    PHOBERT_START_DOCSTRING,
 )
 class PhobertForMaskedLM(RobertaForMaskedLM):
     """
