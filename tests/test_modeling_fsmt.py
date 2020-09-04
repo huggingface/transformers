@@ -424,7 +424,9 @@ class FSMTModelIntegrationTests(unittest.TestCase):
             tgt_sentence = text[tgt]
 
             tokenizer = FSMTTokenizer.from_pretrained(mname)
-            model = FSMTForConditionalGeneration.from_pretrained(mname)
+            model = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
+            if torch_device == "cuda":
+                model.half()
 
             input_ids = tokenizer.encode(src_sentence, return_tensors="pt")
             outputs = model.generate(input_ids)
