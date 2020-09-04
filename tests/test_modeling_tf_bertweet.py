@@ -222,8 +222,11 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
                 "attention_mask": multiple_choice_input_mask,
                 "token_type_ids": multiple_choice_token_type_ids,
             }
-            result = model(inputs)
-            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+            (logits,) = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
