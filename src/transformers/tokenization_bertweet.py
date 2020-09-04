@@ -553,7 +553,7 @@ URLS = r"""			# Capture 1: entire matched URL
   )
   |					# OR, the following to match naked domains:
   (?:
-  	(?<!@)			        # not preceded by a @, avoid matching foo@_gmail.com_
+    (?<!@)			        # not preceded by a @, avoid matching foo@_gmail.com_
     [a-z0-9]+
     (?:[.\-][a-z0-9]+)*
     [.]

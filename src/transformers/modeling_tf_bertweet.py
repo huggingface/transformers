@@ -44,7 +44,7 @@ BERTWEET_START_DOCSTRING = r"""
     This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
     Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
-    
+
     Parameters:
         config (:class:`~transformers.BertweetConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
