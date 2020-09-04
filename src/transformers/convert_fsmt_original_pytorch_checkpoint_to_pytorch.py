@@ -85,8 +85,7 @@ from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
 
 logging.basicConfig(level=logging.INFO)
 
-DEBUG = 1
-
+DEBUG = 0
 json_indent = 2 if DEBUG else None
 
 
