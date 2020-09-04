@@ -47,7 +47,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bart import Attention, EncoderLayer, DecoderLayer
+from .modeling_bart import Attention, DecoderLayer, EncoderLayer
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel
 
@@ -329,6 +329,7 @@ def make_padding_mask(input_ids, padding_idx=1):
 
 # Helper Modules
 
+
 class FSMTEncoder(nn.Module):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
@@ -429,6 +430,7 @@ class FSMTEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
+
 
 class FSMTDecoder(nn.Module):
     """

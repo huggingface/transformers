@@ -225,6 +225,25 @@ class FSMTHeadTests(unittest.TestCase):
     tgt_vocab_size = 99
     langs = ["ru", "en"]
 
+    def _get_config(self):
+        return FSMTConfig(
+            src_vocab_size=self.src_vocab_size,
+            tgt_vocab_size=self.tgt_vocab_size,
+            langs=self.langs,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+            eos_token_id=2,
+            pad_token_id=1,
+            bos_token_id=0,
+            return_dict=True,
+        )
+
     def _get_config_and_data(self):
         input_ids = torch.tensor(
             [
@@ -247,43 +266,12 @@ class FSMTHeadTests(unittest.TestCase):
         )
 
         batch_size = input_ids.shape[0]
-        config = FSMTConfig(
-            src_vocab_size=self.src_vocab_size,
-            tgt_vocab_size=self.tgt_vocab_size,
-            langs=self.langs,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-            return_dict=True,
-        )
+        config = self._get_config()
         return config, input_ids, batch_size
 
     def test_generate_beam_search(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
-        config = FSMTConfig(
-            src_vocab_size=self.src_vocab_size,
-            tgt_vocab_size=self.tgt_vocab_size,
-            langs=self.langs,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-        )
+        config = self._get_config()
         lm_model = FSMTForConditionalGeneration(config).to(torch_device)
         lm_model.eval()
 
