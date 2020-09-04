@@ -45,7 +45,7 @@ class ReformerConfig(PretrainedConfig):
             LSHSelfAttention layer ("lsh") and a LocalSelfAttention layer ("local").
             For more information on LSHSelfAttention layer, see `LSH Self Attention <reformer.html#lsh-self-attention>`__ .
             For more information on LocalSelfAttention layer, see `Local Self Attention <reformer.html#local-sensitive-hashing-self-attention>`__ .
-        axial_pos_embds (:obj:`bool`, optional, defaults to True):
+        axial_pos_embds (:obj:`bool`, optional, defaults to :obj:`True`):
             If `True` use axial position embeddings. For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__
         axial_norm_std (:obj:`float`, optional, defaluts to 1.0):
             The standard deviation of the normal_initializer for initializing the weight matrices of the axial positional encodings.
@@ -77,7 +77,7 @@ class ReformerConfig(PretrainedConfig):
             Dimensionality of the output hidden states of the residual attention blocks.
         initializer_range (:obj:`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        is_decoder (:obj:`bool`, optional, defaults to False):
+        is_decoder (:obj:`bool`, optional, defaults to :obj:`False`):
             If `is_decoder` is True, a causal mask is used in addition to `attention_mask`.
             When using the Reformer for causal language modeling, `is_decoder` is set to `True`.
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
