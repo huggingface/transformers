@@ -432,11 +432,12 @@ class DecoderLayer(nn.Module):
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
             x = self.encoder_attn_layer_norm(x)
-        x, _ = self.encoder_attn(
+        x, cross_attn_weights = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
+            output_attentions=output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -454,9 +455,14 @@ class DecoderLayer(nn.Module):
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
+        if output_attentions:
+            attn_weights = torch.cat([self_attn_weights, cross_attn_weights], dim=3)
+        else:
+            attn_weights = None
+
         return (
             x,
-            self_attn_weights,
+            attn_weights,
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
