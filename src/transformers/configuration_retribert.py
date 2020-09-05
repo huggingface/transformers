@@ -65,7 +65,7 @@ class RetriBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        share_encoders (:obj:`bool`, optional, defaults to True):
+        share_encoders (:obj:`bool`, optional, defaults to :obj:`True`):
             Whether to use the same Bert-type encoder for the queries and document
         projection_dim (:obj:`int`, optional, defaults to 128):
             Final dimension of the query and document representation after projection
