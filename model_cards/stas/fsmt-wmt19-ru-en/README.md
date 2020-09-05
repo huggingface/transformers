@@ -72,11 +72,12 @@ export PAIR=ru-en
 export DATA_DIR=data/$PAIR
 export SAVE_DIR=data/$PAIR
 export BS=8
+export NUM_BEAMS=50
 mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="../../src" python run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation
+PYTHONPATH="../../src" python run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
 ## TODO
