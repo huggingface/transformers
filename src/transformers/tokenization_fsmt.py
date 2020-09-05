@@ -288,7 +288,11 @@ class FSMTTokenizer(PreTrainedTokenizer):
         if langs and len(langs) == 2:
             self.src_lang, self.tgt_lang = langs
         else:
-            raise ValueError(f"langs arg needs to be a list of 2 langs, e.g. ['en', 'ru'], but got f{langs}")
+            raise ValueError(
+                f"arg `langs` needs to be a list of 2 langs, e.g. ['en', 'ru'], but got {langs}. "
+                "Usually that means that tokenizer can't find a mapping for the given model path "
+                "in PRETRAINED_VOCAB_FILES_MAP, and other maps of this tokenizer."
+            )
 
         with open(src_vocab_file, encoding="utf-8") as src_vocab_handle:
             self.encoder = json.load(src_vocab_handle)
