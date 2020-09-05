@@ -16,7 +16,7 @@ You can also use the environment variable ``TRANSFORMERS_VERBOSITY`` to override
 
 .. code-block:: bash
                
-    TRANSFORMERS_VERBOSITY=error myprogram.py
+    TRANSFORMERS_VERBOSITY=error ./myprogram.py
 
 All the methods of this logging module are documented below, the main ones are
 :func:`transformers.logging.get_verbosity` to get the current level of verbosity in the logger and
@@ -31,7 +31,6 @@ verbose to the most verbose), those levels (with their corresponding int values 
 - :obj:`transformers.logging.INFO` (int value, 20): reports error, warnings and basic information.
 - :obj:`transformers.logging.DEBUG` (int value, 10): report all information.
 
-  
 Base setters
 ~~~~~~~~~~~~
 
