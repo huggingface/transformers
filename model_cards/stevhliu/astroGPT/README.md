@@ -1,6 +1,6 @@
 ---
 language: "en"
-thumbnail: "https://github.com/stevhliu/satsuma/blob/master/images/astroGPT-thumbnail.png"
+thumbnail: "https://raw.githubusercontent.com/stevhliu/satsuma/master/images/astroGPT-thumbnail.png"
 widget:
 - text: "Jan 18, 2020"
 - text: "Feb 14, 2020"
