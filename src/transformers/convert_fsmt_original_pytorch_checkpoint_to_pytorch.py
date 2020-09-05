@@ -57,6 +57,10 @@ yes Y | transformers-cli upload fsmt-wmt19-de-en
 yes Y | transformers-cli upload fsmt-wmt19-en-de
 cd -
 
+# if updating just small files and not the large models, here is a script to generate the right commands:
+perl -le 'for $f (@ARGV) { print qq[yes Y | transformers-cli upload $_/$f --filename $_/$f] for map { "fsmt-wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json
+# add/remove files as needed
+
 # force cache invalidation, which will now download the new models
 PYTHONPATH="src" python -c 'from transformers import AutoModel; [AutoModel.from_pretrained("stas/fsmt-wmt19-"+p, use_cdn=False) for p in ["en-ru","ru-en","en-de","de-en"]]'
 
@@ -81,6 +85,7 @@ from transformers import WEIGHTS_NAME
 from transformers.configuration_fsmt import FSMTConfig
 from transformers.modeling_fsmt import FSMTForConditionalGeneration  # , get_authorized_missing_keys
 from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
+from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 
 
 logging.basicConfig(level=logging.INFO)
@@ -250,36 +255,36 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     src_dict = Dictionary.load(src_dict_file)
     src_vocab = rewrite_dict_keys(src_dict.indices)
     src_vocab_size = len(src_vocab)
-    pytorch_vocab_file_src = os.path.join(pytorch_dump_folder_path, f"vocab-{src_lang}.json")
-    print(f"Generating {pytorch_vocab_file_src}")
-    with open(pytorch_vocab_file_src, "w", encoding="utf-8") as f:
+    src_vocab_file = os.path.join(pytorch_dump_folder_path, "vocab-src.json")
+    print(f"Generating {src_vocab_file}")
+    with open(src_vocab_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(src_vocab, ensure_ascii=False, indent=json_indent))
 
     tgt_dict = Dictionary.load(tgt_dict_file)
     tgt_vocab = rewrite_dict_keys(tgt_dict.indices)
     tgt_vocab_size = len(tgt_vocab)
-    pytorch_vocab_file_tgt = os.path.join(pytorch_dump_folder_path, f"vocab-{tgt_lang}.json")
-    print(f"Generating {pytorch_vocab_file_tgt}")
-    with open(pytorch_vocab_file_tgt, "w", encoding="utf-8") as f:
+    tgt_vocab_file = os.path.join(pytorch_dump_folder_path, "vocab-tgt.json")
+    print(f"Generating {tgt_vocab_file}")
+    with open(tgt_vocab_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(tgt_vocab, ensure_ascii=False, indent=json_indent))
 
-    # merge_file (bpecodes)
-    merge_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
-    fairseq_merge_file = os.path.join(fsmt_checkpoint_path, "bpecodes")
-    with open(fairseq_merge_file, encoding="utf-8") as fin:
+    # merges_file (bpecodes)
+    merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
+    fsmt_merges_file = os.path.join(fsmt_checkpoint_path, "bpecodes")
+    with open(fsmt_merges_file, encoding="utf-8") as fin:
         merges = fin.read()
     merges = re.sub(r" \d+$", "", merges, 0, re.M)  # remove frequency number
-    print(f"Generating {merge_file}")
-    with open(merge_file, "w", encoding="utf-8") as fout:
+    print(f"Generating {merges_file}")
+    with open(merges_file, "w", encoding="utf-8") as fout:
         fout.write(merges)
 
-    # config
-    fairseq_config_file = os.path.join(pytorch_dump_folder_path, "config.json")
+    # model config
+    fsmt_model_config_file = os.path.join(pytorch_dump_folder_path, "config.json")
 
     # XXX: need to compare with the other pre-trained models of this type and
     # only set here what's different between them - the common settings go into
-    # config_fsmt
-    conf = {
+    # config_fsmt.py: FSMTConfig.__init__
+    model_conf = {
         "architectures": ["FSMTForConditionalGeneration"],
         "model_type": "fsmt",
         "activation_dropout": 0.0,
@@ -316,9 +321,21 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "tie_word_embeddings": False,
     }
 
-    print(f"Generating {fairseq_config_file}")
-    with open(fairseq_config_file, "w", encoding="utf-8") as f:
-        f.write(json.dumps(conf, ensure_ascii=False, indent=json_indent))
+    print(f"Generating {fsmt_model_config_file}")
+    with open(fsmt_model_config_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps(model_conf, ensure_ascii=False, indent=json_indent))
+
+    # tokenizer config
+    fsmt_tokenizer_config_file = os.path.join(pytorch_dump_folder_path, TOKENIZER_CONFIG_FILE)
+
+    tokenizer_conf = {
+        "langs": [src_lang, tgt_lang],
+        "model_max_length": 1024,
+    }
+
+    print(f"Generating {fsmt_tokenizer_config_file}")
+    with open(fsmt_tokenizer_config_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps(tokenizer_conf, ensure_ascii=False, indent=json_indent))
 
     # model
     model = chkpt["models"][0]

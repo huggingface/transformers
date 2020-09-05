@@ -37,16 +37,16 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "src_vocab_file": {
-        "stas/fsmt-wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-ru-en/vocab-ru.json",
-        "stas/fsmt-wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-ru/vocab-en.json",
-        "stas/fsmt-wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-de-en/vocab-de.json",
-        "stas/fsmt-wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-de/vocab-en.json",
+        "stas/fsmt-wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-ru-en/vocab-src.json",
+        "stas/fsmt-wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-ru/vocab-src.json",
+        "stas/fsmt-wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-de-en/vocab-src.json",
+        "stas/fsmt-wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-de/vocab-src.json",
     },
     "tgt_vocab_file": {
-        "stas/fsmt-wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-ru-en/vocab-en.json",
-        "stas/fsmt-wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-ru/vocab-ru.json",
-        "stas/fsmt-wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-de-en/vocab-en.json",
-        "stas/fsmt-wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-de/vocab-de.json",
+        "stas/fsmt-wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-ru-en/vocab-tgt.json",
+        "stas/fsmt-wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-ru/vocab-tgt.json",
+        "stas/fsmt-wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-de-en/vocab-tgt.json",
+        "stas/fsmt-wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-de/vocab-tgt.json",
     },
     "merges_file": {
         "stas/fsmt-wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-ru-en/merges.txt",
@@ -77,23 +77,6 @@ PRETRAINED_INIT_CONFIGURATION = {
         "langs": ["en", "de"],
     },
 }
-
-# XXX: temp workaround to be able to run local models with run_eval.py, etc.
-LOCALIZE = 1
-if LOCALIZE:
-    old, new = ("stas/", "/code/huggingface/transformers-fair-wmt/data/")
-
-    def localize(buf):
-        return buf.replace(old, new)
-
-    for d in [PRETRAINED_INIT_CONFIGURATION, PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES]:
-        for k, v in d.copy().items():
-            d[localize(k)] = v
-
-    for d in [PRETRAINED_VOCAB_FILES_MAP]:
-        for tk, tv in d.items():
-            for k, v in tv.copy().items():
-                tv[localize(k)] = v
 
 
 def get_pairs(word):
