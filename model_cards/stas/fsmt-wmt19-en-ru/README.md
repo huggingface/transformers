@@ -61,16 +61,19 @@ Pretrained weights were left identical to the original model released by fairseq
 
 ## Eval results
 
-Fairseq reported score is [36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)
+pair   | fairseq | transformers
+-------|---------|----------
+en-ru  | [36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724) | 33.29
 
-The porting of this model is still in progress, but so far we have the following BLEU score: 31.2695
+
+`transformers`` currently doesn't support model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
+
 
 The score was calculated using this code:
 
 ```python
 git clone https://github.com/huggingface/transformers
 cd transformers
-cd examples/seq2seq
 export PAIR=en-ru
 export DATA_DIR=data/$PAIR
 export SAVE_DIR=data/$PAIR
@@ -80,7 +83,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="../../src" python run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
 ## TODO

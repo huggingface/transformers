@@ -121,10 +121,10 @@ def write_model_card(model_card_dir, src_lang, tgt_lang):
     # BLUE scores as follows:
     # "pair": [fairseq, transformers]
     scores = {
-        "en-ru": ["[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)", "31.2695"],
-        "ru-en": ["[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)", "38.8524"],
-        "de-en": ["[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)", "39.4278"],
-        "en-de": ["[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)", "41.0814"],
+        "en-ru": ["[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)", "33.29"],
+        "ru-en": ["[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)", "38.93"],
+        "de-en": ["[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)", "41.18"],
+        "en-de": ["[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)", "42.79"],
     }
     pair = f"{src_lang}-{tgt_lang}"
 
@@ -191,16 +191,19 @@ Pretrained weights were left identical to the original model released by fairseq
 
 ## Eval results
 
-Fairseq reported score is { scores[pair][0] }
+pair   | fairseq | transformers
+-------|---------|----------
+{pair}  | {scores[pair][0]} | {scores[pair][1]}
 
-The porting of this model is still in progress, but so far we have the following BLEU score: { scores[pair][1] }
+
+`transformers`` currently doesn't support model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
+
 
 The score was calculated using this code:
 
 ```python
 git clone https://github.com/huggingface/transformers
 cd transformers
-cd examples/seq2seq
 export PAIR={pair}
 export DATA_DIR=data/$PAIR
 export SAVE_DIR=data/$PAIR
@@ -210,7 +213,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="../../src" python run_eval.py {ORG_NAME}/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py {ORG_NAME}/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
 ## TODO
@@ -233,12 +236,13 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     # XXX: Need to work out the ensemble as fairseq does, for now using just one chkpt
     # checkpoint_file = 'model1.pt:model2.pt:model3.pt:model4.pt'
-    checkpoint_file = "model1.pt"
+    checkpoint_file = "model4.pt"  # proved to give the highest BLEU score for each pair
     # model_name_or_path = 'transformer.wmt19.ru-en'
     data_name_or_path = "."
     cls = fairseq.model_parallel.models.transformer.ModelParallelTransformerModel
     models = cls.hub_models()
     kwargs = {"bpe": "fastbpe", "tokenizer": "moses"}
+    # print(f"using checkpoint {checkpoint_file}")
 
     # note: since the model dump is old, fairseq has upgraded its model some
     # time later, and it does a whole lot of rewrites and splits on the saved
@@ -379,6 +383,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
     print(f"transformers-cli upload {model_dir}")
+    # XXX: this is invalid - waiting on issue to be resolved
     print("Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to force redownload")
 
 
