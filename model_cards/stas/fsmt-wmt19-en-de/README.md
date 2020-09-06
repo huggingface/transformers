@@ -39,7 +39,7 @@ All four models are available:
 ```python
 from transformers.tokenization_fsmt import FSMTTokenizer
 from transformers.modeling_fsmt import FSMTForConditionalGeneration
-mname = "fsmt-wmt19-en-de"
+mname = "stas/fsmt-wmt19-en-de"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 

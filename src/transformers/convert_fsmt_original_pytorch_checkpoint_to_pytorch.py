@@ -91,6 +91,9 @@ from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 
 logging.basicConfig(level=logging.INFO)
 
+ORG_NAME = "stas"  # XXX: will become facebook
+
+
 DEBUG = 0
 json_indent = 2 if DEBUG else None
 
@@ -154,10 +157,10 @@ The abbreviation FSMT stands for FairSeqMachineTranslation
 
 All four models are available:
 
-* [fsmt-wmt19-en-ru](https://huggingface.co/stas/fsmt-wmt19-en-ru)
-* [fsmt-wmt19-ru-en](https://huggingface.co/stas/fsmt-wmt19-ru-en)
-* [fsmt-wmt19-en-de](https://huggingface.co/stas/fsmt-wmt19-en-de)
-* [fsmt-wmt19-de-en](https://huggingface.co/stas/fsmt-wmt19-de-en)
+* [fsmt-wmt19-en-ru](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-en-ru)
+* [fsmt-wmt19-ru-en](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-ru-en)
+* [fsmt-wmt19-en-de](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-en-de)
+* [fsmt-wmt19-de-en](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-de-en)
 
 ## Intended uses & limitations
 
@@ -166,7 +169,7 @@ All four models are available:
 ```python
 from transformers.tokenization_fsmt import FSMTTokenizer
 from transformers.modeling_fsmt import FSMTForConditionalGeneration
-mname = "fsmt-wmt19-{src_lang}-{tgt_lang}"
+mname = "{ORG_NAME}/fsmt-wmt19-{src_lang}-{tgt_lang}"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 
@@ -207,7 +210,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="../../src" python run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="../../src" python run_eval.py {ORG_NAME}/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
 ## TODO
@@ -367,28 +370,8 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print(f"Generating {pytorch_weights_dump_path}")
     torch.save(model_state_dict, pytorch_weights_dump_path)
 
-    # test that it's the same
-    test_state_dict = torch.load(pytorch_weights_dump_path)
-    # print(test_state_dict)
-
-    def compare_state_dicts(d1, d2):
-        models_differ = 0
-        for key_item_1, key_item_2 in zip(d1.items(), d2.items()):
-            if torch.equal(key_item_1[1], key_item_2[1]):
-                pass
-            else:
-                models_differ += 1
-                if key_item_1[0] == key_item_2[0]:
-                    print("Mismatch found at", key_item_1[0])
-                else:
-                    raise Exception
-        if models_differ == 0:
-            print("Models match perfectly! :)")
-
-    compare_state_dicts(model_state_dict, test_state_dict)
-
     # model card
-    model_card_dir = os.path.join(proj_root, "model_cards", "stas", model_dir)
+    model_card_dir = os.path.join(proj_root, "model_cards", ORG_NAME, model_dir)
     print(f"Generating model_card {src_lang}-{tgt_lang}")
     write_model_card(model_card_dir, src_lang, tgt_lang)
 
