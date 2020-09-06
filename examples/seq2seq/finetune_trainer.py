@@ -31,6 +31,7 @@ try:
         freeze_params,
         lmap,
         trim_batch,
+        use_task_specific_params,
     )
 except ImportError:
     from seq2seq_trainer import Seq2SeqTrainer
@@ -43,6 +44,7 @@ except ImportError:
         freeze_params,
         lmap,
         trim_batch,
+        use_task_specific_params,
     )
 
 
@@ -152,7 +154,10 @@ class DataTrainingArguments:
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
     )
-    task: Optional[str] = field(default="summarization", metadata={"help": "summarization or translation"})
+    task: Optional[str] = field(
+        default="summarization",
+        metadata={"help": "summarization (or summarization_{dataset} for pegasus) or translation"},
+    )
     max_source_length: Optional[int] = field(
         default=1024,
         metadata={
@@ -161,7 +166,7 @@ class DataTrainingArguments:
         },
     )
     max_target_length: Optional[int] = field(
-        default=56,
+        default=128,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -186,6 +191,7 @@ class DataTrainingArguments:
     n_test: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
     src_lang: Optional[str] = field(default=None, metadata={"help": "Source language for translation"})
     tgt_lang: Optional[str] = field(default=None, metadata={"help": "Target language for translation"})
+    eval_beams: Optional[int] = field(default=None, metadata={"help": "num_beams for evaluation"})
 
 
 def main():
@@ -251,6 +257,14 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
     )
+
+    # use task specific params
+    use_task_specific_params(model, data_args.task)
+
+    # set num_beams for evaluation
+    if data_args.eval_beams is not None:
+        model.config.num_beams = data_args.eval_beams
+    assert model.config.num_beams >= 1, f"got eval_beams={model.config.num_beams}. Need an integer >= 1"
 
     # set decoder_start_token_id for MBart, TODO(@sshleifer): use_task_specific_params for this
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
