@@ -71,7 +71,7 @@ ru-en  | [41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937) | 38.93
 
 The score was calculated using this code:
 
-```python
+```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 export PAIR=ru-en

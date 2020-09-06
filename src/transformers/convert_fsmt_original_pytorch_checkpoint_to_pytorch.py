@@ -201,7 +201,7 @@ pair   | fairseq | transformers
 
 The score was calculated using this code:
 
-```python
+```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 export PAIR={pair}

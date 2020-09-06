@@ -71,7 +71,7 @@ en-de  | [43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862) | 42.79
 
 The score was calculated using this code:
 
-```python
+```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 export PAIR=en-de
