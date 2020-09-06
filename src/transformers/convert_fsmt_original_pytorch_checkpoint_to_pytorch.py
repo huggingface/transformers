@@ -83,7 +83,7 @@ from fairseq.data.dictionary import Dictionary
 
 from transformers import WEIGHTS_NAME
 from transformers.configuration_fsmt import FSMTConfig
-from transformers.modeling_fsmt import FSMTForConditionalGeneration  # , get_authorized_missing_keys
+from transformers.modeling_fsmt import FSMTForConditionalGeneration
 from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 
@@ -233,8 +233,10 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     models = cls.hub_models()
     kwargs = {"bpe": "fastbpe", "tokenizer": "moses"}
 
-    # note: there is some magic happening here, so can't use torch.load() directly on the model file
-    # see: load_state_dict() in fairseq_model.py
+    # note: since the model dump is old, fairseq has upgraded its model some
+    # time later, and it does a whole lot of rewrites and splits on the saved
+    # weights, therefore we can't use torch.load() directly on the model file.
+    # see: upgrade_state_dict(state_dict) in fairseq_model.py
     chkpt = hub_utils.from_pretrained(
         fsmt_checkpoint_path, checkpoint_file, data_name_or_path, archive_map=models, **kwargs
     )
@@ -281,36 +283,31 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     # model config
     fsmt_model_config_file = os.path.join(pytorch_dump_folder_path, "config.json")
 
-    # XXX: need to compare with the other pre-trained models of this type and
-    # only set here what's different between them - the common settings go into
-    # config_fsmt.py: FSMTConfig.__init__
     model_conf = {
         "architectures": ["FSMTForConditionalGeneration"],
         "model_type": "fsmt",
-        "activation_dropout": 0.0,
+        "activation_dropout": args["activation_dropout"],
         "activation_function": "relu",
         "attention_dropout": args["attention_dropout"],
         "d_model": args["decoder_embed_dim"],
         "dropout": args["dropout"],
         "init_std": 0.02,
-        "max_position_embeddings": 1024,  # XXX: look up?
-        "num_hidden_layers": 6,  # XXX: look up?
+        "max_position_embeddings": args["max_source_positions"],
+        "num_hidden_layers": args["encoder_layers"],
         "src_vocab_size": src_vocab_size,
         "tgt_vocab_size": tgt_vocab_size,
         "langs": [src_lang, tgt_lang],
         "encoder_attention_heads": args["encoder_attention_heads"],
         "encoder_ffn_dim": args["encoder_ffn_embed_dim"],
-        "encoder_layerdrop": 0.0,
+        "encoder_layerdrop": args["encoder_layerdrop"],
         "encoder_layers": args["encoder_layers"],
         "decoder_attention_heads": args["decoder_attention_heads"],
         "decoder_ffn_dim": args["decoder_ffn_embed_dim"],
-        "decoder_layerdrop": 0.0,
+        "decoder_layerdrop": args["decoder_layerdrop"],
         "decoder_layers": args["decoder_layers"],
         "bos_token_id": 0,
         "pad_token_id": 1,
         "eos_token_id": 2,
-        "id2label": {"0": "LABEL_0", "1": "LABEL_1", "2": "LABEL_2"},  # not needed?
-        "label2id": {"LABEL_0": 0, "LABEL_1": 1, "LABEL_2": 2},  # not needed?
         "add_bias_logits": False,
         "add_final_layer_norm": False,
         "is_encoder_decoder": True,
@@ -352,9 +349,6 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "model.encoder_embed_tokens.weight",
         "model.decoder_embed_tokens.weight",
     ]
-    # XXX: this experiment isn't working - needs more investigation
-    # let's save a lot of space, by not saving unneeded keys - lots of them!
-    # ignore_keys.extend(get_authorized_missing_keys())
     for k in ignore_keys:
         model_state_dict.pop(k, None)
 

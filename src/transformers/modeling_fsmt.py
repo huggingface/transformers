@@ -92,9 +92,6 @@ _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 # TODO:
 # - port model ensemble (fs uses 4 model checkpoints)
 # - solve beam search discrepancies
-# - There are keys in the state_dict that don't need to be saved, see the
-#   conversion script (get_authorized_missing_keys()), so need to ensure that if
-#   someone does further work with the weights they don't save those keys
 
 """
 
@@ -790,25 +787,12 @@ class FSMTModel(PretrainedFSMTModel):
         self.decoder.embed_tokens = value  # self.decoder_embed_tokens = value
 
 
-def get_authorized_missing_keys():
-    missing_keys = [r"encoder\.version", r"decoder\.version"]
-
-    # these are 90 dict entries that aren't needed to be saved (they aren't in the original saved weights)
-    postfices = [fr"{x}.{y}" for x in ["k_proj", "v_proj", "q_proj"] for y in ["weight", "bias"]]
-    self_attn_keys = [
-        fr"model.{x}.layers.{y}.self_attn.{z}" for x in ["encoder", "decoder"] for y in range(1, 6) for z in postfices
-    ]
-    encoder_attn_keys = [fr"model.decoder.layers.{y}.encoder_attn.{z}" for y in range(1, 6) for z in postfices]
-    missing_keys += self_attn_keys + encoder_attn_keys
-    return missing_keys
-
-
 @add_start_docstrings(
     "The FSMT Model with a language modeling head. Can be used for summarization.", FSMT_START_DOCSTRING
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
-    authorized_missing_keys = get_authorized_missing_keys()
+    authorized_missing_keys = [r"encoder\.version", r"decoder\.version"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
