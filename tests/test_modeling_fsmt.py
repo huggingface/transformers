@@ -18,6 +18,7 @@ import unittest
 
 import timeout_decorator  # noqa
 
+from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -374,39 +375,38 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         print(output[:, :3, :3])
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
-        # XXX: the rest of the tests were moved to tests/test_tokenization_bart.py - port from there into tokenization tests
-
+    @parameterized.expand(
+        [
+            ["en-ru"],
+            ["ru-en"],
+            ["en-de"],
+            ["de-en"],
+        ]
+    )
     @slow
-    def test_translation(self):
+    def test_translation(self, pair):
         text = {
             "en": "Machine learning is great, isn't it?",
             "ru": "Машинное обучение - это здорово, не так ли?",
             "de": "Maschinelles Lernen ist großartig, oder?",
         }
 
-        pairs = [
-            ["en", "ru"],
-            ["ru", "en"],
-            ["en", "de"],
-            ["de", "en"],
-        ]
+        src, tgt = pair.split("-")
+        print(f"Testing {src} -> {tgt}")
+        mname = f"stas/fsmt-wmt19-{pair}"
 
-        for src, tgt in pairs:
-            print(f"Testing {src} -> {tgt}")
-            mname = f"stas/fsmt-wmt19-{src}-{tgt}"
+        src_sentence = text[src]
+        tgt_sentence = text[tgt]
 
-            src_sentence = text[src]
-            tgt_sentence = text[tgt]
+        tokenizer = FSMTTokenizer.from_pretrained(mname)
+        model = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
+        if torch_device == "cuda":
+            model.half()
 
-            tokenizer = FSMTTokenizer.from_pretrained(mname)
-            model = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
-            if torch_device == "cuda":
-                model.half()
-
-            input_ids = tokenizer.encode(src_sentence, return_tensors="pt")
-            outputs = model.generate(input_ids)
-            decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            assert decoded == tgt_sentence, f"\n\ngot: {decoded}\nexp: {tgt_sentence}\n"
+        input_ids = tokenizer.encode(src_sentence, return_tensors="pt")
+        outputs = model.generate(input_ids)
+        decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        assert decoded == tgt_sentence, f"\n\ngot: {decoded}\nexp: {tgt_sentence}\n"
 
 
 @require_torch
