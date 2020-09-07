@@ -50,6 +50,7 @@ from .modeling_bart import (
     DecoderLayer,
     EncoderLayer,
     LayerNorm,
+    LearnedPositionalEmbedding,
     _prepare_bart_decoder_inputs,
     _reorder_buffer,
     invert_mask,
