@@ -118,7 +118,7 @@ class FSMTConfig(PretrainedConfig):
     - src/tgt vocabs aren't shared - token embeddings aren't shared
 
     """
-    model_type = "fairseq"
+    model_type = "fsmt"
 
     # update the defaults from config file
     def __init__(
