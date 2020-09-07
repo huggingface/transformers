@@ -100,6 +100,7 @@ FSMT_CONFIG_ARGS_DOC = r"""
 class DecoderConfig(PretrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things.
+    note: this is a private helper class
     """
     model_type = "fsmt_decoder"
 
