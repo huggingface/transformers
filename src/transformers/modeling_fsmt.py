@@ -776,8 +776,6 @@ class FSMTModel(PretrainedFSMTModel):
 
     def get_output_embeddings(self):
         return self.decoder.embed_tokens
-        # XXX: it was, but probably not needed here
-        # return _make_linear_from_emb(self.decoder.embed_tokens)  # make it on the fly
 
     def set_output_embeddings(self, value):
         self.decoder.embed_tokens = value  # self.decoder_embed_tokens = value
