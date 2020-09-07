@@ -389,6 +389,7 @@ class GenerationMixin:
                     raise ValueError(
                         "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
                     )
+
             assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
 
