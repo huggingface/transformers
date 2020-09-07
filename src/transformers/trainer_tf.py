@@ -599,6 +599,8 @@ class TFTrainer:
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, _ = self.run_model(features, labels, True)
+        # TODO: Fix the loss calculation for the issue:
+        #       https://github.com/huggingface/transformers/issues/6968
         scaled_loss = per_example_loss / self.total_train_batch_size
         gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
         gradients = [
