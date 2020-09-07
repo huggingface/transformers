@@ -13,13 +13,10 @@ sp.Load(sentencepiece_model)
 
 outputs = ' '.join(sp.EncodeAsPieces(article))
 
-input_ids = tok(article, return_tensors="pt").input_ids
+input_ids = tok(article, return_tensors="pt").input_ids.to("cuda")
 
-import ipdb; ipdb.set_trace()
+model = EncoderDecoderModel.from_pretrained("patrickvonplaten/roberta2roberta_L-24_cnn_daily_mail").to("cuda")
 
-#input_ids = torch.cat([torch.tensor([[97]]), input_ids], dim=-1)
-
-model = EncoderDecoderModel.from_pretrained("patrickvonplaten/roberta2roberta_L-24_cnn_daily_mail")
 model.config.decoder.bos_token_id = 2
 model.config.decoder.pad_token_id = 0
 model.config.decoder.eos_token_id = 1
@@ -31,6 +28,5 @@ model.config.encoder.pad_token_id = 0
 model.config.encoder.eos_token_id = 1
 
 
-outputs = model.generate(input_ids, do_sample=False, max_length=10)
-
+outputs = model.generate(input_ids, num_beams=4, max_length=128)
 print(outputs[0])
