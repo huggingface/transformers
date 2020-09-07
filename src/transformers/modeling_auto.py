@@ -42,7 +42,7 @@ from .configuration_auto import (
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
-    BertSimpleConfig,
+    CausalBertConfig,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -157,7 +157,7 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from .modeling_simple_bert import BertSimpleModel, BertSimpleForCausalLM
+from .modeling_causal_bert import CausalBertModel, CausalBertForCausalLM
 from .modeling_t5 import T5ForConditionalGeneration, T5Model
 from .modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
@@ -215,7 +215,7 @@ MODEL_MAPPING = OrderedDict(
         (ReformerConfig, ReformerModel),
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
-        (BertSimpleConfig, BertSimpleModel),
+        (CausalBertConfig, CausalBertModel),
     ]
 )
 
@@ -287,7 +287,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         ),  # XLM can be MLM and CLM => model should be split similar to BERT; leave here for now
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
-        (BertSimpleConfig, BertSimpleForCausalLM),
+        (CausalBertConfig, CausalBertForCausalLM),
     ]
 )
 

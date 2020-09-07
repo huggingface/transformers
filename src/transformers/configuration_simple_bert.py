@@ -17,7 +17,7 @@
 from .configuration_utils import PretrainedConfig
 
 
-class BertSimpleConfig(PretrainedConfig):
+class CausalBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.BertModel`.
     It is used to instantiate an BERT model according to the specified arguments, defining the model
@@ -71,7 +71,7 @@ class BertSimpleConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "bert_simple"
+    model_type = "causal_bert"
 
     def __init__(
         self,

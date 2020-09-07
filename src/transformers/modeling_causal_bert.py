@@ -43,10 +43,10 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "BertSimpleConfig"
+_CONFIG_FOR_DOC = "CausalBertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
-SIMPLE_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BERT models at https://huggingface.co/models?filter=bert
 ]
 
@@ -133,7 +133,7 @@ def mish(x):
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 
-class BertSimpleEmbeddings(nn.Module):
+class CausalBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -169,13 +169,13 @@ class BertSimpleEmbeddings(nn.Module):
         return embeddings
 
 
-class BertSimplePreTrainedModel(PreTrainedModel):
+class CausalBertPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
     """
 
     config_class = BertConfig
-    base_model_prefix = "bert_simple"
+    base_model_prefix = "causal_bert"
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -191,7 +191,7 @@ class BertSimplePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-SIMPLE_BERT_START_DOCSTRING = r"""
+CAUSAL_BERT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -202,7 +202,7 @@ SIMPLE_BERT_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-SIMPLE_BERT_INPUTS_DOCSTRING = r"""
+CAUSAL_BERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -249,9 +249,9 @@ SIMPLE_BERT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    SIMPLE_BERT_START_DOCSTRING,
+    CAUSAL_BERT_START_DOCSTRING,
 )
-class BertSimpleModel(BertSimplePreTrainedModel):
+class CausalBertModel(CausalBertPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well
@@ -274,7 +274,7 @@ class BertSimpleModel(BertSimplePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BertSimpleEmbeddings(config)
+        self.embeddings = CausalBertEmbeddings(config)
         self.encoder = BertEncoder(config)
 
         self.init_weights()
@@ -293,7 +293,7 @@ class BertSimpleModel(BertSimplePreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(SIMPLE_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(CAUSAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-uncased",
@@ -389,7 +389,7 @@ class BertSimpleModel(BertSimplePreTrainedModel):
         )
 
 
-class BertSimpleOnlyLMHead(nn.Module):
+class CausalBertOnlyLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -404,23 +404,23 @@ class BertSimpleOnlyLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, SIMPLE_BERT_START_DOCSTRING
+    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, CAUSAL_BERT_START_DOCSTRING
 )
-class BertSimpleForCausalLM(BertSimplePreTrainedModel):
+class CausalBertForCausalLM(CausalBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`"
 
-        self.bert_simple = BertSimpleModel(config)
-        self.lm_head = BertSimpleOnlyLMHead(config)
+        self.causal_bert = CausalBertModel(config)
+        self.lm_head = CausalBertOnlyLMHead(config)
 
         self.init_weights()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(SIMPLE_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(CAUSAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -470,7 +470,7 @@ class BertSimpleForCausalLM(BertSimplePreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert_simple(
+        outputs = self.causal_bert(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
