@@ -560,7 +560,6 @@ class RagSequence(PreTrainedRagModel):
 
         ctxt_input_ids, _, _ = self.model.contextualize(input_ids, retriever, print_docs=print_docs)
         rag_num_return_sequences = num_return_sequences
-        forward_batch_size = forward_batch_size // self.n_docs
         hypos = []
 
         for index in range(len(input_ids)):
