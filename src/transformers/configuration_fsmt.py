@@ -15,6 +15,7 @@
 """ FSMT configuration """
 
 
+import copy
 import logging
 
 from .configuration_utils import PretrainedConfig
@@ -96,15 +97,19 @@ FSMT_CONFIG_ARGS_DOC = r"""
 """
 
 
+class DecoderConfig(PretrainedConfig):
+    r""" Configuration class for FSMT's decoder specific things """
+    model_type = "fsmt_decoder"
+
+    def __init__(self, vocab_size=0, bos_token_id=0):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.bos_token_id = bos_token_id
+
+
 @add_start_docstrings_to_callable(FSMT_CONFIG_ARGS_DOC)
 class FSMTConfig(PretrainedConfig):
-    r"""
-        Configuration class for FSMT. Parameters are renamed from the fairseq implementation
-
-    Differences with BART:
-    - src/tgt vocabs aren't shared - token embeddings aren't shared
-
-    """
+    r""" Configuration class for FSMT."""
     model_type = "fsmt"
 
     # update the defaults from config file
@@ -182,9 +187,7 @@ class FSMTConfig(PretrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        # XXX: needed in generation_utils.py:382
-        # alternatively need to setup config.decoder object
-        self.decoder_start_token_id = eos_token_id
+        self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
 
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
@@ -211,3 +214,15 @@ class FSMTConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig`.
+
+        Returns:
+            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["decoder"] = self.decoder.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
