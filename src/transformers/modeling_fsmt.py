@@ -25,7 +25,7 @@
 #
 # Paper: Facebook FAIR's WMT19 News Translation Task Submission https://arxiv.org/abs/1907.06616
 #
-"""PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/"""
+"""PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import logging
 import math
