@@ -1,3 +1,9 @@
+---
+widget:
+- text: "Even the Dwarves"
+- text: "The secrets of"
+---
+
 # Model name
 Magic The Generating
 
