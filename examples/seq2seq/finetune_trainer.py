@@ -266,6 +266,9 @@ def main():
         model.config.num_beams = data_args.eval_beams
     assert model.config.num_beams >= 1, f"got eval_beams={model.config.num_beams}. Need an integer >= 1"
 
+    # set max length for generation
+    model.config.max_generate_length = data_args.val_max_target_length    
+
     # set decoder_start_token_id for MBart, TODO(@sshleifer): use_task_specific_params for this
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
         decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]

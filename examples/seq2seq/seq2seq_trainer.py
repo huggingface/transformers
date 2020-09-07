@@ -153,7 +153,8 @@ class Seq2SeqTrainer(Trainer):
 
         inputs = self._prepare_inputs(inputs)
 
-        max_length = model.config.max_position_embeddings
+        max_length = model.config.max_generate_length if hasattr(model.config, "max_generate_length") else model.config.max_position_embeddings
+
         with torch.no_grad():
             if self.args.predict_with_generate:
                 generated_tokens = model.generate(
@@ -161,6 +162,7 @@ class Seq2SeqTrainer(Trainer):
                     attention_mask=inputs["attention_mask"],
                     use_cache=True,
                     num_beams=model.config.num_beams,
+                    max_length=max_length,
                 )
                 # in case the batch is shorter than max length, the output should be padded
                 generated_tokens = self._pad_tensors_to_max_len(
