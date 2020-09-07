@@ -340,8 +340,8 @@ class FlaxBertModel(FlaxPreTrainedModel):
     def config(self) -> BertConfig:
         return self._config
 
-    @jax.jit
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
+        @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
             return self.model(
                 jnp.array(input_ids, dtype="i4"),
