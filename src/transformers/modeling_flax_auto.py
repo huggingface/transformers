@@ -38,12 +38,12 @@ MODEL_MAPPING = OrderedDict([(RobertaConfig, FlaxRobertaModel), (BertConfig, Fla
 
 class FlaxAutoModel(object):
     r"""
-        :class:`~transformers.FlaxAutoModel` is a generic model class
-        that will be instantiated as one of the base model classes of the library
-        when created with the `FlaxAutoModel.from_pretrained(pretrained_model_name_or_path)`
-        or the `FlaxAutoModel.from_config(config)` class methods.
+    :class:`~transformers.FlaxAutoModel` is a generic model class
+    that will be instantiated as one of the base model classes of the library
+    when created with the `FlaxAutoModel.from_pretrained(pretrained_model_name_or_path)`
+    or the `FlaxAutoModel.from_config(config)` class methods.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -55,7 +55,7 @@ class FlaxAutoModel(object):
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Args:
@@ -81,7 +81,7 @@ class FlaxAutoModel(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
