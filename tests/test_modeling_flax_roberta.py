@@ -2,8 +2,8 @@ import unittest
 
 from numpy import ndarray
 
-from tests.utils import require_flax, require_torch
 from transformers import is_flax_available, is_torch_available
+from transformers.testing_utils import require_flax, require_torch
 from transformers.tokenization_roberta import RobertaTokenizerFast
 
 
