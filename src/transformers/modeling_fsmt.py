@@ -391,7 +391,6 @@ class FSMTDecoder(nn.Module):
         embed_dim = embed_tokens.embedding_dim
         if config.static_position_embeddings:
             num_embeddings = config.tgt_vocab_size
-            # XXX: self.padding_idx and config.pad_token_id are the same?
             self.embed_positions = SinusoidalPositionalEmbedding(
                 embed_dim,
                 self.padding_idx,
@@ -522,8 +521,6 @@ class FSMTDecoder(nn.Module):
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
-        # new XXX: not invoked? self.project_out_dim==None in fairseq
-        # but it then gets invoked later in x.output_layer() transformer.py:676
         x = self.output_projection(x)
 
         next_cache = next_decoder_cache if use_cache else None
