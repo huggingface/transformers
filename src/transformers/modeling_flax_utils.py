@@ -79,11 +79,7 @@ class FlaxPreTrainedModel(ABC):
             if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             else:
-                archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=WEIGHTS_NAME,
-                    use_cdn=use_cdn
-                )
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, use_cdn=use_cdn)
 
             # redirect to the cache, if necessary
             try:

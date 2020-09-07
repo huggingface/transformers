@@ -362,6 +362,6 @@ class FlaxBertModel(FlaxPreTrainedModel):
         return predict(input_ids, token_type_ids, position_ids, attention_mask)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model = FlaxBertModel.from_pretrained("bert-base-cased")
     input()
