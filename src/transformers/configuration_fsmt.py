@@ -95,20 +95,6 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Whether to tie input and output embeddings.
 """
 
-# Porting notes:
-# this one is modeled after BartConfig
-#
-#    Differences with BART:
-#    - src/tgt vocabs aren't shared
-#    - token embeddings aren't shared
-#    - needs a language pair
-#    - scale_embedding are True
-#    - normalize_embedding are False
-#    - static_position_embeddings are True
-#
-#    some unused args were removed too
-
-
 @add_start_docstrings_to_callable(FSMT_CONFIG_ARGS_DOC)
 class FSMTConfig(PretrainedConfig):
     r"""

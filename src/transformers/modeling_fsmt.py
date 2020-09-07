@@ -97,6 +97,20 @@ _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 # Other changes:
 #  - doesn't support use_cache as Bart's version does
 #
+#
+# FSMTConfig changes with BartConfig
+#
+#    Differences with BART:
+#    - src/tgt vocabs aren't shared
+#    - token embeddings aren't shared
+#    - needs a language pair
+#    - scale_embedding are True
+#    - normalize_embedding are False
+#    - static_position_embeddings are True
+#
+#    some unused args were removed too
+#
+#
 # TODO:
 # - port model ensemble (fs uses 4 model checkpoints)
 # - solve beam search discrepancies
