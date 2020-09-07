@@ -98,7 +98,9 @@ FSMT_CONFIG_ARGS_DOC = r"""
 
 
 class DecoderConfig(PretrainedConfig):
-    r""" Configuration class for FSMT's decoder specific things """
+    r"""
+    Configuration class for FSMT's decoder specific things.
+    """
     model_type = "fsmt_decoder"
 
     def __init__(self, vocab_size=0, bos_token_id=0):
@@ -109,7 +111,9 @@ class DecoderConfig(PretrainedConfig):
 
 @add_start_docstrings_to_callable(FSMT_CONFIG_ARGS_DOC)
 class FSMTConfig(PretrainedConfig):
-    r""" Configuration class for FSMT."""
+    r"""
+    Configuration class for FSMT.
+    """
     model_type = "fsmt"
 
     # update the defaults from config file
