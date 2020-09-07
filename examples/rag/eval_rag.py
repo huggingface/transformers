@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from transformers import BartForConditionalGeneration, BartTokenizer, RagSequence, RagToken
+from transformers import BartForConditionalGeneration, BartTokenizer, RagRetriever, RagSequence, RagToken
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # isort:skip
@@ -81,7 +81,7 @@ def get_precision_at_k(args, preds_path, gold_data_path):
     logger.info("Precision@{}: {}".format(k, em))
 
 
-def evaluate_batch_retrieval(args, rag_model, tokenizer, questions):
+def evaluate_batch_retrieval(args, rag_model, tokenizer, retriever, questions):
     def strip_title(title):
         if title.startswith('"'):
             title = title[1:]
@@ -97,7 +97,7 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, questions):
     )
     retriever_input_embs = rag_model.model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
 
-    _, all_docs = rag_model.model.retriever.retrieve(retriever_input_embs, rag_model.config.n_docs)
+    _, all_docs = retriever.retrieve(retriever_input_embs, rag_model.config.n_docs)
 
     provenance_strings = []
     for docs in all_docs:
@@ -106,13 +106,14 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, questions):
     return provenance_strings
 
 
-def evaluate_batch_e2e(args, rag_model, tokenizer, questions):
+def evaluate_batch_e2e(args, rag_model, tokenizer, retriever, questions):
     with torch.no_grad():
         input_ids = tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
             "input_ids"
         ].to(args.device)
         outputs = rag_model.generate(
             input_ids,
+            retriever=retriever,
             num_beams=args.num_beams,
             min_length=args.min_length,
             max_length=args.max_length,
@@ -276,27 +277,28 @@ def main(args):
 
         model = model_class.from_pretrained(checkpoint, **model_kwargs)
         model.to(args.device)
+        retriever = RagRetriever(model.config)
         tokenizer = (
-            model.model.generator_tokenizer
+            retriever.generator_tokenizer
             if args.model_type != "bart" and args.eval_mode == "e2e"
-            else model.model.question_encoder_tokenizer
+            else retriever.question_encoder_tokenizer
             if args.model_type != "bart" and args.eval_mode == "retrieval"
             else BartTokenizer.from_pretrained("facebook/bart-large")
         )
         if args.model_type != "bart":
-            model.model.retriever.init_retrieval(distributed_port=12345)
+            retriever.init_retrieval(distributed_port=12345)
 
         with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
             questions = []
             for line in tqdm(eval_file):
                 questions.append(line.strip())
                 if len(questions) == args.eval_batch_size:
-                    answers = evaluate_batch_fn(args, model, tokenizer, questions)
+                    answers = evaluate_batch_fn(args, model, tokenizer, retriever, questions)
                     preds_file.write("\n".join(answers) + "\n")
                     preds_file.flush()
                     questions = []
             if len(questions) > 0:
-                answers = evaluate_batch_fn(args, model, tokenizer, questions)
+                answers = evaluate_batch_fn(args, model, tokenizer, retriever, questions)
                 preds_file.write("\n".join(answers))
                 preds_file.flush()
 

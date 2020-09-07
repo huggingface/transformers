@@ -26,6 +26,10 @@ import torch
 import torch.distributed as dist
 from nlp import load_dataset
 
+from .tokenization_auto import AutoTokenizer
+from .tokenization_dpr import DPRQuestionEncoderTokenizer
+from .tokenization_t5 import T5Tokenizer
+
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +207,15 @@ class RagRetriever(object):
             if config.retriever_type == "hf_retriever"
             else LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
         )
+        self.generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
+        # TODO(piktus): To be replaced with AutoTokenizer once it supports DPRQuestionEncoderTokenizer
+        self.question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            config.pretrained_question_encoder_tokenizer_name_or_path
+        )
         self.process_group = None
         self.n_docs = config.n_docs
         self.batch_size = config.retrieval_batch_size * torch.cuda.device_count()
+        self.config = config
 
     def init_retrieval(self, distributed_port):
         """
@@ -243,6 +253,114 @@ class RagRetriever(object):
         if dist.is_initialized():
             torch.distributed.barrier(group=self.process_group)
 
+    def preprocess_query(self, input_ids, prefix):
+        r"""
+        Preprocesses the ``input_id`` by first converting it to string using the ``generator_tokenizer`` and
+        then tokenizing it using the ``question_encoder_tokenizer``.
+
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Return:
+            :obj:`torch.LongTensor`:
+                Tokenized input.
+            :obj:`str`:
+                Decoded input strings.
+            :obj:`bool`:
+                A boolean flag signalling that eos token needs to be added to the contextualized input.
+        """
+
+        # T5 tokenizer doesn't add eos token by default evan with add_special_tokens set to True
+        add_eos = (input_ids == self.generator_tokenizer.eos_token_id).any() and isinstance(
+            self.generator_tokenizer, T5Tokenizer
+        )
+
+        input_strings = self.generator_tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+
+        # handle prefix for T5
+        if isinstance(self.generator_tokenizer, T5Tokenizer):
+            for i, s in enumerate(input_strings):
+                if not s.startswith(prefix):
+                    logger.warning("T5 prefix mismatch in {}".format(s))
+                if len(input_strings[i]) <= len(prefix):
+                    input_strings[i] = ""
+                else:
+                    input_strings[i] = input_strings[i][len(prefix) :]
+
+        retriever_inputs = self.question_encoder_tokenizer.batch_encode_plus(
+            input_strings,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
+
+        return retriever_inputs["input_ids"].to(input_ids.device), input_strings, add_eos
+
+    def postprocess_docs(self, doc_scores, docs, input_strings, add_eos, prefix, print_docs=False):
+        r"""
+        Postprocessing retrieved ``docs`` and combining them with ``input_strings``.
+
+        Args:
+            doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, n_docs)`):
+                Retrieval scores of respective docs - passed for logging.
+            docs  (:obj:`dict`):
+                Retrieved documents.
+            input_strings (:obj:`str`):
+                Input strings decoded by ``preprocess_query``.
+            add_eos (:obj:`bool`):
+                A boolean flag signalling that eos token needs to be added to the contextualized input.
+            prefix (:obj:`str`):
+                Prefix added at the beginning of each input, typically used with T5-based models.
+            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
+
+        Return:
+            :obj:`tuple(tuple(torch.FloatTensor)`:
+                a tuple consisting od two elements: contextualized ``input_ids`` and a compatible ``attention_mask``.
+        """
+
+        def cat_input_and_doc(doc_score, doc_title, doc_text, input_string, add_eos, prefix, print_docs=False):
+            # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
+            # TODO(piktus): better handling of truncation
+            if doc_title.startswith('"'):
+                doc_title = doc_title[1:]
+            if doc_title.endswith('"'):
+                doc_title = doc_title[:-1]
+            if prefix is None:
+                prefix = ""
+            suffix = self.generator_tokenizer.eos_token if add_eos else ""
+            out = (
+                prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string + suffix
+            ).replace("  ", " ")
+            if print_docs:
+                logger.info("{} {}".format(doc_score, out))
+            return out
+
+        rag_input_strings = [
+            cat_input_and_doc(
+                doc_scores[i][j],
+                docs[i]["title"][j],
+                docs[i]["text"][j],
+                input_strings[i],
+                add_eos,
+                prefix,
+                print_docs,
+            )
+            for i in range(len(docs))
+            for j in range(self.n_docs)
+        ]
+
+        contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
+            rag_input_strings,
+            max_length=self.config.max_combined_length,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+        ).to(doc_scores.device)
+
+        return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
+
     def _is_main(self):
         return dist.get_rank(group=self.process_group) == 0
 
@@ -275,13 +393,6 @@ class RagRetriever(object):
             vectors_batched.append(vectors)
         return torch.cat(ids_batched), torch.cat(vectors_batched)
 
-    def _finalize_retrieval(self, query_vectors, doc_ids, doc_vectors):
-        assert doc_ids.shape[1] == self.n_docs and doc_vectors.shape[1] == self.n_docs
-        doc_vectors = doc_vectors.to(query_vectors)
-        doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
-        doc_dicts = self.retriever.get_doc_dicts(doc_ids)
-        return doc_scores, doc_dicts
-
     def retrieve(self, query_vectors, n_docs):
         """
         Retrieves documents for specified ``query_vectors``. The main process, which has the access to the index stored in memory, gathers queries
@@ -294,7 +405,7 @@ class RagRetriever(object):
                 The number of docs retrieved per query.
 
         Ouput:
-            total_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`
+            total_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, n_docs)`
                 The retrieval scores of the retrieved docs per query.
             total_examples (:obj:`List[dict]`):
                 The retrieved examples per query.
@@ -306,12 +417,10 @@ class RagRetriever(object):
             logger.info("Initializing index at first query")
             self.retriever.init_index()
 
-        query_vectors_detached = query_vectors.cpu().detach().to(torch.float32)
-
         # single GPU training
         if not dist.is_initialized():
-            doc_ids, doc_vectors = self._main_retrieve(query_vectors_detached)
-            return self._finalize_retrieval(query_vectors, doc_ids, doc_vectors)
+            doc_ids, doc_vectors = self._main_retrieve(query_vectors)
+            return doc_vectors, self.retriever.get_doc_dicts(doc_ids)
 
         # distributed training
         world_size = dist.get_world_size(group=self.process_group)
@@ -320,7 +429,7 @@ class RagRetriever(object):
         gather_list = None
         if self._is_main():
             gather_list = [torch.empty(query_vectors.shape, dtype=torch.float32) for _ in range(world_size)]
-        dist.gather(query_vectors_detached, dst=0, gather_list=gather_list, group=self.process_group)
+        dist.gather(query_vectors, dst=0, gather_list=gather_list, group=self.process_group)
 
         # scatter logic
         n_queries = query_vectors.shape[0]
@@ -334,4 +443,4 @@ class RagRetriever(object):
         doc_ids = self._scattered(scatter_ids, [n_queries, self.n_docs], target_type=torch.int64)
         doc_vectors = self._scattered(scatter_vectors, [n_queries, self.n_docs, query_vectors.shape[1]])
 
-        return self._finalize_retrieval(query_vectors, doc_ids, doc_vectors)
+        return doc_vectors, self.retriever.get_doc_dicts(doc_ids)

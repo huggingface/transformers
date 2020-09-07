@@ -22,6 +22,7 @@ from transformers import (
     AutoTokenizer,
     BartForConditionalGeneration,
     RagConfig,
+    RagRetriever,
     RagSequence,
     RagToken,
     T5ForConditionalGeneration,
@@ -53,6 +54,12 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
 class GenerativeQAModule(BaseTransformer):
     mode = "generative_qa"
     loss_names = ["loss"]
@@ -60,7 +67,9 @@ class GenerativeQAModule(BaseTransformer):
     val_metric = "em"
 
     def __init__(self, hparams, **kwargs):
-
+        # when loading from a pytorch lightning checkpoint, hparams are passed as dict
+        if isinstance(hparams, dict):
+            hparams = AttrDict(hparams)
         if hparams.model_type == "rag_sequence":
             self.model_class = RagSequence
         elif hparams.model_type == "rag_token":
@@ -92,12 +101,14 @@ class GenerativeQAModule(BaseTransformer):
             generator_config = config
 
         tokenizer = (
-            model.model.generator_tokenizer
+            AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
             if self.is_rag_model
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
+
+        self.retriever = RagRetriever(self.model.config) if self.is_rag_model else None
 
         save_git_info(self.hparams.output_dir)
         self.output_dir = Path(self.hparams.output_dir)
@@ -136,7 +147,7 @@ class GenerativeQAModule(BaseTransformer):
         os.environ["MASTER_PORT"] = str(self.distributed_port)
         super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
         if self.is_rag_model:
-            self.model.model.retriever.init_retrieval(self.distributed_port)
+            self.retriever.init_retrieval(self.distributed_port)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -189,6 +200,7 @@ class GenerativeQAModule(BaseTransformer):
         else:  # RAG models
             outputs = self(
                 source_ids,
+                retriever=self.retriever,
                 attention_mask=source_mask,
                 decoder_input_ids=decoder_input_ids,
                 use_cache=False,
@@ -250,6 +262,7 @@ class GenerativeQAModule(BaseTransformer):
         start_time = time.time()
         generated_ids = self.model.generate(
             batch["input_ids"],
+            retriever=self.retriever,
             dedup=False,  # rag specific parameter
             attention_mask=batch["attention_mask"],
             use_cache=True,

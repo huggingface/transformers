@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 
 import torch
 
+from .configuration_auto import AutoConfig
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
@@ -29,11 +30,8 @@ from .modeling_auto import AutoModelForSeq2SeqLM
 from .modeling_bart import BartForConditionalGeneration
 from .modeling_dpr import DPRQuestionEncoder
 from .modeling_outputs import ModelOutput
-from .modeling_t5 import T5ForConditionalGeneration
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
-from .tokenization_auto import AutoTokenizer
-from .tokenization_dpr import DPRQuestionEncoderTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +47,7 @@ class Seq2SeqLMOutputWithDocs(ModelOutput):
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Languaged modeling loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)` if the ``logits are marginalized or :obj:`(batch_size, config.n_docs, sequence_length, config.vocab_size)` if they aren't):
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)` if the ``logits are marginalized or :obj:`(batch_size * config.n_docs, sequence_length, config.vocab_size)` if they aren't):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         decoder_past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
@@ -107,8 +105,8 @@ def _unstack_ctxt(tensor, n_docs):
 
 
 RAG_START_DOCSTRING = r"""
-    RAG is a seq2seq model which encapsulates three core components: a retriever, a question encoder and a generator,
-    as well as respective tokenizers. During a forward pass, we encode the input with the question encoder and pass it
+    RAG is a seq2seq model which encapsulates two core components: a question encoder and a generator.
+    During a forward pass, we encode the input with the question encoder and pass it
     to the retriever to extract relevant context documents. The documents are then prepended to the input.
     Such contextualized input is passed to the generator.
 
@@ -124,24 +122,17 @@ RAG_START_DOCSTRING = r"""
 
 RAG_CORE_DOCSTRING = r"""
     A base RAG model returning raw sequence logits and document retrieval scores.
-    The model takes a retriever, a question encoder (with a tokenizer) and a generator (with a tokenizer)
-    as inputs to the constructor, so it can be a base for various RAG architectures
-    encapsualting different retrievers and generators.
+    The model takes a question encoder and a generator  as inputs to the constructor, so it can be a base
+    for various RAG architectures encapsualting different retrievers and generators.
 
     Args:
         config (:class:`~transformers.RagConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-        retriever (:class:`~transformers.RagRetriever`):
-            A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
         question_encoder (:class:`transformers.PreTrainedModel`):
             An encoder model compatible with the faiss index encapsulated by the ``retriever``.
-        question_encoder_tokenizer (:class:`transformers.PreTrainedTokenizer`):
-            A tokenizer compatible with the ``question_encoder``.
         generator (:class:`transformers.PreTrainedModel`):
             A seq2seq model used as the generator in the RAG architecture.
-        generator_tokenizer (:class:`transformers.PreTrainedTokenizer`):
-            A tokenizer compatible with the ``generator``.
 """
 
 RAG_FORWARD_INPUTS_DOCSTRING = r"""
@@ -150,6 +141,8 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary.
             :class:`~transformers.RagConfig`, used to initialize the model, specifies which generator to use, it also specifies a compatible
             generator tokenizer. Use that tokenizer class to obtain the indices.
+        retriever (:class:`~transformers.RagRetriever`):
+            A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
@@ -189,55 +182,39 @@ class RagModel(torch.nn.Module):
     def __init__(
         self,
         config,
-        retriever,
         question_encoder,
-        question_encoder_tokenizer,
         generator,
-        generator_tokenizer,
     ):
         super().__init__()
         self.config = config
-        self.retriever = retriever
         self.question_encoder = question_encoder
-        self.question_encoder_tokenizer = question_encoder_tokenizer
         self.generator = generator
-        self.generator_tokenizer = generator_tokenizer
         self.n_docs = self.config.n_docs
-        self._validate_configs_match(self.config, self.generator.config)
 
-    def _validate_configs_match(self, rag_config, gen_config):
-        assert rag_config.pad_token_id == gen_config.pad_token_id, "pad_token_id mismatch: {} vs. {}".format(
-            rag_config.pad_token_id, gen_config.pad_token_id
+    def contextualize(self, input_ids, retriever, print_docs=False):
+        question_encoder_input_ids, input_strings, add_eos = retriever.preprocess_query(
+            input_ids, self.generator.config.prefix
         )
-        assert rag_config.bos_token_id == gen_config.bos_token_id, "bos_token_id mismatch: {} vs. {}".format(
-            rag_config.bos_token_id, gen_config.bos_token_id
+        query_vectors = self.question_encoder(question_encoder_input_ids)[0]
+        doc_vectors, docs = retriever.retrieve(query_vectors.cpu().detach().to(torch.float32), n_docs=self.n_docs)
+        doc_vectors = doc_vectors.to(query_vectors)
+        doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
+        input_ids, attention_mask = retriever.postprocess_docs(
+            doc_scores, docs, input_strings, add_eos, self.generator.config.prefix, print_docs
         )
-        assert rag_config.eos_token_id == gen_config.eos_token_id, "eos_token_id mismatch: {} vs. {}".format(
-            rag_config.eos_token_id, gen_config.eos_token_id
-        )
-        assert (
-            rag_config.decoder_start_token_id == gen_config.decoder_start_token_id
-        ), "decoder_start_token_id mismatch: {} vs. {}".format(
-            rag_config.decoder_start_token_id, gen_config.decoder_start_token_id
-        )
-        assert (
-            rag_config.is_encoder_decoder == gen_config.is_encoder_decoder
-        ), "pad_token_id mismatch: {} vs. {}".format(rag_config.is_encoder_decoder, gen_config.is_encoder_decoder)
-        assert rag_config.vocab_size == gen_config.vocab_size, "vocab_size mismatch: {} vs. {}".format(
-            rag_config.vocab_size, gen_config.vocab_size
-        )
+        return input_ids, attention_mask, doc_scores
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids,
+        retriever: RagRetriever,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_past_key_values=None,
         use_cache=None,
-        doc_scores=None,
         print_docs=False,
         **generator_kwargs
     ):
@@ -248,12 +225,13 @@ class RagModel(torch.nn.Module):
         Returns:
 
         """
+
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is not None:
             doc_scores = encoder_outputs[-1]
         else:
             # Add context documents to input
-            input_ids, attention_mask, doc_scores = self.contextualize(input_ids, print_docs=print_docs)
+            input_ids, attention_mask, doc_scores = self.contextualize(input_ids, retriever)
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -280,87 +258,6 @@ class RagModel(torch.nn.Module):
             doc_scores=doc_scores,
         )
 
-    def _cat_input_and_doc(self, doc_score, doc_title, doc_text, input_string, add_eos, print_docs=False):
-        # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
-        # TODO(piktus): handle truncation
-        if doc_title.startswith('"'):
-            doc_title = doc_title[1:]
-        if doc_title.endswith('"'):
-            doc_title = doc_title[:-1]
-        prefix = self.generator.config.prefix if self.generator.config.prefix is not None else ""
-        suffix = self.generator_tokenizer.eos_token if add_eos else ""
-        out = (
-            prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string + suffix
-        ).replace("  ", " ")
-        if print_docs:
-            logger.info("{} {}".format(doc_score, out))
-        return out
-
-    def contextualize(self, input_ids, print_docs=False):
-        r"""
-        Retrieves context documents for every input in the batch.
-
-        Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
-
-        Return:
-            :obj:`tuple(tuple(torch.FloatTensor)`: a tuple consisting od three elements: contextualized ``input_ids``,
-                compatible ``attention_mask`` and scores of the retrieved documents.
-        """
-
-        device = input_ids.device
-        # T5 tokenizer doesn't add eos token by default evan with add_special_tokens set to True
-        add_eos = (input_ids == self.generator_tokenizer.eos_token_id).any() and isinstance(
-            self.generator, T5ForConditionalGeneration
-        )
-
-        input_strings = self.generator_tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-
-        # handle prefix for T5
-        if isinstance(self.generator, T5ForConditionalGeneration):
-            for i, s in enumerate(input_strings):
-                if not s.startswith(self.generator.config.prefix):
-                    logger.warning("T5 prefix mismatch in {}".format(s))
-                if len(input_strings[i]) <= len(self.generator.config.prefix):
-                    input_strings[i] = ""
-                else:
-                    input_strings[i] = input_strings[i][len(self.generator.config.prefix) :]
-
-        retriever_inputs = self.question_encoder_tokenizer.batch_encode_plus(
-            input_strings,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        )
-        retriever_input_embs = self.question_encoder(retriever_inputs["input_ids"].to(device))[0]
-
-        doc_scores, docs = self.retriever.retrieve(retriever_input_embs, n_docs=self.n_docs)
-
-        rag_input_strings = [
-            self._cat_input_and_doc(
-                doc_scores[i][j], docs[i]["title"][j], docs[i]["text"][j], input_strings[i], add_eos, print_docs
-            )
-            for i in range(len(docs))
-            for j in range(self.n_docs)
-        ]
-
-        contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
-            rag_input_strings,
-            max_length=self.config.max_combined_length,
-            return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-        ).to(device)
-
-        return (
-            contextualized_inputs["input_ids"],
-            contextualized_inputs["attention_mask"],
-            doc_scores.to(device),
-        )
-
 
 class RAGEncoder(torch.nn.Module):
     r"""
@@ -373,8 +270,8 @@ class RAGEncoder(torch.nn.Module):
         super().__init__()
         self.rag_model = rag_model
 
-    def forward(self, input_ids=None, attention_mask=None):
-        ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids, print_docs=False)
+    def forward(self, input_ids=None, retriever=None, attention_mask=None):
+        ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids, retriever)
         encoder = self.rag_model.generator.get_encoder()  # stacked
         encoder_outputs = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask, return_dict=True)
         # needed to satisfy assertions in generation_utils
@@ -393,30 +290,33 @@ class PreTrainedRagModel(PreTrainedModel):
     def __init__(
         self,
         config: RagConfig,
-        retriever,
-        question_encoder,
-        question_encoder_tokenizer,
-        generator,
-        generator_tokenizer,
+        question_encoder: PreTrainedModel = None,
+        generator: PreTrainedModel = None,
     ):
         super().__init__(config)
-        self.model = RagModel(
-            config,
-            retriever,
-            question_encoder,
-            question_encoder_tokenizer,
-            generator,
-            generator_tokenizer,
-        )
+
+        self.config = config
+
+        if question_encoder is None:
+            question_encoder_config = AutoConfig.from_config(self.config.pretrained_question_encoder_name_or_path)
+            # TODO(piktus): To be replaced with AutoModel once it supports DPRQuestionEncoder
+            question_encoder = DPRQuestionEncoder.from_config(question_encoder_config)
+
+        if generator is None:
+            generaotr_config = AutoConfig.from_config(self.config.pretrained_generator_name_or_path)
+            generator = AutoModelForSeq2SeqLM.from_config(generaotr_config)
+
         self.n_docs = self.config.n_docs
+        self._validate_configs_match(self.config, generator.config)
+
+        self.model = RagModel(config, question_encoder, generator)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path=None, **kwargs):
         r"""
         Instantiates a pretrained RAG model from a pre-trained model configuration. Since RAG doesn't have any trainable parameters
         other than those encapsulated by the ``question _encoder`` and the ``generator``, we call `:func:`~transformers.PreTrainedModel.from_pretrained``
-        for the ``question_encoder`` and the ``generator`` respectively. The method also uses the provided configuration to initialize the ``retriever``,
-        the ``question_encoder_tokenizer`` and the ``generator_tokenizer``.
+        for the ``question_encoder`` and the ``generator`` respectively.
 
         Parameters:
             pretrained_model_name_or_path (:obj:`str`, `optional`):
@@ -451,14 +351,11 @@ class PreTrainedRagModel(PreTrainedModel):
                 **kwargs,
             )
 
-        question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
-            config.pretrained_question_encoder_tokenizer_name_or_path
-        )
-        # TODO(piktus): To be replaced with AutoModel once it gets published (?)
+        # TODO(piktus): To be replaced with AutoModel once it supports DPRQuestionEncoder
         question_encoder = DPRQuestionEncoder.from_pretrained(
             config.pretrained_question_encoder_name_or_path, config=question_encoder_config
         )
-        generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
+
         generator_kwargs = {}
         if generator_config is not None:
             setattr(generator_config, "return_dict", True)
@@ -467,10 +364,7 @@ class PreTrainedRagModel(PreTrainedModel):
             generator_kwargs["return_dict"] = True
         generator = AutoModelForSeq2SeqLM.from_pretrained(config.pretrained_generator_name_or_path, **generator_kwargs)
 
-        retriever = RagRetriever(config)
-
-        model = cls(config, retriever, question_encoder, question_encoder_tokenizer, generator, generator_tokenizer)
-        return model
+        return cls(config, question_encoder, generator)
 
     def save_pretrained(self, save_directory):
         r"""
@@ -512,6 +406,28 @@ class PreTrainedRagModel(PreTrainedModel):
         shifted_input_ids[:, 0] = start_token_id
         return shifted_input_ids
 
+    def _validate_configs_match(self, rag_config, gen_config):
+        assert rag_config.pad_token_id == gen_config.pad_token_id, "pad_token_id mismatch: {} vs. {}".format(
+            rag_config.pad_token_id, gen_config.pad_token_id
+        )
+        assert rag_config.bos_token_id == gen_config.bos_token_id, "bos_token_id mismatch: {} vs. {}".format(
+            rag_config.bos_token_id, gen_config.bos_token_id
+        )
+        assert rag_config.eos_token_id == gen_config.eos_token_id, "eos_token_id mismatch: {} vs. {}".format(
+            rag_config.eos_token_id, gen_config.eos_token_id
+        )
+        assert (
+            rag_config.decoder_start_token_id == gen_config.decoder_start_token_id
+        ), "decoder_start_token_id mismatch: {} vs. {}".format(
+            rag_config.decoder_start_token_id, gen_config.decoder_start_token_id
+        )
+        assert (
+            rag_config.is_encoder_decoder == gen_config.is_encoder_decoder
+        ), "pad_token_id mismatch: {} vs. {}".format(rag_config.is_encoder_decoder, gen_config.is_encoder_decoder)
+        assert rag_config.vocab_size == gen_config.vocab_size, "vocab_size mismatch: {} vs. {}".format(
+            rag_config.vocab_size, gen_config.vocab_size
+        )
+
 
 @add_start_docstrings_to_callable(
     """A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass
@@ -532,6 +448,7 @@ class RagSequence(PreTrainedRagModel):
     def forward(
         self,
         input_ids,
+        retriever,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
@@ -551,6 +468,7 @@ class RagSequence(PreTrainedRagModel):
 
         outputs = self.model(
             input_ids,
+            retriever,
             attention_mask,
             encoder_outputs,
             decoder_input_ids,
@@ -596,6 +514,7 @@ class RagSequence(PreTrainedRagModel):
     def generate(
         self,
         input_ids,
+        retriever,
         dedup=True,
         print_docs=False,
         num_return_sequences=1,
@@ -610,6 +529,8 @@ class RagSequence(PreTrainedRagModel):
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes
                 it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            retriever (:class:`~transformers.RagRetriever`):
+                A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
             dedup (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Controls whether we want to deduplicate the generations from different context documents for a given input.
                 Has to be set to :obj:`False` if used while training with distributed backend.
@@ -637,8 +558,9 @@ class RagSequence(PreTrainedRagModel):
         def _get_unique_rows(_input_ids):
             return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
 
-        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, print_docs=print_docs)
+        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, retriever, print_docs=print_docs)
         rag_num_return_sequences = num_return_sequences
+        forward_batch_size = forward_batch_size // self.n_docs
         hypos = []
 
         for index in range(len(input_ids)):
@@ -664,7 +586,7 @@ class RagSequence(PreTrainedRagModel):
 
             hypos.append(output_sequences[top_cand_inds])
 
-        return self._cat_and_pad(hypos, pad_token_id=self.model.generator_tokenizer.pad_token_id)
+        return self._cat_and_pad(hypos, pad_token_id=self.config.pad_token_id)
 
     def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0, score=False):
         target = self.shift_tokens_left(target)
@@ -781,6 +703,7 @@ class RagToken(PreTrainedRagModel):
 
         return {
             "input_ids": None,
+            "retriever": kwargs["retriever"],
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
@@ -834,6 +757,7 @@ class RagToken(PreTrainedRagModel):
     def forward(
         self,
         input_ids,
+        retriever,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
@@ -849,7 +773,7 @@ class RagToken(PreTrainedRagModel):
             marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`True`, `logits`, returned as part of :class:`~transformers.file_utils.Seq2SeqLMOutputWithDocs` are marginalized, yielding
                 the shape of :obj:`(batch_size, sequence_length, hidden_size)`. Otherwise we return raw, non-marginalized logits of shape
-                :obj:`(batch_size, n_docs, sequence_length, hidden_size)`. ``marginalize`` is set to :obj:`True` during generation. The parameter is
+                :obj:`(batch_size * n_docs, sequence_length, hidden_size)`. ``marginalize`` is set to :obj:`True` during generation. The parameter is
                 ignored if ``return_loss`` is set to :obj:`True`.
 
         Returns:
@@ -860,6 +784,7 @@ class RagToken(PreTrainedRagModel):
 
         outputs = self.model(
             input_ids,
+            retriever,
             attention_mask,
             encoder_outputs,
             decoder_input_ids,

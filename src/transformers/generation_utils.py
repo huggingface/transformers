@@ -400,7 +400,12 @@ class GenerationMixin:
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
-            encoder_outputs: tuple = encoder(input_ids, attention_mask=attention_mask)
+            if "retriever" in model_specific_kwargs:
+                encoder_outputs: tuple = encoder(
+                    input_ids, retriever=model_specific_kwargs["retriever"], attention_mask=attention_mask
+                )
+            else:
+                encoder_outputs: tuple = encoder(input_ids, attention_mask=attention_mask)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
