@@ -424,12 +424,14 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="pt")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+        self._test_mono_column_pipeline(nlp, VALID_INPUTS, {}, prefix="This is ")
 
     @require_tf
     def test_tf_text_generation(self):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+        self._test_mono_column_pipeline(nlp, VALID_INPUTS, {}, prefix="This is ")
 
     @slow
     @require_torch
