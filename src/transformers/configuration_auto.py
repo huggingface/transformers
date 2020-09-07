@@ -180,7 +180,7 @@ CONFIG_MAPPING = OrderedDict(
             LxmertConfig,
         ),
         (
-            "causal_bert",
+            "causal-bert",
             CausalBertConfig,
         ),
     ]

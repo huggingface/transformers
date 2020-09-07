@@ -71,7 +71,7 @@ class CausalBertConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "causal_bert"
+    model_type = "causal-bert"
 
     def __init__(
         self,

@@ -51,7 +51,7 @@ CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_simple_bert_with_cross_attention(model, tf_hub_path, model_class):
+def load_tf_weights_in_causal_bert_with_cross_attn(model, tf_hub_path, model_class):
     try:
         import numpy as np
         import tensorflow.compat.v1 as tf
@@ -175,7 +175,7 @@ class CausalBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = BertConfig
-    base_model_prefix = "causal_bert"
+    base_model_prefix = "causal-bert"
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
