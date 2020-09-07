@@ -15,7 +15,7 @@ outputs = ' '.join(sp.EncodeAsPieces(article))
 
 input_ids = tok(article, return_tensors="pt").input_ids.to("cuda")
 
-model = EncoderDecoderModel.from_pretrained("patrickvonplaten/roberta2roberta_L-24_cnn_daily_mail").to("cuda")
+model = EncoderDecoderModel.from_pretrained("/home/patrick/hugging_face/roberta2roberta_L-24_cnn_daily_mail/bertseq2seq_full").to("cuda")
 
 model.config.decoder.bos_token_id = 2
 model.config.decoder.pad_token_id = 0
@@ -28,5 +28,7 @@ model.config.encoder.pad_token_id = 0
 model.config.encoder.eos_token_id = 1
 
 
-outputs = model.generate(input_ids, num_beams=4, max_length=128)
-print(outputs[0])
+outputs = model.generate(input_ids, num_beams=4, max_length=128, do_sample=False)[0]
+
+print(tok.decode(outputs))
+print(outputs)

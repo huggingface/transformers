@@ -238,8 +238,21 @@ class EncoderDecoderModel(PreTrainedModel):
             ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
             from .modeling_auto import AutoModel
 
+            if "config" not in kwargs_encoder:
+                from .configuration_auto import AutoConfig
+
+                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+
+                    logger.info(
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                    )
+                    encoder_config.is_decoder = False
+                    encoder_config.add_cross_attention = False
+
+                    kwargs_encoder["config"] = encoder_config
+
             encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
-        encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:

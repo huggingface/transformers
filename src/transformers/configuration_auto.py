@@ -40,6 +40,7 @@ from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Re
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+from .configuration_simple_bert import BertSimpleConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -177,6 +178,10 @@ CONFIG_MAPPING = OrderedDict(
         (
             "lxmert",
             LxmertConfig,
+        ),
+        (
+            "bert_simple",
+            BertSimpleConfig,
         ),
     ]
 )

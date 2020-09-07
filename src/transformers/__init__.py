@@ -22,6 +22,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_simple_bert import BertSimpleConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -429,6 +430,10 @@ if is_torch_available():
         TransfoXLModel,
         TransfoXLPreTrainedModel,
         load_tf_weights_in_transfo_xl,
+    )
+    from .modeling_simple_bert import (
+        BertSimpleModel,
+        BertSimpleForCausalLM
     )
     from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
     from .modeling_xlm import (
