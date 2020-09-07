@@ -92,7 +92,7 @@ toml==0.10.1
 torch==1.6.0
 torchvision==0.7.0
 tqdm==4.47.0
--e git+https://github.com/eltoto1219/transformers.git@4ed21b4e2fd0c2b0acb8b40c0cb43bbf247b44ab#egg=transformers
+transformers==3.1.0
 typed-ast==1.4.1
 typing-extensions==3.7.4.3
 unidic==1.0.2
