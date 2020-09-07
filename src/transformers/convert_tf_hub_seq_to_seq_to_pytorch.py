@@ -36,7 +36,7 @@ def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path):
     print("Building PyTorch model from configuration: {}".format(str(config)))
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_causal_bert_with_cross_attn(model, tf_hub_path, model_class="causal-bert")
+    load_tf_weights_in_causal_bert_with_cross_attn(model, tf_hub_path, model_class="causal_bert")
 
     # Save pytorch-model
     print("Save PyTorch model and config to {}".format(pytorch_dump_path))

@@ -430,7 +430,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Returns:
             :obj:`nn.Module`: A torch module mapping vocabulary to hidden states.
         """
-        import ipdb; ipdb.set_trace()
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
             return base_model.get_input_embeddings()
