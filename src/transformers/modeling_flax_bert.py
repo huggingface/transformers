@@ -6,7 +6,6 @@ import flax.nn as nn
 import jax
 import jax.numpy as jnp
 from transformers import BertConfig
-from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 
 
@@ -247,7 +246,6 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
     model_class = BertModel
     config_class = BertConfig
-    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "bert"
 
     @staticmethod
@@ -362,3 +360,8 @@ class FlaxBertModel(FlaxPreTrainedModel):
             attention_mask = np.ones_like(input_ids)
 
         return predict(input_ids, token_type_ids, position_ids, attention_mask)
+
+
+if __name__ == '__main__':
+    model = FlaxBertModel.from_pretrained("bert-base-cased")
+    input()
