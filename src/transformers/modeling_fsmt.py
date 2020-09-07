@@ -467,16 +467,12 @@ class FSMTDecoder(nn.Module):
         self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
         self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
-        # XXX: also add to init_weights
         self.output_projection = nn.Linear(
             self.embed_tokens.weight.shape[1],
             self.embed_tokens.weight.shape[0],
             bias=False,
         )
-        # self.output_projection.weight = self.embed_tokens.weight
-        # nn.init.normal_(
-        #    self.output_projection.weight, mean=0, std=self.output_embed_dim ** -0.5
-        # )
+        self.output_projection.weight = self.embed_tokens.weight
 
     def forward(
         self,
