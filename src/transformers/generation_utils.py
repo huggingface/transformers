@@ -368,7 +368,7 @@ class GenerationMixin:
         ):
             vocab_size = self.config.decoder.vocab_size
         else:
-            raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size need to be defined")
+            raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size needs to be defined")
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
