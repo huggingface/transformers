@@ -365,8 +365,11 @@ class FSMTModelIntegrationTests(unittest.TestCase):
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, model.config.decoder_attention_heads, model.config.tgt_vocab_size))
         self.assertEqual(output.shape, expected_shape)
+        print(output[:, :3, :3])
+        # expected numbers were generated when using just fairseq's model4.pt
+        # may have to adjust if switched to a different checkpoint
         expected_slice = torch.tensor(
-            [[-3.1850, -3.1849, 2.9694], [-4.0242, -4.0242, 0.2494], [-3.4442, -3.4443, 0.3315]], device=torch_device
+            [[-3.3069, -3.3069, 2.5253], [-4.2303, -4.2301, 0.8354], [-3.2488, -3.2487, 1.7397]], device=torch_device
         )
         print(output[:, :3, :3])
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
