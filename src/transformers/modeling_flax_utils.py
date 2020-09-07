@@ -9,8 +9,6 @@ from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 from transformers import PretrainedConfig, logger
 from transformers.file_utils import (
-    TF2_WEIGHTS_NAME,
-    TF_WEIGHTS_NAME,
     WEIGHTS_NAME,
     cached_path,
     hf_bucket_url,
