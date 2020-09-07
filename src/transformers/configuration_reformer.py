@@ -160,7 +160,7 @@ class ReformerConfig(PretrainedConfig):
         lsh_num_chunks_before=1,
         lsh_num_chunks_after=0,
         max_position_embeddings=4096,
-        num_attention_heads=2,
+        num_attention_heads=12,
         num_buckets=None,
         num_hashes=1,
         pad_token_id=0,
