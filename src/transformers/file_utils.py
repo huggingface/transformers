@@ -71,8 +71,8 @@ try:
     USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
     if USE_JAX in ENV_VARS_TRUE_VALUES:
-        import jax
         import flax
+        import jax
 
         logger.info("JAX version {}, Flax: available".format(jax.__version__))
         logger.info("Flax available: {}".format(flax))
