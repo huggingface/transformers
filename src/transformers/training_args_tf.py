@@ -42,6 +42,12 @@ class TFTrainingArguments(TrainingArguments):
             The batch size per GPU/TPU core/CPU for evaluation.
         gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
+
+            .. warning::
+
+                When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
+                logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
+                examples.
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
