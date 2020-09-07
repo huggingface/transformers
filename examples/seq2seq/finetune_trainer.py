@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
 import torch
+import numpy as np
 
 from transformers import (
     AutoConfig,
@@ -284,6 +285,8 @@ def main():
             label_str = lmap(str.strip, label_str)
 
             rouge: Dict = calculate_rouge(pred_str, label_str)
+            summ_len = np.mean(lmap(len, pred.predictions))
+            rouge.update({"gen_len": summ_len})
             return rouge
 
         def translation_metrics(pred: EvalPrediction) -> Dict:
@@ -293,6 +296,8 @@ def main():
             label_str = lmap(str.strip, label_str)
 
             bleu: Dict = calculate_bleu(pred_str, label_str)
+            gen_len = np.mean(lmap(len, pred.predictions))
+            bleu.update({"gen_len": gen_len})
             return bleu
 
         compute_metrics_fn = summarization_metrics if task_name == "summarization" else translation_metrics
