@@ -2,12 +2,10 @@ import numpy as np
 
 from transformers import BertConfig, RobertaConfig
 from transformers.modeling_flax_bert import FlaxBertModel
-from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 class FlaxRobertaModel(FlaxBertModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
