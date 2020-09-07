@@ -14,6 +14,7 @@ from transformers import (
     HfArgumentParser,
     MBartTokenizer,
     T5Tokenizer,
+    BartTokenizer,
     TrainingArguments,
     set_seed,
 )
@@ -56,6 +57,7 @@ class Seq2SeqDataCollator:
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
         self.data_args = data_args
+        self.add_prefix_space = isinstance(tokenizer, BartTokenizer)
 
     def __call__(self, batch) -> Dict[str, torch.Tensor]:
         if hasattr(self.tokenizer, "prepare_seq2seq_batch"):
@@ -111,7 +113,7 @@ class Seq2SeqDataCollator:
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
             return_tensors="pt",
-            add_prefix_space=self.data_args.add_prefix_space,  # where does this come from ?
+            add_prefix_space=self.add_prefix_space,
         )
         return batch_encoding.data
 
