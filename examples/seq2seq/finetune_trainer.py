@@ -4,18 +4,18 @@ import sys
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
-import torch
 import numpy as np
+import torch
 
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
+    BartTokenizer,
     EvalPrediction,
     HfArgumentParser,
     MBartTokenizer,
     T5Tokenizer,
-    BartTokenizer,
     TrainingArguments,
     set_seed,
 )
@@ -270,7 +270,7 @@ def main():
     assert model.config.num_beams >= 1, f"got eval_beams={model.config.num_beams}. Need an integer >= 1"
 
     # set max length for generation
-    model.config.max_generate_length = data_args.val_max_target_length    
+    model.config.max_generate_length = data_args.val_max_target_length
 
     # set decoder_start_token_id for MBart, TODO(@sshleifer): use_task_specific_params for this
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):

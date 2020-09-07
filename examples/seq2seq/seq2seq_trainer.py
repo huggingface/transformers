@@ -153,7 +153,11 @@ class Seq2SeqTrainer(Trainer):
 
         inputs = self._prepare_inputs(inputs)
 
-        max_length = model.config.max_generate_length if hasattr(model.config, "max_generate_length") else model.config.max_position_embeddings
+        max_length = (
+            model.config.max_generate_length
+            if hasattr(model.config, "max_generate_length")
+            else model.config.max_position_embeddings
+        )
 
         with torch.no_grad():
             if self.args.predict_with_generate:

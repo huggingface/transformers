@@ -89,7 +89,7 @@ def test_finetune_trainer():
     )
     with patch.object(sys, "argv", testargs):
         main()
-    #TODO: check that saved files work
+    # TODO: check that saved files work
     return
 
     # Check metrics
