@@ -6,7 +6,7 @@ article = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bo
 tok = CausalBertTokenizer.from_pretrained("patrickvonplaten/roberta2roberta_L-24_cnn_daily_mail")
 input_ids = tok(article, return_tensors="pt").input_ids
 
-model = EncoderDecoderModel.from_pretrained("patrickvonplaten/roberta2roberta_L-24_cnn_daily_mail",force_download=True)
+model = EncoderDecoderModel.from_pretrained("patrickvonplaten/roberta2roberta_L-24_cnn_daily_mail")
 import ipdb; ipdb.set_trace()
 
 outputs = model.generate(input_ids, num_beams=4, max_length=128, do_sample=False)[0]

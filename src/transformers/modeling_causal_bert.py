@@ -175,7 +175,7 @@ class CausalBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = BertConfig
-    base_model_prefix = "causal-bert"
+    base_model_prefix = "causal_bert"
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
