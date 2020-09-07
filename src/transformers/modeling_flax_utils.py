@@ -47,13 +47,13 @@ class FlaxPreTrainedModel(ABC):
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
         """
         config = kwargs.pop("config", None)
-        state_dict = kwargs.pop("state_dict", None)
+        # state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
-        from_tf = kwargs.pop("from_tf", False)
+        # from_tf = kwargs.pop("from_tf", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        output_loading_info = kwargs.pop("output_loading_info", False)
+        # output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
 
