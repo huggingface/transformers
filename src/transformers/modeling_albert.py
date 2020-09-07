@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch ALBERT model. """
 
-import logging
 import math
 import os
 import warnings
@@ -44,9 +43,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward, find_pruneable_heads_and_indices
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AlbertConfig"
 _TOKENIZER_FOR_DOC = "AlbertTokenizer"
@@ -302,7 +302,10 @@ class AlbertLayer(nn.Module):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         ffn_output = apply_chunking_to_forward(
-            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output[0],
+            self.ff_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output[0],
         )
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
 
@@ -397,16 +400,16 @@ class AlbertTransformer(nn.Module):
 
 
 class AlbertPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = AlbertConfig
     base_model_prefix = "albert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -473,36 +476,36 @@ ALBERT_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -542,17 +545,17 @@ class AlbertModel(AlbertPreTrainedModel):
         return self.embeddings.word_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            ALBERT has a different architecture in that its layers are shared across groups, which then has inner groups.
-            If an ALBERT model has 12 hidden layers and 2 hidden groups, with two inner groups, there
-            is a total of 4 different layers.
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        ALBERT has a different architecture in that its layers are shared across groups, which then has inner groups.
+        If an ALBERT model has 12 hidden layers and 2 hidden groups, with two inner groups, there
+        is a total of 4 different layers.
 
-            These layers are flattened: the indices [0,1] correspond to the two inner groups of the first hidden layer,
-            while [2,3] correspond to the two inner groups of the second hidden layer.
+        These layers are flattened: the indices [0,1] correspond to the two inner groups of the first hidden layer,
+        while [2,3] correspond to the two inner groups of the second hidden layer.
 
-            Any layer with in index other than [0,1,2,3] will result in an error.
-            See base class PreTrainedModel for more information about head pruning
+        Any layer with in index other than [0,1,2,3] will result in an error.
+        See base class PreTrainedModel for more information about head pruning
         """
         for layer, heads in heads_to_prune.items():
             group_idx = int(layer / self.config.inner_group_num)
@@ -646,13 +649,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         self.sop_classifier = AlbertSOPHead(config)
 
         self.init_weights()
-        self.tie_weights()
-
-    def tie_weights(self):
-        self._tie_or_clone_weights(self.predictions.decoder, self.albert.embeddings.word_embeddings)
 
     def get_output_embeddings(self):
         return self.predictions.decoder
+
+    def get_input_embeddings(self):
+        return self.albert.embeddings.word_embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -672,34 +674,34 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         **kwargs,
     ):
         r"""
-        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-        sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
-            Indices should be in ``[0, 1]``.
-            ``0`` indicates original order (sequence A, then sequence B),
-            ``1`` indicates switched order (sequence B, then sequence A).
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
+            labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
+                Labels for computing the masked language modeling loss.
+                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+                in ``[0, ..., config.vocab_size]``
+            sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
+                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
+                Indices should be in ``[0, 1]``.
+                ``0`` indicates original order (sequence A, then sequence B),
+                ``1`` indicates switched order (sequence B, then sequence A).
+            kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+                Used to hide legacy arguments that have been deprecated.
 
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import AlbertTokenizer, AlbertForPreTraining
-        >>> import torch
+            >>> from transformers import AlbertTokenizer, AlbertForPreTraining
+            >>> import torch
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2', return_dict=True)
+            >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+            >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2', return_dict=True)
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(input_ids)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> sop_logits = outputs.sop_logits
+            >>> prediction_logits = outputs.prediction_logits
+            >>> sop_logits = outputs.sop_logits
 
         """
 
@@ -787,7 +789,8 @@ class AlbertSOPHead(nn.Module):
 
 
 @add_start_docstrings(
-    "Albert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING,
+    "Albert Model with a `language modeling` head on top.",
+    ALBERT_START_DOCSTRING,
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     def __init__(self, config):
@@ -797,13 +800,12 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         self.predictions = AlbertMLMHead(config)
 
         self.init_weights()
-        self.tie_weights()
-
-    def tie_weights(self):
-        self._tie_or_clone_weights(self.predictions.decoder, self.albert.embeddings.word_embeddings)
 
     def get_output_embeddings(self):
         return self.predictions.decoder
+
+    def get_input_embeddings(self):
+        return self.albert.embeddings.word_embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -827,7 +829,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         **kwargs
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with
@@ -913,7 +915,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
@@ -953,7 +955,10 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -994,7 +999,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
@@ -1034,7 +1039,10 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1075,11 +1083,11 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
@@ -1171,7 +1179,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
@@ -1216,5 +1224,8 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

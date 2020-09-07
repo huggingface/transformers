@@ -16,15 +16,15 @@
 
 
 import collections
-import logging
 import os
 import unicodedata
 from typing import Optional
 
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -199,7 +199,7 @@ class MecabTokenizer:
         try:
             import fugashi
         except ModuleNotFoundError as error:
-            raise error(
+            raise error.__class__(
                 "You need to install fugashi to use MecabTokenizer."
                 "See https://pypi.org/project/fugashi/ for installation."
             )
@@ -211,7 +211,7 @@ class MecabTokenizer:
                 try:
                     import ipadic
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The ipadic dictionary is not installed. "
                         "See https://github.com/polm/ipadic-py for installation."
                     )
@@ -222,7 +222,7 @@ class MecabTokenizer:
                 try:
                     import unidic_lite
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The unidic_lite dictionary is not installed. "
                         "See https://github.com/polm/unidic-lite for installation."
                     )
@@ -233,7 +233,7 @@ class MecabTokenizer:
                 try:
                     import unidic
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The unidic dictionary is not installed. "
                         "See https://github.com/polm/unidic-py for installation."
                     )

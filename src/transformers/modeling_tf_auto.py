@@ -15,7 +15,6 @@
 """ Auto Model class. """
 
 
-import logging
 import warnings
 from collections import OrderedDict
 
@@ -139,9 +138,10 @@ from .modeling_tf_xlnet import (
     TFXLNetLMHeadModel,
     TFXLNetModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 TF_MODEL_MAPPING = OrderedDict(
@@ -310,27 +310,27 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 
 class TFAutoModel(object):
     r"""
-        :class:`~transformers.TFAutoModel` is a generic model class
-        that will be instantiated as one of the base model classes of the library
-        when created with the `TFAutoModel.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModel` is a generic model class
+    that will be instantiated as one of the base model classes of the library
+    when created with the `TFAutoModel.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        The `from_pretrained()` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+    The `from_pretrained()` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: TFT5Model (T5 model)
-            - `distilbert`: TFDistilBertModel (DistilBERT model)
-            - `roberta`: TFRobertaModel (RoBERTa model)
-            - `bert`: TFBertModel (Bert model)
-            - `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
-            - `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
-            - `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
-            - `xlnet`: TFXLNetModel (XLNet model)
-            - `xlm`: TFXLMModel (XLM model)
-            - `ctrl`: TFCTRLModel (CTRL model)
+        - `t5`: TFT5Model (T5 model)
+        - `distilbert`: TFDistilBertModel (DistilBERT model)
+        - `roberta`: TFRobertaModel (RoBERTa model)
+        - `bert`: TFBertModel (Bert model)
+        - `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
+        - `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
+        - `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
+        - `xlnet`: TFXLNetModel (XLNet model)
+        - `xlm`: TFXLMModel (XLM model)
+        - `ctrl`: TFCTRLModel (CTRL model)
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -342,7 +342,7 @@ class TFAutoModel(object):
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -381,7 +381,7 @@ class TFAutoModel(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -442,7 +442,7 @@ class TFAutoModel(object):
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.TFPretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
@@ -451,8 +451,8 @@ class TFAutoModel(object):
 
             model = TFAutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModel.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
@@ -477,11 +477,11 @@ class TFAutoModel(object):
 
 class TFAutoModelForPreTraining(object):
     r"""
-        :class:`~transformers.TFAutoModelForPreTraining` is a generic model class
-        that will be instantiated as one of the model classes of the library -with the architecture used for pretraining this model– when created with the `TFAutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForPreTraining` is a generic model class
+    that will be instantiated as one of the model classes of the library -with the architecture used for pretraining this model– when created with the `TFAutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -493,7 +493,7 @@ class TFAutoModelForPreTraining(object):
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -532,7 +532,7 @@ class TFAutoModelForPreTraining(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the model classes of the library -with the architecture used for pretraining this model– from a pre-trained model configuration.
+        r"""Instantiates one of the model classes of the library -with the architecture used for pretraining this model– from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
@@ -588,7 +588,7 @@ class TFAutoModelForPreTraining(object):
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 Can be used to update the configuration object (after it being loaded) and initiate the model.
-                (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or
+                (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or
                 automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
@@ -604,8 +604,8 @@ class TFAutoModelForPreTraining(object):
 
             model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForPreTraining.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModelForPreTraining.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -630,27 +630,27 @@ class TFAutoModelForPreTraining(object):
 
 class TFAutoModelWithLMHead(object):
     r"""
-        :class:`~transformers.TFAutoModelWithLMHead` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelWithLMHead` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        The `from_pretrained()` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+    The `from_pretrained()` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: TFT5ForConditionalGeneration (T5 model)
-            - `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
-            - `roberta`: TFRobertaForMaskedLM (RoBERTa model)
-            - `bert`: TFBertForMaskedLM (Bert model)
-            - `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
-            - `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
-            - `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
-            - `xlnet`: TFXLNetLMHeadModel (XLNet model)
-            - `xlm`: TFXLMWithLMHeadModel (XLM model)
-            - `ctrl`: TFCTRLLMHeadModel (CTRL model)
+        - `t5`: TFT5ForConditionalGeneration (T5 model)
+        - `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
+        - `roberta`: TFRobertaForMaskedLM (RoBERTa model)
+        - `bert`: TFBertForMaskedLM (Bert model)
+        - `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
+        - `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
+        - `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
+        - `xlnet`: TFXLNetLMHeadModel (XLNet model)
+        - `xlm`: TFXLMWithLMHeadModel (XLM model)
+        - `ctrl`: TFCTRLLMHeadModel (CTRL model)
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -662,7 +662,7 @@ class TFAutoModelWithLMHead(object):
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -705,7 +705,7 @@ class TFAutoModelWithLMHead(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -767,7 +767,7 @@ class TFAutoModelWithLMHead(object):
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.TFPretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
@@ -776,8 +776,8 @@ class TFAutoModelWithLMHead(object):
 
             model = TFAutoModelWithLMHead.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelWithLMHead.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelWithLMHead.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModelWithLMHead.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
@@ -808,18 +808,18 @@ class TFAutoModelWithLMHead(object):
 
 class TFAutoModelForMultipleChoice:
     r"""
-        :class:`~transformers.TFAutoModelForMultipleChoice` is a generic model class
-        that will be instantiated as one of the multiple choice model classes of the library
-        when created with the `TFAutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForMultipleChoice` is a generic model class
+    that will be instantiated as one of the multiple choice model classes of the library
+    when created with the `TFAutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        The `from_pretrained()` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
-            - `albert`: TFAlbertForMultipleChoice (Albert model)
-            - `bert`: TFBertForMultipleChoice (Bert model)
+    The `from_pretrained()` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+        - `albert`: TFAlbertForMultipleChoice (Albert model)
+        - `bert`: TFBertForMultipleChoice (Bert model)
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -831,7 +831,7 @@ class TFAutoModelForMultipleChoice:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -864,7 +864,7 @@ class TFAutoModelForMultipleChoice:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the multiple choice model classes of the library
+        r"""Instantiates one of the multiple choice model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -921,7 +921,7 @@ class TFAutoModelForMultipleChoice:
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.TFPretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
@@ -930,8 +930,8 @@ class TFAutoModelForMultipleChoice:
 
             model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelFormultipleChoice.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModelFormultipleChoice.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
@@ -958,12 +958,12 @@ class TFAutoModelForMultipleChoice:
 
 class TFAutoModelForCausalLM:
     r"""
-        :class:`~transformers.TFAutoModelForCausalLM` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `TFAutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForCausalLM` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `TFAutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -975,7 +975,7 @@ class TFAutoModelForCausalLM:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1011,7 +1011,7 @@ class TFAutoModelForCausalLM:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1068,7 +1068,8 @@ class TFAutoModelForCausalLM:
 
             model = TFAutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForCausalLM.from_pretrained('./test/gpt2_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = TFAutoModelForCausalLM.from_pretrained('gpt2', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/gpt2_tf_model_config.json')
             model =  TFAutoModelForCausalLM.from_pretrained('./tf_model/gpt2_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1093,12 +1094,12 @@ class TFAutoModelForCausalLM:
 
 class TFAutoModelForMaskedLM:
     r"""
-        :class:`~transformers.TFAutoModelForMaskedLM` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `TFAutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForMaskedLM` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `TFAutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1110,7 +1111,7 @@ class TFAutoModelForMaskedLM:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1149,7 +1150,7 @@ class TFAutoModelForMaskedLM:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1208,9 +1209,10 @@ class TFAutoModelForMaskedLM:
 
         Examples::
 
-            model = TFAutoModelForMaskedLM.from_pretrained('bert')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelForMaskedLM.from_pretrained(('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForMaskedLM.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = TFAutoModelForMaskedLM.from_pretrained(('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model =  TFAutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1235,12 +1237,12 @@ class TFAutoModelForMaskedLM:
 
 class TFAutoModelForSeq2SeqLM:
     r"""
-        :class:`~transformers.TFAutoModelForSeq2SeqLM` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `TFAutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForSeq2SeqLM` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `TFAutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1252,7 +1254,7 @@ class TFAutoModelForSeq2SeqLM:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1285,7 +1287,7 @@ class TFAutoModelForSeq2SeqLM:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1337,7 +1339,8 @@ class TFAutoModelForSeq2SeqLM:
 
             model = TFAutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForSeq2SeqLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = TFAutoModelForSeq2SeqLM.from_pretrained('t5-base', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/t5_tf_model_config.json')
             model =  TFAutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1364,22 +1367,22 @@ class TFAutoModelForSeq2SeqLM:
 
 class TFAutoModelForSequenceClassification(object):
     r"""
-        :class:`~transformers.TFAutoModelForSequenceClassification` is a generic model class
-        that will be instantiated as one of the sequence classification model classes of the library
-        when created with the `TFAutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForSequenceClassification` is a generic model class
+    that will be instantiated as one of the sequence classification model classes of the library
+    when created with the `TFAutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        The `from_pretrained()` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+    The `from_pretrained()` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
-            - `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
-            - `bert`: TFBertForSequenceClassification (Bert model)
-            - `xlnet`: TFXLNetForSequenceClassification (XLNet model)
-            - `xlm`: TFXLMForSequenceClassification (XLM model)
+        - `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
+        - `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
+        - `bert`: TFBertForSequenceClassification (Bert model)
+        - `xlnet`: TFXLNetForSequenceClassification (XLNet model)
+        - `xlm`: TFXLMForSequenceClassification (XLM model)
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1391,7 +1394,7 @@ class TFAutoModelForSequenceClassification(object):
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1428,7 +1431,7 @@ class TFAutoModelForSequenceClassification(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the sequence classification model classes of the library
+        r"""Instantiates one of the sequence classification model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1488,7 +1491,7 @@ class TFAutoModelForSequenceClassification(object):
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.TFPretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
@@ -1497,8 +1500,8 @@ class TFAutoModelForSequenceClassification(object):
 
             model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForSequenceClassification.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModelForSequenceClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
@@ -1525,23 +1528,23 @@ class TFAutoModelForSequenceClassification(object):
 
 class TFAutoModelForQuestionAnswering(object):
     r"""
-        :class:`~transformers.TFAutoModelForQuestionAnswering` is a generic model class
-        that will be instantiated as one of the question answering model classes of the library
-        when created with the `TFAutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.TFAutoModelForQuestionAnswering` is a generic model class
+    that will be instantiated as one of the question answering model classes of the library
+    when created with the `TFAutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        The `from_pretrained()` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+    The `from_pretrained()` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
-            - `albert`: TFAlbertForQuestionAnswering (ALBERT model)
-            - `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
-            - `bert`: TFBertForQuestionAnswering (Bert model)
-            - `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
-            - `xlm`: TFXLMForQuestionAnswering (XLM model)
+        - `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
+        - `albert`: TFAlbertForQuestionAnswering (ALBERT model)
+        - `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
+        - `bert`: TFBertForQuestionAnswering (Bert model)
+        - `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
+        - `xlm`: TFXLMForQuestionAnswering (XLM model)
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1553,7 +1556,7 @@ class TFAutoModelForQuestionAnswering(object):
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1591,7 +1594,7 @@ class TFAutoModelForQuestionAnswering(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the question answering model classes of the library
+        r"""Instantiates one of the question answering model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1652,7 +1655,7 @@ class TFAutoModelForQuestionAnswering(object):
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.TFPretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
@@ -1661,8 +1664,8 @@ class TFAutoModelForQuestionAnswering(object):
 
             model = TFAutoModelForQuestionAnswering.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForQuestionAnswering.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelForQuestionAnswering.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModelForQuestionAnswering.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModelForQuestionAnswering.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
@@ -1697,7 +1700,7 @@ class TFAutoModelForTokenClassification:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1733,7 +1736,7 @@ class TFAutoModelForTokenClassification:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the question answering model classes of the library
+        r"""Instantiates one of the question answering model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1785,7 +1788,7 @@ class TFAutoModelForTokenClassification:
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.TFPretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
@@ -1794,8 +1797,8 @@ class TFAutoModelForTokenClassification:
 
             model = TFAutoModelForTokenClassification.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForTokenClassification.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelForTokenClassification.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            assert model.config.output_attention == True
+            model = TFAutoModelForTokenClassification.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = TFAutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)

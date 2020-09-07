@@ -6,7 +6,6 @@ Copyright by the AllenNLP authors.
 
 import fnmatch
 import json
-import logging
 import os
 import re
 import shutil
@@ -24,14 +23,16 @@ from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
-import requests
-from filelock import FileLock
 from tqdm.auto import tqdm
 
+import requests
+from filelock import FileLock
+
 from . import __version__
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
@@ -302,14 +303,15 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> inputs = tokenizer(question, text, return_tensors='pt')
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
-        >>> start_scores = outputs.start_scores
-        >>> end_scores = outputs.end_scores
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -756,7 +758,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logger.getEffectiveLevel() == logging.NOTSET),
+        disable=bool(logging.get_verbosity() == logging.NOTSET),
     )
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks

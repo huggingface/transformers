@@ -25,21 +25,23 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 if is_torch_available():
     import torch
+
     from transformers import (
         LongformerConfig,
-        LongformerModel,
         LongformerForMaskedLM,
+        LongformerForMultipleChoice,
+        LongformerForQuestionAnswering,
         LongformerForSequenceClassification,
         LongformerForTokenClassification,
-        LongformerForQuestionAnswering,
-        LongformerForMultipleChoice,
+        LongformerModel,
         LongformerSelfAttention,
     )
 
 
 class LongformerModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13

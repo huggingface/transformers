@@ -18,18 +18,13 @@
 """
 
 
-import logging
 import timeit
 from typing import Callable, Optional
 
-from transformers import (
-    MODEL_MAPPING,
-    MODEL_WITH_LM_HEAD_MAPPING,
-    PretrainedConfig,
-    is_py3nvml_available,
-    is_torch_available,
-)
-
+from ..configuration_utils import PretrainedConfig
+from ..file_utils import is_py3nvml_available, is_torch_available
+from ..modeling_auto import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING
+from ..utils import logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -42,6 +37,7 @@ from .benchmark_utils import (
 
 if is_torch_available():
     import torch
+
     from .benchmark_args import PyTorchBenchmarkArguments
 
 
@@ -49,7 +45,7 @@ if is_py3nvml_available():
     import py3nvml.py3nvml as nvml
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class PyTorchBenchmark(Benchmark):
@@ -203,11 +199,17 @@ class PyTorchBenchmark(Benchmark):
                 # run additional 10 times to stabilize compilation for tpu and torchscript
                 logger.info("Do inference on TPU or torchscript. Running model 5 times to stabilize compilation")
                 timeit.repeat(
-                    func, repeat=1, number=5,
+                    func,
+                    repeat=1,
+                    number=5,
                 )
 
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(func, repeat=self.args.repeat, number=10,)
+            runtimes = timeit.repeat(
+                func,
+                repeat=self.args.repeat,
+                number=10,
+            )
 
             if self.args.is_tpu and self.args.torch_xla_tpu_print_metrics:
                 import torch_xla.debug.metrics as met

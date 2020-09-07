@@ -1,5 +1,4 @@
 import inspect
-import logging
 import math
 import os
 import re
@@ -19,13 +18,34 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from .data.data_collator import DataCollator, default_data_collator
+from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import is_nlp_available, is_torch_tpu_available
-from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
+from .integrations import (
+    default_hp_search_backend,
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+    run_hp_search_optuna,
+    run_hp_search_ray,
+)
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
+from .tokenization_utils_base import PreTrainedTokenizerBase
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    BestRun,
+    EvalPrediction,
+    HPSearchBackend,
+    PredictionOutput,
+    TrainOutput,
+    default_compute_objective,
+    default_hp_space,
+    set_seed,
+)
 from .training_args import TrainingArguments
+from .utils import logging
 
 
 _use_native_amp = False
@@ -62,7 +82,13 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = logging.getLogger(__name__)
+if is_optuna_available():
+    import optuna
+
+if is_ray_available():
+    from ray import tune
+
+logger = logging.get_logger(__name__)
 
 
 @contextmanager
@@ -140,19 +166,28 @@ class Trainer:
     optimized for 🤗 Transformers.
 
     Args:
-        model (:class:`~transformers.PreTrainedModel`):
-            The model to train, evaluate or use for predictions.
-        args (:class:`~transformers.TrainingArguments`):
-            The arguments to tweak for training.
-        data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
+        model (:class:`~transformers.PreTrainedModel`, `optional`):
+            The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed.
+        args (:class:`~transformers.TrainingArguments`, `optional`):
+            The arguments to tweak for training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
+            with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.
+        data_collator (:obj:`DataCollator`, `optional`):
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or
-            :obj:`eval_dataset`.
+            :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
+            provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+             The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
+        tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
+            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+            maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
+            interrupted training or reuse the fine-tuned model.
+        model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
+            A function that instantiates the model to be used. If provided, each call to
+            :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -168,23 +203,43 @@ class Trainer:
 
     def __init__(
         self,
-        model: PreTrainedModel,
-        args: TrainingArguments,
+        model: PreTrainedModel = None,
+        args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         **kwargs,
     ):
-        self.model = model.to(args.device)
+        if args is None:
+            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
+            args = TrainingArguments("tmp_trainer")
         self.args = args
-        self.data_collator = data_collator if data_collator is not None else default_data_collator
+        # Seed must be set before instantiating the model when using model
+        set_seed(self.args.seed)
+        assert (
+            model is not None or model_init is not None
+        ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
+        if model is None and model_init is not None:
+            model = model_init()
+        self.model = model.to(args.device) if model is not None else None
+        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.tokenizer = tokenizer
+        self.model_init = model_init
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
+        if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
+            raise RuntimeError(
+                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
+                "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
+            )
         self.tb_writer = tb_writer
         if "prediction_loss_only" in kwargs:
             warnings.warn(
@@ -200,21 +255,10 @@ class Trainer:
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
-        if is_wandb_available():
-            self.setup_wandb()
-        elif os.environ.get("WANDB_DISABLED") != "true":
-            logger.info(
-                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
-            )
-        if is_comet_available():
-            self.setup_comet()
-        elif os.environ.get("COMET_MODE") != "DISABLED":
-            logger.info(
-                "To use comet_ml logging, run `pip/conda install comet_ml` "
-                "see https://www.comet.ml/docs/python-sdk/huggingface/"
-            )
-        set_seed(self.args.seed)
+
+        # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
+        self._loggers_initialized = False
+
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
@@ -242,8 +286,12 @@ class Trainer:
         self.epoch = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
+        self.hp_search_backend = None
+        self.use_tune_checkpoints = False
 
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
+        if not self.args.remove_unused_columns:
+            return
         # Inspect model forward signature to keep only the arguments it accepts.
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
@@ -255,7 +303,7 @@ class Trainer:
         logger.info(
             f"The following columns {dset_description}don't have a corresponding argument in `{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
         )
-        dataset.set_format(columns=columns)
+        dataset.set_format(type=dataset.format["type"], columns=columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -460,7 +508,70 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
-    def train(self, model_path: Optional[str] = None):
+    def _setup_loggers(self):
+        if self._loggers_initialized:
+            return
+        if is_wandb_available():
+            self.setup_wandb()
+        elif os.environ.get("WANDB_DISABLED") != "true":
+            logger.info(
+                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
+                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
+        if is_comet_available():
+            self.setup_comet()
+        elif os.environ.get("COMET_MODE") != "DISABLED":
+            logger.info(
+                "To use comet_ml logging, run `pip/conda install comet_ml` "
+                "see https://www.comet.ml/docs/python-sdk/huggingface/"
+            )
+        self._loggers_initialized = True
+
+    def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
+        """ HP search setup code """
+        if self.hp_search_backend is None or trial is None:
+            return
+        params = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
+        for key, value in params.items():
+            if not hasattr(self.args, key):
+                raise AttributeError(
+                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
+                )
+            old_attr = getattr(self.args, key, None)
+            # Casting value to the proper type
+            if old_attr is not None:
+                value = type(old_attr)(value)
+            setattr(self.args, key, value)
+        if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            logger.info("Trial:", trial.params)
+
+    def _report_to_hp_search(
+        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
+    ):
+        if self.hp_search_backend is None or trial is None:
+            return
+        self.objective = self.compute_objective(metrics)
+        if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            trial.report(self.objective, epoch)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+        elif self.hp_search_backend == HPSearchBackend.RAY:
+            if self.global_step % self.args.save_steps == 0:
+                self._tune_save_checkpoint()
+            tune.report(objective=self.objective, **metrics)
+
+    def _tune_save_checkpoint(self):
+        if not self.use_tune_checkpoints:
+            return
+        with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
+            self.args.output_dir = checkpoint_dir
+            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+            self.save_model(output_dir)
+            if self.is_world_master():
+                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+
+    def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
         Main training entry point.
 
@@ -468,7 +579,23 @@ class Trainer:
             model_path (:obj:`str`, `optional`):
                 Local path to the model if the model to train has been instantiated from a local path. If present,
                 training will resume from the optimizer/scheduler states loaded here.
+            trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
+                The trial run or the hyperparameter dictionary for hyperparameter search.
         """
+        # This might change the seed so needs to run first.
+        self._hp_search_setup(trial)
+
+        # Model re-init
+        if self.model_init is not None:
+            # Seed must be set before instantiating the model when using model_init.
+            set_seed(self.args.seed)
+            model = self.model_init()
+            self.model = model.to(self.args.device)
+
+            # Reinitializes optimizer and scheduler
+            self.optimizer, self.lr_scheduler = None, None
+
+        # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
@@ -542,7 +669,7 @@ class Trainer:
         if model_path is not None:
             # set global_step to global_step of last saved checkpoint from model path
             try:
-                self.global_step = int(model_path.split("-")[-1].split("/")[0])
+                self.global_step = int(model_path.split("-")[-1].split(os.path.sep)[0])
                 epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
                 steps_trained_in_current_epoch = self.global_step % (
                     len(train_dataloader) // self.args.gradient_accumulation_steps
@@ -556,13 +683,12 @@ class Trainer:
                 self.global_step = 0
                 logger.info("  Starting fine-tuning.")
 
-        tr_loss = 0.0
-        logging_loss = 0.0
+        tr_loss = torch.tensor(0.0).to(self.args.device)
+        logging_loss_scalar = 0.0
         model.zero_grad()
-        train_iterator = trange(
-            epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=not self.is_local_process_zero()
-        )
-        for epoch in train_iterator:
+        disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
+        train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
+        for epoch in range(epochs_trained, int(np.ceil(num_train_epochs))):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
@@ -570,19 +696,21 @@ class Trainer:
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_process_zero())
+                epoch_iterator = parallel_loader
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_process_zero())
+                epoch_iterator = train_dataloader
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
                 self._past = None
 
+            epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
+                    epoch_pbar.update(1)
                     continue
 
                 tr_loss += self.training_step(model, inputs)
@@ -617,19 +745,21 @@ class Trainer:
                         self.global_step == 1 and self.args.logging_first_step
                     ):
                         logs: Dict[str, float] = {}
-                        logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
+                        tr_loss_scalar = tr_loss.item()
+                        logs["loss"] = (tr_loss_scalar - logging_loss_scalar) / self.args.logging_steps
                         # backward compatibility for pytorch schedulers
                         logs["learning_rate"] = (
                             self.lr_scheduler.get_last_lr()[0]
                             if version.parse(torch.__version__) >= version.parse("1.4")
                             else self.lr_scheduler.get_lr()[0]
                         )
-                        logging_loss = tr_loss
+                        logging_loss_scalar = tr_loss_scalar
 
                         self.log(logs)
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                        self.evaluate()
+                        metrics = self.evaluate()
+                        self._report_to_hp_search(trial, epoch, metrics)
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -641,7 +771,15 @@ class Trainer:
                         else:
                             assert model is self.model, f"Model {model} should be a reference to self.model"
                         # Save model checkpoint
-                        output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+                        checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
+                        if self.hp_search_backend is not None and trial is not None:
+                            run_id = (
+                                trial.number
+                                if self.hp_search_backend == HPSearchBackend.OPTUNA
+                                else tune.get_trial_id()
+                            )
+                            checkpoint_folder += f"-run-{run_id}"
+                        output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
                         self.save_model(output_dir)
 
@@ -656,12 +794,11 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
+                epoch_pbar.update(1)
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
-                    epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
-                train_iterator.close()
-                break
+            epoch_pbar.close()
+            train_pbar.update(1)
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -671,7 +808,10 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
+            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+                break
 
+        train_pbar.close()
         if self.tb_writer:
             self.tb_writer.close()
         if self.args.past_index and hasattr(self, "_past"):
@@ -679,7 +819,86 @@ class Trainer:
             delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        return TrainOutput(self.global_step, tr_loss / self.global_step)
+        return TrainOutput(self.global_step, tr_loss.item() / self.global_step)
+
+    def hyperparameter_search(
+        self,
+        hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
+        compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
+        n_trials: int = 20,
+        direction: str = "minimize",
+        backend: Optional[Union["str", HPSearchBackend]] = None,
+        **kwargs
+    ) -> BestRun:
+        """
+        Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
+        :obj:`compute_objectie`, which defaults to a function returning the evaluation loss when no metric is provided,
+        the sum of all metrics otherwise.
+
+        .. warning::
+
+            To use this method, you need to have provided a ``model_init`` when initializing your
+            :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This is incompatible
+            with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and override the
+            method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom optimizer/scheduler.
+
+        Args:
+            hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
+                A function that defines the hyperparameter search space. Will default to
+                :func:`~transformers.trainer_utils.default_hp_space_optuna` or
+                :func:`~transformers.trainer_utils.default_hp_space_ray` depending on your backend.
+            compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
+                A function computing the objective to minimize or maximize from the metrics returned by the
+                :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
+            n_trials (:obj:`int`, `optional`, defaults to 100):
+                The number of trial runs to test.
+            direction(:obj:`str`, `optional`, defaults to :obj:`"minimize"`):
+                Whether to optimize greater or lower objects. Can be :obj:`"minimize"` or :obj:`"maximize"`, you should
+                pick :obj:`"minimize"` when optimizing the validation loss, :obj:`"maximize"` when optimizing one or
+                several metrics.
+            backend(:obj:`str` or :class:`~transformers.training_utils.HPSearchBackend`, `optional`):
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending on which
+                one is installed. If both are installed, will default to optuna.
+            kwargs:
+                Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
+                more information see:
+
+                - the documentation of `optuna.create_study <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
+
+        Returns:
+            :class:`transformers.trainer_utils.BestRun`: All the informations about the best run.
+        """
+        if backend is None:
+            backend = default_hp_search_backend()
+            if backend is None:
+                raise RuntimeError(
+                    "At least one of optuna or ray should be installed. "
+                    "To install optuna run `pip install optuna`."
+                    "To install ray run `pip install ray[tune]`."
+                )
+        backend = HPSearchBackend(backend)
+        if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
+            raise RuntimeError("You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
+        if backend == HPSearchBackend.RAY and not is_ray_available():
+            raise RuntimeError(
+                "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
+            )
+        self.hp_search_backend = backend
+
+        if self.model_init is None:
+            raise RuntimeError(
+                "To use hyperparameter search, you need to pass your model through a model_init function."
+            )
+
+        self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
+        self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
+
+        run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
+        best_run = run_hp_search(self, n_trials, direction, **kwargs)
+
+        self.hp_search_backend = None
+        return best_run
 
     def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         """
@@ -693,6 +912,9 @@ class Trainer:
             iterator (:obj:`tqdm`, `optional`):
                 A potential tqdm progress bar to write the logs on.
         """
+        # Set up loggers like W&B or Comet ML
+        self._setup_loggers()
+
         if hasattr(self, "_log"):
             warnings.warn(
                 "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
@@ -748,7 +970,7 @@ class Trainer:
 
         return inputs
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> float:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -764,7 +986,7 @@ class Trainer:
                 argument :obj:`labels`. Check your model's documentation for all accepted arguments.
 
         Return:
-            :obj:`float`: The training loss on this batch.
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
         if hasattr(self, "_training_step"):
             warnings.warn(
@@ -802,7 +1024,7 @@ class Trainer:
         else:
             loss.backward()
 
-        return loss.item()
+        return loss
 
     def is_local_master(self) -> bool:
         """
@@ -875,6 +1097,8 @@ class Trainer:
 
         xm.rendezvous("saving_checkpoint")
         self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -885,6 +1109,8 @@ class Trainer:
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
@@ -1018,8 +1244,9 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
+        disable_tqdm = not self.is_local_process_zero() or self.args.disable_tqdm
         samples_count = 0
-        for inputs in tqdm(dataloader, desc=description):
+        for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             batch_size = inputs[list(inputs.keys())[0]].shape[0]
             samples_count += batch_size
@@ -1046,6 +1273,10 @@ class Trainer:
                 preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
             if label_ids is not None:
                 label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+            if eval_losses is not None:
+                eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
+            if samples_count is not None:
+                samples_count = sum(xm.mesh_reduce("samples_count", torch.tensor([samples_count]), torch.cat).tolist())
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:

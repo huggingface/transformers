@@ -25,12 +25,13 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        GPT2Config,
-        GPT2Model,
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2LMHeadModel,
+        GPT2Config,
         GPT2DoubleHeadsModel,
+        GPT2LMHeadModel,
+        GPT2Model,
     )
 
 
@@ -243,7 +244,8 @@ class GPT2ModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
         )
 
         # get two different outputs
@@ -287,9 +289,9 @@ class GPT2ModelTester:
         }
 
         result = model(**inputs)
-        self.parent.assertEqual(result.lm_loss.shape, ())
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(
-            result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
+            result.logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
@@ -322,7 +324,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     all_generative_model_classes = (
-        (GPT2LMHeadModel,) if is_torch_available() else ()
+        (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     test_missing_keys = False
 

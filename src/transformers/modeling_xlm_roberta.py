@@ -15,12 +15,10 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model. """
 
-
-import logging
-
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -28,9 +26,10 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-base",
@@ -70,7 +69,21 @@ class XLMRobertaModel(RobertaModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """, XLM_ROBERTA_START_DOCSTRING,
+    "XLM-RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.",
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    XLM_ROBERTA_START_DOCSTRING,
 )
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
