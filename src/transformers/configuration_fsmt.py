@@ -95,6 +95,7 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Whether to tie input and output embeddings.
 """
 
+
 @add_start_docstrings_to_callable(FSMT_CONFIG_ARGS_DOC)
 class FSMTConfig(PretrainedConfig):
     r"""
