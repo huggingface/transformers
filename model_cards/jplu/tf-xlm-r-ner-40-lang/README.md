@@ -1,7 +1,7 @@
 
 # XLM-R + NER
 
-This model is a fine-tuned  [XLM-Roberta-base](https://arxiv.org/abs/1911.02116) over the 40 languages proposed in [XTREME]([https://github.com/google-research/xtreme](https://github.com/google-research/xtreme)) from [Wikiann](https://aclweb.org/anthology/P17-1178). This is still an on-going work and the results will be updated everytime an improvement is reached. 
+This model is a fine-tuned  [XLM-Roberta-base](https://arxiv.org/abs/1911.02116) over the 40 languages proposed in [XTREME](https://github.com/google-research/xtreme) from [Wikiann](https://aclweb.org/anthology/P17-1178). This is still an on-going work and the results will be updated everytime an improvement is reached. 
 
 The covered labels are:
 ```
