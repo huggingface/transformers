@@ -595,7 +595,7 @@ class TFTrainer:
 
                     self.distributed_training_steps(batch)
 
-                    training_loss = self.train_loss.result() / ((step + 1) * self.total_train_batch_size)
+                    training_loss = self.train_loss.result() / (step + 1)
 
                     if self.args.debug:
                         logs = {}
@@ -662,7 +662,7 @@ class TFTrainer:
         if self.args.gradient_accumulation_steps > 1:
             self.gradient_accumulator(gradients)
 
-        self.train_loss.update_state(per_example_loss)
+        self.train_loss.update_state(scaled_loss)
 
         if self.args.gradient_accumulation_steps == 1:
             return gradients
