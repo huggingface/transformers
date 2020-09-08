@@ -20,8 +20,7 @@ import argparse
 import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
-
-from .utils import logging
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()

@@ -358,7 +358,7 @@ class GenerationMixin:
             )
             pad_token_id = eos_token_id
 
-        # current position and vocab size
+        # vocab size
         if hasattr(self.config, "vocab_size"):
             vocab_size = self.config.vocab_size
         elif (
@@ -367,6 +367,8 @@ class GenerationMixin:
             and hasattr(self.config.decoder, "vocab_size")
         ):
             vocab_size = self.config.decoder.vocab_size
+        else:
+            raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size needs to be defined")
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -411,7 +413,7 @@ class GenerationMixin:
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
-            # create empty decoder_input_ids
+            # create empty decoder input_ids
             input_ids = torch.full(
                 (effective_batch_size * num_beams, 1),
                 decoder_start_token_id,

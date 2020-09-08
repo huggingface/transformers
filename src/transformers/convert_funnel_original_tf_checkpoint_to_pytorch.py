@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,28 +12,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ALBERT checkpoint."""
+"""Convert Funnel checkpoint."""
 
 
 import argparse
+import logging
 
 import torch
 
-from transformers import AlbertConfig, AlbertForPreTraining, load_tf_weights_in_albert
-from transformers.utils import logging
+from transformers import FunnelConfig, FunnelForPreTraining, load_tf_weights_in_funnel
 
 
-logging.set_verbosity_info()
+logging.basicConfig(level=logging.INFO)
 
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, albert_config_file, pytorch_dump_path):
+def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = AlbertConfig.from_json_file(albert_config_file)
+    config = FunnelConfig.from_json_file(config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = AlbertForPreTraining(config)
+    model = FunnelForPreTraining(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_albert(model, config, tf_checkpoint_path)
+    load_tf_weights_in_funnel(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))
@@ -47,15 +47,15 @@ if __name__ == "__main__":
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
     )
     parser.add_argument(
-        "--albert_config_file",
+        "--config_file",
         default=None,
         type=str,
         required=True,
-        help="The config json file corresponding to the pre-trained ALBERT model. \n"
+        help="The config json file corresponding to the pre-trained model. \n"
         "This specifies the model architecture.",
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
-    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.albert_config_file, args.pytorch_dump_path)
+    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.config_file, args.pytorch_dump_path)

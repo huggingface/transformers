@@ -115,6 +115,8 @@ class ReformerConfig(PretrainedConfig):
         vocab_size (:obj:`int`, optional, defaults to 320):
             Vocabulary size of the Reformer model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ReformerModel`.
+        tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to tie input and output embeddings.
 
     Example::
 
@@ -158,7 +160,7 @@ class ReformerConfig(PretrainedConfig):
         lsh_num_chunks_before=1,
         lsh_num_chunks_after=0,
         max_position_embeddings=4096,
-        num_attention_heads=2,
+        num_attention_heads=12,
         num_buckets=None,
         num_hashes=1,
         pad_token_id=0,
