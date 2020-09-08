@@ -40,9 +40,12 @@ if is_torch_available():
     import torch
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
-    from transformers.modeling_bart import _prepare_bart_decoder_inputs, invert_mask
-    from transformers.modeling_fsmt import SinusoidalPositionalEmbedding
-
+    from transformers.modeling_fsmt import (
+        SinusoidalPositionalEmbedding,
+        _prepare_fsmt_decoder_inputs,
+        invert_mask,
+        shift_tokens_right,
+    )
 
 def calculate_bleu(output_lns, refs_lns, **kwargs) -> dict:
     """Uses sacrebleu's corpus_bleu implementation."""
@@ -174,7 +177,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
+        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
             config, inputs_dict["input_ids"]
         )
         model = FSMTModel(config).to(torch_device).eval()
@@ -297,6 +300,15 @@ class FSMTHeadTests(unittest.TestCase):
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
         # TODO(SS): uneven length batches, empty inputs
 
+    def test_shift_tokens_right(self):
+        input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
+        shifted = shift_tokens_right(input_ids, 1)
+        n_pad_before = input_ids.eq(1).float().sum()
+        n_pad_after = shifted.eq(1).float().sum()
+        self.assertEqual(shifted.shape, input_ids.shape)
+        self.assertEqual(n_pad_after, n_pad_before - 1)
+        self.assertTrue(torch.eq(shifted[:, 0], 2).all())
+
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -310,6 +322,20 @@ class FSMTHeadTests(unittest.TestCase):
         config, *_ = self._get_config_and_data()
         model = FSMTForConditionalGeneration(config).eval().to(torch_device)
         model(**model.dummy_inputs)
+
+    def test_prepare_fsmt_decoder_inputs(self):
+        config, *_ = self._get_config_and_data()
+        input_ids = _long_tensor(([4, 4, 2]))
+        decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
+        ignore = float("-inf")
+        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
+            config, input_ids, decoder_input_ids
+        )
+        expected_causal_mask = torch.tensor(
+            [[0, ignore, ignore], [0, 0, ignore], [0, 0, 0]]  # never attend to the final token, because its pad
+        ).to(input_ids.device)
+        self.assertEqual(decoder_attn_mask.size(), decoder_input_ids.size())
+        self.assertTrue(torch.eq(expected_causal_mask, causal_mask).all())
 
     def test_resize_tokens_embeddings_more(self):
         config, input_ids, _ = self._get_config_and_data()
