@@ -2,7 +2,6 @@ import random
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
-import torch
 
 from .file_utils import is_tf_available, is_torch_available
 from .tokenization_utils_base import ExplicitEnum
@@ -129,30 +128,38 @@ default_hp_space = {
 }
 
 
-def distributed_concat(self, tensor: torch.Tensor, num_total_examples: Optional[int] = None) -> torch.Tensor:
-    assert self.args.local_rank != -1
+def distributed_concat(self, tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> "torch.Tensor":
+    if is_torch_available():
+        import torch
+        assert self.args.local_rank != -1
 
-    output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
-    torch.distributed.all_gather(output_tensors, tensor)
-    concat = torch.cat(output_tensors, dim=0)
+        output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(output_tensors, tensor)
+        concat = torch.cat(output_tensors, dim=0)
 
-    # truncate the dummy elements added by SequentialDistributedSampler
-    if num_total_examples is not None:
-        concat = concat[:num_total_examples]
-    return concat
+        # truncate the dummy elements added by SequentialDistributedSampler
+        if num_total_examples is not None:
+            concat = concat[:num_total_examples]
+        return concat
+    else:
+        raise ImportError("Torch must be installed to use `distributed_concat`")
 
 
 def distributed_broadcast_scalars(
     self, scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
-) -> torch.Tensor:
-    assert self.args.local_rank != -1
+) -> "torch.Tensor":
+    if is_torch_available():
+        import torch
+        assert self.args.local_rank != -1
 
-    tensorized_scalar = torch.Tensor(scalars).cuda()
-    output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
-    torch.distributed.all_gather(output_tensors, tensorized_scalar)
-    concat = torch.cat(output_tensors, dim=0)
+        tensorized_scalar = torch.Tensor(scalars).cuda()
+        output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(output_tensors, tensorized_scalar)
+        concat = torch.cat(output_tensors, dim=0)
 
-    # truncate the dummy elements added by SequentialDistributedSampler
-    if num_total_examples is not None:
-        concat = concat[:num_total_examples]
-    return concat
+        # truncate the dummy elements added by SequentialDistributedSampler
+        if num_total_examples is not None:
+            concat = concat[:num_total_examples]
+        return concat
+    else:
+        raise ImportError("Torch must be installed to use `distributed_broadcast_scalars`")
