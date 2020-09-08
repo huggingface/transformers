@@ -363,14 +363,33 @@ TOLERANCE = 1e-4
 
 @require_torch
 class FSMTModelIntegrationTests(unittest.TestCase):
+    tokenizers_cache = {}
+    models_cache = {}
+
     @cached_property
     def default_tokenizer(self):
-        return FSMTTokenizer.from_pretrained("stas/fsmt-wmt19-ru-en")
+        return self.get_tokenizer("stas/fsmt-wmt19-ru-en")
+
+    @cached_property
+    def default_model(self):
+        return self.get_model("stas/fsmt-wmt19-ru-en")
+
+    def get_tokenizer(self, mname):
+        if mname not in self.tokenizers_cache:
+            self.tokenizers_cache[mname] = FSMTTokenizer.from_pretrained(mname)
+        return self.tokenizers_cache[mname]
+
+    def get_model(self, mname):
+        if mname not in self.models_cache:
+            self.models_cache[mname] = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
+            if torch_device == "cuda":
+                self.models_cache[mname].half()
+        return self.models_cache[mname]
 
     @slow
     def test_inference_no_head(self):
         tokenizer = self.default_tokenizer
-        model = FSMTModel.from_pretrained("stas/fsmt-wmt19-ru-en").to(torch_device)
+        model = self.default_model
 
         src_text = "My friend computer will translate this for me"
         input_ids = tokenizer([src_text], return_tensors="pt")["input_ids"]
@@ -412,10 +431,8 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         src_sentence = text[src]
         tgt_sentence = text[tgt]
 
-        tokenizer = FSMTTokenizer.from_pretrained(mname)
-        model = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        tokenizer = self.get_tokenizer(mname)
+        model = self.get_model(mname)
 
         input_ids = tokenizer.encode(src_sentence, return_tensors="pt")
         outputs = model.generate(input_ids)
@@ -549,8 +566,8 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         # note: this test is not testing the best performance since it only evals a small batch
         # but it should be enough to detect a regression in the output quality
         mname = f"stas/fsmt-wmt19-{pair}"
-        tokenizer = FSMTTokenizer.from_pretrained(mname)
-        model = FSMTForConditionalGeneration.from_pretrained(mname).to(torch_device)
+        tokenizer = self.get_tokenizer(mname)
+        model = self.get_model(mname)
 
         src_sentences = self.bleu_data[pair]["src"]
         tgt_sentences = self.bleu_data[pair]["tgt"]
