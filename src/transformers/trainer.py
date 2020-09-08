@@ -1024,7 +1024,7 @@ class Trainer:
         else:
             loss.backward()
 
-        return loss
+        return loss.detach()
 
     def is_local_master(self) -> bool:
         """
