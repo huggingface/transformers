@@ -27,6 +27,58 @@ if is_comet_available():
 logger = logging.get_logger(__name__)
 
 
+def count_examples_in_batch(batch):
+    """
+    Count the number of examples in ``batch``, i.e. the batch dimension.
+
+    Args:
+        batch (:obj:`Tuple[Dict, tf.Tensor]`):
+            A tuple of batched features and labels.
+
+    Returns:
+        A scalar `tf.int32` tensor.
+    """
+
+    features, labels = batch
+
+    nb_examples = tf.shape(labels)[0]
+
+    return nb_examples
+
+
+def count_instances_in_batch(batch):
+    """
+    Count the number of instances in ``batch`` and inject this information into ``batch``.
+
+    For sentence level tasks, an instance is the same as an examples (in general).
+    For token level tasks like token classification, an instance is a token that is not ignored.
+
+    This method uses the attribute ``nb_instances_in_example`` in features which is provided during
+    the creation of a `tf.data.Dataset`. If this information is not provided, it will return the
+    number of examples in ``batch``.
+
+    Args:
+        batch (:obj:`Tuple[Dict, tf.Tensor]`):
+            A tuple of batched features and labels.
+
+    Returns:
+        The tensor ``batch`` with injected information.
+    """
+
+    features, labels = batch
+
+    nb_examples_in_batch = count_examples_in_batch(batch)
+
+    if "nb_instances_in_example" in features:
+        nb_instances_in_batch = tf.reduce_sum(features["nb_instances_in_example"])
+    else:
+        nb_instances_in_batch = nb_examples_in_batch
+
+    features["nb_instances_in_batch"] = tf.repeat(nb_instances_in_batch, repeats=nb_examples_in_batch)
+
+    return batch
+
+
 class TFTrainer:
     """
     TFTrainer is a simple but feature-complete training and eval loop for TensorFlow,
@@ -144,6 +196,7 @@ class TFTrainer:
             .batch(self.total_train_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
+        ds = ds.map(lambda features, labels: count_instances_in_batch((features, labels)))
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
@@ -599,9 +652,8 @@ class TFTrainer:
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, _ = self.run_model(features, labels, True)
-        # TODO: Fix the loss calculation for the issue:
-        #       https://github.com/huggingface/transformers/issues/6968
-        scaled_loss = per_example_loss / self.total_train_batch_size
+        nb_instances_in_global_batch = tf.cast(features["nb_instances_in_batch"][0], dtype=per_example_loss.dtype)
+        scaled_loss = per_example_loss / nb_instances_in_global_batch
         gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
         gradients = [
             g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)

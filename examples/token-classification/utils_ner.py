@@ -358,6 +358,8 @@ if is_tf_available():
                     ),
                 )
 
+            self.dataset = self.dataset.map(lambda features, labels: self.count_tokens_in_example((features, labels)))
+
         def get_dataset(self):
             self.dataset = self.dataset.apply(tf.data.experimental.assert_cardinality(len(self.features)))
 
@@ -368,3 +370,23 @@ if is_tf_available():
 
         def __getitem__(self, i) -> InputFeatures:
             return self.features[i]
+
+        def count_tokens_in_example(self, example):
+            """
+            Count the number of tokens in ``example`` whose labels are not ``self.pad_token_label_id``,
+            and inject this information into ``example``.
+
+            Args:
+                example (:obj:`Tuple[Dict, tf.Tensor]`):
+                    A tuple of unbatched features and labels.
+
+            Returns:
+                ``batch`` with injected information.
+            """
+
+            features, labels = example
+            features["nb_instances_in_example"] = tf.reduce_sum(
+                tf.cast(labels != self.pad_token_label_id, dtype=tf.int32)
+            )
+
+            return example
