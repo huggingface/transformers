@@ -44,7 +44,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BertForSeqGenerationConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
+_TOKENIZER_FOR_DOC = "BertForSeqGenerationTokenizer"
 
 CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BERT models at https://huggingface.co/models?filter=bert
@@ -191,7 +191,7 @@ class BertForSeqGenerationPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-CAUSAL_BERT_START_DOCSTRING = r"""
+BERT_FOR_SEQ_GENERATION_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -202,7 +202,7 @@ CAUSAL_BERT_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-CAUSAL_BERT_INPUTS_DOCSTRING = r"""
+BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -249,7 +249,7 @@ CAUSAL_BERT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    CAUSAL_BERT_START_DOCSTRING,
+    BERT_FOR_SEQ_GENERATION_START_DOCSTRING,
 )
 class BertForSeqGenerationEncoder(BertForSeqGenerationPreTrainedModel):
     """
@@ -293,7 +293,7 @@ class BertForSeqGenerationEncoder(BertForSeqGenerationPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(CAUSAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-uncased",
@@ -404,7 +404,7 @@ class BertForSeqGenerationOnlyLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, CAUSAL_BERT_START_DOCSTRING
+    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, BERT_FOR_SEQ_GENERATION_START_DOCSTRING
 )
 class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
     def __init__(self, config):
@@ -420,7 +420,7 @@ class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(CAUSAL_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

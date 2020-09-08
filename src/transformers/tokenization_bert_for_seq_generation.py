@@ -17,11 +17,10 @@
 
 import os
 import re
-import warnings
 from shutil import copyfile
 from typing import List, Optional
 
-from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
 
 
