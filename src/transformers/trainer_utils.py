@@ -131,6 +131,7 @@ default_hp_space = {
 def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> "torch.Tensor":
     if is_torch_available():
         import torch
+
         try:
             output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
             torch.distributed.all_gather(output_tensors, tensor)
@@ -151,6 +152,7 @@ def distributed_broadcast_scalars(
 ) -> "torch.Tensor":
     if is_torch_available():
         import torch
+
         try:
             tensorized_scalar = torch.Tensor(scalars).cuda()
             output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
