@@ -319,9 +319,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "bos_token_id": 0,
         "pad_token_id": 1,
         "eos_token_id": 2,
-        "add_final_layer_norm": False,
         "is_encoder_decoder": True,
-        "normalize_before": False,
         "scale_embedding": True,
         "tie_word_embeddings": False,
     }

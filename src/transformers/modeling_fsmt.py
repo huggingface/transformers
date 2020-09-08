@@ -337,7 +337,6 @@ class EncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout)
-        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -359,26 +358,20 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        if self.normalize_before:
-            x = self.self_attn_layer_norm(x)
         x, attn_weights = self.self_attn(
             query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
-            x = self.self_attn_layer_norm(x)
+        x = self.self_attn_layer_norm(x)
 
         residual = x
-        if self.normalize_before:
-            x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
-            x = self.final_layer_norm(x)
+        x = self.final_layer_norm(x)
         return x, attn_weights
 
 
@@ -411,8 +404,6 @@ class FSMTEncoder(nn.Module):
             init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
         )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
-        # mbart has one extra layer_norm
-        self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
     def forward(
         self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
@@ -459,8 +450,6 @@ class FSMTEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-        if self.layer_norm:
-            x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
             # T x B x C -> B x T x C
@@ -487,7 +476,6 @@ class DecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
-        self.normalize_before = config.normalize_before
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.encoder_attn = Attention(
@@ -515,10 +503,8 @@ class DecoderLayer(nn.Module):
 
         if layer_state is None:
             layer_state = {}
-        if self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-        # Self Attention
 
+        # Self Attention
         x, self_attn_weights = self.self_attn(
             query=x,
             key=x,
@@ -529,14 +515,11 @@ class DecoderLayer(nn.Module):
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
-            x = self.self_attn_layer_norm(x)
+        x = self.self_attn_layer_norm(x)
 
         # Cross attention
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
-        if self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
@@ -545,20 +528,16 @@ class DecoderLayer(nn.Module):
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
+        x = self.encoder_attn_layer_norm(x)
 
         # Fully Connected
         residual = x
-        if self.normalize_before:
-            x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
-            x = self.final_layer_norm(x)
+        x = self.final_layer_norm(x)
         return (
             x,
             self_attn_weights,
@@ -593,7 +572,6 @@ class FSMTDecoder(nn.Module):
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
-        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.output_projection = nn.Linear(
             self.embed_tokens.weight.shape[1],
@@ -695,8 +673,6 @@ class FSMTDecoder(nn.Module):
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
-                x = self.layer_norm(x)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 

@@ -68,10 +68,6 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
-            Call layernorm before attention ops.
-        add_final_layer_norm (:obj:`bool`, optional, defaults to :obj:`False`):
-            Why not add another layernorm?
         scale_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
             Scale embeddings by diving by sqrt(d_model).
         bos_token_id (:obj:`int`, optional, defaults to 0)
@@ -140,9 +136,7 @@ class FSMTConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         decoder_start_token_id=2,
-        add_final_layer_norm=False,
         is_encoder_decoder=True,
-        normalize_before=False,
         scale_embedding=True,
         tie_word_embeddings=False,
         **common_kwargs
@@ -191,8 +185,6 @@ class FSMTConfig(PretrainedConfig):
 
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
-        self.add_final_layer_norm = add_final_layer_norm
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout
