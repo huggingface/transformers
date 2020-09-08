@@ -1315,8 +1315,6 @@ class Trainer:
                 label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
             if eval_losses is not None:
                 eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
-            if samples_count is not None:
-                samples_count = sum(xm.mesh_reduce("samples_count", torch.tensor([samples_count]), torch.cat).tolist())
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
