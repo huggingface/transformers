@@ -416,7 +416,7 @@ class TFTrainer:
         else:
             metrics = {}
 
-        metrics["eval_loss"] = self.eval_loss.result().numpy() / (steps * self.args.eval_batch_size)
+        metrics["eval_loss"] = self.eval_loss.result().numpy() / steps
 
         for key in list(metrics.keys()):
             if not key.startswith("eval_"):
@@ -501,8 +501,10 @@ class TFTrainer:
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, logits = self.run_model(features, labels, False)
+        nb_instances_in_global_batch = tf.cast(features["nb_instances_in_batch"][0], dtype=per_example_loss.dtype)
+        scaled_loss = per_example_loss / nb_instances_in_global_batch
 
-        self.eval_loss.update_state(per_example_loss)
+        self.eval_loss.update_state(scaled_loss)
 
         return logits
 
