@@ -97,8 +97,6 @@ _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 #    - token embeddings aren't shared
 #    - needs a language pair
 #    - scale_embedding are True
-#    - normalize_embedding are False
-#    - static_position_embeddings are True
 #
 #    some unused args were removed too
 #
@@ -405,23 +403,14 @@ class FSMTEncoder(nn.Module):
         self.max_source_positions = config.max_position_embeddings
 
         self.embed_tokens = embed_tokens
-        if config.static_position_embeddings:
-            # print(config.max_position_embeddings, embed_dim, self.padding_idx)
-            num_embeddings = config.src_vocab_size
-            self.embed_positions = SinusoidalPositionalEmbedding(
-                embed_dim,
-                self.padding_idx,
-                init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
-            )
-        else:
-            self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings,
-                embed_dim,
-                self.padding_idx,
-                config.extra_pos_embeddings,
-            )
+        # print(config.max_position_embeddings, embed_dim, self.padding_idx)
+        num_embeddings = config.src_vocab_size
+        self.embed_positions = SinusoidalPositionalEmbedding(
+            embed_dim,
+            self.padding_idx,
+            init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
+        )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
@@ -450,7 +439,6 @@ class FSMTEncoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
-        x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
@@ -596,24 +584,15 @@ class FSMTDecoder(nn.Module):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.embed_tokens = embed_tokens
         embed_dim = embed_tokens.embedding_dim
-        if config.static_position_embeddings:
-            num_embeddings = config.tgt_vocab_size
-            self.embed_positions = SinusoidalPositionalEmbedding(
-                embed_dim,
-                self.padding_idx,
-                init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
-            )
-        else:
-            self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings,
-                config.d_model,
-                self.padding_idx,
-                config.extra_pos_embeddings,
-            )
+        num_embeddings = config.tgt_vocab_size
+        self.embed_positions = SinusoidalPositionalEmbedding(
+            embed_dim,
+            self.padding_idx,
+            init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
+        )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
-        self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
         self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.output_projection = nn.Linear(
@@ -683,7 +662,6 @@ class FSMTDecoder(nn.Module):
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
-        x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Convert to FSMT output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
@@ -898,32 +876,6 @@ class Attention(nn.Module):
         return k, v, new_key_padding_mask
 
 
-# XXX: remove this and its references
-class LearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
-        # FSMT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
-        self.offset = offset
-        assert padding_idx is not None
-        num_embeddings += offset
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
-
-    def forward(self, input_ids, use_cache=False):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids.shape[:2]
-        if use_cache:
-            positions = input_ids.data.new(1, 1).fill_(seq_len - 1)  # called before slicing
-        else:
-            # starts at 0, ends at 1-seq_len
-            positions = torch.arange(seq_len, dtype=torch.long, device=self.weight.device)
-        return super().forward(positions + self.offset)
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
