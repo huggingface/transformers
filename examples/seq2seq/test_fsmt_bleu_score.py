@@ -16,17 +16,16 @@
 import io
 import unittest
 
-from sacrebleu import corpus_bleu
+
+try:
+    from .utils import calculate_bleu
+except ImportError:
+    from utils import calculate_bleu
 
 import yaml
 from parameterized import parameterized
 from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow, torch_device
-
-
-def calculate_bleu(output_lns, refs_lns, **kwargs) -> dict:
-    """Uses sacrebleu's corpus_bleu implementation."""
-    return {"bleu": round(corpus_bleu(output_lns, [refs_lns], **kwargs).score, 4)}
 
 
 filename = get_tests_dir() + "/test_data/fsmt/fsmt_val_data.yaml"
