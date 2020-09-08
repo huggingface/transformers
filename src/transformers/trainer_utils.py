@@ -7,6 +7,10 @@ from .file_utils import is_tf_available, is_torch_available
 from .tokenization_utils_base import ExplicitEnum
 
 
+if is_torch_available():
+    import torch
+
+
 def set_seed(seed: int):
     """
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf``
@@ -130,8 +134,6 @@ default_hp_space = {
 
 def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> "torch.Tensor":
     if is_torch_available():
-        import torch
-
         try:
             output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
             torch.distributed.all_gather(output_tensors, tensor)
@@ -151,8 +153,6 @@ def distributed_broadcast_scalars(
     scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
 ) -> "torch.Tensor":
     if is_torch_available():
-        import torch
-
         try:
             tensorized_scalar = torch.Tensor(scalars).cuda()
             output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
