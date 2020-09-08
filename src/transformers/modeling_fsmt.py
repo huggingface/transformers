@@ -244,6 +244,18 @@ FSMT_INPUTS_DOCSTRING = r"""
 """
 
 
+have_fused_layer_norm = False
+if torch.cuda.is_available():
+    try:
+        from apex.normalization import FusedLayerNorm
+
+        have_fused_layer_norm = True
+    except ImportError:
+        pass
+
+LayerNorm = FusedLayerNorm if have_fused_layer_norm else torch.nn.LayerNorm
+
+
 def invert_mask(attention_mask):
     """Turns 1->0, 0->1, False->True, True-> False"""
     assert attention_mask.dim() == 2
@@ -850,20 +862,6 @@ class Attention(nn.Module):
         else:
             new_key_padding_mask = key_padding_mask
         return k, v, new_key_padding_mask
-
-
-def get_layer_norm_func():
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm
-
-
-LayerNorm = get_layer_norm_func()
 
 
 def fill_with_neg_inf(t):
