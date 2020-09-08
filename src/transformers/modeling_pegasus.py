@@ -50,4 +50,11 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
         >>> assert summary == "California's largest electricity provider has turned off power to tens of thousands of customers."
 
     """
+
+    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+        # Note, this will break with a tokenizer that is not PegasusTokenizer
+        logits[:, list(range(2, 105))] = float("-inf")  # never predict unk tokens
+        if cur_len == max_length - 1 and self.config.eos_token_id is not None:
+            self._force_token_ids_generation(logits, self.config.eos_token_id)
+        return logits
     # All the code is in src/transformers/modeling_bart.py
