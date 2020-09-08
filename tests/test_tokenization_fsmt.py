@@ -124,18 +124,10 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["This is it. No more. I'm done!", [132, 21, 37, 7, 1434, 86, 7, 70, 6476, 1305, 427, 2]],
         ]
 
-        # this data was added as different mismatches were found, to validate
-        # the targets (or create more inputs if problems are found) run:
-        #
-        # import torch
+        # if data needs to be recreated, uncomment and run:
         # for src_text, _ in targets:
-        #     mname = "transformer.wmt19.en-ru"
-        #     checkpoint_file = "model1.pt"
-        #     model = torch.hub.load(
-        #         "pytorch/fairseq", mname, checkpoint_file=checkpoint_file, tokenizer="moses", bpe="fastbpe"
-        #     )
-        #     encoded = model.encode(src_text)
-        #     print(f"""[\n"{src_text}",\n {encoded.tolist()}\n],""")
+        #     model = torch.hub.load("pytorch/fairseq", "transformer.wmt19.en-ru", checkpoint_file="model4.pt", tokenizer="moses", bpe="fastbpe")
+        #     print(f"""[\n"{src_text}",\n {model.encode(src_text).tolist()}\n],""")
 
         for src_text, tgt_input_ids in targets:
             input_ids = tokenizer_enc.encode(src_text, return_tensors="pt")[0].tolist()
