@@ -574,7 +574,9 @@ class RagSequence(PreTrainedRagModel):
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
-            outputs = self.forward(new_input_ids, decoder_input_ids=output_sequences, return_loss=True, score=True)
+            outputs = self.forward(
+                new_input_ids, retriever=retriever, decoder_input_ids=output_sequences, return_loss=True, score=True
+            )
             top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
 
             if logger.level == logging.DEBUG:
