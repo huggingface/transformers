@@ -852,15 +852,18 @@ class Attention(nn.Module):
         return k, v, new_key_padding_mask
 
 
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
+def get_layer_norm_func():
     if torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
 
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+            return FusedLayerNorm
         except ImportError:
             pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
+    return torch.nn.LayerNorm
+
+
+LayerNorm = get_layer_norm_func()
 
 
 def fill_with_neg_inf(t):
