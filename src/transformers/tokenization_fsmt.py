@@ -269,25 +269,21 @@ class FSMTTokenizer(PreTrainedTokenizer):
         if lang not in self.cache_moses_punct_normalizer:
             punct_normalizer = sm.MosesPunctNormalizer(lang=lang)
             self.cache_moses_punct_normalizer[lang] = punct_normalizer
-        else:
-            punct_normalizer = self.cache_moses_punct_normalizer[lang]
-        return punct_normalizer.normalize(text)
+        return self.cache_moses_punct_normalizer[lang].normalize(text)
 
     def moses_tokenize(self, text, lang):
         if lang not in self.cache_moses_tokenizer:
             moses_tokenizer = sm.MosesTokenizer(lang=lang)
             self.cache_moses_tokenizer[lang] = moses_tokenizer
-        else:
-            moses_tokenizer = self.cache_moses_tokenizer[lang]
-        return moses_tokenizer.tokenize(text, aggressive_dash_splits=True, return_str=False, escape=True)
+        return self.cache_moses_tokenizer[lang].tokenize(
+            text, aggressive_dash_splits=True, return_str=False, escape=True
+        )
 
     def moses_detokenize(self, tokens, lang):
         if lang not in self.cache_moses_tokenizer:
             moses_detokenizer = sm.MosesDetokenizer(lang=self.tgt_lang)
             self.cache_moses_detokenizer[lang] = moses_detokenizer
-        else:
-            moses_detokenizer = self.cache_moses_detokenizer[lang]
-        return moses_detokenizer.detokenize(tokens)
+        return self.cache_moses_detokenizer[lang].detokenize(tokens)
 
     def moses_pipeline(self, text, lang):
         text = replace_unicode_punct(text)
