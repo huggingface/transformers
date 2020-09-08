@@ -23,7 +23,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     CamembertConfig,
-    CausalBertConfig,
+    BertForSeqGenerationConfig,
     CTRLConfig,
     DistilBertConfig,
     ElectraConfig,
@@ -52,7 +52,7 @@ from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
-from .tokenization_causal_bert import CausalBertTokenizer
+from .tokenization_bert import BertForSeqGenerationTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
@@ -107,7 +107,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
-        (CausalBertConfig, (CausalBertTokenizer, None)),
+        (BertForSeqGenerationConfig, (BertForSeqGenerationTokenizer, None)),
     ]
 )
 

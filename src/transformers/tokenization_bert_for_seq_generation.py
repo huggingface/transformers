@@ -31,13 +31,13 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 tokenizer_url = "https://s3.amazonaws.com/models.huggingface.co/bert/google/bert_L_24_seq2seq_cnn_dail_mail/spiece.model",
 
-_all_causal_bert_models = [
+_all_bert_models = [
     "google/bert_L_24_seq2seq_cnn_dm",
     # This is not exhaustive: see https://huggingface.co/models?filter=bart
 ]
 
 
-class CausalBertTokenizer(PreTrainedTokenizer):
+class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
     """
     Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
@@ -70,9 +70,9 @@ class CausalBertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = {m: 512 for m in _all_causal_bert_models}
+    max_model_input_sizes = {m: 512 for m in _all_bert_models}
     pretrained_vocab_files_map = {
-        "vocab_file": {m: tokenizer_url for m in _all_causal_bert_models}
+        "vocab_file": {m: tokenizer_url for m in _all_bert_models}
     }
     prefix_tokens: List[int] = []
 

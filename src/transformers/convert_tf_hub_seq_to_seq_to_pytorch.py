@@ -17,8 +17,8 @@
 
 import argparse
 
-from transformers.modeling_causal_bert import CausalBertForCausalLM, load_tf_weights_in_causal_bert_with_cross_attn
-from transformers.configuration_causal_bert import CausalBertConfig
+from transformers.modeling_bert_for_seq_generation import BertForSeqGenerationDecoder, load_tf_weights_in_bert_with_cross_attn
+from transformers.configuration_bert_for_seq_generation import BertForSeqGenerationConfig
 from transformers import BertConfig
 
 from transformers import logging
@@ -31,12 +31,12 @@ def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path):
     bert_config = BertConfig.from_pretrained("bert-large-cased", vocab_size=50358, max_position_embeddings=512, is_decoder=True, add_cross_attention=True)
     bert_config_dict = bert_config.to_dict()
     del bert_config_dict["type_vocab_size"]
-    config = CausalBertConfig(**bert_config_dict)
-    model = CausalBertForCausalLM(config)
+    config = BertForSeqGenerationConfig(**bert_config_dict)
+    model = BertForSeqGenerationDecoder(config)
     print("Building PyTorch model from configuration: {}".format(str(config)))
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_causal_bert_with_cross_attn(model, tf_hub_path, model_class="causal_bert")
+    load_tf_weights_in_bert_with_cross_attn(model, tf_hub_path, model_class="bert")
 
     # Save pytorch-model
     print("Save PyTorch model and config to {}".format(pytorch_dump_path))

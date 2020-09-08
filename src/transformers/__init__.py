@@ -22,7 +22,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
-from .configuration_causal_bert import CausalBertConfig
+from .configuration_bert_for_seq_generation import BertForSeqGenerationConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -145,7 +145,7 @@ from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
-from .tokenization_causal_bert import CausalBertTokenizer
+from .tokenization_bert import BertForSeqGenerationTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import (
@@ -432,9 +432,9 @@ if is_torch_available():
         TransfoXLPreTrainedModel,
         load_tf_weights_in_transfo_xl,
     )
-    from .modeling_causal_bert import (
-        CausalBertModel,
-        CausalBertForCausalLM
+    from .modeling_bert_for_seq_generation import (
+        BertForSeqGenerationEncoder,
+        BertForSeqGenerationDecoder
     )
     from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
     from .modeling_xlm import (

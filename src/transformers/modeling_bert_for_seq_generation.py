@@ -43,7 +43,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "CausalBertConfig"
+_CONFIG_FOR_DOC = "BertForSeqGenerationConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -51,7 +51,7 @@ CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_causal_bert_with_cross_attn(model, tf_hub_path, model_class):
+def load_tf_weights_in_bert_with_cross_attn(model, tf_hub_path, model_class):
     try:
         import numpy as np
         import tensorflow.compat.v1 as tf
@@ -133,7 +133,7 @@ def mish(x):
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 
-class CausalBertEmbeddings(nn.Module):
+class BertForSeqGenerationEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -169,13 +169,13 @@ class CausalBertEmbeddings(nn.Module):
         return embeddings
 
 
-class CausalBertPreTrainedModel(PreTrainedModel):
+class BertForSeqGenerationPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
     """
 
     config_class = BertConfig
-    base_model_prefix = "causal_bert"
+    base_model_prefix = "bert"
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -251,7 +251,7 @@ CAUSAL_BERT_INPUTS_DOCSTRING = r"""
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     CAUSAL_BERT_START_DOCSTRING,
 )
-class CausalBertModel(CausalBertPreTrainedModel):
+class BertForSeqGenerationEncoder(BertForSeqGenerationPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well
@@ -274,7 +274,7 @@ class CausalBertModel(CausalBertPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = CausalBertEmbeddings(config)
+        self.embeddings = BertForSeqGenerationEmbeddings(config)
         self.encoder = BertEncoder(config)
 
         self.init_weights()
@@ -389,7 +389,7 @@ class CausalBertModel(CausalBertPreTrainedModel):
         )
 
 
-class CausalBertOnlyLMHead(nn.Module):
+class BertForSeqGenerationOnlyLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -406,14 +406,14 @@ class CausalBertOnlyLMHead(nn.Module):
 @add_start_docstrings(
     """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, CAUSAL_BERT_START_DOCSTRING
 )
-class CausalBertForCausalLM(CausalBertPreTrainedModel):
+class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`"
 
-        self.causal_bert = CausalBertModel(config)
-        self.lm_head = CausalBertOnlyLMHead(config)
+        self.bert = BertForSeqGenerationEncoder(config)
+        self.lm_head = BertForSeqGenerationOnlyLMHead(config)
 
         self.init_weights()
 
@@ -470,7 +470,7 @@ class CausalBertForCausalLM(CausalBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.causal_bert(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
