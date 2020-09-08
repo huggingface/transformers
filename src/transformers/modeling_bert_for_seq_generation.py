@@ -51,7 +51,7 @@ CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_bert_with_cross_attn(model, tf_hub_path, model_class):
+def load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class):
     try:
         import numpy as np
         import tensorflow.compat.v1 as tf

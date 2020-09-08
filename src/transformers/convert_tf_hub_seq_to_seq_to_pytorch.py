@@ -17,7 +17,7 @@
 
 import argparse
 
-from transformers.modeling_bert_for_seq_generation import BertForSeqGenerationDecoder, load_tf_weights_in_bert_with_cross_attn
+from transformers.modeling_bert_for_seq_generation import BertForSeqGenerationDecoder, load_tf_weights_in_bert_for_seq_generation
 from transformers.configuration_bert_for_seq_generation import BertForSeqGenerationConfig
 from transformers import BertConfig
 
@@ -36,7 +36,7 @@ def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path):
     print("Building PyTorch model from configuration: {}".format(str(config)))
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_bert_with_cross_attn(model, tf_hub_path, model_class="bert")
+    load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class="bert")
 
     # Save pytorch-model
     print("Save PyTorch model and config to {}".format(pytorch_dump_path))
