@@ -58,12 +58,13 @@ yes Y | transformers-cli upload fsmt-wmt19-en-de
 cd -
 
 # if updating just small files and not the large models, here is a script to generate the right commands:
-perl -le 'for $f (@ARGV) { print qq[yes Y | transformers-cli upload $_/$f --filename $_/$f] for map { "fsmt-wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json
+perl -le 'for $f (@ARGV) { print qq[yes Y | transformers-cli upload $_/$f --filename $_/$f] for map { "fsmt-wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
 
-# force cache invalidation, which will now download the new models
-# XXX: this doesn't work:
-PYTHONPATH="src" python -c 'from transformers import AutoModel; [AutoModel.from_pretrained("stas/fsmt-wmt19-"+p, use_cdn=False) for p in ["en-ru","ru-en","en-de","de-en"]]'
+# Caching note: Unfortunately due to CDN caching the uploaded model may be unavailable for up to 24hs after upload
+# So the only way to start using the new model sooner is either:
+# 1. download it to a local path and use that path as model_name
+# 2. make sure you use: from_pretrained(..., use_cdn=False) everywhere
 
 # happy translations
 
