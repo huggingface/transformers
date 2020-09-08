@@ -30,6 +30,7 @@ from .configuration_auto import (
     EncoderDecoderConfig,
     FlaubertConfig,
     FSMTConfig,
+    FunnelConfig,
     GPT2Config,
     LongformerConfig,
     LxmertConfig,
@@ -110,6 +111,14 @@ from .modeling_flaubert import (
     FlaubertWithLMHeadModel,
 )
 from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
+from .modeling_funnel import (
+    FunnelForMaskedLM,
+    FunnelForMultipleChoice,
+    FunnelForQuestionAnswering,
+    FunnelForSequenceClassification,
+    FunnelForTokenClassification,
+    FunnelModel,
+)
 from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
 from .modeling_longformer import (
     LongformerForMaskedLM,
@@ -205,6 +214,7 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
     ]
 )
@@ -258,6 +268,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
+        (FunnelConfig, FunnelForMaskedLM),
     ]
 )
 
@@ -295,6 +306,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
+        (FunnelConfig, FunnelForMaskedLM),
     ]
 )
 
@@ -325,6 +337,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
+        (FunnelConfig, FunnelForSequenceClassification),
     ]
 )
 
@@ -344,6 +357,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
+        (FunnelConfig, FunnelForQuestionAnswering),
     ]
 )
 
@@ -362,6 +376,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
+        (FunnelConfig, FunnelForTokenClassification),
     ]
 )
 
@@ -379,6 +394,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMultipleChoice),
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
+        (FunnelConfig, FunnelForMultipleChoice),
     ]
 )
 
@@ -426,6 +442,7 @@ class AutoModel:
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (Flaubert model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraModel` (Electra model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelModel` (Funnel Transformer model)
 
         Examples::
 
@@ -467,6 +484,7 @@ class AutoModel:
             - `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
             - `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
             - `electra`: :class:`~transformers.ElectraModel` (Electra  model)
+            - `funnel`: :class:`~transformers.FunnelModel` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -734,6 +752,7 @@ class AutoModelWithLMHead:
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
         Examples::
 
@@ -779,6 +798,7 @@ class AutoModelWithLMHead:
             - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+            - `funnel`: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1029,6 +1049,7 @@ class AutoModelForMaskedLM:
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForMaskedLM` (Camembert model)
                 - isInstance of `albert` configuration class: :class:`~transformers.AlbertForMaskedLM` (Albert model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
 
         Examples::
@@ -1065,6 +1086,7 @@ class AutoModelForMaskedLM:
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
             - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
+            - `funnel`: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1309,7 +1331,7 @@ class AutoModelForSequenceClassification:
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForSequenceClassification` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
-
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelModelForSequenceClassification` (Funnel Transformer model)
 
         Examples::
 
@@ -1345,6 +1367,7 @@ class AutoModelForSequenceClassification:
             - `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
             - `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
             - `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
+            - `funnel`: :class:`~transformers.FunnelForSequenceClassification` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1459,6 +1482,7 @@ class AutoModelForQuestionAnswering:
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForQuestionAnswering` (Funnel Transformer model)
 
         Examples::
 
@@ -1493,6 +1517,7 @@ class AutoModelForQuestionAnswering:
             - `xlnet`: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
             - `xlm`: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
             - `flaubert`: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
+            - `funnel`: :class:`~transformers.FunnelForQuestionAnswering` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1609,6 +1634,7 @@ class AutoModelForTokenClassification:
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForTokenClassification` (Funnel Transformer model)
 
         Examples::
 
@@ -1646,6 +1672,7 @@ class AutoModelForTokenClassification:
             - `flaubert`: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
             - `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
             - `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+            - `funnel`: :class:`~transformers.FunnelForTokenClassification` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`

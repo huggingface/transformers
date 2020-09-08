@@ -1609,7 +1609,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 )
                 tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
 
-        # Check all our special tokens are registrered as "no split" token (we don't cut them) and are in the vocab
+        # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
         added_tokens = tokenizer.sanitize_special_tokens()
         if added_tokens:
             logger.warning(
