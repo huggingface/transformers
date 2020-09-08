@@ -567,7 +567,7 @@ class FSMTDecoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             embed_dim,
             self.padding_idx,
-            init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
+            init_size=num_embeddings + self.padding_idx + 1,
         )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
@@ -852,8 +852,6 @@ class Attention(nn.Module):
         return k, v, new_key_padding_mask
 
 
-
-
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
     if torch.cuda.is_available():
         try:
@@ -873,14 +871,6 @@ def fill_with_neg_inf(t):
 # Public API
 def _get_shape(t):
     return getattr(t, "shape", None)
-
-
-# def output_projection(self):
-#     return nn.Linear(
-#         self.embed_tokens.weight.shape[1],
-#         self.embed_tokens.weight.shape[0],
-#         bias=False,
-#     )
 
 
 @add_start_docstrings(
@@ -1059,24 +1049,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         Returns:
 
         """
-        if "lm_labels" in unused:
-            warnings.warn(
-                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = unused.pop("lm_labels")
-        if "decoder_cached_states" in unused:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_cached_states")
-        if "decoder_past_key_values" in unused:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_past_key_values")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

@@ -183,16 +183,12 @@ class FSMTConfig(PretrainedConfig):
 
         self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
 
-        # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.dropout = dropout
-
-        # pos embedding offset
-        self.extra_pos_embeddings = self.pad_token_id + 1
 
     @property
     def num_attention_heads(self) -> int:
