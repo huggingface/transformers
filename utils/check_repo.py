@@ -141,18 +141,20 @@ def get_model_doc_files():
 # for the all_model_classes variable.
 def find_tested_models(test_file):
     """ Parse the content of test_file to detect what's in all_model_classes"""
+    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
     with open(os.path.join(PATH_TO_TESTS, test_file)) as f:
         content = f.read()
-    all_models = re.search(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
+    all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis
-    if all_models is None:
-        all_models = re.search(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
-    if all_models is not None:
+    if len(all_models) == 0:
+        all_models = re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
+    if len(all_models) > 0:
         model_tested = []
-        for line in all_models.groups()[0].split(","):
-            name = line.strip()
-            if len(name) > 0:
-                model_tested.append(name)
+        for entry in all_models:
+            for line in entry.split(","):
+                name = line.strip()
+                if len(name) > 0:
+                    model_tested.append(name)
         return model_tested
 
 
