@@ -18,8 +18,8 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import math
 
-import numpy as np
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
@@ -95,6 +95,7 @@ def gelu(x):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         Also see https://arxiv.org/abs/1606.08415
     """
+    x = tf.convert_to_tensor(x)
     cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
 
     return x * cdf
@@ -102,14 +103,17 @@ def gelu(x):
 
 def gelu_new(x):
     """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
+    This is a smoother version of the GELU.
     Original paper: https://arxiv.org/abs/1606.08415
     Args:
         x: float Tensor to perform activation.
     Returns:
         `x` with the GELU activation applied.
     """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
+    x = tf.convert_to_tensor(x)
+    pi = tf.cast(math.pi, x.dtype)
+    coeff = tf.cast(0.044715, x.dtype)
+    cdf = 0.5 * (1.0 + tf.tanh(tf.sqrt(2.0 / pi) * (x + coeff * tf.pow(x, 3))))
 
     return x * cdf
 
