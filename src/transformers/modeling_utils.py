@@ -582,7 +582,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             return model_embeds
 
         # Update base model and current model config
-        # XXX: now we have src_vocab_size/tgt_vocab_size
         self.config.vocab_size = new_num_tokens
         base_model.vocab_size = new_num_tokens
 
