@@ -241,6 +241,12 @@ class LineByLineWithSOPTextDataset(Dataset):
             i += 1  # go to next line
         return examples
 
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+        return self.examples[i]
+
 class TextDatasetForNextSentencePrediction(Dataset):
     """
     This will be superseded by a framework-agnostic approach
