@@ -86,6 +86,8 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Padding token id.
         eos_token_id (:obj:`int`, optional, defaults to 2)
             End of stream token id.
+        decoder_start_token_id (:obj:`int`, `optional`):
+            This model starts decoding with `eos_token_id`
         encoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
         decoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
