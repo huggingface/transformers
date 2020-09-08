@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+from unittest import skipIf
 
 import timeout_decorator  # noqa
 
@@ -27,6 +28,14 @@ from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
+try:
+    from sacrebleu import corpus_bleu
+
+    sacrebleu_is_missing = False
+except Exception:
+    sacrebleu_is_missing = True
+
+
 if is_torch_available():
     import torch
 
@@ -34,14 +43,10 @@ if is_torch_available():
     from transformers.modeling_bart import _prepare_bart_decoder_inputs, invert_mask
     from transformers.modeling_fsmt import SinusoidalPositionalEmbedding
 
-import os
-import sys
 
-
-# XXX: make calculate_bleu accessible to integration tests?
-examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))
-sys.path.insert(0, examples_dir)
-from seq2seq.utils import calculate_bleu  # noqa
+def calculate_bleu(output_lns, refs_lns, **kwargs) -> dict:
+    """Uses sacrebleu's corpus_bleu implementation."""
+    return {"bleu": round(corpus_bleu(output_lns, [refs_lns], **kwargs).score, 4)}
 
 
 @require_torch
@@ -539,6 +544,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         ]
     )
     @slow
+    @skipIf(sacrebleu_is_missing, "pip install sacrebleu")
     def test_bleu_scores(self, pair, min_bleu_score):
         # note: this test is not testing the best performance since it only evals a small batch
         # but it should be enough to detect a regression in the output quality
