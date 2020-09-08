@@ -251,7 +251,7 @@ BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_FOR_SEQ_GENERATION_START_DOCSTRING,
 )
-class BertForSeqGenerationEncoder(BertForSeqGenerationPreTrainedModel):
+class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well
@@ -412,7 +412,7 @@ class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
 
         assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`"
 
-        self.bert = BertForSeqGenerationEncoder(config)
+        self.bert = BertForSeqGenerationEncoderModel(config)
         self.lm_head = BertForSeqGenerationOnlyLMHead(config)
 
         self.init_weights()

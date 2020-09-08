@@ -157,7 +157,7 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from .modeling_bert_for_seq_generation import BertForSeqGenerationEncoder, BertForSeqGenerationDecoder
+from .modeling_bert_for_seq_generation import BertForSeqGenerationEncoderModel, BertForSeqGenerationDecoder
 from .modeling_t5 import T5ForConditionalGeneration, T5Model
 from .modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
@@ -215,7 +215,7 @@ MODEL_MAPPING = OrderedDict(
         (ReformerConfig, ReformerModel),
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
-        (BertForSeqGenerationConfig, BertForSeqGenerationEncoder),
+        (BertForSeqGenerationConfig, BertForSeqGenerationEncoderModel),
     ]
 )
 

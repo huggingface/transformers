@@ -433,7 +433,7 @@ if is_torch_available():
         load_tf_weights_in_transfo_xl,
     )
     from .modeling_bert_for_seq_generation import (
-        BertForSeqGenerationEncoder,
+        BertForSeqGenerationEncoderModel,
         BertForSeqGenerationDecoder
     )
     from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
