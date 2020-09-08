@@ -51,7 +51,7 @@ CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class):
+def load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class, is_encoder_named_decoder=False, is_encoder=False):
     try:
         import numpy as np
         import tensorflow.compat.v1 as tf
@@ -74,11 +74,20 @@ def load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class):
             if "global" in key:
                 logger.info(f"Skipping {key}...")
                 continue
-            model_pointer = getattr(model, model_class)
+            if not is_encoder:
+                model_pointer = getattr(model, model_class)
+            else:
+                model_pointer = model
             is_embedding = False
             logger.info(f"Trying to match {key}...")
             # remove start_string = "module/bert/"
             sub_layers = key.split("/")[2:]
+            if is_encoder_named_decoder and sub_layers[0] == "encoder":
+                logger.info(f"Skipping encoder layer {key} for decoder")
+                continue
+            if is_encoder and sub_layers[0] == "decoder":
+                logger.info(f"Skipping decoder layer {key} for encoder")
+                continue
             for i, sub_layer in enumerate(sub_layers):
                 if sub_layer == "embeddings":
                     is_embedding = True
@@ -94,6 +103,8 @@ def load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class):
                     model_pointer = model_pointer.crossattention.self
                 elif sub_layer == "encdec_output":
                     model_pointer = model_pointer.crossattention.output
+                elif is_encoder_named_decoder and sub_layer == "decoder":
+                    model_pointer = model_pointer.encoder
                 else:
                     if sub_layer == "attention" and "encdec" in sub_layers[i + 1]:
                         continue
