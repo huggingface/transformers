@@ -233,18 +233,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         cls_token="</s>",
         mask_token="<special1>",
-        additional_special_tokens=[
-            "<special0>",
-            "<special1>",
-            "<special2>",
-            "<special3>",
-            "<special4>",
-            "<special5>",
-            "<special6>",
-            "<special7>",
-            "<special8>",
-            "<special9>",
-        ],
         **kwargs
     ):
         super().__init__(
@@ -254,7 +242,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
