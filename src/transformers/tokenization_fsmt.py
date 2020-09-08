@@ -162,7 +162,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
     BPE tokenizer for FSMT (fairseq transformer)
     See: https://github.com/pytorch/fairseq/tree/master/examples/wmt19
 
-
     - Moses preprocessing & tokenization for most supported languages
     - (optionally) lower case & normalize all inputs text
     - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
@@ -183,10 +182,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             Merges file.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to lowercase the input when tokenizing.
-        remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to keep accents when tokenizing.
         unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -203,16 +198,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             It is also used as the last token of a sequence built with special tokens.
         pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
             The token used for padding, for example when batching sequences of different lengths.
-        cls_token (:obj:`string`, `optional`, defaults to "</s>"):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
-        mask_token (:obj:`string`, `optional`, defaults to "<special1>"):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
-            List of additional special tokens.
-
 
     """
 
@@ -231,8 +216,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
         bos_token="<s>",
         sep_token="</s>",
         pad_token="<pad>",
-        cls_token="</s>",
-        mask_token="<special1>",
         **kwargs
     ):
         super().__init__(
@@ -240,8 +223,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             sep_token=sep_token,
             pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
             **kwargs,
         )
 
