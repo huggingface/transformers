@@ -113,7 +113,7 @@ def test_train_mbart_cc25_enro_script():
 def test_opus_mt_distill_script():
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     env_vars_to_replace = {
-        #"--fp16_opt_level=O1": "",
+        "--fp16_opt_level=O1": "",
         "$MAX_LEN": 128,
         "$BS": 16,
         "$GAS": 1,
@@ -127,7 +127,7 @@ def test_opus_mt_distill_script():
         Path("examples/seq2seq/distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
     )
     bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
-    #bash_script = bash_script.replace("--fp16 ", " ")
+    bash_script = bash_script.replace("--fp16 ", " ")
 
     for k, v in env_vars_to_replace.items():
         bash_script = bash_script.replace(k, str(v))

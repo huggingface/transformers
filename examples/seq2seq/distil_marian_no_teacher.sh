@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 export PYTHONPATH="../":"${PYTHONPATH}"
 export WANDB_PROJECT=dmar
-python finetune.py \
+python distillation.py \
   --learning_rate=3e-4 \
   --do_train \
   --do_predict \
