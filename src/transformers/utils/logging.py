@@ -59,23 +59,6 @@ def _get_default_logging_level():
     return _default_log_level
 
 
-def logging_level_str_to_code(level_str):
-    """
-    Convert log level strings (error, warning, etc.) to their ``logger`` codes (``logging.ERROR``, ``logging.WARNING``, etc.)
-
-    Args:
-        level_str (:obj:`str`): "error", "warning", etc.
-
-    Returns:
-        :obj:`int`: The corresponding logging level
-    """
-
-    if level_str in log_levels:
-        return log_levels[level_str]
-    else:
-        raise ValueError(f"unknown level {level_str}, has to be one of: { log_levels.keys() }")
-
-
 def _get_library_name() -> str:
 
     return __name__.split(".")[0]

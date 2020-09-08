@@ -4,7 +4,6 @@ import unittest
 import transformers.tokenization_bart
 from transformers import logging
 from transformers.testing_utils import CaptureLogger, mockenv
-from transformers.utils.logging import logging_level_str_to_code
 
 
 class HfArgumentParserTest(unittest.TestCase):
@@ -66,7 +65,7 @@ class HfArgumentParserTest(unittest.TestCase):
         _ = logging.get_logger("transformers.tokenization_bart")
 
         env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
-        env_level = logging_level_str_to_code(env_level_str)
+        env_level = logging.log_levels[env_level_str]
 
         current_level = logging.get_verbosity()
         self.assertEqual(
