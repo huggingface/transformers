@@ -365,14 +365,15 @@ TOLERANCE = 1e-4
 class FSMTModelIntegrationTests(unittest.TestCase):
     tokenizers_cache = {}
     models_cache = {}
+    default_mname = "stas/fsmt-wmt19-en-ru"
 
     @cached_property
     def default_tokenizer(self):
-        return self.get_tokenizer("stas/fsmt-wmt19-ru-en")
+        return self.get_tokenizer(self.default_mname)
 
     @cached_property
     def default_model(self):
-        return self.get_model("stas/fsmt-wmt19-ru-en")
+        return self.get_model(self.default_mname)
 
     def get_tokenizer(self, mname):
         if mname not in self.tokenizers_cache:
@@ -389,7 +390,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         tokenizer = self.default_tokenizer
-        model = self.default_model
+        model = FSMTModel.from_pretrained(self.default_mname).to(torch_device)
 
         src_text = "My friend computer will translate this for me"
         input_ids = tokenizer([src_text], return_tensors="pt")["input_ids"]
@@ -397,15 +398,13 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         inputs_dict = prepare_fsmt_inputs_dict(model.config, input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((1, model.config.decoder_attention_heads, model.config.tgt_vocab_size))
+        expected_shape = torch.Size((1, 10, model.config.tgt_vocab_size))
         self.assertEqual(output.shape, expected_shape)
-        print(output[:, :3, :3])
-        # expected numbers were generated when using just fairseq's model4.pt
+        # expected numbers were generated when en-ru model, using just fairseq's model4.pt
         # may have to adjust if switched to a different checkpoint
         expected_slice = torch.tensor(
-            [[-3.3069, -3.3069, 2.5253], [-4.2303, -4.2301, 0.8354], [-3.2488, -3.2487, 1.7397]], device=torch_device
+            [[-1.5753, -1.5753, 2.8975], [-0.9540, -0.9540, 1.0299], [-3.3131, -3.3131, 0.5219]]
         )
-        print(output[:, :3, :3])
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     @parameterized.expand(
