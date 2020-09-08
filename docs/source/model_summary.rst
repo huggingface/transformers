@@ -416,6 +416,38 @@ traditional GAN setting) then the ELECTRA model is trained for a few steps.
 The library provides a version of the model for masked language modeling, token classification and sentence
 classification.
 
+Funnel Transformer
+----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=funnel">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-funnel-blueviolet">
+   </a>
+   <a href="model_doc/funnel.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-funnel-blueviolet">
+   </a>
+
+`Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
+<https://arxiv.org/abs/2006.03236>`_, Zihang Dai et al.
+
+Funnel Transformer is a transformer model using pooling, a bit like a ResNet model: layers are grouped in blocks, and
+at the beginning of each block (except the first one), the hidden states are pooled among the sequence dimension. This
+way, their length is divided by 2, which speeds up the computation of the next hidden states. All pretrained models
+have three blocks, which means the final hidden state has a sequence length that is one fourth of the original sequence
+length.
+
+For tasks such as classification, this is not a problem, but for tasks like masked language modeling or token
+classification, we need a hidden state with the same sequence length as the original input. In those cases, the final
+hidden states are upsampled to the input sequence length and go through two additional layers. That's why there are two
+versions of each checkpoint. The version suffixed with "-base" contains only the three blocks, while the version
+without that suffix contains the three blocks and the upsampling head with its additional layers.
+
+The pretrained models available use the same pretraining objective as ELECTRA.
+
+The library provides a version of the model for masked language modeling, token classification, sentence
+classification, multiple choice classification and question answering.
+
 .. _longformer:
 
 Longformer
