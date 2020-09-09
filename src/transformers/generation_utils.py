@@ -130,6 +130,7 @@ class GenerationMixin:
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
+        antilm_params = None,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -493,6 +494,7 @@ class GenerationMixin:
                 batch_size=effective_batch_size,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                antilm_params=antilm_params,
                 model_kwargs=model_kwargs,
             )
 
@@ -516,6 +518,7 @@ class GenerationMixin:
         batch_size,
         attention_mask,
         use_cache,
+        antilm_params,
         model_kwargs,
     ):
         """Generate sequences for each example without beam search (num_beams == 1).
@@ -526,6 +529,18 @@ class GenerationMixin:
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
         past = None
+        past2 = None
+
+        # Initialize MMI antiLM settings
+        if antilm_params is None:
+            print("Must define antilm_params")
+            quit()
+        threshold_g = antilm_params["length_thresh"] + cur_len  # cur_len starts at the length of input
+        alpha = antilm_params["alpha"]
+        lm_model = antilm_params["lm_model"]
+        bsz = input_ids.size(0)
+        input_ids2 = torch.LongTensor(bsz,1).fill_(50256).to(input_ids.device)
+        
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_kwargs
@@ -533,6 +548,19 @@ class GenerationMixin:
 
             outputs = self(**model_inputs, return_dict=True)
             next_token_logits = outputs.logits[:, -1, :]
+
+            # Apply antiLM decoding
+            # subtract language model from targets
+            if cur_len < threshold_g:
+                print(f"A: On token {cur_len}")
+                model_inputs2 = self.prepare_inputs_for_generation(
+                    input_ids2, past=past2, attention_mask=attention_mask, use_cache=use_cache
+                )
+                outputs2 = lm_model(**model_inputs2)
+                next_token_logits2 = outputs2[0][:, -1, :]
+                print(f"A: Original next logits {next_token_logits}")
+                next_token_logits = next_token_logits - alpha * next_token_logits2
+                print(f"A: Modified next logits {next_token_logits}")
 
             scores = self.postprocess_next_token_scores(
                 scores=next_token_logits,
@@ -553,6 +581,10 @@ class GenerationMixin:
                 past = outputs.past_key_values
             elif "mems" in outputs:
                 past = outputs.mems
+            if "past_key_values" in outputs2:
+                past2 = outputs2.past_key_values
+            elif "mems" in outputs:
+                past2 = outputs2.mems
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
