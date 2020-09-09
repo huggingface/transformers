@@ -230,6 +230,7 @@ class TFTrainer:
             .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
+        ds = ds.map(lambda features, labels: count_instances_in_batch((features, labels)))
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
@@ -260,6 +261,7 @@ class TFTrainer:
             .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
+        ds = ds.map(lambda features, labels: count_instances_in_batch((features, labels)))
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
