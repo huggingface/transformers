@@ -108,8 +108,8 @@ def test_pack_dataset():
 
 import os
 def test_dynamic_batch_size():
-    if os.getenv('real_data', False):
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+    if os.getenv('USE_REAL_DATA', False):
+        data_dir = "examples/seq2seq/wmt_en_ro"
         max_len = 128
         max_tokens = max_len * 2 * 64
     else:
