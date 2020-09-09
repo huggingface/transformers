@@ -272,7 +272,7 @@ class SummarizationModule(BaseTransformer):
                 collate_fn=dataset.collate_fn,
                 # shuffle=False,
                 num_workers=self.num_workers,
-                batch_size=None,
+                # batch_size=None,
             )
         else:
             return DataLoader(
