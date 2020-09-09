@@ -9,6 +9,7 @@ from typing import Callable, Dict, Optional, Tuple
 import numpy as np
 import tensorflow as tf
 from packaging.version import parse
+from tensorflow.python.distribute.values import PerReplica
 
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
@@ -25,58 +26,6 @@ if is_comet_available():
     import comet_ml
 
 logger = logging.get_logger(__name__)
-
-
-def count_examples_in_batch(batch):
-    """
-    Count the number of examples in ``batch``, i.e. the batch dimension.
-
-    Args:
-        batch (:obj:`Tuple[Dict, tf.Tensor]`):
-            A tuple of batched features and labels.
-
-    Returns:
-        A scalar `tf.int32` tensor.
-    """
-
-    features, labels = batch
-
-    nb_examples = tf.shape(labels)[0]
-
-    return nb_examples
-
-
-def count_instances_in_batch(batch):
-    """
-    Count the number of instances in ``batch`` and inject this information into ``batch``.
-
-    For sentence level tasks, an instance is the same as an examples (in general).
-    For token level tasks like token classification, an instance is a token that is not ignored.
-
-    This method uses the attribute ``nb_instances_in_example`` in features which is provided during
-    the creation of a `tf.data.Dataset`. If this information is not provided, it will return the
-    number of examples in ``batch``.
-
-    Args:
-        batch (:obj:`Tuple[Dict, tf.Tensor]`):
-            A tuple of batched features and labels.
-
-    Returns:
-        The tensor ``batch`` with injected information.
-    """
-
-    features, labels = batch
-
-    nb_examples_in_batch = count_examples_in_batch(batch)
-
-    if "nb_instances_in_example" in features:
-        nb_instances_in_batch = tf.reduce_sum(features["nb_instances_in_example"])
-    else:
-        nb_instances_in_batch = nb_examples_in_batch
-
-    features["nb_instances_in_batch"] = tf.repeat(nb_instances_in_batch, repeats=nb_examples_in_batch)
-
-    return batch
 
 
 class TFTrainer:
@@ -196,7 +145,6 @@ class TFTrainer:
             .batch(self.total_train_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
-        ds = ds.map(lambda features, labels: count_instances_in_batch((features, labels)))
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
@@ -230,7 +178,6 @@ class TFTrainer:
             .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
-        ds = ds.map(lambda features, labels: count_instances_in_batch((features, labels)))
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
@@ -261,7 +208,6 @@ class TFTrainer:
             .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
-        ds = ds.map(lambda features, labels: count_instances_in_batch((features, labels)))
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
@@ -649,14 +595,13 @@ class TFTrainer:
             # Clean the state at the end of training
             delattr(self, "_past")
 
-    def training_step(self, features, labels):
+    def training_step(self, features, labels, nb_instances_in_global_batch):
         """
         Perform a training step on features and labels.
 
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, _ = self.run_model(features, labels, True)
-        nb_instances_in_global_batch = tf.cast(features["nb_instances_in_batch"][0], dtype=per_example_loss.dtype)
         scaled_loss = per_example_loss / nb_instances_in_global_batch
         gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
         gradients = [
@@ -671,9 +616,9 @@ class TFTrainer:
         if self.args.gradient_accumulation_steps == 1:
             return gradients
 
-    def apply_gradients(self, features, labels):
+    def apply_gradients(self, features, labels, nb_instances_in_global_batch):
         if self.args.gradient_accumulation_steps == 1:
-            gradients = self.training_step(features, labels)
+            gradients = self.training_step(features, labels, nb_instances_in_global_batch)
 
             self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
         else:
@@ -683,7 +628,7 @@ class TFTrainer:
                 }
                 reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
 
-                self.training_step(reduced_features, reduced_labels)
+                self.training_step(reduced_features, reduced_labels, nb_instances_in_global_batch)
 
                 features = {
                     k: tf.concat(
@@ -708,7 +653,33 @@ class TFTrainer:
     @tf.function
     def distributed_training_steps(self, batch):
         with self.args.strategy.scope():
-            self.args.strategy.run(self.apply_gradients, batch)
+
+            nb_instances_in_batch = self.compute_nb_instances(batch)
+            inputs = self.get_step_inputs(batch, nb_instances_in_batch)
+
+            self.args.strategy.run(self.apply_gradients, inputs)
+
+    def compute_nb_instance(self, batch):
+
+        labels = batch[-1]
+        if isinstance(labels, PerReplica):
+            labels = tf.concat(labels.values, axis=0)
+
+        nb_instances = tf.cast(labels != -100, dtype=tf.int32)
+
+        return nb_instances
+
+    def get_step_inputs(self, batch, nb_instances):
+
+        features, labels = batch
+
+        if isinstance(labels, PerReplica):
+            # need to make a `PerReplica` objects for ``nb_instances``
+            nb_instances = PerReplica([nb_instances] * len(labels.values))
+
+        step_inputs = (features, labels, nb_instances)
+
+        return step_inputs
 
     def run_model(self, features, labels, training):
         """
