@@ -689,6 +689,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
                     hidden_states=encoder_outputs.hidden_states,
                     attentions=encoder_outputs.attentions,
                 )
+        else:
+            if return_dict is not None or output_attentions is not None or output_hidden_states is not None:
+                tf.print("Warning: The parameters return_dict, output_attentions and output_hidden_states are disabled in graph mode.")
 
         return output
 
