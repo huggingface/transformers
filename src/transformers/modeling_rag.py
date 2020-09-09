@@ -23,6 +23,7 @@ from typing import List, Optional, Tuple
 import torch
 
 from .configuration_auto import AutoConfig
+from .configuration_dpr import DPRConfig
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
@@ -30,6 +31,7 @@ from .modeling_auto import AutoModelForSeq2SeqLM
 from .modeling_bart import BartForConditionalGeneration
 from .modeling_dpr import DPRQuestionEncoder
 from .modeling_outputs import ModelOutput
+from .modeling_t5 import T5ForConditionalGeneration
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
 
@@ -192,13 +194,32 @@ class RagModel(torch.nn.Module):
         self.n_docs = self.config.n_docs
 
     def contextualize(self, input_ids, retriever, print_docs=False):
-        question_encoder_input_ids, input_strings, add_eos = retriever.preprocess_query(
-            input_ids, self.generator.config.prefix
-        )
+        """
+        Implements RAG sequence "thorough" decoding.
+
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
+                it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            retriever (:class:`~transformers.RagRetriever`):
+                A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
+            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
+
+        Return:
+            :obj:`tuple(tuple(torch.FloatTensor)`: a tuple consisting od three elements: contextualized ``input_ids``,
+                compatible ``attention_mask`` and scores of the retrieved documents.
+        """
+        question_encoder_input_ids, input_strings = retriever.preprocess_query(input_ids, self.generator.config.prefix)
         query_vectors = self.question_encoder(question_encoder_input_ids)[0]
         doc_vectors, docs = retriever.retrieve(query_vectors.cpu().detach().to(torch.float32), n_docs=self.n_docs)
         doc_vectors = doc_vectors.to(query_vectors)
         doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
+
+        # T5 tokenizer doesn't add eos token by default even with add_special_tokens set to True
+        add_eos = (input_ids == self.config.eos_token_id).any() and isinstance(
+            self.generator, T5ForConditionalGeneration
+        )
         input_ids, attention_mask = retriever.postprocess_docs(
             doc_scores, docs, input_strings, add_eos, self.generator.config.prefix, print_docs
         )
@@ -296,14 +317,13 @@ class PreTrainedRagModel(PreTrainedModel):
         super().__init__(config)
 
         self.config = config
-
         if question_encoder is None:
-            question_encoder_config = AutoConfig.from_config(self.config.pretrained_question_encoder_name_or_path)
-            # TODO(piktus): To be replaced with AutoModel once it supports DPRQuestionEncoder
-            question_encoder = DPRQuestionEncoder.from_config(question_encoder_config)
+            # TODO(piktus): To be replaced with AutoConfig / AutoModel once it supports DPRQuestionEncoder
+            question_encoder_config = DPRConfig.from_pretrained(self.config.pretrained_question_encoder_name_or_path)
+            question_encoder = DPRQuestionEncoder(question_encoder_config)
 
         if generator is None:
-            generaotr_config = AutoConfig.from_config(self.config.pretrained_generator_name_or_path)
+            generaotr_config = AutoConfig.from_pretrained(self.config.pretrained_generator_name_or_path)
             generator = AutoModelForSeq2SeqLM.from_config(generaotr_config)
 
         self.n_docs = self.config.n_docs

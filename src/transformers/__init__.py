@@ -658,7 +658,7 @@ if is_tf_available():
 
 if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available():
     from .configuration_rag import RagConfig
-    from .modeling_rag import RagSequence, RagToken
+    from .modeling_rag import RagModel, RagSequence, RagToken
     from .retrieval_rag import RagRetriever
     from .tokenization_rag import RagDefaultTokenizer
 

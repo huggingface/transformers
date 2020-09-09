@@ -267,14 +267,7 @@ class RagRetriever(object):
                 Tokenized input.
             :obj:`str`:
                 Decoded input strings.
-            :obj:`bool`:
-                A boolean flag signalling that eos token needs to be added to the contextualized input.
         """
-
-        # T5 tokenizer doesn't add eos token by default evan with add_special_tokens set to True
-        add_eos = (input_ids == self.generator_tokenizer.eos_token_id).any() and isinstance(
-            self.generator_tokenizer, T5Tokenizer
-        )
 
         input_strings = self.generator_tokenizer.batch_decode(input_ids, skip_special_tokens=True)
 
@@ -295,7 +288,7 @@ class RagRetriever(object):
             truncation=True,
         )
 
-        return retriever_inputs["input_ids"].to(input_ids.device), input_strings, add_eos
+        return retriever_inputs["input_ids"].to(input_ids.device), input_strings
 
     def postprocess_docs(self, doc_scores, docs, input_strings, add_eos, prefix, print_docs=False):
         r"""
