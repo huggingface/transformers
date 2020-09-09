@@ -329,7 +329,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
-        parser.add_argument("--max_tokens_per_batch", action="store_true", default=False)
+        parser.add_argument("--max_tokens_per_batch", type=int, default=None)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
