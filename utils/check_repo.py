@@ -47,6 +47,7 @@ MODEL_NAME_TO_DOC_FILE = {
     "openai": "gpt.rst",
     "transfo_xl": "transformerxl.rst",
     "xlm_roberta": "xlmroberta.rst",
+    "bert_for_seq_generation": "bertforseqgeneration.rst",
 }
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -208,6 +209,7 @@ def find_documented_classes(doc_file):
 def check_models_are_documented(module, doc_file):
     """ Check models defined in module are documented in doc_file."""
     defined_models = get_models(module)
+    print(module)
     documented_classes = find_documented_classes(doc_file)
     failures = []
     for model_name, _ in defined_models:
@@ -230,6 +232,8 @@ def _get_model_name(module):
     # Secial case for xlm_roberta
     if splits[-1] == "roberta" and splits[-2] == "xlm":
         return "_".join(splits[-2:])
+    if splits[-1] == "generation" and splits[-2] == "seq" and splits[-3] == "for" and splits[-4] == "bert":
+        return "_".join(splits[-4:])
     return splits[-1]
 
 
