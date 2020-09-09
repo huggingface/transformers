@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The OPUS-NMT Team, Marian team, and The HuggingFace Inc. team.
+# Copyright 2020 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Bert model configuration """
+"""  BertForSeqGeneration model configuration """
 
 from .configuration_utils import PretrainedConfig
 
 
 class BertForSeqGenerationConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BertModel`.
-    It is used to instantiate an BERT model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BertForSeqGenerationConfig`.
+    It is used to instantiate an BertForSeqGenerationConfig model according to the specified arguments, defining the model
+    architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -30,12 +29,12 @@ class BertForSeqGenerationConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, optional, defaults to 30522):
+        vocab_size (:obj:`int`, optional, defaults to 50358):
             Vocabulary size of the BERT model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
-        hidden_size (:obj:`int`, optional, defaults to 768):
+        hidden_size (:obj:`int`, optional, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, optional, defaults to 12):
+        num_hidden_layers (:obj:`int`, optional, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, optional, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -60,13 +59,13 @@ class BertForSeqGenerationConfig(PretrainedConfig):
 
     Example::
 
-        >>> from transformers import BertModel, BertConfig
+        >>> from transformers import BertForSeqGenerationConfig, BertForSeqGenerationEncoderModel
 
-        >>> # Initializing a BERT bert-base-uncased style configuration
-        >>> configuration = BertConfig()
+        >>> # Initializing a BertForSeqGeneration config
+        >>> configuration = BertForSeqGenerationConfig()
 
-        >>> # Initializing a model from the bert-base-uncased style configuration
-        >>> model = BertModel(configuration)
+        >>> # Initializing a modelfrom the config
+        >>> model = BertForSeqGenerationEncoderModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
@@ -75,11 +74,11 @@ class BertForSeqGenerationConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        vocab_size=50358,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -87,10 +86,12 @@ class BertForSeqGenerationConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=2,
+        eos_token_id=1,
         gradient_checkpointing=False,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

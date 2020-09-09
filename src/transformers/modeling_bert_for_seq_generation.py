@@ -1,6 +1,6 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2020 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model. """
+"""PyTorch BertForSeqGeneration model. """
 
+
+import warnings
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .activations import gelu, gelu_new, swish
-from .configuration_bert import BertConfig
+from .configuration_bert_for_seq_generation import BertForSeqGenerationConfig
 from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -39,10 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BertForSeqGenerationConfig"
 _TOKENIZER_FOR_DOC = "BertForSeqGenerationTokenizer"
-
-CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all BERT models at https://huggingface.co/models?filter=bert
-]
 
 
 def load_tf_weights_in_bert_for_seq_generation(
@@ -135,13 +132,6 @@ def load_tf_weights_in_bert_for_seq_generation(
         return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
-
-
 class BertForSeqGenerationEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -183,7 +173,7 @@ class BertForSeqGenerationPreTrainedModel(PreTrainedModel):
     a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = BertConfig
+    config_class = BertForSeqGenerationConfig
     base_model_prefix = "bert"
     authorized_missing_keys = [r"position_ids"]
 
@@ -227,12 +217,6 @@ BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
@@ -257,7 +241,7 @@ BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare BertForSeqGeneration model transformer outputting raw hidden-states without any specific head on top.",
     BERT_FOR_SEQ_GENERATION_START_DOCSTRING,
 )
 class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
@@ -268,6 +252,8 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
     the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
+    This model should be used when leveraging Bert or Roberta checkpoints for the `EncoderDecoderModel` class as described in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks`_ by Sascha Rothe, Shashi Narayan, and Aliaksei Severyn.
+
     To behave as an decoder the model needs to be initialized with the
     :obj:`is_decoder` argument of the configuration set to :obj:`True`.
     To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
@@ -277,6 +263,8 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
     .. _`Attention is all you need`:
         https://arxiv.org/abs/1706.03762
 
+    .. _`Leveraging Pre-trained Checkpoints for Sequence Generation Tasks`:
+        https://arxiv.org/abs/1907.12461
     """
 
     def __init__(self, config):
@@ -305,7 +293,7 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
     @add_start_docstrings_to_callable(BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-uncased",
+        checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder",
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -389,7 +377,7 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
         sequence_output = encoder_outputs[0]
 
         if not return_dict:
-            return (sequence_output) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
         return BaseModelOutput(
             last_hidden_state=sequence_output,
@@ -420,7 +408,8 @@ class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`"
+        if not config.is_decoder:
+            warnings.warn("If you want to use `BertForSeqGenerationDecoder` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertForSeqGenerationEncoderModel(config)
         self.lm_head = BertForSeqGenerationOnlyLMHead(config)
@@ -465,13 +454,13 @@ class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BertTokenizer, BertLMHeadModel, BertConfig
+            >>> from transformers import BertForSeqGenerationTokenizer, BertForSeqGenerationDecoder, BertForSeqGenerationConfig
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
-            >>> config = BertConfig.from_pretrained("bert-base-cased")
+            >>> tokenizer = BertForSeqGenerationTokenizer.from_pretrained('google/bert_for_seq_generation_L-24_bbc_encoder')
+            >>> config = BertForSeqGenerationConfig.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
             >>> config.is_decoder = True
-            >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config, return_dict=True)
+            >>> model = BertForSeqGenerationDecoder.from_pretrained('google/bert_for_seq_generation_L-24_bbc_encoder', config=config, return_dict=True)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

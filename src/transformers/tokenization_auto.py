@@ -27,6 +27,7 @@ from .configuration_auto import (
     CTRLConfig,
     DistilBertConfig,
     ElectraConfig,
+    EncoderDecoderConfig,
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
@@ -235,6 +236,10 @@ class AutoTokenizer:
             if tokenizer_class is None:
                 raise ValueError("Tokenizer class {} does not exist or is not currently imported.")
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # if model is an encoder decoder, the encoder tokenizer class is used by default
+        if isinstance(config, EncoderDecoderConfig):
+            config = config.encoder
 
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
             if isinstance(config, config_class):
