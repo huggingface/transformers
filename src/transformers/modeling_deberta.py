@@ -27,8 +27,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_deberta import DeBERTaConfig
-from .file_utils import add_start_docstrings
-from .modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel
 
 
@@ -46,8 +46,11 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "DeBERTaConfig"
+_TOKENIZER_FOR_DOC = "DeBERTaTokenizer"
+
 ####################################################
-# This list contrains shortcut names for some of
+# This list contains shortcut names for some of
 # the pretrained weights provided with the models
 ####################################################
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -574,52 +577,57 @@ class DeBERTaEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        output_all_encoded_layers=True,
-        return_att=False,
+        output_hidden_states=True,
+        output_attentions=False,
         query_states=None,
         relative_pos=None,
+        return_dict=False,
     ):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
-        all_encoder_layers = []
-        att_matrixs = []
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         if isinstance(hidden_states, Sequence):
             next_kv = hidden_states[0]
         else:
             next_kv = hidden_states
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            output_states = layer_module(
+
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            hidden_states = layer_module(
                 next_kv,
                 attention_mask,
-                return_att,
+                output_attentions,
                 query_states=query_states,
                 relative_pos=relative_pos,
                 rel_embeddings=rel_embeddings,
             )
-            if return_att:
-                output_states, att_m = output_states
+            if output_attentions:
+                hidden_states, att_m = hidden_states
 
             if query_states is not None:
-                query_states = output_states
+                query_states = hidden_states
                 if isinstance(hidden_states, Sequence):
                     next_kv = hidden_states[i + 1] if i + 1 < len(self.layer) else None
             else:
-                next_kv = output_states
+                next_kv = hidden_states
 
-            if output_all_encoded_layers:
-                all_encoder_layers.append(output_states)
-                if return_att:
-                    att_matrixs.append(att_m)
-        if not output_all_encoded_layers:
-            all_encoder_layers.append(output_states)
-            if return_att:
-                att_matrixs.append(att_m)
-        if return_att:
-            return (all_encoder_layers, att_matrixs)
-        else:
-            return all_encoder_layers
+            if output_attentions:
+                all_attentions = all_attentions + (att_m,)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 def build_relative_position(query_size, key_size, device):
@@ -865,9 +873,9 @@ class DeBERTaEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        padding_idx = getattr(config, "padding_idx", 0)
+        pad_token_id = getattr(config, "pad_token_id", 0)
         self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
-        self.word_embeddings = nn.Embedding(config.vocab_size, self.embedding_size, padding_idx=padding_idx)
+        self.word_embeddings = nn.Embedding(config.vocab_size, self.embedding_size, padding_idx=pad_token_id)
 
         self.position_biased_input = getattr(config, "position_biased_input", True)
         if not self.position_biased_input:
@@ -885,21 +893,32 @@ class DeBERTaEmbeddings(nn.Module):
         self.output_to_half = False
         self.config = config
 
-    def forward(self, input_ids, token_type_ids=None, position_ids=None, mask=None):
-        seq_length = input_ids.size(1)
-        if position_ids is None:
-            position_ids = torch.arange(0, seq_length, dtype=torch.long, device=input_ids.device)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-        if token_type_ids is None:
-            token_type_ids = torch.zeros_like(input_ids)
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-        words_embeddings = self.word_embeddings(input_ids)
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, mask=None, inputs_embeds=None):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+
         if self.position_embeddings is not None:
             position_embeddings = self.position_embeddings(position_ids.long())
         else:
-            position_embeddings = torch.zeros_like(words_embeddings)
+            position_embeddings = torch.zeros_like(inputs_embeds)
 
-        embeddings = words_embeddings
+        embeddings = inputs_embeds
         if self.position_biased_input:
             embeddings += position_embeddings
         if self.config.type_vocab_size > 0:
@@ -954,80 +973,51 @@ DEBERTA_START_DOCSTRING = r"""    The DeBERTa model was proposed in
 """
 
 DEBERTA_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
-            To match pre-training, DeBERTa input sequence should be formatted with [CLS] and [SEP] tokens as follows:
-
-            (a) For sequence pairs:
-
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-
-
-            (b) For single sequences:
-
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
 
             Indices can be obtained using :class:`transformers.DeBERTaTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
-            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+
+            `What are position IDs? <../glossary.html#position-ids>`_
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
 @add_start_docstrings(
     "The bare DeBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     DEBERTA_START_DOCSTRING,
-    DEBERTA_INPUTS_DOCSTRING,
 )
 class DeBERTaModel(DeBERTaPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the output of the last layer of the model.
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during DeBERTa pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = DeBERTaTokenizer.from_pretrained('microsoft/deberta-base')
-        model = DeBERTaModel.from_pretrained('microsoft/deberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
-    """
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1050,33 +1040,62 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
         """
         raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
+    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="microsoft/deberta-base",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif (input_ids is None) and (inputs_embeds is not None):
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
+            attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
-            token_type_ids = torch.zeros_like(input_ids)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         embedding_output = self.embeddings(
-            input_ids.to(torch.long), token_type_ids.to(torch.long), position_ids, attention_mask
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            mask=attention_mask,
+            inputs_embeds=inputs_embeds,
         )
 
-        encoded_layers = self.encoder(embedding_output, attention_mask, output_all_encoded_layers=True)
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask,
+            output_hidden_states=True,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
+        )
+        encoded_layers = encoder_outputs[1]
 
         if self.z_steps > 1:
             hidden_states = encoded_layers[-2]
@@ -1099,62 +1118,29 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
         sequence_output = encoded_layers[-1]
 
         if not return_dict:
-            return (sequence_output, sequence_output[:, 0])
-        else:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=sequence_output,
-                pooler_output=sequence_output[:, 0],
-                hidden_states=encoded_layers,
-            )
+            return (sequence_output,) + encoder_outputs[(1 if output_hidden_states else 2) :]
+
+        return BaseModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings(
     """DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     DEBERTA_START_DOCSTRING,
-    DEBERTA_INPUTS_DOCSTRING,
 )
 class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
-    r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
-            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification (or regression if config.num_labels==1) loss.
-        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = DeBERTaTokenizer.from_pretrained('microsoft/deberta-base')
-        model = DeBERTaForSequenceClassification.from_pretrained('microsoft/deberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
-    """
-
     def __init__(self, config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
         self.num_labels = num_labels
 
-        self.bert = DeBERTaModel(config)
+        self.deberta = DeBERTaModel(config)
         pool_config = PoolConfig(self.config)
-        output_dim = self.bert.config.hidden_size
         self.pooler = ContextPooler(pool_config)
         output_dim = self.pooler.output_dim()
 
@@ -1165,26 +1151,51 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
 
         self.init_weights()
 
+    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="microsoft/deberta-base",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_layer, cls = self.bert(
-            input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask, position_ids=position_ids
+        outputs = self.deberta(
+            input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
+
+        encoder_layer = outputs[0]
         pooled_output = self.pooler(encoder_layer)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
-        loss = torch.tensor(0).to(logits)
+        loss = None
         if labels is not None:
             if self.num_labels == 1:
                 # regression task
@@ -1205,9 +1216,12 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
                 log_softmax = torch.nn.LogSoftmax(-1)
                 loss = -((log_softmax(logits) * labels).sum(-1)).mean()
         if not return_dict:
-            return (loss, logits)
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
         else:
             return SequenceClassifierOutput(
                 loss=loss,
                 logits=logits,
+                hidden_states=outputs.hidden_states,
+                attentions=outputs.attentions,
             )

@@ -153,9 +153,9 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
             model = DeBERTaModel(config=config)
             model.to(torch_device)
             model.eval()
-            sequence_output, cls = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-            sequence_output, cls = model(input_ids, token_type_ids=token_type_ids)
-            sequence_output, cls = model(input_ids)
+            sequence_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)[0]
+            sequence_output = model(input_ids, token_type_ids=token_type_ids)[0]
+            sequence_output = model(input_ids)[0]
 
             result = {
                 "sequence_output": sequence_output,
@@ -224,22 +224,6 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_token_classification(*config_and_inputs)
-
-    @unittest.skip
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip
-    def test_model_common_attributes(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

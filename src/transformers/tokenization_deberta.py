@@ -490,8 +490,8 @@ class GPT2Tokenizer(object):
 
 class DeBERTaTokenizer(PreTrainedTokenizer):
     r"""
-    Constructs a XxxTokenizer.
-    :class:`~transformers.DeBERTaTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
+    Constructs a :class:`~transformers.DeBERTaTokenizer`, which runs end-to-end tokenization: punctuation
+    splitting + wordpiece
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
