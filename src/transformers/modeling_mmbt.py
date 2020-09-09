@@ -16,25 +16,23 @@
 """PyTorch MMBT model. """
 
 
-import logging
-
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
-from .modeling_outputs import BaseModelOutputWithPooling
+from .modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from .modeling_utils import ModuleUtilsMixin
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MMBTConfig"
 
 
 class ModalEmbeddings(nn.Module):
-    """Generic Modal Embeddings which takes in an encoder, and a transformer embedding.
-    """
+    """Generic Modal Embeddings which takes in an encoder, and a transformer embedding."""
 
     def __init__(self, config, encoder, embeddings):
         super().__init__()
@@ -144,17 +142,19 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
 @add_start_docstrings(
-    "The bare MMBT Model outputting raw hidden-states without any specific head on top.", MMBT_START_DOCSTRING,
+    "The bare MMBT Model outputting raw hidden-states without any specific head on top.",
+    MMBT_START_DOCSTRING,
 )
 class MMBTModel(nn.Module, ModuleUtilsMixin):
     def __init__(self, config, transformer, encoder):
@@ -182,7 +182,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         Returns:
@@ -198,7 +198,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -257,13 +257,13 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
             encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.transformer.pooler(sequence_output)
 
-        if return_tuple:
+        if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -288,34 +288,34 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
 )
 class MMBTForClassification(nn.Module):
     r"""
-            **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-                Labels for computing the sequence classification/regression loss.
-                Indices should be in ``[0, ..., config.num_labels - 1]``.
-                If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
-                If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
-        Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-            **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-                Classification (or regression if config.num_labels==1) loss.
-            **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
-                Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
-                list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-                of shape ``(batch_size, sequence_length, hidden_size)``:
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``output_attentions=True``)
-                list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification (or regression if config.num_labels==1) loss.
+        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
-        Examples::
+    Examples::
 
-            # For example purposes. Not runnable.
-            transformer = BertModel.from_pretrained('bert-base-uncased')
-            encoder = ImageEncoder(args)
-            model = MMBTForClassification(config, transformer, encoder)
-            outputs = model(input_modal, input_ids, labels=labels)
-            loss, logits = outputs[:2]
-        """
+        # For example purposes. Not runnable.
+        transformer = BertModel.from_pretrained('bert-base-uncased')
+        encoder = ImageEncoder(args)
+        model = MMBTForClassification(config, transformer, encoder)
+        outputs = model(input_modal, input_ids, labels=labels)
+        loss, logits = outputs[:2]
+    """
 
     def __init__(self, config, transformer, encoder):
         super().__init__()
@@ -339,7 +339,9 @@ class MMBTForClassification(nn.Module):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        return_dict=None,
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mmbt(
             input_modal=input_modal,
@@ -353,6 +355,7 @@ class MMBTForClassification(nn.Module):
             modal_position_ids=modal_position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -360,8 +363,7 @@ class MMBTForClassification(nn.Module):
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-
+        loss = None
         if labels is not None:
             if self.num_labels == 1:
                 #  We are doing regression
@@ -370,6 +372,14 @@ class MMBTForClassification(nn.Module):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

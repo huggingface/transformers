@@ -56,6 +56,13 @@ XLMRobertaModel
     :members:
 
 
+XLMRobertaForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLMRobertaForCausalLM
+    :members:
+
+
 XLMRobertaForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

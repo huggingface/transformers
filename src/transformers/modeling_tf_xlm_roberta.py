@@ -15,9 +15,6 @@
 # limitations under the License.
 """ TF 2.0  XLM-RoBERTa model. """
 
-
-import logging
-
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_roberta import (
@@ -28,9 +25,10 @@ from .modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
@@ -62,8 +60,6 @@ XLM_ROBERTA_START_DOCSTRING = r"""
         config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -81,7 +77,8 @@ class TFXLMRobertaModel(TFRobertaModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """, XLM_ROBERTA_START_DOCSTRING,
+    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    XLM_ROBERTA_START_DOCSTRING,
 )
 class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
     """

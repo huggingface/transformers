@@ -26,12 +26,14 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFT5Model, TFT5ForConditionalGeneration, T5Tokenizer
+
+    from transformers import T5Tokenizer, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -78,6 +80,7 @@ class TFT5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
+            return_dict=True,
         )
 
         return (config, input_ids, input_mask, token_labels)
@@ -89,22 +92,14 @@ class TFT5ModelTester:
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
         }
-        decoder_output, decoder_past, encoder_output = model(inputs)
+        result = model(inputs)
 
-        decoder_output, decoder_past, encoder_output = model(
-            input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids
-        )
-        result = {
-            "encoder_output": encoder_output.numpy(),
-            "decoder_past": decoder_past,
-            "decoder_output": decoder_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(
-            list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        result = model(input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids)
+        decoder_output = result.last_hidden_state
+        decoder_past = result.past_key_values
+        encoder_output = result.encoder_last_hidden_state
+        self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
+        self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertEqual(len(decoder_past), 2)
         # decoder_past[0] should correspond to encoder output
         self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
@@ -121,14 +116,9 @@ class TFT5ModelTester:
             "decoder_attention_mask": input_mask,
         }
 
-        prediction_scores, _, _ = model(inputs_dict)
+        result = model(inputs_dict)
 
-        result = {
-            "prediction_scores": prediction_scores.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
         model = TFT5Model(config=config).get_decoder()
@@ -192,7 +182,10 @@ class TFT5ModelTester:
 
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
+        attn_mask = tf.concat(
+            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
+            axis=1,
+        )
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]

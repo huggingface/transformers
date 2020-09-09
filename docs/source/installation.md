@@ -22,13 +22,13 @@ When TensorFlow 2.0 and/or PyTorch has been installed, 🤗 Transformers can be 
 pip install transformers
 ```
 
-Alternatively, for CPU-support only, you can install 🤗 Transformers and PyTorch in one line with
+Alternatively, for CPU-support only, you can install 🤗 Transformers and PyTorch in one line with:
 
 ```bash
 pip install transformers[torch]
 ```
 
-or 🤗 Transformers and TensorFlow 2.0 in one line with
+or 🤗 Transformers and TensorFlow 2.0 in one line with:
 
 ```bash
 pip install transformers[tf-cpu]
@@ -73,8 +73,8 @@ This library provides pretrained models that will be downloaded and cached local
 folder given by the shell environment variable ``TRANSFORMERS_CACHE``. The default value for it will be the PyTorch
 cache home followed by ``/transformers/`` (even if you don't have PyTorch installed). This is (by order of priority):
 
-  * shell environment variable ``ENV_TORCH_HOME``
-  * shell environment variable ``ENV_XDG_CACHE_HOME`` + ``/torch/``
+  * shell environment variable ``TORCH_HOME``
+  * shell environment variable ``XDG_CACHE_HOME`` + ``/torch/``
   * default: ``~/.cache/torch/``
 
 So if you don't have any specific environment variable set, the cache directory will be at

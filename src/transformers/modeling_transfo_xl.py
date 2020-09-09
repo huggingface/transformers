@@ -19,7 +19,6 @@
 """
 
 
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -31,9 +30,10 @@ from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
@@ -45,8 +45,8 @@ TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def build_tf_to_pytorch_map(model, config):
-    """ A map of modules from TF to PyTorch.
-        This time I use a map to keep the PyTorch model as identical to the original PyTorch model as possible.
+    """A map of modules from TF to PyTorch.
+    This time I use a map to keep the PyTorch model as identical to the original PyTorch model as possible.
     """
     tf_to_pt_map = {}
 
@@ -62,7 +62,7 @@ def build_tf_to_pytorch_map(model, config):
             zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
             layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
-            if config.tie_weight:
+            if config.tie_word_embeddings:
                 tf_to_pt_map.update({layer_str + "b": out_l.bias})
             else:
                 raise NotImplementedError
@@ -112,8 +112,7 @@ def build_tf_to_pytorch_map(model, config):
 
 
 def load_tf_weights_in_transfo_xl(model, config, tf_path):
-    """ Load tf checkpoints in a pytorch model
-    """
+    """Load tf checkpoints in a pytorch model"""
     try:
         import numpy as np
         import tensorflow as tf
@@ -155,7 +154,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -384,7 +385,12 @@ class RelPartialLearnableDecoderLayer(nn.Module):
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
 
         attn_outputs = self.dec_attn(
-            dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask, output_attentions=output_attentions,
+            dec_inp,
+            r,
+            attn_mask=dec_attn_mask,
+            mems=mems,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         ff_output = self.pos_ff(attn_outputs[0])
 
@@ -454,8 +460,8 @@ class AdaptiveEmbedding(nn.Module):
 
 
 class TransfoXLPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = TransfoXLConfig
@@ -472,8 +478,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         nn.init.constant_(bias, 0.0)
 
     def _init_weights(self, m):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         classname = m.__class__.__name__
         if classname.find("Linear") != -1:
             if hasattr(m, "weight") and m.weight is not None:
@@ -513,7 +518,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
                 self._init_bias(m.r_bias)
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, layer: Optional[int] = -1):
-        """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
+        """Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
         Arguments:
@@ -618,7 +623,7 @@ class TransfoXLModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    mems: List[torch.FloatTensor]
+    mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -650,11 +655,20 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    losses: Optional[torch.FloatTensor]
-    prediction_scores: torch.FloatTensor
-    mems: List[torch.FloatTensor]
+    losses: Optional[torch.FloatTensor] = None
+    prediction_scores: torch.FloatTensor = None
+    mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def logits(self):
+        # prediciton scores are the output of the adaptive softmax, see
+        # the file `modeling_transfo_xl_utilities`. Since the adaptive
+        # softmax returns the log softmax value, `self.prediciton_scores`
+        # are strictly speaking not exactly `logits`, but behave the same
+        # way logits do.
+        return self.prediction_scores
 
 
 TRANSFO_XL_START_DOCSTRING = r"""
@@ -683,20 +697,21 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as input ids as they have already been computed.
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -836,13 +851,13 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -941,11 +956,14 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         # We transpose back here to shape [bsz, len, hidden_dim]
         core_out = core_out.transpose(0, 1).contiguous()
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TransfoXLModelOutput(
-            last_hidden_state=core_out, mems=new_mems, hidden_states=hids, attentions=attentions,
+            last_hidden_state=core_out,
+            mems=new_mems,
+            hidden_states=hids,
+            attentions=attentions,
         )
 
 
@@ -975,7 +993,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         Run this to be sure output and input (adaptive) softmax weights are tied
         """
 
-        if self.config.tie_weight:
+        if self.config.tie_word_embeddings:
             for i in range(len(self.crit.out_layers)):
                 self._tie_or_clone_weights(self.crit.out_layers[i], self.transformer.word_emb.emb_layers[i])
         if self.config.tie_projs:
@@ -1013,17 +1031,17 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if input_ids is not None:
             bsz, tgt_len = input_ids.size(0), input_ids.size(1)
         elif inputs_embeds is not None:
@@ -1038,7 +1056,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         last_hidden = transformer_outputs[0]
@@ -1048,7 +1066,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         prediction_scores = softmax_output.view(bsz, tgt_len, -1) if labels is None else ()
         loss = softmax_output.view(bsz, tgt_len - 1) if labels is not None else None
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1061,8 +1079,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         )
 
     def get_output_embeddings(self):
-        """ Double-check if you are using adaptive softmax.
-        """
+        """Double-check if you are using adaptive softmax."""
         if self.sample_softmax > 0:
             return self.out_layer
         else:

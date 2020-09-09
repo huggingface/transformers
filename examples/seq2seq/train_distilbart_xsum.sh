@@ -18,4 +18,4 @@ python distillation.py \
   --tokenizer_name facebook/bart-large \
   --warmup_steps 500 \
   --output_dir distilbart_xsum_12_6 \
-  $@
+  "$@"

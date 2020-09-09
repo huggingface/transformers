@@ -16,15 +16,15 @@
 
 
 import collections
-import logging
 from typing import List, Optional, Union
 
 from .file_utils import add_end_docstrings, add_start_docstrings
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_utils_base import BatchEncoding, TensorType
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -168,12 +168,12 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
             * `True` or `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`).
             * `False` or `'do_not_truncate'` (default): No truncation (i.e. can output batch with sequences length greater than the model max admissible input size)
-        max_length (:obj:`Union[int, None]`, `optional`, defaults to :obj:`None`):
+        max_length (:obj:`Union[int, None]`, `optional`):
             Control the length for padding/truncation. Accepts the following values
 
             * `None` (default): This will use the predefined model max length if required by one of the truncation/padding parameters. If the model has no specific max input length (e.g. XLNet) truncation/padding to max length is deactivated.
             * `any integer value` (e.g. `42`): Use this specific maximum length value if required by one of the truncation/padding parameters.
-        return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
+        return_tensors (:obj:`str`, `optional`):
             Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
             PyTorch :obj:`torch.Tensor` or Numpy :obj: `np.ndarray` instead of a list of python integers.
         return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`none`):
@@ -330,7 +330,11 @@ class CustomDPRReaderTokenizerMixin:
         return nbest_spans_predictions[:num_spans]
 
     def _get_best_spans(
-        self, start_logits: List[int], end_logits: List[int], max_answer_length: int, top_spans: int,
+        self,
+        start_logits: List[int],
+        end_logits: List[int],
+        max_answer_length: int,
+        top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage.

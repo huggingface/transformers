@@ -16,7 +16,6 @@
 
 
 import json
-import logging
 import os
 import re
 import sys
@@ -26,9 +25,10 @@ from typing import List, Optional
 import sacremoses as sm
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -578,9 +578,9 @@ class XLMTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
             List of additional special tokens.
-        lang2id (:obj:`Dict[str, int]`, `optional`, defaults to :obj:`None`):
+        lang2id (:obj:`Dict[str, int]`, `optional`):
             Dictionary mapping languages string identifiers to their IDs.
-        id2lang (:obj:`Dict[int, str`, `optional`, defaults to :obj:`None`):
+        id2lang (:obj:`Dict[int, str`, `optional`):
             Dictionary mapping language IDs to their string identifiers.
         do_lowercase_and_remove_accent (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to lowercase and remove accents when tokenizing.
@@ -863,7 +863,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -887,7 +887,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Set to True if the token list is already formatted with special tokens for the model
@@ -902,7 +902,12 @@ class XLMTokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formated with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0,))
+            return list(
+                map(
+                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
+                    token_ids_0,
+                )
+            )
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
@@ -925,7 +930,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:

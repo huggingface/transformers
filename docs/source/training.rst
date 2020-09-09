@@ -16,10 +16,10 @@ TF2, and focus specifically on the nuances and tools for training models in
 
 Sections:
 
-  * :ref:`pytorch`
-  * :ref:`tensorflow`
-  * :ref:`trainer`
-  * :ref:`additional-resources`
+  - :ref:`pytorch`
+  - :ref:`tensorflow`
+  - :ref:`trainer`
+  - :ref:`additional-resources`
 
 .. _pytorch:
 
@@ -49,7 +49,7 @@ put it in train mode.
 .. code-block:: python
 
     from transformers import BertForSequenceClassification
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', return_dict=True)
     model.train()
 
 This is useful because it allows us to make use of the pre-trained BERT
@@ -131,7 +131,6 @@ Then all we have to do is call ``scheduler.step()`` after ``optimizer.step()``.
 
 .. code-block:: python
 
-    ...
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -151,7 +150,7 @@ the encoder parameters, which can be accessed with the ``base_model``
 submodule on any task-specific model in the library:
 
 .. code-block:: python
-   
+
     for param in model.base_model.parameters():
         param.requires_grad = False
 
@@ -182,6 +181,7 @@ the pretrained tokenizer name.
 .. code-block:: python
 
     from transformers import BertTokenizer, glue_convert_examples_to_features
+    import tensorflow as tf
     import tensorflow_datasets as tfds
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     data = tfds.load('glue/mrpc')
@@ -191,7 +191,7 @@ the pretrained tokenizer name.
 The model can then be compiled and trained as any Keras model:
 
 .. code-block:: python
-    
+
     optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5)
     loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
     model.compile(optimizer=optimizer, loss=loss)
@@ -282,7 +282,7 @@ your own ``compute_metrics`` function and pass it to the trainer.
 
 .. code-block:: python
 
-    from sklearn.metrics import precision_recall_fscore_support
+    from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
     def compute_metrics(pred):
         labels = pred.label_ids
@@ -305,19 +305,14 @@ launching tensorboard in your specified ``logging_dir`` directory.
 Additional resources
 ^^^^^^^^^^^^^^^^^^^^
 
-    * `A lightweight colab demo
-      <https://colab.research.google.com/drive/1-JIJlao4dI-Ilww_NnTc0rxtp-ymgDgM?usp=sharing>`_
-      which uses ``Trainer`` for IMDb sentiment classification.
+- `A lightweight colab demo <https://colab.research.google.com/drive/1-JIJlao4dI-Ilww_NnTc0rxtp-ymgDgM?usp=sharing>`_
+  which uses ``Trainer`` for IMDb sentiment classification.
 
-    * `🤗 Transformers Examples <https://github.com/huggingface/transformers/tree/master/examples>`_
-      including scripts for training and fine-tuning on GLUE, SQuAD, and
-      several other tasks.
+- `🤗 Transformers Examples <https://github.com/huggingface/transformers/tree/master/examples>`_
+  including scripts for training and fine-tuning on GLUE, SQuAD, and several other tasks.
 
-    * `How to train a language model
-      <https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb>`_,
-      a detailed colab notebook which uses ``Trainer`` to train a masked
-      language model from scratch on Esperanto.
+- `How to train a language model <https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb>`_,
+  a detailed colab notebook which uses ``Trainer`` to train a masked language model from scratch on Esperanto.
 
-    * `🤗 Transformers Notebooks <./notebooks.html>`_ which contain dozens
-      of example notebooks from the community for training and using
-      🤗 Transformers on a variety of tasks.
+- `🤗 Transformers Notebooks <notebooks.html>`_ which contain dozens of example notebooks from the community for
+  training and using 🤗 Transformers on a variety of tasks.

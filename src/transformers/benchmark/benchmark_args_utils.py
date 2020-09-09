@@ -16,13 +16,14 @@
 
 import dataclasses
 import json
-import logging
 from dataclasses import dataclass, field
 from time import time
 from typing import List
 
+from ..utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 def list_field(default=None, metadata=None):
@@ -62,8 +63,8 @@ class BenchmarkArguments:
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
     training: bool = field(default=False, metadata={"help": "Benchmark training of model"})
     verbose: bool = field(default=False, metadata={"help": "Verbose memory tracing"})
-    no_speed: bool = field(default=False, metadata={"help": "Don't perform speed measurments"})
-    no_memory: bool = field(default=False, metadata={"help": "Don't perform memory measurments"})
+    no_speed: bool = field(default=False, metadata={"help": "Don't perform speed measurements"})
+    no_memory: bool = field(default=False, metadata={"help": "Don't perform memory measurements"})
     trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
