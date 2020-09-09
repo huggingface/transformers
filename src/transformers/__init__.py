@@ -203,19 +203,18 @@ if is_torch_available():
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
     from .data.data_collator import (
-        default_data_collator,
         DataCollator,
         DataCollatorForLanguageModeling,
-        DataCollatorForSOP,
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorForSOP,
+        default_data_collator,
     )
     from .data.datasets import (
         GlueDataset,
-        TextDataset,
+        GlueDataTrainingArguments,
         LineByLineTextDataset,
         LineByLineWithSOPTextDataset,
-        GlueDataTrainingArguments,
         SquadDataset,
         SquadDataTrainingArguments,
         TextDataset,

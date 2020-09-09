@@ -5,8 +5,9 @@ import time
 from typing import Dict, Optional
 
 import torch
-from filelock import FileLock
 from torch.utils.data.dataset import Dataset
+
+from filelock import FileLock
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -36,7 +37,11 @@ class TextDataset(Dataset):
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else directory,
-            "cached_lm_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
+            "cached_lm_{}_{}_{}".format(
+                tokenizer.__class__.__name__,
+                str(block_size),
+                filename,
+            ),
         )
 
         # Make sure only the first process in distributed training processes the dataset,
@@ -257,7 +262,11 @@ class TextDatasetForNextSentencePrediction(Dataset):
     """
 
     def __init__(
-        self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, overwrite_cache=False,
+        self,
+        tokenizer: PreTrainedTokenizer,
+        file_path: str,
+        block_size: int,
+        overwrite_cache=False,
     ):
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
@@ -265,7 +274,12 @@ class TextDatasetForNextSentencePrediction(Dataset):
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
-            directory, "cached_nsp_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
+            directory,
+            "cached_nsp_{}_{}_{}".format(
+                tokenizer.__class__.__name__,
+                str(block_size),
+                filename,
+            ),
         )
 
         self.tokenizer = tokenizer
