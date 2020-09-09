@@ -97,6 +97,10 @@ class SummarizationModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
 
+        if self.hparams.sortish_sampler and self.hparams.gpus > 1:
+            raise AssertionError('Sortish Sampler does not work for multigpu')
+        if self.hparams.sortish_sampler and self.hparams.max_tokens_per_batch  is not None:
+            raise AssertionError('max tokens per batch and sortish sampler are incompatible.')
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
@@ -246,33 +250,40 @@ class SummarizationModule(BaseTransformer):
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
-        sampler = None
 
         if self.hparams.sortish_sampler and type_path == "train":
-            assert self.hparams.gpus <= 1  # TODO: assert earlier
-            #sampler = dataset.make_sortish_sampler(batch_size)
-            shuffle = False
-            batch_size = None
-            from durbango import pickle_load
-            batch_sampler = pickle_load('dynamic_batches.pkl')
+            sampler = dataset.make_sortish_sampler(batch_size)
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=dataset.collate_fn,
+                shuffle=False,
+                num_workers=self.num_workers,
+                sampler=sampler,
+            )
+
+        elif self.hparams.max_tokens_per_batch is not None and type_path == 'train':
+            #batch_sampler = pickle_load('dynamic_batches.pkl')
+            #batch_by_size
+            batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch)  # TODO(SS): shuffle this
             return DataLoader(
                 dataset,
                 batch_sampler=batch_sampler,
                 collate_fn=dataset.collate_fn,
+                #shuffle=False,
+                num_workers=self.num_workers,
+                batch_size=None,
+            )
+        else:
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=dataset.collate_fn,
                 shuffle=shuffle,
                 num_workers=self.num_workers,
-                #sampler=sampler,
+                sampler=None,
             )
 
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            collate_fn=dataset.collate_fn,
-            shuffle=shuffle,
-            num_workers=self.num_workers,
-            sampler=sampler,
-        )
-        return dataloader
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
@@ -319,6 +330,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
+        parser.add_argument("--max_tokens_per_batch", action="store_true", default=False)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")

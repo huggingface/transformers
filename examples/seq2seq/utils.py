@@ -14,6 +14,7 @@ from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
+from transformers.file_utils import cached_property
 
 from transformers import BartTokenizer
 
@@ -75,6 +76,7 @@ def trim_batch(
         return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
+
 class AbstractSeq2SeqDataset(Dataset):
     def __init__(
         self,
@@ -111,8 +113,25 @@ class AbstractSeq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
+    @cached_property
+    def tgt_lens(self):
+        return self.get_char_lens(self.tgt_file)
+
     def make_sortish_sampler(self, batch_size):
         return SortishSampler(self.src_lens, batch_size)
+
+    def make_dynamic_sampler(self, max_tokens_per_batch=1024, **kwargs):
+        from fairseq.data.data_utils import batch_by_size
+        indices = np.arange(len(self.src_lens))
+        def num_tokens_in_example(i):
+            num_src_tokens = min(self.src_lens[i]//4, self.max_source_length)
+            num_tgt_tokens = min(self.tgt_lens[i]//4, self.max_target_length)
+            return num_src_tokens + num_tgt_tokens # fairseq logic: max(num_src_tokens, num_tgt_tokens)
+        num_tokens_fn = lambda i: self.src_lens[i] // 4  # assume each token is ~4 characters (a bit conservative)
+        batch_sampler: List[List[int]] = batch_by_size(
+            indices, num_tokens_fn=num_tokens_fn, max_tokens=max_tokens_per_batch, **kwargs)
+        return batch_sampler
+
 
     def __getitem__(self, item):
         raise NotImplementedError("You must implement this")
