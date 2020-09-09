@@ -22,19 +22,20 @@ try:
 except ImportError:
     from utils import calculate_bleu
 
-import yaml
+import json
+
 from parameterized import parameterized
 from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow, torch_device
 
 
-filename = get_tests_dir() + "/test_data/fsmt/fsmt_val_data.yaml"
+filename = get_tests_dir() + "/test_data/fsmt/fsmt_val_data.json"
 with io.open(filename, "r", encoding="utf-8") as f:
-    bleu_data = yaml.load(f)
+    bleu_data = json.load(f)
 
 
 @require_torch
-class ModelTester(unittest.TestCase):
+class ModelEvalTester(unittest.TestCase):
     def get_tokenizer(self, mname):
         return FSMTTokenizer.from_pretrained(mname)
 
