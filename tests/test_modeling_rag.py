@@ -18,7 +18,7 @@ import copy
 import unittest
 from unittest.mock import patch
 
-from transformers.file_utils import is_faiss_available, is_nlp_available, is_psutil_available, is_torch_available
+from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -28,10 +28,15 @@ from .test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import BartConfig, BartForConditionalGeneration, DPRConfig, DPRQuestionEncoder
-
-    if is_nlp_available() and is_faiss_available() and is_psutil_available():
-        from transformers import RagConfig, RagSequence, RagToken
+    from transformers import (
+        BartConfig,
+        BartForConditionalGeneration,
+        DPRConfig,
+        DPRQuestionEncoder,
+        RagConfig,
+        RagSequence,
+        RagToken,
+    )
 
 
 class RagModelTester:
