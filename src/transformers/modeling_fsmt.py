@@ -1004,7 +1004,6 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
-    authorized_missing_keys = [r"encoder\.version", r"decoder\.version"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
