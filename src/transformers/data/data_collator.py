@@ -251,7 +251,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
         attention_mask = (~masked_indices).float()
         if self.tokenizer._pad_token is not None:
             attention_padding_mask = labels.eq(self.tokenizer.pad_token_id)
-            attention_mask.masked_fill_(padding_mask, value=1.0)
+            attention_mask.masked_fill_(attention_padding_mask, value=1.0)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens, -100 is default for CE compute
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])

@@ -150,7 +150,7 @@ class LineByLineWithSOPTextDataset(Dataset):
                         if article_open:
                             article_lines.append(line)
 
-        logger.info(f"Dataset parse finished.")
+        logger.info("Dataset parse finished.")
 
     def create_examples_from_document(self, document, block_size, tokenizer, short_seq_prob=0.1):
         """Creates examples for a single document."""
