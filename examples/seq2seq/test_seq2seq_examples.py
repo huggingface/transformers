@@ -463,5 +463,3 @@ def test_finetune_lr_schedulers():
     args = argparse.Namespace(**args_d1)
     model = main(args)
     assert getattr(model.hparams, "lr_scheduler") == supported_param, f"lr_scheduler={supported_param} shouldn't fail"
-
-

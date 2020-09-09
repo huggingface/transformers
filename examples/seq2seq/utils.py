@@ -14,9 +14,9 @@ from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
-from transformers.file_utils import cached_property
 
 from transformers import BartTokenizer
+from transformers.file_utils import cached_property
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
@@ -76,7 +76,6 @@ def trim_batch(
         return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
-
 class AbstractSeq2SeqDataset(Dataset):
     def __init__(
         self,
@@ -120,18 +119,23 @@ class AbstractSeq2SeqDataset(Dataset):
     def make_sortish_sampler(self, batch_size):
         return SortishSampler(self.src_lens, batch_size)
 
-    def make_dynamic_sampler(self, max_tokens_per_batch=1024, **kwargs):
+    def make_dynamic_sampler(self, max_tokens_per_batch=1024, chars_per_token=4, **kwargs):
+        # import ipdb; ipdb.set_trace()
         from fairseq.data.data_utils import batch_by_size
-        indices = np.arange(len(self.src_lens))
-        def num_tokens_in_example(i):
-            num_src_tokens = min(self.src_lens[i]//4, self.max_source_length)
-            num_tgt_tokens = min(self.tgt_lens[i]//4, self.max_target_length)
-            return num_src_tokens + num_tgt_tokens # fairseq logic: max(num_src_tokens, num_tgt_tokens)
-        num_tokens_fn = lambda i: self.src_lens[i] // 4  # assume each token is ~4 characters (a bit conservative)
-        batch_sampler: List[List[int]] = batch_by_size(
-            indices, num_tokens_fn=num_tokens_fn, max_tokens=max_tokens_per_batch, **kwargs)
-        return batch_sampler
 
+        # indices = np.arange(len(self.src_lens))
+        sorted_indices = list(self.make_sortish_sampler(1))
+
+        def num_tokens_in_example(i):
+            num_src_tokens = min(self.src_lens[i] // chars_per_token, self.max_source_length)
+            num_tgt_tokens = min(self.tgt_lens[i] // chars_per_token, self.max_target_length)
+            return num_src_tokens + num_tgt_tokens  # fairseq logic: max(num_src_tokens, num_tgt_tokens)
+
+        # num_tokens_fn = lambda i: self.src_lens[i] // 4  # assume each token is ~4 characters (a bit conservative)
+        batch_sampler: List[List[int]] = batch_by_size(
+            sorted_indices, num_tokens_fn=num_tokens_in_example, max_tokens=max_tokens_per_batch, **kwargs
+        )
+        return batch_sampler
 
     def __getitem__(self, item):
         raise NotImplementedError("You must implement this")

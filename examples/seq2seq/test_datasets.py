@@ -4,14 +4,12 @@ from pathlib import Path
 import pytest
 from torch.utils.data import DataLoader
 
-from .pack_dataset import pack_data_dir
-from .test_seq2seq_examples import (
-    MBART_TINY, MARIAN_TINY, T5_TINY, BART_TINY, make_test_data_dir,
-    ARTICLES, SUMMARIES,
-)
-from .utils import Seq2SeqDataset, LegacySeq2SeqDataset
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
+
+from .pack_dataset import pack_data_dir
+from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
+from .utils import LegacySeq2SeqDataset, Seq2SeqDataset
 
 
 @pytest.mark.parametrize(
@@ -106,9 +104,12 @@ def test_pack_dataset():
     assert len(packed_examples[0]) == sum(len(x) for x in orig_examples)
     assert orig_paths == new_paths
 
+
 import os
+
+
 def test_dynamic_batch_size():
-    if os.getenv('USE_REAL_DATA', False):
+    if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
         max_len = 128
         max_tokens = max_len * 2 * 64
@@ -118,26 +119,30 @@ def test_dynamic_batch_size():
         max_len = 64
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
-    ds = Seq2SeqDataset(tokenizer, data_dir=data_dir, type_path='train', max_source_length=max_len, max_target_length=max_len)
+    ds = Seq2SeqDataset(
+        tokenizer, data_dir=data_dir, type_path="train", max_source_length=max_len, max_target_length=max_len
+    )
 
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=4)
     batch_sizes = [len(x) for x in batch_sampler]
     assert len(set(batch_sizes)) > 1
-    data_loader =  DataLoader(
+    data_loader = DataLoader(
         ds,
         batch_sampler=batch_sampler,
         collate_fn=ds.collate_fn,
-        #shuffle=True,
+        # shuffle=True,
         num_workers=2,
         # batch_size=None,
     )
-    batch_sizes_seen = set()
+
+    failures = []
     for batch in data_loader:
-        shapes = {k: v.shape for k,v in batch.items()}
-        bs = shapes['input_ids'][0]
+        shapes = {k: v.shape for k, v in batch.items()}
+        bs = shapes["input_ids"][0]
         assert bs % 4 == 0 or bs < 4
-        batch_sizes_seen.add(bs)
-        num_src_tokens = shapes['input_ids'][0] * shapes['input_ids'][1]
-        num_tgt_tokens = shapes['labels'][0] * shapes['labels'][1]
-        assert num_tgt_tokens + num_src_tokens < max_tokens
-    assert len(batch_sizes_seen) > 1
+        num_src_tokens = shapes["input_ids"][0] * shapes["input_ids"][1]
+        num_tgt_tokens = shapes["labels"][0] * shapes["labels"][1]
+        if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
+            failures.append(num_tgt_tokens + num_src_tokens)
+    if failures:
+        raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")

@@ -98,9 +98,9 @@ class SummarizationModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
 
         if self.hparams.sortish_sampler and self.hparams.gpus > 1:
-            raise AssertionError('Sortish Sampler does not work for multigpu')
-        if self.hparams.sortish_sampler and self.hparams.max_tokens_per_batch  is not None:
-            raise AssertionError('max tokens per batch and sortish sampler are incompatible.')
+            raise AssertionError("Sortish Sampler does not work for multigpu")
+        if self.hparams.sortish_sampler and self.hparams.max_tokens_per_batch is not None:
+            raise AssertionError("max tokens per batch and sortish sampler are incompatible.")
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
@@ -262,15 +262,15 @@ class SummarizationModule(BaseTransformer):
                 sampler=sampler,
             )
 
-        elif self.hparams.max_tokens_per_batch is not None and type_path == 'train':
-            #batch_sampler = pickle_load('dynamic_batches.pkl')
-            #batch_by_size
+        elif self.hparams.max_tokens_per_batch is not None and type_path == "train":
+            # batch_sampler = pickle_load('dynamic_batches.pkl')
+            # batch_by_size
             batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch)  # TODO(SS): shuffle this
             return DataLoader(
                 dataset,
                 batch_sampler=batch_sampler,
                 collate_fn=dataset.collate_fn,
-                #shuffle=False,
+                # shuffle=False,
                 num_workers=self.num_workers,
                 batch_size=None,
             )
@@ -283,7 +283,6 @@ class SummarizationModule(BaseTransformer):
                 num_workers=self.num_workers,
                 sampler=None,
             )
-
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
