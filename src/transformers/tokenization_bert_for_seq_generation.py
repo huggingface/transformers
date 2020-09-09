@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 tokenizer_url = (
-    "https://s3.amazonaws.com/models.huggingface.co/bert/google/bert_L_24_seq2seq_cnn_dail_mail/spiece.model",
+    "https://s3.amazonaws.com/models.huggingface.co/bert/google/bert_for_seq_generation_L-24_bbc_encoder/spiece.model"
 )
 
 
