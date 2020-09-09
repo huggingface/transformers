@@ -143,9 +143,9 @@ from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
+from .tokenization_bert_for_seq_generation import BertForSeqGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
-from .tokenization_bert_for_seq_generation import BertForSeqGenerationTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import (
@@ -278,6 +278,11 @@ if is_torch_available():
         BertModel,
         BertPreTrainedModel,
         load_tf_weights_in_bert,
+    )
+    from .modeling_bert_for_seq_generation import (
+        BertForSeqGenerationDecoder,
+        BertForSeqGenerationEncoderModel,
+        load_tf_weights_in_bert_for_seq_generation,
     )
     from .modeling_camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -431,11 +436,6 @@ if is_torch_available():
         TransfoXLModel,
         TransfoXLPreTrainedModel,
         load_tf_weights_in_transfo_xl,
-    )
-    from .modeling_bert_for_seq_generation import (
-        BertForSeqGenerationEncoderModel,
-        BertForSeqGenerationDecoder,
-        load_tf_weights_in_bert_for_seq_generation, 
     )
     from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
     from .modeling_xlm import (

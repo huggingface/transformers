@@ -23,6 +23,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
+    BertForSeqGenerationConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -42,7 +43,6 @@ from .configuration_auto import (
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
-    BertForSeqGenerationConfig,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -74,6 +74,7 @@ from .modeling_bert import (
     BertLMHeadModel,
     BertModel,
 )
+from .modeling_bert_for_seq_generation import BertForSeqGenerationDecoder, BertForSeqGenerationEncoderModel
 from .modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -157,7 +158,6 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from .modeling_bert_for_seq_generation import BertForSeqGenerationEncoderModel, BertForSeqGenerationDecoder
 from .modeling_t5 import T5ForConditionalGeneration, T5Model
 from .modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (

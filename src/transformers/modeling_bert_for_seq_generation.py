@@ -29,17 +29,11 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-)
-from .modeling_utils import (
-    PreTrainedModel,
-)
-from .modeling_bert import (
-    BertEncoder,
-)
+from .modeling_bert import BertEncoder
+from .modeling_outputs import BaseModelOutput, CausalLMOutput
+from .modeling_utils import PreTrainedModel
 from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -51,12 +45,16 @@ CAUSAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_bert_for_seq_generation(model, tf_hub_path, model_class, is_encoder_named_decoder=False, is_encoder=False):
+def load_tf_weights_in_bert_for_seq_generation(
+    model, tf_hub_path, model_class, is_encoder_named_decoder=False, is_encoder=False
+):
     try:
         import numpy as np
         import tensorflow.compat.v1 as tf
+
         import tensorflow_hub as hub
         import tensorflow_text  # noqa: F401
+
         tf.disable_eager_execution()
     except ImportError:
         logger.error(
@@ -415,7 +413,8 @@ class BertForSeqGenerationOnlyLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, BERT_FOR_SEQ_GENERATION_START_DOCSTRING
+    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """,
+    BERT_FOR_SEQ_GENERATION_START_DOCSTRING,
 )
 class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
     def __init__(self, config):

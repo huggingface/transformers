@@ -12,11 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model T5."""
+""" Tokenization class for model BertForSeqGeneration."""
 
 
 import os
-import re
 from shutil import copyfile
 from typing import List, Optional
 
@@ -28,7 +27,9 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-tokenizer_url = "https://s3.amazonaws.com/models.huggingface.co/bert/google/bert_L_24_seq2seq_cnn_dail_mail/spiece.model",
+tokenizer_url = (
+    "https://s3.amazonaws.com/models.huggingface.co/bert/google/bert_L_24_seq2seq_cnn_dail_mail/spiece.model",
+)
 
 _all_bert_models = [
     "google/bert_L_24_seq2seq_cnn_dm",
@@ -70,9 +71,7 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = {m: 512 for m in _all_bert_models}
-    pretrained_vocab_files_map = {
-        "vocab_file": {m: tokenizer_url for m in _all_bert_models}
-    }
+    pretrained_vocab_files_map = {"vocab_file": {m: tokenizer_url for m in _all_bert_models}}
     prefix_tokens: List[int] = []
 
     def __init__(
@@ -82,21 +81,16 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        extra_ids=100,
-        additional_special_tokens=None,
+        sep_token="<::::>",
         **kwargs
     ):
         # Add extra_ids to the special token list
-        if extra_ids > 0:
-            if additional_special_tokens is None:
-                additional_special_tokens = []
-            additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids)])
-
         super().__init__(
+            bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            additional_special_tokens=additional_special_tokens,
+            sep_token=sep_token,
             **kwargs,
         )
 
@@ -111,7 +105,6 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
             raise
 
         self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
 
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
@@ -155,44 +148,6 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + [1]
         return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
-#    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
-#        """Do not add eos again if user already added it."""
-#        if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-#            warnings.warn(
-#                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated eos tokens being added."
-#            )
-#            return token_ids
-#        else:
-#            return token_ids + [self.eos_token_id]
-
-#    def build_inputs_with_special_tokens(
-#        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-#    ) -> List[int]:
-#        """
-#        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-#        by concatenating and adding special tokens.
-#        For some t5 tasks, model.config.prefix is specified. This must be used before tokenization.
-#        A sequence has the following format:
-#
-#        - single sequence: ``X </s>``
-#        - pair of sequences: ``A </s> B </s>``
-#
-#        Args:
-#            token_ids_0 (:obj:`List[int]`):
-#                List of IDs to which the special tokens will be added
-#            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
-#                Optional second list of IDs for sequence pairs.
-#
-#        Returns:
-#            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-#        """
-#        token_ids_0 = self._add_eos_if_not_present(token_ids_0)
-#        if token_ids_1 is None:
-#            return self.prefix_tokens + token_ids_0
-#        else:
-#            token_ids_1 = self._add_eos_if_not_present(token_ids_1)
-#            return self.prefix_tokens + token_ids_0 + token_ids_1
-
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -221,18 +176,11 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        if token.startswith("<extra_id_"):
-            match = re.match(r"<extra_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        else:
-            token = "<extra_id_{}>".format(self.vocab_size - 1 - index)
+        token = self.sp_model.IdToPiece(index)
         return token
 
     def convert_tokens_to_string(self, tokens):

@@ -55,6 +55,7 @@ from .modeling_utils import (
 )
 from .utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BertConfig"
