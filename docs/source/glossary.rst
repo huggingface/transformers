@@ -128,7 +128,7 @@ The encoded versions have different lengths:
     >>> len(encoded_sequence_a), len(encoded_sequence_b)
     (8, 19)
 
-Therefore, we can't be put then together in a same tensor as-is. The first sequence needs to be padded up to the length
+Therefore, we can't put them together in the same tensor as-is. The first sequence needs to be padded up to the length
 of the second one, or the second one needs to be truncated down to the length of the first one.
 
 In the first case, the list of IDs will be extended by the padding indices. We can pass a list to the tokenizer and ask

@@ -1931,26 +1931,26 @@ REFORMER_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        num_hashes (:obj:`int`, `optional`, defaults to :obj:`None`):
+        num_hashes (:obj:`int`, `optional`):
             `num_hashes` is the number of hashing rounds that should be performed during
             bucketing. Setting `num_hashes` overwrites the default `num_hashes` defined
             in `config.num_hashes`.
@@ -1962,13 +1962,13 @@ REFORMER_INPUTS_DOCSTRING = r"""
             :obj:`(batch_size, sequence_length, hidden_size)`).
 
             List of tuples that contains all previous computed hidden states and buckets (only relevant for LSH Self-Attention). Can be used to speed up sequential decoding.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        use_cache (:obj:`bool`, `optional`):
             If set to ``True``, the ``past_buckets_states`` of all attention layers are returned.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -2232,7 +2232,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
                 Labels for computing the sequence classification/regression loss.
                 Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
                 All labels set to ``-100`` are ignored (masked), the loss is only
@@ -2345,7 +2345,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Labels for computing the masked language modeling loss.
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -2423,7 +2423,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
@@ -2526,11 +2526,11 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.

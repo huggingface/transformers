@@ -142,11 +142,11 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """

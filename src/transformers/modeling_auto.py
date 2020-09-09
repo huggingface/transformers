@@ -29,8 +29,10 @@ from .configuration_auto import (
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
+    FunnelConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
     MBartConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
@@ -107,6 +109,14 @@ from .modeling_flaubert import (
     FlaubertModel,
     FlaubertWithLMHeadModel,
 )
+from .modeling_funnel import (
+    FunnelForMaskedLM,
+    FunnelForMultipleChoice,
+    FunnelForQuestionAnswering,
+    FunnelForSequenceClassification,
+    FunnelForTokenClassification,
+    FunnelModel,
+)
 from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
 from .modeling_longformer import (
     LongformerForMaskedLM,
@@ -116,6 +126,7 @@ from .modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
+from .modeling_lxmert import LxmertForPreTraining, LxmertModel
 from .modeling_marian import MarianMTModel
 from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
@@ -156,6 +167,7 @@ from .modeling_xlm import (
     XLMWithLMHeadModel,
 )
 from .modeling_xlm_roberta import (
+    XLMRobertaForCausalLM,
     XLMRobertaForMaskedLM,
     XLMRobertaForMultipleChoice,
     XLMRobertaForQuestionAnswering,
@@ -199,6 +211,8 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (FunnelConfig, FunnelModel),
+        (LxmertConfig, LxmertModel),
     ]
 )
 
@@ -223,6 +237,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
+        (LxmertConfig, LxmertForPreTraining),
     ]
 )
 
@@ -249,12 +264,14 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
+        (FunnelConfig, FunnelForMaskedLM),
     ]
 )
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         (CamembertConfig, CamembertForCausalLM),
+        (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
@@ -285,6 +302,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
+        (FunnelConfig, FunnelForMaskedLM),
     ]
 )
 
@@ -314,6 +332,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
+        (FunnelConfig, FunnelForSequenceClassification),
     ]
 )
 
@@ -333,6 +352,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
+        (FunnelConfig, FunnelForQuestionAnswering),
     ]
 )
 
@@ -351,6 +371,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
+        (FunnelConfig, FunnelForTokenClassification),
     ]
 )
 
@@ -368,6 +389,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMultipleChoice),
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
+        (FunnelConfig, FunnelForMultipleChoice),
     ]
 )
 
@@ -415,6 +437,7 @@ class AutoModel:
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (Flaubert model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraModel` (Electra model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelModel` (Funnel Transformer model)
 
         Examples::
 
@@ -456,6 +479,7 @@ class AutoModel:
             - `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
             - `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
             - `electra`: :class:`~transformers.ElectraModel` (Electra  model)
+            - `funnel`: :class:`~transformers.FunnelModel` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -506,6 +530,7 @@ class AutoModel:
         Examples::
 
             model = AutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = AutoModel.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
             assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
@@ -655,7 +680,8 @@ class AutoModelForPreTraining:
 
             model = AutoModelForPreTraining.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = AutoModelForPreTraining.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForPreTraining.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModelForPreTraining.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -721,6 +747,7 @@ class AutoModelWithLMHead:
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
         Examples::
 
@@ -766,6 +793,7 @@ class AutoModelWithLMHead:
             - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+            - `funnel`: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -810,7 +838,8 @@ class AutoModelWithLMHead:
 
             model = AutoModelWithLMHead.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = AutoModelWithLMHead.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelWithLMHead.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -951,7 +980,8 @@ class AutoModelForCausalLM:
 
             model = AutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
             model = AutoModelForCausalLM.from_pretrained('./test/gpt2_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForCausalLM.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/gpt2_tf_model_config.json')
             model =  AutoModelForCausalLM.from_pretrained('./tf_model/gpt2_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1014,6 +1044,7 @@ class AutoModelForMaskedLM:
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForMaskedLM` (Camembert model)
                 - isInstance of `albert` configuration class: :class:`~transformers.AlbertForMaskedLM` (Albert model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
 
         Examples::
@@ -1050,6 +1081,7 @@ class AutoModelForMaskedLM:
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
             - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
+            - `funnel`: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1094,7 +1126,8 @@ class AutoModelForMaskedLM:
 
             model = AutoModelForMaskedLM.from_pretrained('bert')    # Download model and configuration from S3 and cache.
             model = AutoModelForMaskedLM.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForMaskedLM.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model =  AutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1227,7 +1260,8 @@ class AutoModelForSeq2SeqLM:
 
             model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
             model = AutoModelForSeq2SeqLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForSeq2SeqLM.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/t5_tf_model_config.json')
             model =  AutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1292,7 +1326,7 @@ class AutoModelForSequenceClassification:
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForSequenceClassification` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
-
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelModelForSequenceClassification` (Funnel Transformer model)
 
         Examples::
 
@@ -1328,6 +1362,7 @@ class AutoModelForSequenceClassification:
             - `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
             - `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
             - `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
+            - `funnel`: :class:`~transformers.FunnelForSequenceClassification` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1379,7 +1414,8 @@ class AutoModelForSequenceClassification:
 
             model = AutoModelForSequenceClassification.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = AutoModelForSequenceClassification.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForSequenceClassification.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1441,6 +1477,7 @@ class AutoModelForQuestionAnswering:
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForQuestionAnswering` (Funnel Transformer model)
 
         Examples::
 
@@ -1475,6 +1512,7 @@ class AutoModelForQuestionAnswering:
             - `xlnet`: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
             - `xlm`: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
             - `flaubert`: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
+            - `funnel`: :class:`~transformers.FunnelForQuestionAnswering` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1523,7 +1561,8 @@ class AutoModelForQuestionAnswering:
 
             model = AutoModelForQuestionAnswering.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = AutoModelForQuestionAnswering.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForQuestionAnswering.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1590,6 +1629,7 @@ class AutoModelForTokenClassification:
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForTokenClassification` (Funnel Transformer model)
 
         Examples::
 
@@ -1627,6 +1667,7 @@ class AutoModelForTokenClassification:
             - `flaubert`: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
             - `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
             - `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+            - `funnel`: :class:`~transformers.FunnelForTokenClassification` (Funnel Transformer model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1675,7 +1716,8 @@ class AutoModelForTokenClassification:
 
             model = AutoModelForTokenClassification.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = AutoModelForTokenClassification.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            model = AutoModelForTokenClassification.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)

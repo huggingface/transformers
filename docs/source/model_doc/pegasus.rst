@@ -60,7 +60,7 @@ Usage Example
     batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest').to(torch_device)
     translated = model.generate(**batch)
     tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
-    assert tgt_text[0] == "California's largest electricity provider has turned off power to tens of thousands of customers."
+    assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
 
 PegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -190,6 +190,7 @@ class PretrainedConfig(object):
             self.num_labels = kwargs.pop("num_labels", 2)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
+        self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
@@ -300,11 +301,11 @@ class PretrainedConfig(object):
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-            config = BertConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            assert config.output_attention == True
-            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attention=True,
+            config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+            assert config.output_attentions == True
+            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True,
                                                                foo=False, return_unused_kwargs=True)
-            assert config.output_attention == True
+            assert config.output_attentions == True
             assert unused_kwargs == {'foo': False}
 
         """

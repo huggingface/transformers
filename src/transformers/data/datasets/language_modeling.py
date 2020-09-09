@@ -2,7 +2,7 @@ import os
 import pickle
 import random
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from torch.utils.data.dataset import Dataset
@@ -28,6 +28,7 @@ class TextDataset(Dataset):
         file_path: str,
         block_size: int,
         overwrite_cache=False,
+        cache_dir: Optional[str] = None,
     ):
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
@@ -35,7 +36,7 @@ class TextDataset(Dataset):
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
-            directory,
+            cache_dir if cache_dir is not None else directory,
             "cached_lm_{}_{}_{}".format(
                 tokenizer.__class__.__name__,
                 str(block_size),

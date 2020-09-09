@@ -578,9 +578,9 @@ class XLMTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
             List of additional special tokens.
-        lang2id (:obj:`Dict[str, int]`, `optional`, defaults to :obj:`None`):
+        lang2id (:obj:`Dict[str, int]`, `optional`):
             Dictionary mapping languages string identifiers to their IDs.
-        id2lang (:obj:`Dict[int, str`, `optional`, defaults to :obj:`None`):
+        id2lang (:obj:`Dict[int, str`, `optional`):
             Dictionary mapping language IDs to their string identifiers.
         do_lowercase_and_remove_accent (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to lowercase and remove accents when tokenizing.
@@ -863,7 +863,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -887,7 +887,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Set to True if the token list is already formatted with special tokens for the model
@@ -930,7 +930,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
