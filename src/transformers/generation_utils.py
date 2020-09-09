@@ -552,15 +552,15 @@ class GenerationMixin:
             # Apply antiLM decoding
             # subtract language model from targets
             if cur_len < threshold_g:
-                print(f"A: On token {cur_len}")
+                #print(f"A: On token {cur_len}")
                 model_inputs2 = self.prepare_inputs_for_generation(
                     input_ids2, past=past2, attention_mask=attention_mask, use_cache=use_cache
                 )
                 outputs2 = lm_model(**model_inputs2)
                 next_token_logits2 = outputs2[0][:, -1, :]
-                print(f"A: Original next logits {next_token_logits}")
+                #print(f"A: Original next logits {next_token_logits}")
                 next_token_logits = next_token_logits - alpha * next_token_logits2
-                print(f"A: Modified next logits {next_token_logits}")
+                #print(f"A: Modified next logits {next_token_logits}")
 
             scores = self.postprocess_next_token_scores(
                 scores=next_token_logits,
