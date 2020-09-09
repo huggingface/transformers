@@ -1357,6 +1357,9 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             string_sequences = ["Testing the prepare_for_model method.", "Test"]
 
+            if tokenizer.pad_token is None:
+                tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
             tokenizer.batch_encode_plus(
                 string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
             )
