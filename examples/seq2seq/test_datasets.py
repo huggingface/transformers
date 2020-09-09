@@ -106,12 +106,20 @@ def test_pack_dataset():
     assert len(packed_examples[0]) == sum(len(x) for x in orig_examples)
     assert orig_paths == new_paths
 
-
+import os
 def test_dynamic_batch_size():
-    data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+    if os.getenv('real_data', False):
+        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        max_len = 128
+        max_tokens = max_len * 2 * 64
+    else:
+        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        max_tokens = 320
+        max_len = 64
+
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
-    ds = Seq2SeqDataset(tokenizer, data_dir=data_dir, type_path='train', max_source_length=64, max_target_length=64)
-    max_tokens = 320
+    ds = Seq2SeqDataset(tokenizer, data_dir=data_dir, type_path='train', max_source_length=max_len, max_target_length=max_len)
+
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=4)
     batch_sizes = [len(x) for x in batch_sampler]
     assert len(set(batch_sizes)) > 1
