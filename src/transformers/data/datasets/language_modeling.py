@@ -36,11 +36,7 @@ class TextDataset(Dataset):
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else directory,
-            "cached_lm_{}_{}_{}".format(
-                tokenizer.__class__.__name__,
-                str(block_size),
-                filename,
-            ),
+            "cached_lm_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
         )
 
         # Make sure only the first process in distributed training processes the dataset,
@@ -112,6 +108,7 @@ class LineByLineTextDataset(Dataset):
     def __getitem__(self, i) -> torch.Tensor:
         return torch.tensor(self.examples[i], dtype=torch.long)
 
+
 class LineByLineWithSOPTextDataset(Dataset):
     """
     Dataset for sentence order prediction task, prepare sentence pairs for SOP task
@@ -131,12 +128,15 @@ class LineByLineWithSOPTextDataset(Dataset):
                 original_lines = f.readlines()
                 article_lines = []
                 for line in original_lines:
-                    if '<doc id=' in line:
+                    if "<doc id=" in line:
                         article_open = True
-                    elif '</doc>' in line:
+                    elif "</doc>" in line:
                         article_open = False
-                        document = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line)) 
-                                    for line in article_lines[1:] if (len(line) > 0 and not line.isspace())]
+                        document = [
+                            tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line))
+                            for line in article_lines[1:]
+                            if (len(line) > 0 and not line.isspace())
+                        ]
 
                         examples = self.create_examples_from_document(document, block_size, tokenizer)
                         self.examples.extend(examples)
@@ -169,8 +169,8 @@ class LineByLineWithSOPTextDataset(Dataset):
         # next sentence prediction task too easy. Instead, we split the input into
         # segments "A" and "B" based on the actual "sentences" provided by the user
         # input.
-        examples = [] 
-        current_chunk = [] # a buffer stored current working segments
+        examples = []
+        current_chunk = []  # a buffer stored current working segments
         current_length = 0
         i = 0
         while i < len(document):
@@ -186,7 +186,7 @@ class LineByLineWithSOPTextDataset(Dataset):
                     # `a_end` is how many segments from `current_chunk` go into the `A` (first) sentence.
                     a_end = 1
                     # if current chunk has more than 2 sentences, pick part of it `A` (first) sentence
-                    if len(current_chunk) >= 2:  
+                    if len(current_chunk) >= 2:
                         a_end = random.randint(1, len(current_chunk) - 1)
                     # token a
                     tokens_a = []
@@ -198,7 +198,7 @@ class LineByLineWithSOPTextDataset(Dataset):
                     for j in range(a_end, len(current_chunk)):
                         tokens_b.extend(current_chunk[j])
 
-                    if len(tokens_a) == 0 or len(tokens_b) == 0: 
+                    if len(tokens_a) == 0 or len(tokens_b) == 0:
                         continue
 
                     # switch tokens_a and tokens_b randomly
@@ -222,6 +222,7 @@ class LineByLineWithSOPTextDataset(Dataset):
                                 del trunc_tokens[0]
                             else:
                                 trunc_tokens.pop()
+
                     truncate_seq_pair(tokens_a, tokens_b, max_num_tokens)
                     assert len(tokens_a) >= 1
                     assert len(tokens_b) >= 1
@@ -234,7 +235,8 @@ class LineByLineWithSOPTextDataset(Dataset):
                     example = {
                         "input_ids": torch.tensor(input_ids, dtype=torch.long),
                         "token_type_ids": torch.tensor(token_type_ids, dtype=torch.long),
-                        "sentence_order_label": torch.tensor(0 if is_next else 1, dtype=torch.long)}
+                        "sentence_order_label": torch.tensor(0 if is_next else 1, dtype=torch.long),
+                    }
                     examples.append(example)
                 current_chunk = []  # clear current chunk
                 current_length = 0  # reset current text length
@@ -247,6 +249,7 @@ class LineByLineWithSOPTextDataset(Dataset):
     def __getitem__(self, i) -> Dict[str, torch.tensor]:
         return self.examples[i]
 
+
 class TextDatasetForNextSentencePrediction(Dataset):
     """
     This will be superseded by a framework-agnostic approach
@@ -254,11 +257,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
     """
 
     def __init__(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        file_path: str,
-        block_size: int,
-        overwrite_cache=False,
+        self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, overwrite_cache=False,
     ):
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
@@ -266,12 +265,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
-            directory,
-            "cached_nsp_{}_{}_{}".format(
-                tokenizer.__class__.__name__,
-                str(block_size),
-                filename,
-            ),
+            directory, "cached_nsp_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
         )
 
         self.tokenizer = tokenizer
