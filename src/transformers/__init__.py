@@ -207,6 +207,7 @@ if is_torch_available():
         DataCollatorForLanguageModeling,
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorWithPadding,
         DataCollatorForSOP,
         default_data_collator,
     )
