@@ -69,6 +69,9 @@ Funnel specific outputs
 .. autoclass:: transformers.modeling_funnel.FunnelForPreTrainingOutput
     :members:
 
+.. autoclass:: transformers.modeling_tf_funnel.TFFunnelForPreTrainingOutput
+    :members:
+
 
 FunnelBaseModel
 ~~~~~~~~~~~~~~~
@@ -123,4 +126,60 @@ FunnelForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.FunnelForQuestionAnswering
+    :members:
+
+
+TFFunnelBaseModel
+~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelBaseModel
+    :members:
+
+
+TFFunnelModel
+~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelModel
+    :members:
+
+
+TFFunnelModelForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelForPreTraining
+    :members:
+
+
+TFFunnelForMaskedLM
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelForMaskedLM
+    :members:
+
+
+TFFunnelForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelForSequenceClassification
+    :members:
+
+
+TFFunnelForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelForMultipleChoice
+    :members:
+
+
+TFFunnelForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelForTokenClassification
+    :members:
+
+
+TFFunnelForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFunnelForQuestionAnswering
     :members:

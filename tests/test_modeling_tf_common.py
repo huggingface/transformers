@@ -487,7 +487,10 @@ class TFModelTesterMixin:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             hidden_states = [t.numpy() for t in outputs[-1]]
-            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [self.model_tester.seq_length, self.model_tester.hidden_size],
