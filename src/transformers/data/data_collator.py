@@ -197,6 +197,7 @@ class DataCollatorForLanguageModeling:
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
+
 @dataclass
 class DataCollatorForSOP(DataCollatorForLanguageModeling):
     """
@@ -212,17 +213,18 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
         token_type_ids = [example["token_type_ids"] for example in examples]
         # size of segment_ids varied because randomness, padding zero to the end as the orignal implementation
-        token_type_ids = pad_sequence(token_type_ids, 
-                                      batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
         sop_label_list = [example["sentence_order_label"] for example in examples]
         sentence_order_label = torch.stack(sop_label_list)
 
-        return {"input_ids": input_ids,
-                "labels": labels,
-                "attention_mask": attention_mask,
-                "token_type_ids": token_type_ids,
-                "sentence_order_label": sentence_order_label}
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+            "sentence_order_label": sentence_order_label,
+        }
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -263,6 +265,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels, attention_mask
+
 
 @dataclass
 class DataCollatorForPermutationLanguageModeling:

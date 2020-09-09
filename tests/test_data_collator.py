@@ -25,6 +25,7 @@ if is_torch_available():
 PATH_SAMPLE_TEXT = "./tests/fixtures/sample_text.txt"
 PATH_SAMPLE_TEXT_DIR = "./tests/fixtures/tests_samples/wiki_text"
 
+
 @require_torch
 class DataCollatorIntegrationTest(unittest.TestCase):
     def test_default_with_dict(self):
