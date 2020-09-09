@@ -1,4 +1,4 @@
-BERT
+BertForSeqGeneration
 ----------------------------------------------------
 
 Overview
@@ -19,27 +19,27 @@ Tips:
 The original code can be found `here <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_.
 
 BertForSeqGenerationConfig
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BertForSeqGenerationConfig
     :members:
 
 
 BertForSeqGenerationTokenizer
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BertForSeqGenerationTokenizer
     :members: 
 
 BertForSeqGenerationEncoderModel
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BertForSeqGenerationEncoderModel
     :members:
 
 
 BertForSeqGenerationDecoder
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BertForSeqGenerationDecoder
     :members:
