@@ -13,7 +13,6 @@ The abstract from the paper is the following:
 Tips:
 
 - :class:`~transformers.BertForSeqGenerationEncoderModel` and :class:`~transformers.BertForSeqGenerationDecoder`  should be used in combination with :class:`~transformers.EncoderDecoder`.
-  the right rather than the left.
 - For summarization, sentence splitting, sentence fusion and translation, no special tokens are required for the input. Therefore, no EOS token should be added to the end of the input.
 
 The original code can be found `here <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_.

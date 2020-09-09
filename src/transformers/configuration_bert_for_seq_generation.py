@@ -30,13 +30,13 @@ class BertForSeqGenerationConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, optional, defaults to 50358):
-            Vocabulary size of the BERT model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
+            Vocabulary size of the BertForSeqGeneration model. Defines the different tokens that
+            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertForSeqGeneration`.
         hidden_size (:obj:`int`, optional, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, optional, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, optional, defaults to 12):
+        num_attention_heads (:obj:`int`, optional, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, optional, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.

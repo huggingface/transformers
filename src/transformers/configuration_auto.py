@@ -99,6 +99,10 @@ CONFIG_MAPPING = OrderedDict(
             AlbertConfig,
         ),
         (
+            "bert-for-seq-generation",
+            BertForSeqGenerationConfig,
+        ),
+        (
             "camembert",
             CamembertConfig,
         ),
@@ -178,10 +182,6 @@ CONFIG_MAPPING = OrderedDict(
         (
             "lxmert",
             LxmertConfig,
-        ),
-        (
-            "bert-for-seq-generation",
-            BertForSeqGenerationConfig,
         ),
     ]
 )
