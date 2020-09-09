@@ -33,6 +33,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    LayoutLMConfig,
     LongformerConfig,
     LxmertConfig,
     MBartConfig,
@@ -124,6 +125,12 @@ from .modeling_funnel import (
     FunnelModel,
 )
 from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
+from .modeling_layoutlm import (
+    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+    LayoutLMModel,
+    LayoutLMForMaskedLM,
+    LayoutLMForTokenClassification,        
+)
 from .modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForMultipleChoice,
@@ -221,6 +228,7 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
+        (LayoutLMConfig, LayoutLMModel),
     ]
 )
 
@@ -247,6 +255,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
+        (LayoutLMConfig, LayoutLMForMaskedLM),
     ]
 )
 
@@ -274,6 +283,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
+        (LayoutLMConfig, LayoutLMForMaskedLM),
     ]
 )
 
@@ -313,6 +323,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
+        (LayoutLMConfig, LayoutLMForMaskedLM),
     ]
 )
 
@@ -383,6 +394,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
+        (LayoutLMConfig, LayoutLMForTokenClassification),
     ]
 )
 
