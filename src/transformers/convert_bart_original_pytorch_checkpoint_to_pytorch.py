@@ -31,8 +31,7 @@ from transformers import (
     BartTokenizer,
 )
 from transformers.modeling_bart import _make_linear_from_emb
-
-from .utils import logging
+from transformers.utils import logging
 
 
 FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn", "bart_xsum/model.pt"]

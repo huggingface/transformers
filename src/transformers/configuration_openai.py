@@ -81,7 +81,7 @@ class OpenAIGPTConfig(PretrainedConfig):
             Argument used when doing sequence summary. Used in for the multiple choice head in
             :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
             Add a projection after the vector extraction
-        summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+        summary_activation (:obj:`string` or :obj:`None`, optional):
             Argument used when doing sequence summary. Used in for the multiple choice head in
             :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
             'tanh' => add a tanh activation to the output, Other => no activation.

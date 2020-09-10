@@ -85,7 +85,7 @@ class GPT2Config(PretrainedConfig):
             Argument used when doing sequence summary. Used in for the multiple choice head in
             :class:`~transformers.GPT2DoubleHeadsModel`.
             Add a projection after the vector extraction
-        summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+        summary_activation (:obj:`string` or :obj:`None`, optional):
             Argument used when doing sequence summary. Used in for the multiple choice head in
             :class:`~transformers.GPT2DoubleHeadsModel`.
             'tanh' => add a tanh activation to the output, Other => no activation.

@@ -66,12 +66,12 @@ except (ImportError, AssertionError):
 
 
 try:
-    import nlp  # noqa: F401
+    import datasets  # noqa: F401
 
-    _nlp_available = True
+    _datasets_available = True
 
 except ImportError:
-    _nlp_available = False
+    _datasets_available = False
 
 try:
     from torch.hub import _get_torch_home
@@ -133,7 +133,9 @@ CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 
-MULTIPLE_CHOICE_DUMMY_INPUTS = [[[0], [1]], [[0], [1]]]
+MULTIPLE_CHOICE_DUMMY_INPUTS = [
+    [[0, 1, 0, 1], [1, 0, 0, 1]]
+] * 2  # Needs to have 0s and 1s only since XLM uses it for langs too.
 DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
@@ -153,8 +155,8 @@ def is_torch_tpu_available():
     return _torch_tpu_available
 
 
-def is_nlp_available():
-    return _nlp_available
+def is_datasets_available():
+    return _datasets_available
 
 
 def is_psutil_available():
@@ -530,7 +532,7 @@ def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, o
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
         elif "LMHead" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
-        elif "Model" in model_class:
+        elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")

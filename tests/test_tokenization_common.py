@@ -1352,6 +1352,18 @@ class TokenizerTesterMixin:
 
             self.assertEqual(input_dict, prepared_input_dict)
 
+    def test_batch_encode_plus_overflowing_tokens(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            string_sequences = ["Testing the prepare_for_model method.", "Test"]
+
+            if tokenizer.pad_token is None:
+                tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+            tokenizer.batch_encode_plus(
+                string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
+            )
+
     @require_torch
     @require_tf
     def test_batch_encode_plus_tensors(self):

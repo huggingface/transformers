@@ -131,7 +131,13 @@ conversion utilities for the following models:
 25. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
     Cross-Modality Encoder Representations from Transformers for Open-Domain Question
     Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
-26. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+26. `Funnel Transformer <https://github.com/laiguokun/Funnel-Transformer>`_ (from CMU/Google Brain) released with the paper
+    `Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
+    <https://arxiv.org/abs/2006.03236>`_ by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
+    `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
+    <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+28. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -216,7 +222,9 @@ conversion utilities for the following models:
     model_doc/dpr
     model_doc/pegasus
     model_doc/mbart
+    model_doc/funnel
     model_doc/lxmert
+    model_doc/bertgeneration
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils
