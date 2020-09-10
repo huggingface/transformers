@@ -19,10 +19,10 @@ import argparse
 
 from transformers import (
     BertConfig,
-    BertForSeqGenerationConfig,
-    BertForSeqGenerationDecoder,
-    BertForSeqGenerationEncoderModel,
-    load_tf_weights_in_bert_for_seq_generation,
+    BertGenerationConfig,
+    BertGenerationDecoder,
+    BertGenerationEncoder,
+    load_tf_weights_in_bert_generation,
     logging,
 )
 
@@ -41,15 +41,15 @@ def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path, is_encoder_
     )
     bert_config_dict = bert_config.to_dict()
     del bert_config_dict["type_vocab_size"]
-    config = BertForSeqGenerationConfig(**bert_config_dict)
+    config = BertGenerationConfig(**bert_config_dict)
     if is_encoder:
-        model = BertForSeqGenerationEncoderModel(config)
+        model = BertGenerationEncoder(config)
     else:
-        model = BertForSeqGenerationDecoder(config)
+        model = BertGenerationDecoder(config)
     print("Building PyTorch model from configuration: {}".format(str(config)))
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_bert_for_seq_generation(
+    load_tf_weights_in_bert_generation(
         model,
         tf_hub_path,
         model_class="bert",

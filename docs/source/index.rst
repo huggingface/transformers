@@ -224,7 +224,7 @@ conversion utilities for the following models:
     model_doc/mbart
     model_doc/funnel
     model_doc/lxmert
-    model_doc/bertforseqgeneration
+    model_doc/bertgeneration
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

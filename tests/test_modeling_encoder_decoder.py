@@ -21,7 +21,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
-from .test_modeling_bert_for_seq_generation import BertForSeqGenerationEncoderModelTester
+from .test_modeling_bert_for_seq_generation import BertGenerationEncoderTester
 from .test_modeling_common import ids_tensor
 from .test_modeling_gpt2 import GPT2ModelTester
 from .test_modeling_roberta import RobertaModelTester
@@ -33,8 +33,8 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        BertForSeqGenerationDecoder,
-        BertForSeqGenerationEncoderModel,
+        BertGenerationDecoder,
+        BertGenerationEncoder,
         BertLMHeadModel,
         BertModel,
         BertTokenizer,
@@ -500,12 +500,12 @@ class BertForSeqGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = BertForSeqGenerationEncoderModel(config)
-        decoder_model = BertForSeqGenerationDecoder(decoder_config)
+        encoder_model = BertGenerationEncoder(config)
+        decoder_model = BertGenerationDecoder(decoder_config)
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        model_tester = BertForSeqGenerationEncoderModelTester(self)
+        model_tester = BertGenerationEncoderTester(self)
         encoder_config_and_inputs = model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester.prepare_config_and_inputs_for_decoder()
         (

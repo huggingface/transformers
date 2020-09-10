@@ -24,10 +24,10 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 
 if is_torch_available():
-    from transformers import BertForSeqGenerationConfig, BertForSeqGenerationDecoder, BertForSeqGenerationEncoderModel
+    from transformers import BertGenerationConfig, BertGenerationDecoder, BertGenerationEncoder
 
 
-class BertForSeqGenerationEncoderModelTester:
+class BertGenerationEncoderTester:
     def __init__(
         self,
         parent,
@@ -76,7 +76,7 @@ class BertForSeqGenerationEncoderModelTester:
         if self.use_labels:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = BertForSeqGenerationConfig(
+        config = BertGenerationConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -122,7 +122,7 @@ class BertForSeqGenerationEncoderModelTester:
         token_labels,
         **kwargs,
     ):
-        model = BertForSeqGenerationEncoderModel(config=config)
+        model = BertGenerationEncoder(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -140,7 +140,7 @@ class BertForSeqGenerationEncoderModelTester:
         **kwargs,
     ):
         config.add_cross_attention = True
-        model = BertForSeqGenerationEncoderModel(config=config)
+        model = BertGenerationEncoder(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -164,7 +164,7 @@ class BertForSeqGenerationEncoderModelTester:
         token_labels,
         *args,
     ):
-        model = BertForSeqGenerationDecoder(config)
+        model = BertGenerationDecoder(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -183,13 +183,13 @@ class BertForSeqGenerationEncoderModelTester:
 
 
 @require_torch
-class BertForSeqGenerationEncoderModelTest(ModelTesterMixin, unittest.TestCase):
+class BertGenerationEncoderTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BertForSeqGenerationEncoderModel, BertForSeqGenerationDecoder) if is_torch_available() else ()
+    all_model_classes = (BertGenerationEncoder, BertGenerationDecoder) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = BertForSeqGenerationEncoderModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BertForSeqGenerationConfig, hidden_size=37)
+        self.model_tester = BertGenerationEncoderTester(self)
+        self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -230,5 +230,5 @@ class BertForSeqGenerationEncoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = BertForSeqGenerationEncoderModel.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
         self.assertIsNotNone(model)

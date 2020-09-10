@@ -32,9 +32,9 @@ tokenizer_url = (
 )
 
 
-class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
+class BertGenerationTokenizer(PreTrainedTokenizer):
     """
-    Constructs a BertForSeqGenerationTokenizer tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Constructs a BertGenerationTokenizer tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -43,14 +43,14 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
         vocab_file (:obj:`string`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
+        eos_token (:obj:`string`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
-        bos_token (:obj:`string`, `optional`, defaults to "<s>"):
+        bos_token (:obj:`string`, `optional`, defaults to :obj:`"<s>"`):
             The begin of sequence token.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`string`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
+        pad_token (:obj:`string`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
     """
 
@@ -112,7 +112,7 @@ class BertForSeqGenerationTokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use BertForSeqGenerationTokenizer: https://github.com/google/sentencepiece"
+                "You need to install SentencePiece to use BertGenerationTokenizer: https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
             raise

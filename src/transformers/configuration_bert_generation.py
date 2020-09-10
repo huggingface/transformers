@@ -17,11 +17,10 @@
 from .configuration_utils import PretrainedConfig
 
 
-class BertForSeqGenerationConfig(PretrainedConfig):
+class BertGenerationConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BertForSeqGenerationConfig`.
-    It is used to instantiate an BertForSeqGenerationConfig model according to the specified arguments, defining the model
-    architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BertGenerationConfig`.
+    It is used to instantiate a BertGenerationConfig model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -29,43 +28,43 @@ class BertForSeqGenerationConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, optional, defaults to 50358):
+        vocab_size (:obj:`int`, `optional`, defaults to 50358):
             Vocabulary size of the BertForSeqGeneration model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertForSeqGeneration`.
-        hidden_size (:obj:`int`, optional, defaults to 1024):
+        hidden_size (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, optional, defaults to 24):
+        num_hidden_layers (:obj:`int`, `optional`, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, optional, defaults to 16):
+        num_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, optional, defaults to 3072):
+        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-            If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-        hidden_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, optional, defaults to 512):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (:obj:`float`, optional, defaults to 0.02):
+        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, optional, defaults to False):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
-        >>> from transformers import BertForSeqGenerationConfig, BertForSeqGenerationEncoderModel
+        >>> from transformers import BertGenerationConfig, BertGenerationEncoder
 
         >>> # Initializing a BertForSeqGeneration config
-        >>> configuration = BertForSeqGenerationConfig()
+        >>> configuration = BertGenerationConfig()
 
         >>> # Initializing a modelfrom the config
-        >>> model = BertForSeqGenerationEncoderModel(configuration)
+        >>> model = BertGenerationEncoder(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config

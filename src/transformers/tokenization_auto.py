@@ -15,6 +15,7 @@
 """ Auto Tokenizer class. """
 
 
+import warnings
 from collections import OrderedDict
 
 from .configuration_auto import (
@@ -22,7 +23,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
-    BertForSeqGenerationConfig,
+    BertGenerationConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -51,7 +52,7 @@ from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
-from .tokenization_bert_for_seq_generation import BertForSeqGenerationTokenizer
+from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
@@ -108,7 +109,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
-        (BertForSeqGenerationConfig, (BertForSeqGenerationTokenizer, None)),
+        (BertGenerationConfig, (BertGenerationTokenizer, None)),
     ]
 )
 
@@ -239,6 +240,10 @@ class AutoTokenizer:
 
         # if model is an encoder decoder, the encoder tokenizer class is used by default
         if isinstance(config, EncoderDecoderConfig):
+            if type(config.decoder) is not type(config.encoder):  # noqa: E721
+                warnings.warn(
+                    f"The encoder model config class: {config.encoder.__class__} is different from the decoder model config class: {config.decoder.__class}. It is not recommend to use the `AutoTokenizer.from_pretrained(..)` method in this case. Please use the encoder and decoder specific tokenizer classes."
+                )
             config = config.encoder
 
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():

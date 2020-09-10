@@ -19,7 +19,7 @@ import unittest
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow
-from transformers.tokenization_bert_for_seq_generation import BertForSeqGenerationTokenizer
+from transformers.tokenization_bert_generation import BertGenerationTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -31,16 +31,16 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 
 class BertForSeqGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = BertForSeqGenerationTokenizer
+    tokenizer_class = BertGenerationTokenizer
 
     def setUp(self):
         super().setUp()
 
-        tokenizer = BertForSeqGenerationTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = BertGenerationTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = BertForSeqGenerationTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = BertGenerationTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -113,7 +113,7 @@ class BertForSeqGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCa
 
     @cached_property
     def big_tokenizer(self):
-        return BertForSeqGenerationTokenizer.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        return BertGenerationTokenizer.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
 
     @slow
     def test_tokenization_base_easy_symbols(self):
@@ -190,7 +190,7 @@ class BertForSeqGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCa
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
-        from transformers import BertForSeqGenerationConfig, BertForSeqGenerationEncoderModel
+        from transformers import BertGenerationConfig, BertGenerationEncoder
 
         # Build sequence
         first_ten_tokens = list(self.big_tokenizer.get_vocab().keys())[:10]
@@ -200,8 +200,8 @@ class BertForSeqGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCa
             [sequence + " " + sequence], return_tensors="pt", return_token_type_ids=False
         )
 
-        config = BertForSeqGenerationConfig()
-        model = BertForSeqGenerationEncoderModel(config)
+        config = BertGenerationConfig()
+        model = BertGenerationEncoder(config)
 
         assert model.get_input_embeddings().weight.shape[0] >= self.big_tokenizer.vocab_size
 

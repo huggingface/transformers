@@ -1,6 +1,5 @@
 # coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BertForSeqGeneration model. """
+"""PyTorch BERT model specific for generation. """
 
 
 import warnings
@@ -23,7 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .configuration_bert_for_seq_generation import BertForSeqGenerationConfig
+from .configuration_bert_generation import BertGenerationConfig
 from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -38,11 +37,11 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "BertForSeqGenerationConfig"
-_TOKENIZER_FOR_DOC = "BertForSeqGenerationTokenizer"
+_CONFIG_FOR_DOC = "BertGenerationConfig"
+_TOKENIZER_FOR_DOC = "BertGenerationTokenizer"
 
 
-def load_tf_weights_in_bert_for_seq_generation(
+def load_tf_weights_in_bert_generation(
     model, tf_hub_path, model_class, is_encoder_named_decoder=False, is_encoder=False
 ):
     try:
@@ -132,7 +131,7 @@ def load_tf_weights_in_bert_for_seq_generation(
         return model
 
 
-class BertForSeqGenerationEmbeddings(nn.Module):
+class BertGenerationEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -168,12 +167,12 @@ class BertForSeqGenerationEmbeddings(nn.Module):
         return embeddings
 
 
-class BertForSeqGenerationPreTrainedModel(PreTrainedModel):
+class BertGenerationPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = BertForSeqGenerationConfig
+    config_class = BertGenerationConfig
     base_model_prefix = "bert"
     authorized_missing_keys = [r"position_ids"]
 
@@ -190,7 +189,7 @@ class BertForSeqGenerationPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-BERT_FOR_SEQ_GENERATION_START_DOCSTRING = r"""
+BERT_GENERATION_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -201,7 +200,7 @@ BERT_FOR_SEQ_GENERATION_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
+BERT_GENERATION_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -211,30 +210,30 @@ BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -242,36 +241,30 @@ BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare BertForSeqGeneration model transformer outputting raw hidden-states without any specific head on top.",
-    BERT_FOR_SEQ_GENERATION_START_DOCSTRING,
+    BERT_GENERATION_START_DOCSTRING,
 )
-class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
+class BertGenerationEncoder(BertGenerationPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well
     as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
+    the self-attention layers, following the architecture described in `Attention is all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    This model should be used when leveraging Bert or Roberta checkpoints for the `EncoderDecoderModel` class as described in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks`_ by Sascha Rothe, Shashi Narayan, and Aliaksei Severyn.
+    This model should be used when leveraging Bert or Roberta checkpoints for the `EncoderDecoderModel` class as described in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, and Aliaksei Severyn.
 
     To behave as an decoder the model needs to be initialized with the
     :obj:`is_decoder` argument of the configuration set to :obj:`True`.
     To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
     argument and :obj:`add_cross_attention` set to :obj:`True`; an
     :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
-
-    .. _`Attention is all you need`:
-        https://arxiv.org/abs/1706.03762
-
-    .. _`Leveraging Pre-trained Checkpoints for Sequence Generation Tasks`:
-        https://arxiv.org/abs/1907.12461
     """
 
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BertForSeqGenerationEmbeddings(config)
+        self.embeddings = BertGenerationEmbeddings(config)
         self.encoder = BertEncoder(config)
 
         self.init_weights()
@@ -290,7 +283,7 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(BERT_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder",
@@ -311,10 +304,10 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             if the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
@@ -386,7 +379,7 @@ class BertForSeqGenerationEncoderModel(BertForSeqGenerationPreTrainedModel):
         )
 
 
-class BertForSeqGenerationOnlyLMHead(nn.Module):
+class BertGenerationOnlyLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -402,24 +395,24 @@ class BertForSeqGenerationOnlyLMHead(nn.Module):
 
 @add_start_docstrings(
     """Bert Model with a `language modeling` head on top for CLM fine-tuning. """,
-    BERT_FOR_SEQ_GENERATION_START_DOCSTRING,
+    BERT_GENERATION_START_DOCSTRING,
 )
-class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
+class BertGenerationDecoder(BertGenerationPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
-            warnings.warn("If you want to use `BertForSeqGenerationDecoder` as a standalone, add `is_decoder=True.`")
+            warnings.warn("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
 
-        self.bert = BertForSeqGenerationEncoderModel(config)
-        self.lm_head = BertForSeqGenerationOnlyLMHead(config)
+        self.bert = BertGenerationEncoder(config)
+        self.lm_head = BertGenerationOnlyLMHead(config)
 
         self.init_weights()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(BERT_FOR_SEQ_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(BERT_GENERATION_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -436,15 +429,15 @@ class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
         return_dict=None,
     ):
         r"""
-            encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
-            encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask
                 is used in the cross-attention if the model is configured as a decoder.
                 Mask values selected in ``[0, 1]``:
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Labels for computing the left-to-right language modeling loss (next word prediction).
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -454,13 +447,13 @@ class BertForSeqGenerationDecoder(BertForSeqGenerationPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BertForSeqGenerationTokenizer, BertForSeqGenerationDecoder, BertForSeqGenerationConfig
+            >>> from transformers import BertGenerationTokenizer, BertGenerationDecoder, BertGenerationConfig
             >>> import torch
 
-            >>> tokenizer = BertForSeqGenerationTokenizer.from_pretrained('google/bert_for_seq_generation_L-24_bbc_encoder')
-            >>> config = BertForSeqGenerationConfig.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+            >>> tokenizer = BertGenerationTokenizer.from_pretrained('google/bert_for_seq_generation_L-24_bbc_encoder')
+            >>> config = BertGenerationConfig.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
             >>> config.is_decoder = True
-            >>> model = BertForSeqGenerationDecoder.from_pretrained('google/bert_for_seq_generation_L-24_bbc_encoder', config=config, return_dict=True)
+            >>> model = BertGenerationDecoder.from_pretrained('google/bert_for_seq_generation_L-24_bbc_encoder', config=config, return_dict=True)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
