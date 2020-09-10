@@ -125,12 +125,7 @@ from .modeling_funnel import (
     FunnelModel,
 )
 from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
-from .modeling_layoutlm import (
-    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-    LayoutLMModel,
-    LayoutLMForMaskedLM,
-    LayoutLMForTokenClassification,        
-)
+from .modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
 from .modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForMultipleChoice,

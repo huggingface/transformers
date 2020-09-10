@@ -367,9 +367,9 @@ if is_torch_available():
     )
     from .modeling_layoutlm import (
         LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-        LayoutLMModel,
         LayoutLMForMaskedLM,
-        LayoutLMForTokenClassification,        
+        LayoutLMForTokenClassification,
+        LayoutLMModel,
     )
     from .modeling_longformer import (
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

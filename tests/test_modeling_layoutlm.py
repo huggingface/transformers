@@ -24,14 +24,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
-    from transformers import (
-        LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-        LayoutLMTokenizer,
-        LayoutLMConfig,
-        LayoutLMModel,
-        LayoutLMForMaskedLM,
-        LayoutLMForTokenClassification
-    )
+    from transformers import LayoutLMConfig, LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
     from transformers.file_utils import cached_property
 
     #
@@ -64,7 +57,7 @@ class LayoutLMModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        range_bbox = 1000,
+        range_bbox=1000,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -182,7 +175,12 @@ class LayoutLMModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "bbox": bbox, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "bbox": bbox,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -190,9 +188,7 @@ class LayoutLMModelTester:
 class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (LayoutLMModel, LayoutLMForMaskedLM, LayoutLMForTokenClassification)
-        if is_torch_available()
-        else ()
+        (LayoutLMModel, LayoutLMForMaskedLM, LayoutLMForTokenClassification) if is_torch_available() else ()
     )
 
     def setUp(self):
@@ -214,29 +210,10 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    @slow
-    def test_lm_outputs_same_as_reference_model(self):
-        """Write something that could help someone fixing this here."""
-        checkpoint_path = "microsoft/layoutlm_large_uncased"
-        model = self.big_model
-        tokenizer = LayoutLMTokenizer.from_pretrained(
-            checkpoint_path
-        )  # same with AutoTokenizer (see tokenization_auto.py). This is not mandatory
-        # MODIFY THIS DEPENDING ON YOUR MODELS RELEVANT TASK.
-        batch = tokenizer(["I went to the <mask> yesterday"]).to(torch_device)
-        desired_mask_result = tokenizer.decode("store")  # update this
-        logits = model(**batch).logits
-        masked_index = (batch.input_ids == self.tokenizer.mask_token_id).nonzero()
-        assert model.num_parameters() == 175e9  # a joke
-        mask_entry_logits = logits[0, masked_index.item(), :]
-        probs = mask_entry_logits.softmax(dim=0)
-        _, predictions = probs.topk(1)
-        self.assertEqual(tokenizer.decode(predictions), desired_mask_result)
-
     @cached_property
     def big_model(self):
         """Cached property means this code will only be executed once."""
-        checkpoint_path = "microsoft/layoutlm_large_uncased"
+        checkpoint_path = "microsoft/layoutlm-large-uncased"
         model = LayoutLMForMaskedLM.from_pretrained(checkpoint_path).to(
             torch_device
         )  # test whether AutoModel can determine your model_class from checkpoint name

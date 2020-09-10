@@ -16,30 +16,15 @@
 
 
 import logging
-import os
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from .configuration_layoutlm import LayoutLMConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_bert import (
-    BertConfig, 
-    BertModel, 
-    BertPreTrainedModel, 
-    BertLayerNorm, 
-    BertOnlyMLMHead,
-)
-from .modeling_outputs import (
-    BaseModelOutputWithPooling,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
-from .modeling_utils import PreTrainedModel
+from .modeling_bert import BertLayerNorm, BertModel, BertOnlyMLMHead, BertPreTrainedModel
+from .modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput, TokenClassifierOutput
 
 
 logger = logging.getLogger(__name__)
@@ -54,29 +39,17 @@ LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class LayoutLMEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
     def __init__(self, config):
         super(LayoutLMEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
-        )
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size
-        )
-        self.x_position_embeddings = nn.Embedding(
-            config.max_2d_position_embeddings, config.hidden_size
-        )
-        self.y_position_embeddings = nn.Embedding(
-            config.max_2d_position_embeddings, config.hidden_size
-        )
-        self.h_position_embeddings = nn.Embedding(
-            config.max_2d_position_embeddings, config.hidden_size
-        )
-        self.w_position_embeddings = nn.Embedding(
-            config.max_2d_position_embeddings, config.hidden_size
-        )
-        self.token_type_embeddings = nn.Embedding(
-            config.type_vocab_size, config.hidden_size
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
+        self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
+        self.h_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
+        self.w_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -115,12 +88,8 @@ class LayoutLMEmbeddings(nn.Module):
         upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
         right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
         lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
-        h_position_embeddings = self.h_position_embeddings(
-            bbox[:, :, 3] - bbox[:, :, 1]
-        )
-        w_position_embeddings = self.w_position_embeddings(
-            bbox[:, :, 2] - bbox[:, :, 0]
-        )
+        h_position_embeddings = self.h_position_embeddings(bbox[:, :, 3] - bbox[:, :, 1])
+        w_position_embeddings = self.w_position_embeddings(bbox[:, :, 2] - bbox[:, :, 0])
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = (
@@ -137,7 +106,6 @@ class LayoutLMEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
 
 
 LAYOUTLM_START_DOCSTRING = r"""    The LayoutLM model was proposed in
@@ -239,14 +207,36 @@ class LayoutLMModel(BertModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        """
+        input_ids (torch.LongTensor of shape (batch_size, sequence_length)):
+            Indices of input sequence tokens in the vocabulary.
+        attention_mask (torch.FloatTensor of shape (batch_size, sequence_length), optional):
+            Mask to avoid performing attention on padding token indices. 
+            Mask values selected in [0, 1]: 1 for tokens that are NOT MASKED, 0 for MASKED tokens.
+        token_type_ids (torch.LongTensor of shape (batch_size, sequence_length), optional):
+            Segment token indices to indicate first and second portions of the inputs. 
+            Indices are selected in [0, 1]: 0 corresponds to a sentence A token, 1 corresponds to a sentence B token
+        position_ids (torch.LongTensor of shape (batch_size, sequence_length), optional):
+            Indices of positions of each input sequence tokens in the position embeddings. 
+            Selected in the range [0, config.max_position_embeddings - 1].
+        head_mask (torch.FloatTensor of shape (num_heads,) or (num_layers, num_heads), optional):
+            Mask to nullify selected heads of the self-attention modules. 
+            Mask values selected in [0, 1]: 1 indicates the head is not masked, 0 indicates the head is masked.
+        inputs_embeds (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size), optional):
+            Optionally, instead of passing input_ids you can choose to directly pass an embedded representation. 
+            This is useful if you want more control over how to convert input_ids indices into associated vectors than the model’s internal embedding lookup matrix.
+        output_attentions (bool, optional):
+            If set to True, the attentions tensors of all attention layers are returned. 
+        output_hidden_states (bool, optional):
+            If set to True, the hidden states of all layers are returned. 
+        return_dict (bool, optional):
+            If set to True, the model will return a ModelOutput instead of a plain tuple.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if bbox is None:
-            raise ValueError("You have to specify bbox")
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -264,36 +254,35 @@ class LayoutLMModel(BertModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
+        if bbox is None:
+            bbox = torch.zeros(tuple(list(input_shape) + [4]), dtype=torch.long, device=device)
+
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
-        extended_attention_mask = extended_attention_mask.to(
-            dtype=next(self.parameters()).dtype
-        ) 
+        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         if head_mask is not None:
             if head_mask.dim() == 1:
-                head_mask = (
-                    head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                )
-                head_mask = head_mask.expand(
-                    self.config.num_hidden_layers, -1, -1, -1, -1
-                )
+                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  
+                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+            head_mask = head_mask.to(dtype=next(self.parameters()).dtype)
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, bbox=bbox, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+            input_ids=input_ids,
+            bbox=bbox,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
-            embedding_output, extended_attention_mask, head_mask=head_mask,
+            embedding_output,
+            extended_attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -355,6 +344,7 @@ class LayoutLMForMaskedLM(BertPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
@@ -447,9 +437,10 @@ class LayoutLMForTokenClassification(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,       
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -468,7 +459,7 @@ class LayoutLMForTokenClassification(BertPreTrainedModel):
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

@@ -16,9 +16,7 @@
 
 
 import logging
-from typing import Callable, Union
 
-from .configuration_utils import PretrainedConfig
 from .configuration_bert import BertConfig
 
 
@@ -35,7 +33,7 @@ class LayoutLMConfig(BertConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.LayoutLMModel`.
     It is used to instantiate a LayoutLM model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the LayoutLM `layoutlm-base-uncased <https://huggingface.co/layoutlm/layoutlm-base-uncased>`__ architecture.
+    the LayoutLM `layoutlm-base-uncased <https://huggingface.co/microsoft/layoutlm-base-uncased>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.BertConfig` and can be used
     to control the model outputs. Read the documentation from :class:`~transformers.BertConfig`
@@ -73,8 +71,21 @@ class LayoutLMConfig(BertConfig):
         gradient_checkpointing (:obj:`bool`, optional, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         max_2d_position_embeddings (:obj:`int`, optional, defaults to 1024):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum value that the 2D position embedding might ever used. 
+            Typically set this to something large just in case (e.g., 1024).
+
+    Example::
+
+        >>> from transformers import LayoutLMModel, LayoutLMConfig
+
+        >>> # Initializing a LayoutLM configuration
+        >>> configuration = LayoutLMConfig()
+
+        >>> # Initializing a model from the configuration
+        >>> model = LayoutLMModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
 
     """
     model_type = "layoutlm"
@@ -113,5 +124,6 @@ class LayoutLMConfig(BertConfig):
             layer_norm_eps=layer_norm_eps,
             pad_token_id=pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
-            **kwargs)
+            **kwargs,
+        )
         self.max_2d_position_embeddings = max_2d_position_embeddings

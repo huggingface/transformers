@@ -134,9 +134,15 @@ conversion utilities for the following models:
 26. `Funnel Transformer <https://github.com/laiguokun/Funnel-Transformer>`_ (from CMU/Google Brain) released with the paper
     `Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
     <https://arxiv.org/abs/2006.03236>`_ by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+<<<<<<< b22bf0ccfa57d02c413a3b145297656226f3d921
 27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
     `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
     <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+=======
+27. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with the paper
+    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+    <https://arxiv.org/abs/1912.13318>`_ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
+>>>>>>> finish test docs readme model/config/tokenization class
 28. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
@@ -227,6 +233,7 @@ conversion utilities for the following models:
     model_doc/funnel
     model_doc/lxmert
     model_doc/bertgeneration
+    model_doc/layoutlm
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

@@ -15,12 +15,8 @@
 """ Tokenization class for model LayoutLM."""
 
 
-import collections
 import logging
-import os
-from typing import List, Optional
 
-from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_bert import BertTokenizer
 
 
@@ -30,23 +26,22 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "layoutlm-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "layoutlm-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        "microsoft/layoutlm-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "microsoft/layoutlm-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
     }
 }
 
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "layoutlm-base-uncased": 512,
-    "layoutlm-large-uncased": 512,
+    "microsoft/layoutlm-base-uncased": 512,
+    "microsoft/layoutlm-large-uncased": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "layoutlm-base-uncased": {"do_lower_case": True},
-    "layoutlm-large-uncased": {"do_lower_case": True},
+    "microsoft/layoutlm-base-uncased": {"do_lower_case": True},
+    "microsoft/layoutlm-large-uncased": {"do_lower_case": True},
 }
-
 
 
 class LayoutLMTokenizer(BertTokenizer):
