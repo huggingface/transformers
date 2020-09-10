@@ -195,7 +195,7 @@ class RagModel(torch.nn.Module):
 
     def contextualize(self, input_ids, retriever, print_docs=False):
         """
-        Implements RAG sequence "thorough" decoding.
+        Adds context to every input in the batch by querying the retriever.
 
         Args:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -601,7 +601,7 @@ class RagSequence(PreTrainedRagModel):
 
             if logger.level == logging.DEBUG:
                 output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
-                logger.debig("Hypos with scores:")
+                logger.debug("Hypos with scores:")
                 for score, hypo in zip(outputs.loss, output_strings):
                     logger.debug("\t{} {}".format(score, hypo))
 

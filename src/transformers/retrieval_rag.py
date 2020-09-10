@@ -42,15 +42,29 @@ class Index(object):
     def __init__(self, *args, **kwargs):
         pass
 
+    def get_doc_dicts(self, doc_ids):
+        """
+        Returns a list of dictionaries, containing titles and text of the retrieved documents.
+
+        Args:
+            doc_ids (:obj:`torch.Tensor` of shape :obj:`(batch_size, n_docs)`):
+                A tensor of document indices.
+        """
+        pass
+
     def get_top_docs(self, query_vectors, n_docs):
         """
-        An index which can be deserialized from the files built using https://github.com/facebookresearch/DPR.
-        We use default faiss index parameters as specified in that repository.
+        For each query in the batch, retrieves ``n_docs`` documents.
+
         Args:
-            query_vectors (:obj:`np.array`):
+            query_vectors (:obj:`np.array` of shape :obj:`(batch_size, vector_size):
                 An array of query vectors.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
+
+        Returns:
+            :obj:`torch.Tensor` of shape :obj:`(batch_size, n_docs)`: A tensor of indices of retrieved documents.
+            :obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`: A tensor of vector representations of retrieved documents.
         """
         raise NotImplementedError
 
@@ -62,7 +76,7 @@ class Index(object):
 
     def init_index(self):
         """
-        A function responsible for loading the index to memory. Should be called only once per training run of a RAG model.
+        A function responsible for loading the index into memory. Should be called only once per training run of a RAG model.
         E.g. if the model is trained on multiple GPUs in a distributed setup, only one of the workers will load the index.
         """
         raise NotImplementedError
@@ -136,7 +150,7 @@ class LegacyIndex(Index):
 
 class HFIndex(Index):
     """
-    An and index build for an instance of :class:`~nlp.Datasets`. If ``index_path`` is set to ``None``,
+    A wrapper around an instance of :class:`~nlp.Datasets`. If ``index_path`` is set to ``None``,
     we load the pre-computed index available with the :class:`~nlp.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
 
     Args:
