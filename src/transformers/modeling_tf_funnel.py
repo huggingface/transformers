@@ -643,7 +643,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         all_attentions = () if output_attentions else None
 
         for block_index, block in enumerate(self.blocks):
-            pooling_flag = hidden.shape[1] > (2 if self.separate_cls else 1)
+            pooling_flag = shape_list(hidden)[1] > (2 if self.separate_cls else 1)
             pooling_flag = pooling_flag and block_index > 0
             if pooling_flag:
                 pooled_hidden, attention_inputs = self.attention_structure.pre_attention_pooling(
