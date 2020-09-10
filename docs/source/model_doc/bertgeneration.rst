@@ -4,7 +4,7 @@ BertGeneration
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-The BertForSeqGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using :class:`~transformers.EncoderDecoderModel` as proposed in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using :class:`~transformers.EncoderDecoderModel` as proposed in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
 
 The abstract from the paper is the following:
 
