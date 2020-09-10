@@ -706,7 +706,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, loss_function_params=None, **kwargs):
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -903,7 +903,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             resolved_archive_file = None
 
         # Instantiate model.
-        model = cls(config, *model_args, **model_kwargs)
+        model = cls(config, *model_args, loss_function_params=loss_function_params, **model_kwargs)
 
         if state_dict is None and not from_tf:
             try:

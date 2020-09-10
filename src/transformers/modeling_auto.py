@@ -1350,7 +1350,7 @@ class AutoModelForSequenceClassification:
         )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, loss_function_params=None, **kwargs):
         r"""Instantiates one of the sequence classification model classes of the library
         from a pre-trained model configuration.
 
@@ -1433,7 +1433,11 @@ class AutoModelForSequenceClassification:
 
         for config_class, model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
             if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+                return model_class.from_pretrained(
+                    pretrained_model_name_or_path,
+                    *model_args, config=config, loss_function_params=loss_function_params,
+                    **kwargs
+                )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(

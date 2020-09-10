@@ -1277,8 +1277,9 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, loss_function_params=None):
         super().__init__(config)
+        self.loss_function_params = {} if loss_function_params is None else loss_function_params
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
@@ -1340,7 +1341,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
-                loss_fct = CrossEntropyLoss()
+                loss_fct = CrossEntropyLoss(**self.loss_function_params)
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
