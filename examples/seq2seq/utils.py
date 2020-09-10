@@ -328,7 +328,10 @@ class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
             max_tokens=self.max_tokens_per_batch,
             required_batch_size_multiple=self.required_bs_mult,
         )
-        return iter(batch_sampler)
+        batch_sizes = lmap(len, batch_sampler)
+        if np.mean(batch_sizes) < 4:
+            raise ValueError("DELETEME")
+        return batch_sampler
 
     def __len__(self):
         return self.ss.num_samples
