@@ -5,6 +5,7 @@ import streamlit as st
 import torch
 from elasticsearch import Elasticsearch
 
+import transformers
 from eli5_utils import (
     embed_questions_for_retrieval,
     make_qa_s2s_model,
