@@ -77,7 +77,7 @@ jobs:
                       - v0.3-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/nlp
+            - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,tf-cpu,torch,testing]
             - run: pip install codecov pytest-cov
             - save_cache:
@@ -104,7 +104,7 @@ jobs:
                       - v0.3-torch-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/nlp
+            - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,torch,testing]
             - save_cache:
                   key: v0.3-torch-{{ checksum "setup.py" }}
@@ -129,7 +129,7 @@ jobs:
                       - v0.3-tf-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/nlp
+            - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,tf-cpu,testing]
             - save_cache:
                   key: v0.3-tf-{{ checksum "setup.py" }}
