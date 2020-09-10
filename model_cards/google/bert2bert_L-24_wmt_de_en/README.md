@@ -19,7 +19,7 @@ Disclaimer: The model card has been written by the Hugging Face team.
 
 ## How to use
 
-You can use this model for sentence fusion, *e.g.*
+You can use this model for translation, *e.g.*
 
 ```python
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
