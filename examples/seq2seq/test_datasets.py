@@ -1,9 +1,11 @@
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
 from torch.utils.data import DataLoader
 
+from durbango import pickle_save
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
 
@@ -120,10 +122,14 @@ def test_dynamic_batch_size():
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
-        tokenizer, data_dir=data_dir, type_path="train", max_source_length=max_len, max_target_length=max_len
+        tokenizer, data_dir=data_dir, type_path="train", max_source_length=max_len, max_target_length=max_len, n_obs=1000
     )
 
-    batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=4)
+    logs = defaultdict(list)
+    mult = 64
+    batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
+    from durbango import pickle_save
+    pickle_save(batch_sampler, "batches/dynamic_sampler.pkl")
     batch_sizes = [len(x) for x in batch_sampler]
     assert len(set(batch_sizes)) > 1
     data_loader = DataLoader(
@@ -136,13 +142,74 @@ def test_dynamic_batch_size():
     )
 
     failures = []
+    pad = tokenizer.pad_token_id
     for batch in data_loader:
+        logs["tpb"].append(batch["input_ids"].ne(pad).sum() + batch["labels"].ne(pad).sum())
+        logs["bs"].append(batch["input_ids"].shape[0])
+        logs["src_pad_tok"].append(batch["input_ids"].eq(pad).sum())
+        logs["src_pad_frac"].append(batch["input_ids"].eq(pad).float().mean())
         shapes = {k: v.shape for k, v in batch.items()}
         bs = shapes["input_ids"][0]
-        assert bs % 4 == 0 or bs < 4
+        assert bs % mult == 0 or bs < mult
         num_src_tokens = shapes["input_ids"][0] * shapes["input_ids"][1]
         num_tgt_tokens = shapes["labels"][0] * shapes["labels"][1]
         if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
             failures.append(num_tgt_tokens + num_src_tokens)
-    if failures:
-        raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")
+    from durbango import pickle_save
+
+    pickle_save(logs, "batches/dynb_logs.pkl")
+    # if failures:raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")
+
+
+def test_sortish():
+    if os.getenv("USE_REAL_DATA", False):
+        data_dir = "examples/seq2seq/wmt_en_ro"
+        max_len = 128
+        max_tokens = max_len * 2 * 64
+    else:
+        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        max_tokens = 320
+        max_len = 64
+
+    tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
+    ds = Seq2SeqDataset(
+        tokenizer, data_dir=data_dir, type_path="train", max_source_length=max_len, max_target_length=max_len,
+        n_obs=1000
+    )
+    sampler = ds.make_sortish_sampler(64)
+    pickle_save(sampler, "batches/sortish.pkl")
+    from collections import defaultdict
+
+    logs = defaultdict(list)
+    mult = 64
+    # batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
+    #batch_sizes = [len(x) for x in batch_sampler]
+    #assert len(set(batch_sizes)) > 1
+    data_loader = DataLoader(
+        ds,
+        sampler=sampler,
+        batch_size=64,
+        # batch_sampler=batch_sampler,
+        collate_fn=ds.collate_fn,
+        # shuffle=True,
+        num_workers=2,
+        # batch_size=None,
+    )
+
+    failures = []
+    pad = tokenizer.pad_token_id
+    for batch in data_loader:
+        logs["tpb"].append(batch["input_ids"].ne(pad).sum() + batch["labels"].ne(pad).sum())
+        logs["bs"].append(batch["input_ids"].shape[0])
+        logs["src_pad_tok"].append(batch["input_ids"].eq(pad).sum())
+        logs["src_pad_frac"].append(batch["input_ids"].eq(pad).float().mean())
+        shapes = {k: v.shape for k, v in batch.items()}
+        bs = shapes["input_ids"][0]
+        assert bs % mult == 0 or bs < mult
+        num_src_tokens = shapes["input_ids"][0] * shapes["input_ids"][1]
+        num_tgt_tokens = shapes["labels"][0] * shapes["labels"][1]
+        if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
+            failures.append(num_tgt_tokens + num_src_tokens)
+
+    pickle_save(logs, "batches/sortish_logs.pkl")
+    # if failures:raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")

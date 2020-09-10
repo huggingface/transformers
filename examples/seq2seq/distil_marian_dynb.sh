@@ -12,7 +12,7 @@ python distillation.py \
   --data_dir $ENRO_DIR \
   --max_source_length $MAX_LEN --max_target_length $MAX_LEN --val_max_target_length $MAX_LEN --test_max_target_length $MAX_LEN \
   --freeze_encoder --freeze_embeds \
-  --train_batch_size=64 --eval_batch_size=64 \
+  --train_batch_size=32 --eval_batch_size=64 \
   --tokenizer_name $m --model_name_or_path $m \
   --warmup_steps 500 --logger_name wandb --max_tokens_per_batch=16384 \
   --fp16_opt_level=O1 --task translation \

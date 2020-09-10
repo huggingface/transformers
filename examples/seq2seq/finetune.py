@@ -175,6 +175,9 @@ class SummarizationModule(BaseTransformer):
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
         logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["labels"].ne(self.pad).sum()
+        logs["bs"] = batch["input_ids"].shape[0]
+        logs["src_pad_tok"] = batch["input_ids"].eq(self.pad).sum()
+        logs["src_pad_frac"] = batch["input_ids"].eq(self.pad).float().mean()
         return {"loss": loss_tensors[0], "log": logs}
 
     def validation_step(self, batch, batch_idx) -> Dict:

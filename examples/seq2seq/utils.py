@@ -92,7 +92,11 @@ class AbstractSeq2SeqDataset(Dataset):
         super().__init__()
         self.src_file = Path(data_dir).joinpath(type_path + ".source")
         self.tgt_file = Path(data_dir).joinpath(type_path + ".target")
-        self.src_lens = self.get_char_lens(self.src_file)
+        self.len_file = Path(data_dir).joinpath(type_path + ".len")
+        if os.path.exists(self.len_file):
+            self.src_lens = pickle_load(self.len_file)
+        else:
+            self.src_lens = self.get_char_lens(self.src_file)
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
         assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
@@ -123,17 +127,18 @@ class AbstractSeq2SeqDataset(Dataset):
         # import ipdb; ipdb.set_trace()
         from fairseq.data.data_utils import batch_by_size
 
-        # indices = np.arange(len(self.src_lens))
-        sorted_indices = list(self.make_sortish_sampler(1))
+        #sorted_indices = np.arange(len(self.src_lens))
+        sorted_indices = list(self.make_sortish_sampler(1024))
 
         def num_tokens_in_example(i):
-            num_src_tokens = min(self.src_lens[i] // chars_per_token, self.max_source_length)
-            num_tgt_tokens = min(self.tgt_lens[i] // chars_per_token, self.max_target_length)
-            return num_src_tokens + num_tgt_tokens  # fairseq logic: max(num_src_tokens, num_tgt_tokens)
+            return self.src_lens[i]
+            # num_src_tokens = min(self.src_lens[i] // chars_per_token, self.max_source_length)
+            # num_tgt_tokens = min(self.tgt_lens[i] // chars_per_token, self.max_target_length)
+            # return num_src_tokens + num_tgt_tokens  # fairseq logic: max(num_src_tokens, num_tgt_tokens)
 
         # num_tokens_fn = lambda i: self.src_lens[i] // 4  # assume each token is ~4 characters (a bit conservative)
         batch_sampler: List[List[int]] = batch_by_size(
-            sorted_indices, num_tokens_fn=num_tokens_in_example, max_tokens=max_tokens_per_batch, **kwargs
+            sorted_indices, num_tokens_fn=num_tokens_in_example, max_tokens=max_tokens_per_batch, required_batch_size_multiple=64
         )
         return batch_sampler
 
