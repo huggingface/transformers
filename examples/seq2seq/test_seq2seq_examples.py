@@ -149,7 +149,7 @@ class TestSummarizationDistiller(unittest.TestCase):
             no_teacher=True,
             freeze_encoder=True,
             gpus=2,
-            sortish_sampler=False,
+            sortish_sampler=True,
         )
         self._test_distiller_cli(updates)
 
