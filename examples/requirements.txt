@@ -12,7 +12,7 @@ faiss
 streamlit
 elasticsearch
 pandas
-nlp
+datasets
 fire
 pytest
 conllu
