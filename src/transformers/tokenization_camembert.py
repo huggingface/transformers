@@ -22,7 +22,6 @@ from typing import List, Optional
 import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_xlnet import SPIECE_UNDERLINE
 from .utils import logging
 
 
@@ -46,6 +45,8 @@ SHARED_MODEL_IDENTIFIERS = [
     "Musixmatch/umberto-commoncrawl-cased-v1",
     "Musixmatch/umberto-wikipedia-uncased-v1",
 ]
+
+SPIECE_UNDERLINE = "▁"
 
 
 class CamembertTokenizer(PreTrainedTokenizer):
@@ -253,7 +254,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
+                "You need to install SentencePiece to use CamembertTokenizer: https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
             raise

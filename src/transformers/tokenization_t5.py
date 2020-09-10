@@ -27,8 +27,6 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-SPIECE_UNDERLINE = "▁"
-
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to file names for serializing Tokenizer instances
