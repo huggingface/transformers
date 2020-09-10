@@ -66,7 +66,7 @@ class SummarizationModule(BaseTransformer):
     default_val_metric = "rouge2"
 
     def __init__(self, hparams, **kwargs):
-        if hparams.sortish_sampler and hparams.gpus > 1:
+        if hparams.gpus > 1 and (hparams.sortish_sampler or hparams.max_tokens_per_batch is not None):
             hparams.replace_sampler_ddp = False
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
@@ -274,7 +274,7 @@ class SummarizationModule(BaseTransformer):
             )
 
         elif self.hparams.max_tokens_per_batch is not None and type_path == "train":
-            batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch)
+            batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1)
             return DataLoader(
                 dataset,
                 batch_sampler=batch_sampler,
