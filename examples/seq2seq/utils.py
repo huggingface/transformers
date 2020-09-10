@@ -15,7 +15,7 @@ import torch.distributed as dist
 from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
-from torch.utils.data import Dataset, Sampler
+from torch.utils.data import Dataset, Sampler, BatchSampler
 
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
@@ -309,7 +309,7 @@ class DistributedSortishSampler(Sampler):
         self.epoch = epoch
 
 
-class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
+class DistributedDynamicBatchSizeSampler(BatchSampler):
     def __init__(self, dataset, max_tokens_per_batch, required_bs_mult=4, num_replicas=None, rank=None):
         ss_bs = 2048 if len(dataset) > 2048 else len(dataset) // 2
         self.ss = DistributedSortishSampler(dataset, ss_bs, num_replicas=num_replicas, rank=rank)
