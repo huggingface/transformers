@@ -23,6 +23,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
+    BertGenerationConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -73,6 +74,7 @@ from .modeling_bert import (
     BertLMHeadModel,
     BertModel,
 )
+from .modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
 from .modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -213,6 +215,7 @@ MODEL_MAPPING = OrderedDict(
         (ReformerConfig, ReformerModel),
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
+        (BertGenerationConfig, BertGenerationEncoder),
     ]
 )
 
@@ -284,6 +287,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         ),  # XLM can be MLM and CLM => model should be split similar to BERT; leave here for now
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
+        (BertGenerationConfig, BertGenerationDecoder),
     ]
 )
 
