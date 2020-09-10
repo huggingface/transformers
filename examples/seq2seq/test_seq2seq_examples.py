@@ -34,6 +34,7 @@ CHEAP_ARGS = {
     "supervise_forward": True,
     "normalize_hidden": True,
     "label_smoothing": 0.2,
+    "eval_max_gen_length": None,
     "eval_beams": 1,
     "val_metric": "loss",
     "save_top_k": 1,
