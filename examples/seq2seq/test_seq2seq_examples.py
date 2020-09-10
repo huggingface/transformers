@@ -149,9 +149,9 @@ class TestSummarizationDistiller(unittest.TestCase):
             no_teacher=True,
             freeze_encoder=True,
             gpus=2,
-            sortish_sampler=False,
+            sortish_sampler=True,
         )
-        self._test_distiller_cli(updates)
+        self._test_distiller_cli(updates, check_contents=False)
 
     def test_distill_no_teacher(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True)
