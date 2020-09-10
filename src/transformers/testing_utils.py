@@ -124,7 +124,7 @@ def require_multigpu(test_case):
 
 def require_non_multigpu(test_case):
     """
-    Decorator marking a test that requires no or a single GPU setup (in PyTorch).
+    Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
     if not _torch_available:
         return unittest.skip("test requires PyTorch")(test_case)
@@ -132,7 +132,7 @@ def require_non_multigpu(test_case):
     import torch
 
     if torch.cuda.device_count() > 1:
-        return unittest.skip("test requires no or a single GPU")(test_case)
+        return unittest.skip("test requires 0 or 1 GPU")(test_case)
     return test_case
 
 
