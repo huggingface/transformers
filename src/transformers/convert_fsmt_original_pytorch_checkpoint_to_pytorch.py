@@ -51,14 +51,14 @@ PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoin
 
 # upload
 cd data
-yes Y | transformers-cli upload fsmt-wmt19-ru-en
-yes Y | transformers-cli upload fsmt-wmt19-en-ru
-yes Y | transformers-cli upload fsmt-wmt19-de-en
-yes Y | transformers-cli upload fsmt-wmt19-en-de
+transformers-cli upload -y fsmt-wmt19-ru-en
+transformers-cli upload -y fsmt-wmt19-en-ru
+transformers-cli upload -y fsmt-wmt19-de-en
+transformers-cli upload -y fsmt-wmt19-en-de
 cd -
 
 # if updating just small files and not the large models, here is a script to generate the right commands:
-perl -le 'for $f (@ARGV) { print qq[yes Y | transformers-cli upload $_/$f --filename $_/$f] for map { "fsmt-wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
+perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for map { "fsmt-wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
 
 # Caching note: Unfortunately due to CDN caching the uploaded model may be unavailable for up to 24hs after upload
