@@ -15,16 +15,16 @@
 """ Tokenization classes for ALBERT model."""
 
 
-import logging
 import os
 import unicodedata
 from shutil import copyfile
 from typing import List, Optional
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -246,7 +246,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -263,18 +263,18 @@ class AlbertTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -306,7 +306,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:

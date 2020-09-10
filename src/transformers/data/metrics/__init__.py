@@ -15,8 +15,9 @@
 # limitations under the License.
 
 try:
+    from sklearn.metrics import f1_score, matthews_corrcoef
+
     from scipy.stats import pearsonr, spearmanr
-    from sklearn.metrics import matthews_corrcoef, f1_score
 
     _has_sklearn = True
 except (AttributeError, ImportError):
@@ -51,7 +52,9 @@ if _has_sklearn:
         }
 
     def glue_compute_metrics(task_name, preds, labels):
-        assert len(preds) == len(labels)
+        assert len(preds) == len(
+            labels
+        ), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
         if task_name == "cola":
             return {"mcc": matthews_corrcoef(labels, preds)}
         elif task_name == "sst-2":
@@ -63,9 +66,9 @@ if _has_sklearn:
         elif task_name == "qqp":
             return acc_and_f1(preds, labels)
         elif task_name == "mnli":
-            return {"acc": simple_accuracy(preds, labels)}
+            return {"mnli/acc": simple_accuracy(preds, labels)}
         elif task_name == "mnli-mm":
-            return {"acc": simple_accuracy(preds, labels)}
+            return {"mnli-mm/acc": simple_accuracy(preds, labels)}
         elif task_name == "qnli":
             return {"acc": simple_accuracy(preds, labels)}
         elif task_name == "rte":
@@ -78,7 +81,9 @@ if _has_sklearn:
             raise KeyError(task_name)
 
     def xnli_compute_metrics(task_name, preds, labels):
-        assert len(preds) == len(labels)
+        assert len(preds) == len(
+            labels
+        ), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
         if task_name == "xnli":
             return {"acc": simple_accuracy(preds, labels)}
         else:

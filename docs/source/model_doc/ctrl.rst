@@ -1,6 +1,9 @@
 CTRL
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 CTRL model was proposed in `CTRL: A Conditional Transformer Language Model for Controllable Generation <https://arxiv.org/abs/1909.05858>`_
 by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
 It's a causal (unidirectional) transformer pre-trained using language modeling on a very large

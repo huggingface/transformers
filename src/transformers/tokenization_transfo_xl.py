@@ -19,14 +19,16 @@
 
 
 import glob
-import logging
 import os
 import pickle
 import re
+import warnings
 from collections import Counter, OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
+
+import sacremoses as sm
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
@@ -35,14 +37,16 @@ from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
 from .file_utils import cached_path, is_torch_available
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .utils import logging
 
 
 if is_torch_available():
     import torch
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.txt"}
 VOCAB_FILES_NAMES_FAST = {"pretrained_vocab_file": "vocab.json", "vocab_file": "vocab.json"}
@@ -67,6 +71,47 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
     "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-corpus.bin",
 }
 CORPUS_NAME = "corpus.bin"
+
+MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
+DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
+
+
+def tokenize_numbers(text_array: List[str]) -> List[str]:
+    """
+    Splits large comma-separated numbers and floating point values.
+    This is done by replacing commas with ' @,@ ' and dots with ' @.@ '.
+    Args:
+        text_array: An already tokenized text as list
+    Returns:
+        A list of strings with tokenized numbers
+    Example::
+        >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
+        ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
+    """
+    tokenized = []
+    for i in range(len(text_array)):
+        reg, sub = MATCH_NUMBERS
+        replaced = re.sub(reg, sub, text_array[i]).split()
+        tokenized.extend(replaced)
+
+    return tokenized
+
+
+def detokenize_numbers(text: str) -> str:
+    """
+    Inverts the operation of `tokenize_numbers`.
+    This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Args:
+        text: A string where the number should be detokenized
+    Returns:
+        A detokenized string
+    Example::
+        >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
+        "$ 5,000 1.73 m"
+    """
+    for reg, sub in DETOKENIZE_NUMBERS:
+        text = re.sub(reg, sub, text)
+    return text
 
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
@@ -95,6 +140,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
+        language="en",
         **kwargs
     ):
         super().__init__(
@@ -113,9 +159,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.delimiter = delimiter
         self.vocab_file = vocab_file
         self.never_split = never_split
-        self.punctuation_symbols = '!"#$%&()*+,-./\:;<=>?@[\\]^_`{|}~'  # noqa: W605
+        self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
+        self.language = language
+        self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
+        self.moses_tokenizer = sm.MosesTokenizer(language)
+        self.moses_detokenizer = sm.MosesDetokenizer(language)
 
         try:
             if pretrained_vocab_file is not None:
@@ -140,13 +190,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _compile_space_around_punctuation_pattern(self):
         look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
-        look_ahead_to_match_all_except_space = "(?=[^\s])"  # noqa: W605
+        look_ahead_to_match_all_except_space = r"(?=[^\s])"
         return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose:
             logger.info("counting file {} ...".format(path))
-        assert os.path.exists(path)
+        assert os.path.exists(path), f"Input file {path} not found"
 
         sents = []
         with open(path, "r", encoding="utf-8") as f:
@@ -161,7 +211,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def count_sents(self, sents, verbose=False):
         """
-            sents : a list of sentences, each a list of tokenized symbols
+        sents : a list of sentences, each a list of tokenized symbols
         """
         if verbose:
             logger.info("counting {} sents ...".format(len(sents)))
@@ -232,7 +282,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
         if verbose:
             logger.info("encoding file {} ...".format(path))
-        assert os.path.exists(path)
+        assert os.path.exists(path), f"Output file {path} not found"
         encoded = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
@@ -271,6 +321,61 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
 
+    def move_added_token(self, token: str, target_idx: int):
+        """
+        Moves an added token to a specific position in the vocab.
+        This method should be used when resizing an embedding layer other than the last one in the `AdaptiveEmbedding`
+        in order to move the token in the tokenizer from the default position (at the very end) to the desired one.
+
+        Args:
+            token: The token to move to a specific position in the vocab.
+            target_idx: The position where the token should be moved to.
+        """
+        assert token in self.added_tokens_encoder, "Token which should be moved has to be an added token"
+        assert token not in self.idx2sym, "Token which should be moved is already in vocab"
+
+        # Insert sym into vocab
+        self.idx2sym.insert(target_idx, token)
+        self.sym2idx[token] = target_idx
+
+        # Shift following indices in sym2idx
+        for idx in range(target_idx + 1, len(self.idx2sym)):
+            current_sym = self.idx2sym[idx]
+            self.sym2idx[current_sym] = idx
+
+        # Delete token from added_tokens
+        old_index = self.added_tokens_encoder[token]
+        del self.added_tokens_decoder[old_index]
+        del self.added_tokens_encoder[token]
+
+    def moses_punct_norm(self, text):
+        return self.moses_punct_normalizer.normalize(text)
+
+    def moses_tokenize(self, text):
+        return self.moses_tokenizer.tokenize(
+            text, aggressive_dash_splits=True, return_str=False, escape=False, protected_patterns=self.never_split
+        )
+
+    def moses_pipeline(self, text: str) -> List[str]:
+        """
+        Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
+        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`).
+        Additionally, large comma-separated numbers and floating point values are split.
+        E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000 people are 1 @.@ 80m tall".
+        Args:
+            text: Text to be tokenized
+        Returns:
+            A list of tokenized strings
+        Example::
+            >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+            >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
+            ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
+        """
+        text = self.moses_punct_norm(text)
+        text = self.moses_tokenize(text)
+        text = tokenize_numbers(text)
+        return text
+
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
@@ -294,9 +399,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement")
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
-        out_string = " ".join(tokens).strip()
-        return out_string
+        """
+        Converts a sequence of tokens (string) in a single string.
+        Additionally, the split numbers are converted back into it's original form.
+        """
+        out_string = self.moses_detokenizer.detokenize(tokens)
+        return detokenize_numbers(out_string).strip()
 
     def convert_to_tensor(self, symbols):
         return torch.LongTensor(self.convert_tokens_to_ids(symbols))
@@ -318,7 +426,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if self.delimiter == "":
             symbols = line
         else:
-            symbols = line.split(self.delimiter)
+            symbols = self.moses_pipeline(line)
 
         if add_double_eos:  # lm1b
             return ["<S>"] + symbols + ["<S>"]
@@ -326,19 +434,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols + ["<eos>"]
         else:
             return symbols
-
-    def prepare_for_tokenization(self, text, **kwargs):
-        # add spaces before punctuation symbols as should be done in transfo-xl
-
-        if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
-            text = self.punctuation_with_space_around_pattern.sub(r" ", text)
-        elif self.punction_without_space_before_pattern.search(text):
-            # searches until the first occurence of a punctuation symbol without surrounding spaces
-            logger.warning(
-                "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
-            )
-
-        return text
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
@@ -455,6 +550,11 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+        warnings.warn(
+            "The class `TransfoXLTokenizerFast` is deprecated and will be removed in a future version. Please use `TransfoXLTokenizer` with it's enhanced tokenization instead.",
+            FutureWarning,
+        )
+
     def save_pretrained(self, save_directory):
         logger.warning(
             "Please note you will not be able to load the vocabulary in"
@@ -467,7 +567,7 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 class LMOrderedIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None):
         """
-            data -- LongTensor -- the LongTensor is strictly ordered
+        data -- LongTensor -- the LongTensor is strictly ordered
         """
         self.bsz = bsz
         self.bptt = bptt
@@ -526,7 +626,7 @@ class LMOrderedIterator(object):
 class LMShuffledIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
         """
-            data -- list[LongTensor] -- there is no order among the LongTensors
+        data -- list[LongTensor] -- there is no order among the LongTensors
         """
         self.data = data
 

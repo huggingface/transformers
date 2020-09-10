@@ -24,6 +24,7 @@
 
 🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, T5, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over thousands of pretrained models in 100+ languages and deep interoperability between PyTorch & TensorFlow 2.0.
 
+### Recent contributors
 [![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/0)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/0)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/1)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/1)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/2)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/2)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/3)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/3)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/4)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/4)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/5)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/5)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/6)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/6)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/7)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/7)
 
 ### Features
@@ -59,11 +60,11 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| [Documentation][(v2.5.0)](https://huggingface.co/transformers/v2.5.0)[(v2.4.0/v2.4.1)](https://huggingface.co/transformers/v2.4.0)[(v2.3.0)](https://huggingface.co/transformers/v2.3.0)[(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
+| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
 
 ## Installation
 
-This repo is tested on Python 3.6+, PyTorch 1.0.0+ and TensorFlow 2.0.
+This repo is tested on Python 3.6+, PyTorch 1.0.0+ (PyTorch 1.3.1+ for examples) and TensorFlow 2.0.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
@@ -164,19 +165,35 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 17. **[ELECTRA](https://huggingface.co/transformers/model_doc/electra.html)** (from Google Research/Stanford University) released with the paper [ELECTRA: Pre-training text encoders as discriminators rather than generators](https://arxiv.org/abs/2003.10555) by Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning.
 18. **[DialoGPT](https://huggingface.co/transformers/model_doc/dialogpt.html)** (from Microsoft Research) released with the paper [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.org/abs/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
 19. **[Reformer](https://huggingface.co/transformers/model_doc/reformer.html)** (from Google Research) released with the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
-20. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
-21. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
+20. **[MarianMT](https://huggingface.co/transformers/model_doc/marian.html)** Machine translation models trained using [OPUS](http://opus.nlpl.eu/) data by Jörg Tiedemann. The [Marian Framework](https://marian-nmt.github.io/) is being developed by the Microsoft Translator Team.
+21. **[Longformer](https://huggingface.co/transformers/model_doc/longformer.html)** (from AllenAI) released with the paper [Longformer: The Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, Arman Cohan.
+22. **[DPR](https://github.com/facebookresearch/DPR)** (from Facebook) released with the paper [Dense Passage Retrieval
+for Open-Domain Question Answering](https://arxiv.org/abs/2004.04906) by Vladimir Karpukhin, Barlas Oğuz, Sewon
+Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
+23. **[Pegasus](https://github.com/google-research/pegasus)** (from Google) released with the paper [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://arxiv.org/abs/1912.08777)> by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
+24. **[MBart](https://github.com/pytorch/fairseq/tree/master/examples/mbart)** (from Facebook) released with the paper  [Multilingual Denoising Pre-training for Neural Machine Translation](https://arxiv.org/abs/2001.08210) by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov, Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.  
+25. **[LXMERT](https://github.com/airsplay/lxmert)** (from UNC Chapel Hill) released with the paper [LXMERT: Learning Cross-Modality Encoder Representations from Transformers for Open-Domain Question Answering](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal.
+26. **[Funnel Transformer](https://github.com/laiguokun/Funnel-Transformer)** (from CMU/Google Brain) released with the paper [Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing](https://arxiv.org/abs/2006.03236) by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+27. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
+28. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Pearson R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
 ## Online demo
 
+You can test our inference API on most model pages from the model hub: https://huggingface.co/models
+
+For example: 
+- [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
+- [NER with Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
+- [Text generation with GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
+- [NLI with RoBERTa](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
+- [Summarization with BART](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
+- [Question answering with DistilBERT](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
+- [Translation with T5](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
+
+
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team at transformer.huggingface.co, is the official demo of this repo’s text generation capabilities.
-You can use it to experiment with completions generated by `GPT2Model`, `TransfoXLModel`, and `XLNetModel`.
-
-> “🦄 Write with transformer is to writing what calculators are to calculus.”
-
-![write_with_transformer](https://transformer.huggingface.co/front/assets/thumbnail-large.png)
 
 ## Quick tour
 
@@ -285,8 +302,8 @@ pytorch_model = BertForSequenceClassification.from_pretrained('./save/', from_tf
 sentence_0 = "This research was consistent with his findings."
 sentence_1 = "His findings were compatible with this research."
 sentence_2 = "His findings were not compatible with this research."
-inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
-inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
+inputs_1 = tokenizer(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
+inputs_2 = tokenizer(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
 
 pred_1 = pytorch_model(inputs_1['input_ids'], token_type_ids=inputs_1['token_type_ids'])[0].argmax().item()
 pred_2 = pytorch_model(inputs_2['input_ids'], token_type_ids=inputs_2['token_type_ids'])[0].argmax().item()
@@ -338,8 +355,8 @@ python ./examples/text-classification/run_glue.py \
     --do_eval \
     --data_dir $GLUE_DIR/$TASK_NAME \
     --max_seq_length 128 \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/$TASK_NAME/
@@ -365,8 +382,8 @@ python ./examples/text-classification/run_glue.py \
     --data_dir=${GLUE_DIR}/STS-B  \
     --output_dir=./proc_data/sts-b-110   \
     --max_seq_length=128   \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --gradient_accumulation_steps=1 \
     --max_steps=1200  \
     --model_name=xlnet-large-cased   \
@@ -389,8 +406,8 @@ python -m torch.distributed.launch --nproc_per_node 8 ./examples/text-classifica
     --do_eval   \
     --data_dir $GLUE_DIR/MRPC/   \
     --max_seq_length 128   \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --learning_rate 2e-5   \
     --num_train_epochs 3.0  \
     --output_dir /tmp/mrpc_output/ \
@@ -426,8 +443,8 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --max_seq_length 384 \
     --doc_stride 128 \
     --output_dir ../models/wwm_uncased_finetuned_squad/ \
-    --per_gpu_eval_batch_size=3   \
-    --per_gpu_train_batch_size=3   \
+    --per_device_eval_batch_size=3   \
+    --per_device_train_batch_size=3   \
 ```
 
 Training with these hyper-parameters gave us the following results:
@@ -536,20 +553,21 @@ You can create `Pipeline` objects for the following down-stream tasks:
  - `translation_xx_to_yy`
 
 ```python
-from transformers import pipeline
+>>> from transformers import pipeline
 
 # Allocate a pipeline for sentiment-analysis
-nlp = pipeline('sentiment-analysis')
-nlp('We are very happy to include pipeline into the transformers repository.')
->>> {'label': 'POSITIVE', 'score': 0.99893874}
+>>> nlp = pipeline('sentiment-analysis')
+>>> nlp('We are very happy to include pipeline into the transformers repository.')
+[{'label': 'POSITIVE', 'score': 0.9978193640708923}]
 
 # Allocate a pipeline for question-answering
-nlp = pipeline('question-answering')
-nlp({
-    'question': 'What is the name of the repository ?',
-    'context': 'Pipeline have been included in the huggingface/transformers repository'
-})
->>> {'score': 0.28756016668193496, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+>>> nlp = pipeline('question-answering')
+>>> nlp({
+...     'question': 'What is the name of the repository ?',
+...     'context': 'Pipeline have been included in the huggingface/transformers repository'
+... })
+{'score': 0.5135612454720828, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+
 ```
 
 ## Migrating from pytorch-transformers to transformers
@@ -609,7 +627,7 @@ Breaking change in the `from_pretrained()` method:
 
 1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them, don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
 
-2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead, which can break derived model classes built based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/transformers/pull/866) by forwarding the the model's `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuration class attributes.
+2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead, which can break derived model classes built based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/transformers/pull/866) by forwarding the model's `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuration class attributes.
 
 Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other serialization method before.
 
@@ -682,11 +700,11 @@ for batch in train_data:
 
 ## Citation
 
-We now have a paper you can cite for the 🤗 Transformers library:
+We now have a [paper](https://arxiv.org/abs/1910.03771) you can cite for the 🤗 Transformers library:
 ```bibtex
 @article{Wolf2019HuggingFacesTS,
   title={HuggingFace's Transformers: State-of-the-art Natural Language Processing},
-  author={Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and R'emi Louf and Morgan Funtowicz and Jamie Brew},
+  author={Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Joe Davison and Sam Shleifer and Patrick von Platen and Clara Ma and Yacine Jernite and Julien Plu and Canwen Xu and Teven Le Scao and Sylvain Gugger and Mariama Drame and Quentin Lhoest and Alexander M. Rush},
   journal={ArXiv},
   year={2019},
   volume={abs/1910.03771}

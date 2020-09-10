@@ -50,6 +50,49 @@ XLNetTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+XLNet specific outputs
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_xlnet.XLNetModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetLMHeadModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForSequenceClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForMultipleChoiceOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForTokenClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
+    :members:
+
+
 XLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -71,17 +114,17 @@ XLNetForSequenceClassification
     :members:
 
 
-XLNetForTokenClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.XLNetForTokenClassification
-    :members:
-
-
 XLNetForMultipleChoice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForMultipleChoice
+    :members:
+
+
+XLNetForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLNetForTokenClassification
     :members:
 
 
@@ -117,6 +160,20 @@ TFXLNetForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForSequenceClassification
+    :members:
+
+
+TFLNetForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLNetForMultipleChoice
+    :members:
+
+
+TFXLNetForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLNetForTokenClassification
     :members:
 
 

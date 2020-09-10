@@ -6,7 +6,7 @@ Overview
 
 The ALBERT model was proposed in `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations <https://arxiv.org/abs/1909.11942>`_
 by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut. It presents
-two parameter-reduction techniques to lower memory consumption and increase the trainig speed of BERT:
+two parameter-reduction techniques to lower memory consumption and increase the training speed of BERT:
 
 - Splitting the embedding matrix into two smaller matrices
 - Using repeating layers split among groups
@@ -47,10 +47,27 @@ AlbertTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+Albert specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_albert.AlbertForPreTrainingOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_albert.TFAlbertForPreTrainingOutput
+    :members:
+
+
 AlbertModel
 ~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AlbertModel
+    :members:
+
+
+AlbertForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForPreTraining
     :members:
 
 
@@ -68,6 +85,20 @@ AlbertForSequenceClassification
     :members:
 
 
+AlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForMultipleChoice
+    :members:
+
+
+AlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForTokenClassification
+    :members:
+
+
 AlbertForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -82,6 +113,13 @@ TFAlbertModel
     :members:
 
 
+TFAlbertForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForPreTraining
+    :members:
+
+
 TFAlbertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -93,4 +131,25 @@ TFAlbertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFAlbertForSequenceClassification
+    :members:
+
+
+TFAlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForMultipleChoice
+    :members:
+
+
+TFAlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForTokenClassification
+    :members:
+
+
+TFAlbertForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForQuestionAnswering
     :members:

@@ -1,0 +1,10 @@
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch: off
+comment:
+  require_changes: true    # only comment if there was change in coverage
+  require_head: yes        # don't report if there is no head coverage report
+  require_base: yes        # don't report if there is no base coverage report

@@ -1,9 +1,81 @@
 /* Our DOM objects */
 
+/* Colab dropdown */
+
+.colab-dropdown {
+    position: relative;
+    display: inline-block;
+}
+  
+.colab-dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 117px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+  
+.colab-dropdown-content button {
+    color: #6670FF;
+    background-color: #f9f9f9;
+    font-size: 12px;
+    border: none;
+    min-width: 117px;
+    padding: 5px 5px;
+    text-decoration: none;
+    display: block;
+}
+  
+.colab-dropdown-content button:hover {background-color: #eee;}
+  
+.colab-dropdown:hover .colab-dropdown-content {display: block;}
+
+/* Version control */
+
+.version-button {
+    background-color: #6670FF;
+    color: white;
+    border: none;
+    padding: 5px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.version-button:hover, .version-button:focus {
+    background-color: #A6B0FF;
+}
+ 
+.version-dropdown {
+    display: none;
+    background-color: #6670FF;
+    min-width: 160px;
+    overflow: auto;
+    font-size: 15px;
+}
+  
+.version-dropdown a {
+    color: white;
+    padding: 3px 4px;
+    text-decoration: none;
+    display: block;
+}
+  
+.version-dropdown a:hover {
+    background-color: #A6B0FF;
+}
+  
+.version-show {
+    display: block;
+}
+
+/* Framework selector */
+
 .framework-selector {
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
+    margin-right: 30px;
 }
 
 .framework-selector > button {
@@ -18,6 +90,12 @@
     color: white;
     border: 1px solid #6670FF;
     padding: 5px;
+}
+
+/* Copy button */
+
+a.copybtn {
+    margin: 3px;
 }
 
 /* The literal code blocks */
@@ -38,6 +116,7 @@
 
 /* The research field on top of the toc tree */
 .wy-side-nav-search{
+    padding-top: 0;
     background-color: #6670FF;
 }
 

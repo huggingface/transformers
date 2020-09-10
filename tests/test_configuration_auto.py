@@ -19,8 +19,7 @@ import unittest
 from transformers.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.configuration_bert import BertConfig
 from transformers.configuration_roberta import RobertaConfig
-
-from .utils import DUMMY_UNKWOWN_IDENTIFIER
+from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER
 
 
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")

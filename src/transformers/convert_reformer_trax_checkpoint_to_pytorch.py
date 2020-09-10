@@ -16,16 +16,16 @@
 
 
 import argparse
-import logging
 import pickle
 
 import numpy as np
 import torch
 
 from transformers import ReformerConfig, ReformerModelWithLMHead
+from transformers.utils import logging
 
 
-logging.basicConfig(level=logging.INFO)
+logging.set_verbosity_info()
 
 
 def set_param(torch_layer, weight, bias=None):
@@ -48,10 +48,12 @@ def set_layer_weights_in_torch_lsh(weights, torch_layer, hidden_size):
         torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.value,
+        torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
+        torch_layer.output.dense,
+        torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
     )
 
 
@@ -63,16 +65,20 @@ def set_layer_weights_in_torch_local(weights, torch_layer, hidden_size):
     np_dense = np.asarray(weights[3])
 
     set_param(
-        torch_layer.self_attention.query, torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.query,
+        torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.self_attention.key, torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.key,
+        torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.value,
+        torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
+        torch_layer.output.dense,
+        torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
     )
 
 
@@ -82,7 +88,9 @@ def set_block_weights_in_torch(weights, torch_block, hidden_size):
     layer_norm_1_weight = np.asarray(layer_norm_1[0])
     layer_norm_1_bias = np.asarray(layer_norm_1[1])
     set_param(
-        torch_block.attention.layer_norm, torch.tensor(layer_norm_1_weight), torch.tensor(layer_norm_1_bias),
+        torch_block.attention.layer_norm,
+        torch.tensor(layer_norm_1_weight),
+        torch.tensor(layer_norm_1_bias),
     )
 
     # lsh weights + output
@@ -93,7 +101,7 @@ def set_block_weights_in_torch(weights, torch_block, hidden_size):
         set_layer_weights_in_torch_local(attn_weights, torch_block.attention, hidden_size)
 
     # intermediate weighs
-    intermediate_weights = weights[2][0][2][2]
+    intermediate_weights = weights[2][0][1][2]
 
     # Chunked Feed Forward
     if len(intermediate_weights) == 4:
@@ -103,7 +111,9 @@ def set_block_weights_in_torch(weights, torch_block, hidden_size):
     layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
     layer_norm_2_bias = np.asarray(intermediate_weights[0][1])
     set_param(
-        torch_block.feed_forward.layer_norm, torch.tensor(layer_norm_2_weight), torch.tensor(layer_norm_2_bias),
+        torch_block.feed_forward.layer_norm,
+        torch.tensor(layer_norm_2_weight),
+        torch.tensor(layer_norm_2_bias),
     )
 
     # intermediate dense
@@ -132,7 +142,8 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
     # word embeds
     word_embeddings = np.asarray(weights[1])
     set_param(
-        torch_model_reformer.embeddings.word_embeddings, torch.tensor(word_embeddings),
+        torch_model_reformer.embeddings.word_embeddings,
+        torch.tensor(word_embeddings),
     )
 
     if isinstance(weights[3], tuple):
@@ -145,19 +156,16 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
             position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
 
     trax_layer_weights = weights[5]
-    assert len(torch_model_reformer.encoder.layers) * 4 + 1 == len(
+    assert len(torch_model_reformer.encoder.layers) * 4 == len(
         trax_layer_weights
     ), "HF and trax model do not have the same number of layers"
     for layer_idx, layer in enumerate(torch_model_reformer.encoder.layers):
         block_weights = trax_layer_weights[4 * layer_idx : 4 * (layer_idx + 1)]
         set_block_weights_in_torch(block_weights, layer, hidden_size)
 
-    # output weights
-    out_weights = weights[6]
-
     # output layer norm
-    layer_norm_out_weight = np.asarray(out_weights[0][0])
-    layer_norm_out_bias = np.asarray(out_weights[0][1])
+    layer_norm_out_weight = np.asarray(weights[7][0])
+    layer_norm_out_bias = np.asarray(weights[7][1])
     set_param(
         torch_model_reformer.encoder.layer_norm,
         torch.tensor(layer_norm_out_weight),
@@ -165,8 +173,8 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
     )
 
     # output embeddings
-    output_embed_weights = np.asarray(out_weights[2][0])
-    output_embed_bias = np.asarray(out_weights[2][1])
+    output_embed_weights = np.asarray(weights[9][0])
+    output_embed_bias = np.asarray(weights[9][1])
     set_param(
         torch_model.lm_head.decoder,
         torch.tensor(output_embed_weights).transpose(0, 1).contiguous(),

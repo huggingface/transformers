@@ -15,11 +15,10 @@
 # limitations under the License.
 """PyTorch CamemBERT model. """
 
-import logging
-
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -27,15 +26,19 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
-CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "camembert-base": "https://cdn.huggingface.co/camembert-base-pytorch_model.bin",
-    "umberto-commoncrawl-cased-v1": "https://cdn.huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/pytorch_model.bin",
-    "umberto-wikipedia-uncased-v1": "https://cdn.huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/pytorch_model.bin",
-}
+_TOKENIZER_FOR_DOC = "CamembertTokenizer"
+
+CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "camembert-base",
+    "Musixmatch/umberto-commoncrawl-cased-v1",
+    "Musixmatch/umberto-wikipedia-uncased-v1",
+    # See all CamemBERT models at https://huggingface.co/models?filter=camembert
+]
 
 CAMEMBERT_START_DOCSTRING = r"""
 
@@ -62,11 +65,11 @@ class CamembertModel(RobertaModel):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top. """, CAMEMBERT_START_DOCSTRING,
+    """CamemBERT Model with a `language modeling` head on top. """,
+    CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForMaskedLM(RobertaForMaskedLM):
     """
@@ -75,7 +78,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -90,7 +92,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -105,7 +106,6 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -120,7 +120,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -135,4 +134,15 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
+
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning. """, CAMEMBERT_START_DOCSTRING
+)
+class CamembertForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = CamembertConfig

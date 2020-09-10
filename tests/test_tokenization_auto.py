@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import logging
 import unittest
 
 from transformers import (
@@ -28,15 +27,19 @@ from transformers import (
     RobertaTokenizer,
     RobertaTokenizerFast,
 )
+from transformers.configuration_auto import AutoConfig
+from transformers.configuration_roberta import RobertaConfig
+from transformers.testing_utils import (
+    DUMMY_DIFF_TOKENIZER_IDENTIFIER,
+    DUMMY_UNKWOWN_IDENTIFIER,
+    SMALL_MODEL_IDENTIFIER,
+)
 from transformers.tokenization_auto import TOKENIZER_MAPPING
-
-from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
 
 
 class AutoTokenizerTest(unittest.TestCase):
     # @slow
     def test_tokenizer_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in (x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
@@ -50,19 +53,24 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertGreater(len(tokenizer), 0)
 
     def test_tokenizer_from_pretrained_identifier(self):
-        logging.basicConfig(level=logging.INFO)
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
         self.assertEqual(tokenizer.vocab_size, 12)
 
     def test_tokenizer_from_model_type(self):
-        logging.basicConfig(level=logging.INFO)
         tokenizer = AutoTokenizer.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(tokenizer, (RobertaTokenizer, RobertaTokenizerFast))
         self.assertEqual(tokenizer.vocab_size, 20)
 
+    def test_tokenizer_from_tokenizer_class(self):
+        config = AutoConfig.from_pretrained(DUMMY_DIFF_TOKENIZER_IDENTIFIER)
+        self.assertIsInstance(config, RobertaConfig)
+        # Check that tokenizer_type ≠ model_type
+        tokenizer = AutoTokenizer.from_pretrained(DUMMY_DIFF_TOKENIZER_IDENTIFIER, config=config)
+        self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
+        self.assertEqual(tokenizer.vocab_size, 12)
+
     def test_tokenizer_identifier_with_correct_config(self):
-        logging.basicConfig(level=logging.INFO)
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:
             tokenizer = tokenizer_class.from_pretrained("wietsedv/bert-base-dutch-cased")
             self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
@@ -75,7 +83,6 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.max_len, 512)
 
     def test_tokenizer_identifier_non_existent(self):
-        logging.basicConfig(level=logging.INFO)
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:
             with self.assertRaises(EnvironmentError):
                 _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")

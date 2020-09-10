@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa, Albert, XLM-RoBERTa)."""
+""" Finetuning the library models for sequence classification on GLUE."""
 
 
 import dataclasses
@@ -21,7 +21,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import numpy as np
 
@@ -135,22 +135,28 @@ def main():
 
     # Get datasets
     train_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
-        if training_args.do_train
-        else None
+        GlueDataset(data_args, tokenizer=tokenizer, cache_dir=model_args.cache_dir) if training_args.do_train else None
     )
     eval_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank, evaluate=True)
+        GlueDataset(data_args, tokenizer=tokenizer, mode="dev", cache_dir=model_args.cache_dir)
         if training_args.do_eval
         else None
     )
+    test_dataset = (
+        GlueDataset(data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
+        if training_args.do_predict
+        else None
+    )
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
-        if output_mode == "classification":
-            preds = np.argmax(p.predictions, axis=1)
-        elif output_mode == "regression":
-            preds = np.squeeze(p.predictions)
-        return glue_compute_metrics(data_args.task_name, preds, p.label_ids)
+    def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
+        def compute_metrics_fn(p: EvalPrediction):
+            if output_mode == "classification":
+                preds = np.argmax(p.predictions, axis=1)
+            elif output_mode == "regression":
+                preds = np.squeeze(p.predictions)
+            return glue_compute_metrics(task_name, preds, p.label_ids)
+
+        return compute_metrics_fn
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -158,7 +164,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
+        compute_metrics=build_compute_metrics_fn(data_args.task_name),
     )
 
     # Training
@@ -173,8 +179,8 @@ def main():
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
-    results = {}
-    if training_args.do_eval and training_args.local_rank in [-1, 0]:
+    eval_results = {}
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
         # Loop to handle MNLI double evaluation (matched, mis-matched)
@@ -182,24 +188,53 @@ def main():
         if data_args.task_name == "mnli":
             mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
             eval_datasets.append(
-                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, local_rank=training_args.local_rank, evaluate=True)
+                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="dev", cache_dir=model_args.cache_dir)
             )
 
         for eval_dataset in eval_datasets:
-            result = trainer.evaluate(eval_dataset=eval_dataset)
+            trainer.compute_metrics = build_compute_metrics_fn(eval_dataset.args.task_name)
+            eval_result = trainer.evaluate(eval_dataset=eval_dataset)
 
             output_eval_file = os.path.join(
                 training_args.output_dir, f"eval_results_{eval_dataset.args.task_name}.txt"
             )
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results {} *****".format(eval_dataset.args.task_name))
-                for key, value in result.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+            if trainer.is_world_master():
+                with open(output_eval_file, "w") as writer:
+                    logger.info("***** Eval results {} *****".format(eval_dataset.args.task_name))
+                    for key, value in eval_result.items():
+                        logger.info("  %s = %s", key, value)
+                        writer.write("%s = %s\n" % (key, value))
 
-            results.update(result)
+            eval_results.update(eval_result)
 
-    return results
+    if training_args.do_predict:
+        logging.info("*** Test ***")
+        test_datasets = [test_dataset]
+        if data_args.task_name == "mnli":
+            mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
+            test_datasets.append(
+                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
+            )
+
+        for test_dataset in test_datasets:
+            predictions = trainer.predict(test_dataset=test_dataset).predictions
+            if output_mode == "classification":
+                predictions = np.argmax(predictions, axis=1)
+
+            output_test_file = os.path.join(
+                training_args.output_dir, f"test_results_{test_dataset.args.task_name}.txt"
+            )
+            if trainer.is_world_master():
+                with open(output_test_file, "w") as writer:
+                    logger.info("***** Test results {} *****".format(test_dataset.args.task_name))
+                    writer.write("index\tprediction\n")
+                    for index, item in enumerate(predictions):
+                        if output_mode == "regression":
+                            writer.write("%d\t%3.3f\n" % (index, item))
+                        else:
+                            item = test_dataset.get_labels()[item]
+                            writer.write("%d\t%s\n" % (index, item))
+    return eval_results
 
 
 def _mp_fn(index):

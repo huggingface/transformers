@@ -36,7 +36,7 @@ To create the package for pypi.
 
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-8. Update the documentation commit in .circleci/deploy.sh for the accurate documentation to be displayed
+8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
 
 9. Update README.md to redirect to correct documentation.
 """
@@ -65,28 +65,40 @@ if stale_egg_info.exists():
 
 extras = {}
 
-extras["mecab"] = ["mecab-python3"]
+extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0.0,<2.0", "unidic_lite>=1.0.7", "unidic>=1.0.2"]
 extras["sklearn"] = ["scikit-learn"]
-extras["tf"] = ["tensorflow<=2.1.0"]
-extras["tf-cpu"] = ["tensorflow-cpu<=2.1.0"]
+
+# keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
+extras["tf"] = [
+    "tensorflow",
+    "onnxconverter-common",
+    "keras2onnx"
+    # "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
+    # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
+]
+extras["tf-cpu"] = [
+    "tensorflow-cpu",
+    "onnxconverter-common",
+    "keras2onnx"
+    # "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
+    # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
+]
 extras["torch"] = ["torch"]
+extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator"]
-extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
-extras["quality"] = [
-    "black",
-    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
-    "flake8",
-]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow<=2.1.0", "torch"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil", "parameterized"]
+# sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
+extras["quality"] = ["black >= 20.8b1", "isort >= 5", "flake8 >= 3.8.3"]
+extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
-    version="2.9.0",
-    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
+    version="3.1.0",
+    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
     long_description=open("README.md", "r", encoding="utf-8").read(),
@@ -98,9 +110,11 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.7.0",
+        "tokenizers == 0.8.1.rc2",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
+        # utilities from PyPA to e.g. compare versions
+        "packaging",
         # filesystem locks e.g. to prevent parallel downloads
         "filelock",
         # for downloading models over HTTPS
@@ -110,12 +124,14 @@ setup(
         # for OpenAI GPT
         "regex != 2019.12.17",
         # for XLNet
-        "sentencepiece",
+        "sentencepiece != 0.1.92",
         # for XLM
         "sacremoses",
     ],
     extras_require=extras,
-    scripts=["transformers-cli"],
+    entry_points={
+        "console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]
+    },
     python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
