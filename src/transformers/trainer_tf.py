@@ -442,14 +442,13 @@ class TFTrainer:
 
         return output.metrics
 
-    def prediction_step(self, features: tf.Tensor, labels: tf.Tensor) -> tf.Tensor:
+    def prediction_step(self, features: tf.Tensor, labels: tf.Tensor, nb_instances_in_global_batch: tf.Tensor) -> tf.Tensor:
         """
         Compute the prediction on features and update the loss with labels.
 
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, logits = self.run_model(features, labels, False)
-        nb_instances_in_global_batch = tf.cast(features["nb_instances_in_batch"][0], dtype=per_example_loss.dtype)
         scaled_loss = per_example_loss / nb_instances_in_global_batch
 
         self.eval_loss.update_state(scaled_loss)
@@ -458,6 +457,10 @@ class TFTrainer:
 
     @tf.function
     def distributed_prediction_steps(self, batch):
+
+        nb_instances_in_batch = self._compute_nb_instances(batch)
+        inputs = self._get_step_inputs(batch, nb_instances_in_batch)   
+
         logits = self.args.strategy.run(self.prediction_step, batch)
 
         return logits
@@ -654,12 +657,12 @@ class TFTrainer:
     def distributed_training_steps(self, batch):
         with self.args.strategy.scope():
 
-            nb_instances_in_batch = self.compute_nb_instances(batch)
-            inputs = self.get_step_inputs(batch, nb_instances_in_batch)
+            nb_instances_in_batch = self._compute_nb_instances(batch)
+            inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
             self.args.strategy.run(self.apply_gradients, inputs)
 
-    def compute_nb_instance(self, batch):
+    def _compute_nb_instance(self, batch):
 
         labels = batch[-1]
         if isinstance(labels, PerReplica):
@@ -669,7 +672,7 @@ class TFTrainer:
 
         return nb_instances
 
-    def get_step_inputs(self, batch, nb_instances):
+    def _get_step_inputs(self, batch, nb_instances):
 
         features, labels = batch
 
