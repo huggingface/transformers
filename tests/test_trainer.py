@@ -242,8 +242,6 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
         trainer.train()
 
-        print("a", trainer.model.a)
-        print("b", trainer.model.b)
         self.assertTrue(torch.abs(trainer.model.a - 1.8950) < 1e-4)
         self.assertTrue(torch.abs(trainer.model.b - 2.5656) < 1e-4)
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
