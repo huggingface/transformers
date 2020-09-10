@@ -592,6 +592,17 @@ if is_tf_available():
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
     )
+    from .modeling_tf_funnel import (
+        TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFFunnelBaseModel,
+        TFFunnelForMaskedLM,
+        TFFunnelForMultipleChoice,
+        TFFunnelForPreTraining,
+        TFFunnelForQuestionAnswering,
+        TFFunnelForSequenceClassification,
+        TFFunnelForTokenClassification,
+        TFFunnelModel,
+    )
     from .modeling_tf_gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
