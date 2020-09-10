@@ -151,15 +151,14 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
-class TFFunnelAttentionStructure(tf.keras.layers.Layer):
+class TFFunnelAttentionStructure:
     """
     Contains helpers for `TFFunnelRelMultiheadAttention `.
     """
 
     cls_token_type_id: int = 2
 
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config):
         self.d_model = config.d_model
         self.attention_type = config.attention_type
         self.num_blocks = config.num_blocks
@@ -614,7 +613,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         self.separate_cls = config.separate_cls
         self.pool_q_only = config.pool_q_only
         self.block_repeats = config.block_repeats
-        self.attention_structure = TFFunnelAttentionStructure(config, name="attention_structure")
+        self.attention_structure = TFFunnelAttentionStructure(config)
         self.blocks = [
             [TFFunnelLayer(config, block_index, name=f"blocks_._{block_index}_._{i}") for i in range(block_size)]
             for block_index, block_size in enumerate(config.block_sizes)
@@ -700,7 +699,7 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
         self.separate_cls = config.separate_cls
         self.truncate_seq = config.truncate_seq
         self.stride = 2 ** (len(config.block_sizes) - 1)
-        self.attention_structure = TFFunnelAttentionStructure(config, name="attention_structure")
+        self.attention_structure = TFFunnelAttentionStructure(config)
         self.layers = [TFFunnelLayer(config, 0, name=f"layers_._{i}") for i in range(config.num_decoder_layers)]
 
     def call(
@@ -770,9 +769,6 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -866,9 +862,6 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -1009,10 +1002,10 @@ class TFFunnelClassificationHead(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         self.linear_out = tf.keras.layers.Dense(n_labels, kernel_initializer=initializer, name="linear_out")
 
-    def call(self, hidden):
+    def call(self, hidden, training=False):
         hidden = self.linear_hidden(hidden)
         hidden = tf.keras.activations.tanh(hidden)
-        hidden = self.dropout(hidden)
+        hidden = self.dropout(hidden, training=training)
         return self.linear_out(hidden)
 
 
@@ -1368,7 +1361,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
 
         last_hidden_state = outputs[0]
         pooled_output = last_hidden_state[:, 0]
-        logits = self.classifier(pooled_output)
+        logits = self.classifier(pooled_output, training=training)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
 
@@ -1484,7 +1477,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
         last_hidden_state = outputs[0]
         pooled_output = last_hidden_state[:, 0]
-        logits = self.classifier(pooled_output)
+        logits = self.classifier(pooled_output, training=training)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
