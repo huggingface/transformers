@@ -135,7 +135,6 @@ class DataCollatorForLanguageModeling:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
-        batch = batch.type(torch.LongTensor)
         if self.mlm:
             inputs, labels = self.mask_tokens(batch)
             return {"input_ids": inputs, "labels": labels}
@@ -150,7 +149,7 @@ class DataCollatorForLanguageModeling:
     ) -> torch.Tensor:
         # In order to accept both lists of lists and lists of Tensors
         if isinstance(examples[0], (list, tuple)):
-            examples = [torch.Tensor(e) for e in examples]
+            examples = [torch.tensor(e, dtype=torch.long) for e in examples]
         length_of_first = examples[0].size(0)
         are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
         if are_tensors_same_length:
