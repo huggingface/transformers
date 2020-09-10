@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 import time
+import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -92,6 +93,9 @@ class SummarizationModule(BaseTransformer):
             "val": self.hparams.val_max_target_length,
             "test": self.hparams.test_max_target_length,
         }
+        if self.hparams.sortish_sampler and self.hparams.gpus > 1:
+            self.hparams.sortish_sampler = False
+            warnings.warn("ignoring sortish_sampler as it is unsupported on multiple GPUs")
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
 
@@ -253,7 +257,7 @@ class SummarizationModule(BaseTransformer):
         dataset = self.get_dataset(type_path)
         sampler = None
         if self.hparams.sortish_sampler and type_path == "train":
-            assert self.hparams.gpus <= 1  # TODO: assert earlier
+            assert self.hparams.gpus <= 1  # this should never break because of the assertion in __init__
             sampler = dataset.make_sortish_sampler(batch_size)
             shuffle = False
 
