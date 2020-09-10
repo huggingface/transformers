@@ -317,8 +317,6 @@ class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
         self.required_bs_mult = required_bs_mult
 
     def __iter__(self):
-        from fairseq.data.data_utils import batch_by_size
-
         sorted_available_indices: List[int] = list(self.ss)
 
         def num_tokens_in_example(i):
