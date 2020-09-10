@@ -15,7 +15,6 @@
 """ Auto Tokenizer class. """
 
 
-import warnings
 from collections import OrderedDict
 
 from .configuration_auto import (
@@ -241,7 +240,7 @@ class AutoTokenizer:
         # if model is an encoder decoder, the encoder tokenizer class is used by default
         if isinstance(config, EncoderDecoderConfig):
             if type(config.decoder) is not type(config.encoder):  # noqa: E721
-                warnings.warn(
+                logger.warn(
                     f"The encoder model config class: {config.encoder.__class__} is different from the decoder model config class: {config.decoder.__class}. It is not recommended to use the `AutoTokenizer.from_pretrained(..)` method in this case. Please use the encoder and decoder specific tokenizer classes."
                 )
             config = config.encoder
