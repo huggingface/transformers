@@ -20,7 +20,7 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import is_nlp_available, is_torch_tpu_available
+from .file_utils import is_datasets_available, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
     is_comet_available,
@@ -65,8 +65,8 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
-if is_nlp_available():
-    import nlp
+if is_datasets_available():
+    import datasets
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -179,10 +179,10 @@ class Trainer:
             :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
             provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+            The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-             The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+             The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
@@ -280,10 +280,10 @@ class Trainer:
                 FutureWarning,
             )
 
-        if is_nlp_available():
-            if isinstance(train_dataset, nlp.Dataset):
+        if is_datasets_available():
+            if isinstance(train_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.train_dataset, description="training")
-            if isinstance(eval_dataset, nlp.Dataset):
+            if isinstance(eval_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
         self.global_step = None
@@ -294,7 +294,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
 
-    def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
             return
         # Inspect model forward signature to keep only the arguments it accepts.
@@ -364,12 +364,12 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`, columns not
+                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
                 accepted by the ``model.forward()`` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif eval_dataset is not None and is_nlp_available() and isinstance(eval_dataset, nlp.Dataset):
+        elif eval_dataset is not None and is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
@@ -393,10 +393,10 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                The test dataset to use. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed.
         """
-        if is_nlp_available() and isinstance(test_dataset, nlp.Dataset):
+        if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             self._remove_unused_columns(test_dataset, description="test")
         test_sampler = self._get_eval_sampler(test_dataset)
 
@@ -1200,7 +1200,7 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`,
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
                 columns not accepted by the ``model.forward()`` method are automatically removed.
 
         Returns:
@@ -1227,7 +1227,7 @@ class Trainer:
 
         Args:
             test_dataset (:obj:`Dataset`):
-                Dataset to run the predictions on. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed.
 
         Returns:
