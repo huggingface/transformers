@@ -207,6 +207,7 @@ if is_torch_available():
         DataCollatorForLanguageModeling,
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorForSOP,
         DataCollatorWithPadding,
         default_data_collator,
     )
@@ -214,6 +215,7 @@ if is_torch_available():
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
+        LineByLineWithSOPTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
         TextDataset,
