@@ -449,7 +449,7 @@ class TFTrainer:
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, logits = self.run_model(features, labels, False)
-        scaled_loss = per_example_loss / nb_instances_in_global_batch
+        scaled_loss = per_example_loss / tf.cast(nb_instances_in_global_batch, dtype=per_example_loss.dtype)
 
         self.eval_loss.update_state(scaled_loss)
 
@@ -461,7 +461,7 @@ class TFTrainer:
         nb_instances_in_batch = self._compute_nb_instances(batch)
         inputs = self._get_step_inputs(batch, nb_instances_in_batch)   
 
-        logits = self.args.strategy.run(self.prediction_step, batch)
+        logits = self.args.strategy.run(self.prediction_step, inputs)
 
         return logits
 
@@ -605,7 +605,7 @@ class TFTrainer:
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, _ = self.run_model(features, labels, True)
-        scaled_loss = per_example_loss / nb_instances_in_global_batch
+        scaled_loss = per_example_loss / tf.cast(nb_instances_in_global_batch, dtype=per_example_loss.dtype)
         gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
         gradients = [
             g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
@@ -662,13 +662,13 @@ class TFTrainer:
 
             self.args.strategy.run(self.apply_gradients, inputs)
 
-    def _compute_nb_instance(self, batch):
+    def _compute_nb_instances(self, batch):
 
         labels = batch[-1]
         if isinstance(labels, PerReplica):
             labels = tf.concat(labels.values, axis=0)
 
-        nb_instances = tf.cast(labels != -100, dtype=tf.int32)
+        nb_instances = tf.reduce_sum(tf.cast(labels != -100, dtype=tf.int32))
 
         return nb_instances
 
