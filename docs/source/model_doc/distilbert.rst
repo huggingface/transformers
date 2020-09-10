@@ -1,6 +1,9 @@
 DistilBERT
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The DistilBERT model was proposed in the blog post
 `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`__,
 and the paper `DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`__.
@@ -72,6 +75,20 @@ DistilBertForSequenceClassification
     :members:
 
 
+DistilBertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DistilBertForMultipleChoice
+    :members:
+
+
+DistilBertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DistilBertForTokenClassification
+    :members:
+
+
 DistilBertForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -96,6 +113,22 @@ TFDistilBertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFDistilBertForSequenceClassification
+    :members:
+
+
+
+TFDistilBertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDistilBertForMultipleChoice
+    :members:
+
+
+
+TFDistilBertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDistilBertForTokenClassification
     :members:
 
 

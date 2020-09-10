@@ -15,30 +15,31 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model. """
 
-
-import logging
-
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
+    RobertaForQuestionAnswering,
     RobertaForSequenceClassification,
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
-XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlm-roberta-base": "https://cdn.huggingface.co/xlm-roberta-base-pytorch_model.bin",
-    "xlm-roberta-large": "https://cdn.huggingface.co/xlm-roberta-large-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll02-dutch": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll02-dutch-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll02-spanish": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll02-spanish-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll03-english": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll03-english-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll03-german": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll03-german-pytorch_model.bin",
-}
+XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlm-roberta-base",
+    "xlm-roberta-large",
+    "xlm-roberta-large-finetuned-conll02-dutch",
+    "xlm-roberta-large-finetuned-conll02-spanish",
+    "xlm-roberta-large-finetuned-conll03-english",
+    "xlm-roberta-large-finetuned-conll03-german",
+    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
+]
 
 
 XLM_ROBERTA_START_DOCSTRING = r"""
@@ -65,11 +66,24 @@ class XLMRobertaModel(RobertaModel):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """, XLM_ROBERTA_START_DOCSTRING,
+    "XLM-RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.",
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    XLM_ROBERTA_START_DOCSTRING,
 )
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
@@ -78,7 +92,6 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -93,7 +106,6 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -108,7 +120,6 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -123,4 +134,17 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+
+
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
+    """
+    This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig

@@ -15,13 +15,11 @@
 # limitations under the License.
 """ BERT model configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",
@@ -39,75 +37,73 @@ BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bert-base-cased-finetuned-mrpc": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-config.json",
     "bert-base-german-dbmdz-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-config.json",
     "bert-base-german-dbmdz-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-config.json",
-    "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/config.json",
-    "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/config.json",
-    "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/config.json",
-    "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/config.json",
-    "bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/config.json",
-    "bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/config.json",
-    "bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/config.json",
+    "cl-tohoku/bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/config.json",
+    "cl-tohoku/bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/config.json",
+    "cl-tohoku/bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/config.json",
+    "cl-tohoku/bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/config.json",
+    "TurkuNLP/bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/config.json",
+    "TurkuNLP/bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/config.json",
+    "wietsedv/bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/config.json",
+    # See all BERT models at https://huggingface.co/models?filter=bert
 }
 
 
 class BertConfig(PretrainedConfig):
     r"""
-        This is the configuration class to store the configuration of a :class:`~transformers.BertModel`.
-        It is used to instantiate an BERT model according to the specified arguments, defining the model
-        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BertModel`.
+    It is used to instantiate an BERT model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+    the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
 
-        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-        for more information.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
 
-        Args:
-            vocab_size (:obj:`int`, optional, defaults to 30522):
-                Vocabulary size of the BERT model. Defines the different tokens that
-                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
-            hidden_size (:obj:`int`, optional, defaults to 768):
-                Dimensionality of the encoder layers and the pooler layer.
-            num_hidden_layers (:obj:`int`, optional, defaults to 12):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (:obj:`int`, optional, defaults to 12):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            intermediate_size (:obj:`int`, optional, defaults to 3072):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
-                The non-linear activation function (function or string) in the encoder and pooler.
-                If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-            hidden_dropout_prob (:obj:`float`, optional, defaults to 0.1):
-                The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
-                The dropout ratio for the attention probabilities.
-            max_position_embeddings (:obj:`int`, optional, defaults to 512):
-                The maximum sequence length that this model might ever be used with.
-                Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-            type_vocab_size (:obj:`int`, optional, defaults to 2):
-                The vocabulary size of the `token_type_ids` passed into :class:`~transformers.BertModel`.
-            initializer_range (:obj:`float`, optional, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
-                The epsilon used by the layer normalization layers.
+    Args:
+        vocab_size (:obj:`int`, optional, defaults to 30522):
+            Vocabulary size of the BERT model. Defines the different tokens that
+            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
+        hidden_size (:obj:`int`, optional, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (:obj:`int`, optional, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (:obj:`int`, optional, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (:obj:`int`, optional, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
+            The non-linear activation function (function or string) in the encoder and pooler.
+            If string, "gelu", "relu", "swish" and "gelu_new" are supported.
+        hidden_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        max_position_embeddings (:obj:`int`, optional, defaults to 512):
+            The maximum sequence length that this model might ever be used with.
+            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+        type_vocab_size (:obj:`int`, optional, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed into :class:`~transformers.BertModel`.
+        initializer_range (:obj:`float`, optional, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        gradient_checkpointing (:obj:`bool`, optional, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
-        Example::
+    Example::
 
-            from transformers import BertModel, BertConfig
+        >>> from transformers import BertModel, BertConfig
 
-            # Initializing a BERT bert-base-uncased style configuration
-            configuration = BertConfig()
+        >>> # Initializing a BERT bert-base-uncased style configuration
+        >>> configuration = BertConfig()
 
-            # Initializing a model from the bert-base-uncased style configuration
-            model = BertModel(configuration)
+        >>> # Initializing a model from the bert-base-uncased style configuration
+        >>> model = BertModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
     """
-    pretrained_config_archive_map = BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "bert"
 
     def __init__(
@@ -125,6 +121,7 @@ class BertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -141,3 +138,4 @@ class BertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.gradient_checkpointing = gradient_checkpointing

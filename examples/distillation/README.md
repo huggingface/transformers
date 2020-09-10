@@ -55,7 +55,7 @@ Here are the results on the *test* sets for 6 of the languages available in XNLI
 
 ## Setup
 
-This part of the library has only be tested with Python3.6+. There are few specific dependencies to install before launching a distillation, you can install them with the command `pip install -r requirements.txt`. 
+This part of the library has only be tested with Python3.6+. There are few specific dependencies to install before launching a distillation, you can install them with the command `pip install -r requirements.txt`.
 
 **Important note:** The training scripts have been updated to support PyTorch v1.2.0 (there are breakings changes compared to v1.1.0).
 
@@ -161,7 +161,7 @@ python -m torch.distributed.launch \
     --master_port $MASTER_PORT \
     train.py \
         --force \
-        --n_gpu $WORLD_SIZE \
+        --gpus $WORLD_SIZE \
         --student_type distilbert \
         --student_config training_configs/distilbert-base-uncased.json \
         --teacher_type bert \

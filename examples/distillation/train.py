@@ -210,7 +210,7 @@ def main():
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-    parser.add_argument("--n_gpu", type=int, default=1, help="Number of GPUs in the node.")
+    parser.add_argument("--gpus", type=int, default=1, help="Number of GPUs in the node.")
     parser.add_argument("--local_rank", type=int, default=-1, help="Distributed training - Local rank")
     parser.add_argument("--seed", type=int, default=56, help="Random seed")
 
@@ -273,7 +273,7 @@ def main():
         token_probs = None
 
     train_lm_seq_dataset = LmSeqsDataset(params=args, data=data)
-    logger.info(f"Data loader created.")
+    logger.info("Data loader created.")
 
     # STUDENT #
     logger.info(f"Loading student config from {args.student_config}")
@@ -288,7 +288,7 @@ def main():
 
     if args.n_gpu > 0:
         student.to(f"cuda:{args.local_rank}")
-    logger.info(f"Student loaded.")
+    logger.info("Student loaded.")
 
     # TEACHER #
     teacher = teacher_model_class.from_pretrained(args.teacher_name, output_hidden_states=True)

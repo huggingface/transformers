@@ -41,7 +41,9 @@ from transformers import (
 
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,7 @@ MODEL_CLASSES = {
 # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
 # in https://github.com/rusiaaman/XLNet-gen#methodology
 # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
-PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+PREFIX = """In 1991, the remains of Russian Tsar Nicholas II and his family
 (except for Alexei and Maria) are discovered.
 The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
 remainder of the story. 1883 Western Siberia,
@@ -120,12 +122,14 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
 
 
 def prepare_xlnet_input(args, _, tokenizer, prompt_text):
-    prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
+    prefix = args.prefix if args.prefix else args.padding_text if args.padding_text else PREFIX
+    prompt_text = prefix + prompt_text
     return prompt_text
 
 
 def prepare_transfoxl_input(args, _, tokenizer, prompt_text):
-    prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
+    prefix = args.prefix if args.prefix else args.padding_text if args.padding_text else PREFIX
+    prompt_text = prefix + prompt_text
     return prompt_text
 
 
@@ -180,16 +184,29 @@ def main():
     parser.add_argument("--k", type=int, default=0)
     parser.add_argument("--p", type=float, default=0.9)
 
-    parser.add_argument("--padding_text", type=str, default="", help="Padding text for Transfo-XL and XLNet.")
+    parser.add_argument("--prefix", type=str, default="", help="Text added prior to input.")
+    parser.add_argument("--padding_text", type=str, default="", help="Deprecated, the use of `--prefix` is preferred.")
     parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
     parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
+    )
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+
+    logger.warning(
+        "device: %s, n_gpu: %s, 16-bits training: %s",
+        args.device,
+        args.n_gpu,
+        args.fp16,
+    )
 
     set_seed(args)
 
@@ -204,6 +221,9 @@ def main():
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
 
+    if args.fp16:
+        model.half()
+
     args.length = adjust_length_to_model(args.length, max_sequence_length=model.config.max_position_embeddings)
     logger.info(args)
 
@@ -214,11 +234,18 @@ def main():
     if requires_preprocessing:
         prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
         preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)
+
+        if model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
+            tokenizer_kwargs = {"add_space_before_punct_symbol": True}
+        else:
+            tokenizer_kwargs = {}
+
         encoded_prompt = tokenizer.encode(
-            preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", add_space_before_punct_symbol=True
+            preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", **tokenizer_kwargs
         )
     else:
-        encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
+        prefix = args.prefix if args.prefix else args.padding_text
+        encoded_prompt = tokenizer.encode(prefix + prompt_text, add_special_tokens=False, return_tensors="pt")
     encoded_prompt = encoded_prompt.to(args.device)
 
     if encoded_prompt.size()[-1] == 0:

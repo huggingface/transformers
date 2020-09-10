@@ -15,13 +15,13 @@
 # limitations under the License.
 """ XLNet configuration """
 
-
-import logging
+import warnings
 
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-config.json",
@@ -31,104 +31,106 @@ XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XLNetConfig(PretrainedConfig):
     """
-        This is the configuration class to store the configuration of a :class:`~transformers.XLNetModel`.
-        It is used to instantiate an XLNet model according to the specified arguments, defining the model
-        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the `xlnet-large-cased <https://huggingface.co/xlnet-large-cased>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.XLNetModel`.
+    It is used to instantiate an XLNet model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+    the `xlnet-large-cased <https://huggingface.co/xlnet-large-cased>`__ architecture.
 
-        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-        for more information.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
-        Args:
-            vocab_size (:obj:`int`, optional, defaults to 32000):
-                Vocabulary size of the XLNet model. Defines the different tokens that
-                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLNetModel`.
-            d_model (:obj:`int`, optional, defaults to 1024):
-                Dimensionality of the encoder layers and the pooler layer.
-            n_layer (:obj:`int`, optional, defaults to 24):
-                Number of hidden layers in the Transformer encoder.
-            n_head (:obj:`int`, optional, defaults to 16):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            d_inner (:obj:`int`, optional, defaults to 4096):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            ff_activation (:obj:`string`, optional, defaults to "gelu"):
-                The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-            untie_r (:obj:`boolean`, optional, defaults to :obj:`True`):
-                Untie relative position biases
-            attn_type (:obj:`string`, optional, defaults to "bi"):
-                The attention type used by the model. Set 'bi' for XLNet, 'uni' for Transformer-XL.
-            initializer_range (:obj:`float`, optional, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
-                The epsilon used by the layer normalization layers.
-            dropout (:obj:`float`, optional, defaults to 0.1):
-                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-            mem_len (:obj:`int` or :obj:`None`, optional, defaults to :obj:`None`):
-                The number of tokens to cache. The key/value pairs that have already been pre-computed
-                in a previous forward pass won't be re-computed. See the
-                `quickstart <https://huggingface.co/transformers/quickstart.html#using-the-past>`__
-                for more information.
-            reuse_len (:obj:`int` or :obj:`None`, optional, defaults to :obj:`None`):
-                The number of tokens in the current batch to be cached and reused in the future.
-            bi_data (:obj:`boolean`, optional, defaults to :obj:`False`):
-                Whether to use bidirectional input pipeline. Usually set to `True` during
-                pretraining and `False` during finetuning.
-            clamp_len (:obj:`int`, optional, defaults to -1):
-                Clamp all relative distances larger than clamp_len.
-                Setting this attribute to -1 means no clamping.
-            same_length (:obj:`boolean`, optional, defaults to :obj:`False`):
-                Whether to use the same attention length for each token.
-            summary_type (:obj:`string`, optional, defaults to "last"):
-                Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
-                Is one of the following options:
-                    - 'last' => take the last token hidden state (like XLNet)
-                    - 'first' => take the first token hidden state (like Bert)
-                    - 'mean' => take the mean of all tokens hidden states
-                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                    - 'attn' => Not implemented now, use multi-head attention
-            summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
-                Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
-                Add a projection after the vector extraction
-            summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
-                Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
-                'tanh' => add a tanh activation to the output, Other => no activation.
-            summary_proj_to_labels (:obj:`boolean`, optional, defaults to :obj:`True`):
-                Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
-                If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
-            summary_last_dropout (:obj:`float`, optional, defaults to 0.1):
-                Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
-                Add a dropout after the projection and activation
-            start_n_top (:obj:`int`, optional, defaults to 5):
-                Used in the SQuAD evaluation script for XLM and XLNet.
-            end_n_top (:obj:`int`, optional, defaults to 5):
-                Used in the SQuAD evaluation script for XLM and XLNet.
+    Args:
+        vocab_size (:obj:`int`, optional, defaults to 32000):
+            Vocabulary size of the XLNet model. Defines the different tokens that
+            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLNetModel`.
+        d_model (:obj:`int`, optional, defaults to 1024):
+            Dimensionality of the encoder layers and the pooler layer.
+        n_layer (:obj:`int`, optional, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        n_head (:obj:`int`, optional, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        d_inner (:obj:`int`, optional, defaults to 4096):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        ff_activation (:obj:`string`, optional, defaults to "gelu"):
+            The non-linear activation function (function or string) in the
+            encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
+        untie_r (:obj:`boolean`, optional, defaults to :obj:`True`):
+            Untie relative position biases
+        attn_type (:obj:`string`, optional, defaults to "bi"):
+            The attention type used by the model. Set 'bi' for XLNet, 'uni' for Transformer-XL.
+        initializer_range (:obj:`float`, optional, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        dropout (:obj:`float`, optional, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        mem_len (:obj:`int` or :obj:`None`, optional):
+            The number of tokens to cache. The key/value pairs that have already been pre-computed
+            in a previous forward pass won't be re-computed. See the
+            `quickstart <https://huggingface.co/transformers/quickstart.html#using-the-past>`__
+            for more information.
+        reuse_len (:obj:`int` or :obj:`None`, optional):
+            The number of tokens in the current batch to be cached and reused in the future.
+        bi_data (:obj:`boolean`, optional, defaults to :obj:`False`):
+            Whether to use bidirectional input pipeline. Usually set to `True` during
+            pretraining and `False` during finetuning.
+        clamp_len (:obj:`int`, optional, defaults to -1):
+            Clamp all relative distances larger than clamp_len.
+            Setting this attribute to -1 means no clamping.
+        same_length (:obj:`boolean`, optional, defaults to :obj:`False`):
+            Whether to use the same attention length for each token.
+        summary_type (:obj:`string`, optional, defaults to "last"):
+            Argument used when doing sequence summary. Used in for the multiple choice head in
+            :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+            Is one of the following options:
 
-        Example::
+            - 'last' => take the last token hidden state (like XLNet)
+            - 'first' => take the first token hidden state (like Bert)
+            - 'mean' => take the mean of all tokens hidden states
+            - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+            - 'attn' => Not implemented now, use multi-head attention
+        summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
+            Argument used when doing sequence summary. Used in for the multiple choice head in
+            :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+            Add a projection after the vector extraction
+        summary_activation (:obj:`string` or :obj:`None`, optional):
+            Argument used when doing sequence summary. Used in for the multiple choice head in
+            :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+            'tanh' => add a tanh activation to the output, Other => no activation.
+        summary_proj_to_labels (:obj:`boolean`, optional, defaults to :obj:`True`):
+            Argument used when doing sequence summary. Used in for the multiple choice head in
+            :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+            If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
+        summary_last_dropout (:obj:`float`, optional, defaults to 0.1):
+            Argument used when doing sequence summary. Used in for the multiple choice head in
+            :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+            Add a dropout after the projection and activation
+        start_n_top (:obj:`int`, optional, defaults to 5):
+            Used in the SQuAD evaluation script for XLM and XLNet.
+        end_n_top (:obj:`int`, optional, defaults to 5):
+            Used in the SQuAD evaluation script for XLM and XLNet.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last pre-computed hidden states.
 
-            from transformers import XLNetConfig, XLNetModel
+            .. note::
+                This flag behaves differently from with other models: it just controls the inference behavior, during
+                training the model always uses ``use_cache=True``.
 
-            # Initializing a XLNet configuration
-            configuration = XLNetConfig()
+    Example::
 
-            # Initializing a model from the configuration
-            model = XLNetModel(configuration)
+        >>> from transformers import XLNetConfig, XLNetModel
 
-            # Accessing the model configuration
-            configuration = model.config
+        >>> # Initializing a XLNet configuration
+        >>> configuration = XLNetConfig()
 
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+        >>> # Initializing a model from the configuration
+        >>> model = XLNetModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
     """
 
-    pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "xlnet"
 
     def __init__(
@@ -160,14 +162,17 @@ class XLNetConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs
     ):
-        """Constructs XLNetConfig.
-        """
+        """Constructs XLNetConfig."""
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_layer = n_layer
         self.n_head = n_head
         assert d_model % n_head == 0
+        if "d_head" in kwargs:
+            assert (
+                kwargs["d_head"] == d_model // n_head
+            ), f"`d_head` ({kwargs['d_head']}) should be equal to `d_model // n_head` ({d_model // n_head})"
         self.d_head = d_model // n_head
         self.ff_activation = ff_activation
         self.d_inner = d_inner
@@ -194,6 +199,17 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+
+        if mem_len is None or mem_len == 0:
+            warnings.warn(
+                "This config doesn't use attention memories, a core feature of XLNet."
+                " Consider setting `men_len` to a non-zero value, for example "
+                "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
+                " for accurate training performance as well as an order of magnitude faster inference."
+                " Starting from version 3.5.0, the default parameter will be 1024, following"
+                " the implementation in https://arxiv.org/abs/1906.08237",
+                FutureWarning,
+            )
 
     @property
     def max_position_embeddings(self):

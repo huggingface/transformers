@@ -1,5 +1,5 @@
 ---
-language: malay
+language: ms
 ---
 
 # Bahasa GPT2 Model

@@ -1,5 +1,3 @@
-# Install newest ptl.
-pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 # Install example requirements
 pip install -r ../requirements.txt
 
@@ -23,7 +21,7 @@ mkdir -p $OUTPUT_DIR
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-python3 run_pl_glue.py --data_dir $DATA_DIR \
+python3 run_pl_glue.py --gpus 1 --data_dir $DATA_DIR \
 --task $TASK \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \

@@ -13,17 +13,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert or Roberta). """
-
-
+""" Fine-tuning the library models for named entity recognition on CoNLL-2003. """
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from seqeval.metrics import f1_score, precision_score, recall_score
+from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
 
 from transformers import (
@@ -36,7 +35,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from utils_ner import NerDataset, Split, get_labels
+from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +52,9 @@ class ModelArguments:
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+    )
+    task_type: Optional[str] = field(
+        default="NER", metadata={"help": "Task type to fine tune in training (e.g. NER, POS, etc)"}
     )
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
@@ -75,7 +77,8 @@ class DataTrainingArguments:
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
     )
     labels: Optional[str] = field(
-        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."}
+        default=None,
+        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."},
     )
     max_seq_length: int = field(
         default=128,
@@ -112,6 +115,16 @@ def main():
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
 
+    module = import_module("tasks")
+    try:
+        token_classification_task_clazz = getattr(module, model_args.task_type)
+        token_classification_task: TokenClassificationTask = token_classification_task_clazz()
+    except AttributeError:
+        raise ValueError(
+            f"Task {model_args.task_type} needs to be defined as a TokenClassificationTask subclass in {module}. "
+            f"Available tasks classes are: {TokenClassificationTask.__subclasses__()}"
+        )
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -132,7 +145,7 @@ def main():
     set_seed(training_args.seed)
 
     # Prepare CONLL-2003 task
-    labels = get_labels(data_args.labels)
+    labels = token_classification_task.get_labels(data_args.labels)
     label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
     num_labels = len(labels)
 
@@ -163,7 +176,8 @@ def main():
 
     # Get datasets
     train_dataset = (
-        NerDataset(
+        TokenClassificationDataset(
+            token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             labels=labels,
@@ -171,13 +185,13 @@ def main():
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
             mode=Split.train,
-            local_rank=training_args.local_rank,
         )
         if training_args.do_train
         else None
     )
     eval_dataset = (
-        NerDataset(
+        TokenClassificationDataset(
+            token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             labels=labels,
@@ -185,7 +199,6 @@ def main():
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
             mode=Split.dev,
-            local_rank=training_args.local_rank,
         )
         if training_args.do_eval
         else None
@@ -210,6 +223,7 @@ def main():
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
         return {
+            "accuracy_score": accuracy_score(out_label_list, preds_list),
             "precision": precision_score(out_label_list, preds_list),
             "recall": recall_score(out_label_list, preds_list),
             "f1": f1_score(out_label_list, preds_list),
@@ -237,23 +251,25 @@ def main():
 
     # Evaluation
     results = {}
-    if training_args.do_eval and training_args.local_rank in [-1, 0]:
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
         result = trainer.evaluate()
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
-            for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+        if trainer.is_world_master():
+            with open(output_eval_file, "w") as writer:
+                logger.info("***** Eval results *****")
+                for key, value in result.items():
+                    logger.info("  %s = %s", key, value)
+                    writer.write("%s = %s\n" % (key, value))
 
             results.update(result)
 
     # Predict
-    if training_args.do_predict and training_args.local_rank in [-1, 0]:
-        test_dataset = NerDataset(
+    if training_args.do_predict:
+        test_dataset = TokenClassificationDataset(
+            token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             labels=labels,
@@ -261,35 +277,31 @@ def main():
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
             mode=Split.test,
-            local_rank=training_args.local_rank,
         )
 
         predictions, label_ids, metrics = trainer.predict(test_dataset)
         preds_list, _ = align_predictions(predictions, label_ids)
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w") as writer:
-            for key, value in metrics.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+        if trainer.is_world_master():
+            with open(output_test_results_file, "w") as writer:
+                for key, value in metrics.items():
+                    logger.info("  %s = %s", key, value)
+                    writer.write("%s = %s\n" % (key, value))
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
-                example_id = 0
-                for line in f:
-                    if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                        writer.write(line)
-                        if not preds_list[example_id]:
-                            example_id += 1
-                    elif preds_list[example_id]:
-                        output_line = line.split()[0] + " " + preds_list[example_id].pop(0) + "\n"
-                        writer.write(output_line)
-                    else:
-                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+        if trainer.is_world_master():
+            with open(output_test_predictions_file, "w") as writer:
+                with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
+                    token_classification_task.write_predictions_to_file(writer, f, preds_list)
 
     return results
+
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
 
 
 if __name__ == "__main__":

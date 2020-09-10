@@ -10,8 +10,8 @@ The ReformerLM model was trained in flax using colab notebook proposed by author
 The model is a language model that operates on small sub-word units. Text can be generated as follows:
 
 ```python
-model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
-tok = ReformerTokenizer.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
+model = ReformerModelWithLMHead.from_pretrained("google/reformer-crime-and-punishment")
+tok = ReformerTokenizer.from_pretrained("google/reformer-crime-and-punishment")
 tok.decode(model.generate(tok.encode("A few months later", return_tensors="pt"), do_sample=True,temperature=0.7, max_length=100)[0])
 
 # gives:'A few months later on was more than anything in the flat. 

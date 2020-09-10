@@ -40,7 +40,7 @@ def roberta_similarity_batches(to_predict):
   return similarity_scores
 
 def similarity_roberta(model, tokenizer, sent_pairs):
-  batch_token = tokenizer.batch_encode_plus(sent_pairs, pad_to_max_length=True, max_length=500)
+  batch_token = tokenizer(sent_pairs, padding='max_length', truncation=True, max_length=500)
   res = model(torch.tensor(batch_token['input_ids']).cuda(), attention_mask=torch.tensor(batch_token["attention_mask"]).cuda())  
   return res
 
