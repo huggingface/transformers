@@ -1,4 +1,4 @@
-BertForSeqGeneration
+BertGeneration
 ----------------------------------------------------
 
 Overview
