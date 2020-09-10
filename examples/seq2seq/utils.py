@@ -131,6 +131,8 @@ class AbstractSeq2SeqDataset(Dataset):
 
     def make_dynamic_sampler(self, max_tokens_per_batch=1024, distributed=False, chars_per_token=4, **kwargs):
         # import ipdb; ipdb.set_trace()
+        if distributed:
+            return DistributedDynamicBatchSizeSampler(self, max_tokens_per_batch, required_bs_mult=4)
         from fairseq.data.data_utils import batch_by_size
 
         # sorted_indices = np.arange(len(self.src_lens))
@@ -303,7 +305,7 @@ class DistributedSortishSampler(Sampler):
 
 class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
     def __init__(self, dataset, max_tokens_per_batch, required_bs_mult=4, num_replicas=None, rank=None):
-        ss_bs = 2048 if len(self.dataset) > 2048 else len(self.dataset) // 2
+        ss_bs = 2048 if len(dataset) > 2048 else len(dataset) // 2
         self.ss = DistributedSortishSampler(dataset, ss_bs, num_replicas=num_replicas, rank=rank)
         self.max_tokens_per_batch = max_tokens_per_batch
         self.required_bs_mult = required_bs_mult
@@ -314,7 +316,7 @@ class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
         sorted_available_indices: List[int] = list(self.ss)
 
         def num_tokens_in_example(i):
-            return self.src_lens[i]
+            return self.ss.dataset.src_lens[i]
 
         batch_sampler: List[List[int]] = batch_by_size(
             sorted_available_indices,
@@ -324,6 +326,11 @@ class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
         )
         return iter(batch_sampler)
 
+    def __len__(self):
+        return self.ss.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
 logger = getLogger(__name__)
 

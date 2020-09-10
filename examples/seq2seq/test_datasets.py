@@ -8,11 +8,12 @@ from torch.utils.data import DataLoader
 from durbango import pickle_save
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
+import itertools
 
 from .pack_dataset import pack_data_dir
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
-from .utils import LegacySeq2SeqDataset, Seq2SeqDataset
-
+from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, DistributedSortishSampler, DistributedDynamicBatchSizeSampler
+import os
 
 @pytest.mark.parametrize(
     ["tok_name"],
@@ -107,7 +108,7 @@ def test_pack_dataset():
     assert orig_paths == new_paths
 
 
-import os
+
 
 
 def test_dynamic_batch_size():
@@ -168,24 +169,7 @@ def test_dynamic_batch_size():
 
 
 def test_sortish():
-    if os.getenv("USE_REAL_DATA", False):
-        data_dir = "examples/seq2seq/wmt_en_ro"
-        max_len = 128
-        max_tokens = max_len * 2 * 64
-    else:
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
-        max_tokens = 320
-        max_len = 64
-
-    tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
-    ds = Seq2SeqDataset(
-        tokenizer,
-        data_dir=data_dir,
-        type_path="train",
-        max_source_length=max_len,
-        max_target_length=max_len,
-        n_obs=1000,
-    )
+    ds, max_tokens, tokenizer = get_dataset()
     sampler = ds.make_sortish_sampler(64)
     pickle_save(sampler, "batches/sortish.pkl")
     from collections import defaultdict
@@ -223,3 +207,33 @@ def test_sortish():
 
     pickle_save(logs, "batches/sortish_logs.pkl")
     # if failures:raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")
+
+
+def get_dataset(n_obs=1000):
+    if os.getenv("USE_REAL_DATA", False):
+        data_dir = "examples/seq2seq/wmt_en_ro"
+        max_len = 128
+        max_tokens = max_len * 2 * 64
+    else:
+        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        max_tokens = 320
+        max_len = 64
+    tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
+    ds = Seq2SeqDataset(
+        tokenizer,
+        data_dir=data_dir,
+        type_path="train",
+        max_source_length=max_len,
+        max_target_length=max_len,
+        n_obs=n_obs,
+    )
+    return ds, max_tokens, tokenizer
+
+
+def test_distributed_stuff():
+    ds, max_tokens, tokenizer = get_dataset()
+    s1 = list(DistributedDynamicBatchSizeSampler(ds, 256, num_replicas=2, rank=0))
+    s2 = list(DistributedDynamicBatchSizeSampler(ds, 256, num_replicas=2, rank=1))
+    ids1 = set(itertools.chain.from_iterable(s1))
+    ids2 = set(itertools.chain.from_iterable(s2))
+    assert ids1.intersection(ids2) == set()
