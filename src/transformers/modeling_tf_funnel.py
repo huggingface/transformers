@@ -1654,8 +1654,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
 
         loss = None
         if start_positions is not None and end_positions is not None:
-            labels = {"start_position": start_positions}
-            labels["end_position"] = end_positions
+            labels = {"start_position": start_positions, "end_position": end_positions}
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
