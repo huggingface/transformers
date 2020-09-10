@@ -15,8 +15,6 @@
 """PyTorch BERT model specific for generation. """
 
 
-import warnings
-
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -195,7 +193,7 @@ BERT_GENERATION_START_DOCSTRING = r"""
     usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.BertGenerationConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -205,7 +203,7 @@ BERT_GENERATION_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.BertTokenizer`.
+            Indices can be obtained using :class:`transformers.BertGenerationTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
@@ -394,7 +392,7 @@ class BertGenerationOnlyLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """,
+    """BertGeneration Model with a `language modeling` head on top for CLM fine-tuning. """,
     BERT_GENERATION_START_DOCSTRING,
 )
 class BertGenerationDecoder(BertGenerationPreTrainedModel):
@@ -402,7 +400,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            warnings.warn("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
+            logging.warn("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertGenerationEncoder(config)
         self.lm_head = BertGenerationOnlyLMHead(config)

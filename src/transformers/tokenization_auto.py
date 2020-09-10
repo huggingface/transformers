@@ -242,7 +242,7 @@ class AutoTokenizer:
         if isinstance(config, EncoderDecoderConfig):
             if type(config.decoder) is not type(config.encoder):  # noqa: E721
                 warnings.warn(
-                    f"The encoder model config class: {config.encoder.__class__} is different from the decoder model config class: {config.decoder.__class}. It is not recommend to use the `AutoTokenizer.from_pretrained(..)` method in this case. Please use the encoder and decoder specific tokenizer classes."
+                    f"The encoder model config class: {config.encoder.__class__} is different from the decoder model config class: {config.decoder.__class}. It is not recommended to use the `AutoTokenizer.from_pretrained(..)` method in this case. Please use the encoder and decoder specific tokenizer classes."
                 )
             config = config.encoder
 

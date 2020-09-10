@@ -19,7 +19,7 @@ from .configuration_utils import PretrainedConfig
 
 class BertGenerationConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BertGenerationConfig`.
+    This is the configuration class to store the configuration of a :class:`~transformers.BertGenerationPreTrainedModel`.
     It is used to instantiate a BertGenerationConfig model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
