@@ -207,8 +207,8 @@ if is_torch_available():
         DataCollatorForLanguageModeling,
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
-        DataCollatorWithPadding,
         DataCollatorForSOP,
+        DataCollatorWithPadding,
         default_data_collator,
     )
     from .data.datasets import (
