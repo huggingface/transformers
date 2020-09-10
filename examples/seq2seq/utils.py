@@ -20,6 +20,12 @@ from torch.utils.data import Dataset, Sampler
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
 
+try:
+    from fairseq.data.data_utils import batch_by_size
+    has_fairseq = True
+except (ImportError, ModuleNotFoundError):
+    has_fairseq = False
+
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
     """From fairseq"""
@@ -130,10 +136,10 @@ class AbstractSeq2SeqDataset(Dataset):
             return SortishSampler(self.src_lens, batch_size)
 
     def make_dynamic_sampler(self, max_tokens_per_batch=1024, distributed=False, chars_per_token=4, **kwargs):
-        # import ipdb; ipdb.set_trace()
+        assert has_fairseq, 'Dynamic batch size requires `pip install fairseq`'
         if distributed:
             return DistributedDynamicBatchSizeSampler(self, max_tokens_per_batch, required_bs_mult=4)
-        from fairseq.data.data_utils import batch_by_size
+
 
         # sorted_indices = np.arange(len(self.src_lens))
         sorted_indices = list(self.make_sortish_sampler(1024))
