@@ -1,6 +1,6 @@
 import unittest
 
-import nlp
+import datasets
 import numpy as np
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
@@ -200,11 +200,11 @@ class TrainerIntegrationTest(unittest.TestCase):
         x = trainer.eval_dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
-    def test_trainer_with_nlp(self):
+    def test_trainer_with_datasets(self):
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
         y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,))
-        train_dataset = nlp.Dataset.from_dict({"input_x": x, "label": y})
+        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y})
 
         # Base training. Should have the same results as test_reproducible_training
         model = RegressionModel()
@@ -222,7 +222,7 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # Adding one column not used by the model should have no impact
         z = np.random.normal(size=(64,)).astype(np.float32)
-        train_dataset = nlp.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
+        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
         model = RegressionModel()
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()

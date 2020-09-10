@@ -1,5 +1,5 @@
+import datasets
 import faiss
-import nlp
 import numpy as np
 import streamlit as st
 import torch
@@ -45,7 +45,7 @@ def load_models():
 def load_indexes():
     if LOAD_DENSE_INDEX:
         faiss_res = faiss.StandardGpuResources()
-        wiki40b_passages = nlp.load_dataset(path="wiki_snippets", name="wiki40b_en_100_0")["train"]
+        wiki40b_passages = datasets.load_dataset(path="wiki_snippets", name="wiki40b_en_100_0")["train"]
         wiki40b_passage_reps = np.memmap(
             "wiki40b_passages_reps_32_l-8_h-768_b-512-512.dat",
             dtype="float32",
@@ -63,7 +63,7 @@ def load_indexes():
 
 @st.cache(allow_output_mutation=True)
 def load_train_data():
-    eli5 = nlp.load_dataset("eli5", name="LFQA_reddit")
+    eli5 = datasets.load_dataset("eli5", name="LFQA_reddit")
     eli5_train = eli5["train_eli5"]
     eli5_train_q_reps = np.memmap(
         "eli5_questions_reps.dat", dtype="float32", mode="r", shape=(eli5_train.num_rows, 128)
