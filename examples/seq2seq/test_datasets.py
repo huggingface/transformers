@@ -122,13 +122,19 @@ def test_dynamic_batch_size():
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
-        tokenizer, data_dir=data_dir, type_path="train", max_source_length=max_len, max_target_length=max_len, n_obs=1000
+        tokenizer,
+        data_dir=data_dir,
+        type_path="train",
+        max_source_length=max_len,
+        max_target_length=max_len,
+        n_obs=1000,
     )
 
     logs = defaultdict(list)
     mult = 64
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
     from durbango import pickle_save
+
     pickle_save(batch_sampler, "batches/dynamic_sampler.pkl")
     batch_sizes = [len(x) for x in batch_sampler]
     assert len(set(batch_sizes)) > 1
@@ -173,8 +179,12 @@ def test_sortish():
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
-        tokenizer, data_dir=data_dir, type_path="train", max_source_length=max_len, max_target_length=max_len,
-        n_obs=1000
+        tokenizer,
+        data_dir=data_dir,
+        type_path="train",
+        max_source_length=max_len,
+        max_target_length=max_len,
+        n_obs=1000,
     )
     sampler = ds.make_sortish_sampler(64)
     pickle_save(sampler, "batches/sortish.pkl")
@@ -183,8 +193,8 @@ def test_sortish():
     logs = defaultdict(list)
     mult = 64
     # batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
-    #batch_sizes = [len(x) for x in batch_sampler]
-    #assert len(set(batch_sizes)) > 1
+    # batch_sizes = [len(x) for x in batch_sampler]
+    # assert len(set(batch_sizes)) > 1
     data_loader = DataLoader(
         ds,
         sampler=sampler,
