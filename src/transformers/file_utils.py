@@ -66,12 +66,12 @@ except (ImportError, AssertionError):
 
 
 try:
-    import nlp  # noqa: F401
+    import datasets  # noqa: F401
 
-    _nlp_available = True
+    _datasets_available = True
 
 except ImportError:
-    _nlp_available = False
+    _datasets_available = False
 
 try:
     from torch.hub import _get_torch_home
@@ -155,8 +155,8 @@ def is_torch_tpu_available():
     return _torch_tpu_available
 
 
-def is_nlp_available():
-    return _nlp_available
+def is_datasets_available():
+    return _datasets_available
 
 
 def is_psutil_available():
