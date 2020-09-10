@@ -442,7 +442,9 @@ class TFTrainer:
 
         return output.metrics
 
-    def prediction_step(self, features: tf.Tensor, labels: tf.Tensor, nb_instances_in_global_batch: tf.Tensor) -> tf.Tensor:
+    def prediction_step(
+        self, features: tf.Tensor, labels: tf.Tensor, nb_instances_in_global_batch: tf.Tensor
+    ) -> tf.Tensor:
         """
         Compute the prediction on features and update the loss with labels.
 
@@ -459,7 +461,7 @@ class TFTrainer:
     def distributed_prediction_steps(self, batch):
 
         nb_instances_in_batch = self._compute_nb_instances(batch)
-        inputs = self._get_step_inputs(batch, nb_instances_in_batch)   
+        inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
         logits = self.args.strategy.run(self.prediction_step, inputs)
 
