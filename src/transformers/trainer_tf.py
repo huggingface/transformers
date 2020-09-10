@@ -662,7 +662,8 @@ class TFTrainer:
 
             self.args.strategy.run(self.apply_gradients, inputs)
 
-    def _compute_nb_instances(self, batch):
+    @staticmethod
+    def _compute_nb_instances(batch):
 
         labels = batch[-1]
         if isinstance(labels, PerReplica):
@@ -672,7 +673,8 @@ class TFTrainer:
 
         return nb_instances
 
-    def _get_step_inputs(self, batch, nb_instances):
+    @staticmethod
+    def _get_step_inputs(batch, nb_instances):
 
         features, labels = batch
 
