@@ -1352,6 +1352,18 @@ class TokenizerTesterMixin:
 
             self.assertEqual(input_dict, prepared_input_dict)
 
+    def test_batch_encode_plus_overflowing_tokens(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            string_sequences = ["Testing the prepare_for_model method.", "Test"]
+
+            if tokenizer.pad_token is None:
+                tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+            tokenizer.batch_encode_plus(
+                string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
+            )
+
     @require_torch
     @require_tf
     def test_batch_encode_plus_tensors(self):
@@ -1555,14 +1567,19 @@ class TokenizerTesterMixin:
             "vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
         ]
         batch = tokenizer.prepare_seq2seq_batch(
-            src_texts=src_text, tgt_texts=tgt_text, max_length=3, max_target_length=10, return_tensors="pt"
+            src_texts=src_text,
+            tgt_texts=tgt_text,
+            max_length=3,
+            max_target_length=10,
+            return_tensors="pt",
+            src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
         )
         self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.decoder_input_ids.shape[1], 10)
+        self.assertEqual(batch.labels.shape[1], 10)
         # max_target_length will default to max_length if not specified
         batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, max_length=3)
         self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.decoder_input_ids.shape[1], 3)
+        self.assertEqual(batch.labels.shape[1], 3)
 
         batch_encoder_only = tokenizer.prepare_seq2seq_batch(
             src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"

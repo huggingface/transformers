@@ -28,6 +28,9 @@ TRANSLATION_FINETUNED_MODELS = [
 ]
 TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translation_en_to_fr")]
 
+TEXT2TEXT_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
+TF_TEXT2TEXT_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
+
 DIALOGUE_FINETUNED_MODELS = ["microsoft/DialoGPT-medium"]
 
 expected_fill_mask_result = [
@@ -395,16 +398,40 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs)
 
     @require_torch
+    def test_torch_text2text(self):
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["generated_text"]
+        for model_name in TEXT2TEXT_FINETUNED_MODELS:
+            nlp = pipeline(task="text2text-generation", model=model_name, tokenizer=model_name)
+            self._test_mono_column_pipeline(
+                nlp,
+                VALID_INPUTS,
+                mandatory_keys,
+                invalid_inputs,
+            )
+
+    @require_tf
+    @slow
+    def test_tf_text2text(self):
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["generated_text"]
+        for model in TEXT2TEXT_FINETUNED_MODELS:
+            nlp = pipeline(task="text2text-generation", model=model, tokenizer=model, framework="tf")
+            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs)
+
+    @require_torch
     def test_torch_text_generation(self):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="pt")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+        self._test_mono_column_pipeline(nlp, VALID_INPUTS, {}, prefix="This is ")
 
     @require_tf
     def test_tf_text_generation(self):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+        self._test_mono_column_pipeline(nlp, VALID_INPUTS, {}, prefix="This is ")
 
     @slow
     @require_torch

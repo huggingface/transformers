@@ -346,7 +346,7 @@ class Adafactor(Optimizer):
             If True, learning rate is scaled by root mean square
         relative_step (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If True, time-dependent learning rate is computed instead of external learning rate
-        warmup_init (:obj:`bool`, `optional`, defaults to False):
+        warmup_init (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Time-dependent learning rate computation depends on whether warm-up initialization is being used
 
     This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.

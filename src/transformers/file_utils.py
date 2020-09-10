@@ -316,14 +316,15 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> inputs = tokenizer(question, text, return_tensors='pt')
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
-        >>> start_scores = outputs.start_scores
-        >>> end_scores = outputs.end_scores
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -770,7 +771,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logging.get_verbosity() > logging.NOTSET),
+        disable=bool(logging.get_verbosity() == logging.NOTSET),
     )
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks

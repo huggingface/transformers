@@ -96,7 +96,7 @@ class TFT5ModelTester:
 
         result = model(input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.decoder_past_key_values
+        decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
         self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])

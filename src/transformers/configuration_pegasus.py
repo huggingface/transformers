@@ -47,46 +47,23 @@ DEFAULTS = dict(
     activation_function="relu",
 )
 # Config values that vary between checkpoints: for testing and conversion
-max_gen_length = {
-    # See appendix C of paper
-    "xsum": 64,
-    "cnn_dailymail": 128,
-    "newsroom": 128,
-    "wikihow": 256,
-    "multi_news": 256,
-    "reddit_tifu": 128,
-    "big_patent": 256,
-    "arxiv": 256,
-    "pubmed": 256,
-    "gigaword": 32,
-    "aeslc": 32,
-    "billsum": 256,
-    "large": 256,  # @sshleifer chose arbitrarily
+task_specific_params = {
+    # These are task specific params for pegasus-large and normal params for finetuned checkpoints
+    "summarization_xsum": {"length_penalty": 0.8, "max_length": 64, "max_position_embeddings": 512},
+    "summarization_cnn_dailymail": {"length_penalty": 0.8, "max_length": 128, "max_position_embeddings": 1024},
+    "summarization_newsroom": {"length_penalty": 0.8, "max_length": 128, "max_position_embeddings": 512},
+    "summarization_wikihow": {"length_penalty": 0.6, "max_length": 256, "max_position_embeddings": 512},
+    "summarization_multi_news": {"length_penalty": 0.8, "max_length": 256, "max_position_embeddings": 1024},
+    "summarization_reddit_tifu": {"length_penalty": 0.6, "max_length": 128, "max_position_embeddings": 512},
+    "summarization_big_patent": {"length_penalty": 0.7, "max_length": 256, "max_position_embeddings": 1024},
+    "summarization_arxiv": {"length_penalty": 0.8, "max_length": 256, "max_position_embeddings": 1024},
+    "summarization_pubmed": {"length_penalty": 0.8, "max_length": 256, "max_position_embeddings": 1024},
+    "summarization_gigaword": {"length_penalty": 0.6, "max_length": 32, "max_position_embeddings": 128},
+    "summarization_aeslc": {"length_penalty": 0.6, "max_length": 32, "max_position_embeddings": 512},
+    "summarization_billsum": {"length_penalty": 0.6, "max_length": 256, "max_position_embeddings": 1024},
+    # this last entry is useless -- just for consistency
+    "summarization_large": {"length_penalty": 0.8, "max_length": 256, "max_position_embeddings": 1024},
 }
-max_model_length = {
-    "xsum": 512,
-    "cnn_dailymail": 1024,
-    "newsroom": 512,
-    "wikihow": 512,
-    "multi_news": 1024,
-    "reddit_tifu": 512,
-    "big_patent": 1024,
-    "arxiv": 1024,
-    "pubmed": 1024,
-    "gigaword": 128,
-    "aeslc": 512,
-    "billsum": 1024,
-    "large": 1024,
-}
-expected_alpha = {
-    "multinews": 0.9,
-    "wikihow": 0.6,
-    "reddit_tifu": 0.6,
-    "big_patent": 0.7,
-    "gigaword": 0.6,
-    "aeslc": 0.6,
-    "billsum": 0.6,
-}  # otherwise 0.8
 
 
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)

@@ -67,15 +67,15 @@ class MobileBertConfig(PretrainedConfig):
             The ID of the token in the word embedding to use as padding.
         embedding_size (:obj:`int`, optional, defaults to 128):
             The dimension of the word embedding vectors.
-        trigram_input (:obj:`bool`, optional, defaults to True):
+        trigram_input (:obj:`bool`, optional, defaults to :obj:`True`):
             Use a convolution of trigram as input.
-        use_bottleneck (:obj:`bool`, optional, defaults to True):
+        use_bottleneck (:obj:`bool`, optional, defaults to :obj:`True`):
             Whether to use bottleneck in BERT.
         intra_bottleneck_size (:obj:`int`, optional, defaults to 128):
             Size of bottleneck layer output.
-        use_bottleneck_attention (:obj:`bool`, optional, defaults to False):
+        use_bottleneck_attention (:obj:`bool`, optional, defaults to :obj:`False`):
             Whether to use attention inputs from the bottleneck transformation.
-        key_query_shared_bottleneck (:obj:`bool`, optional, defaults to True):
+        key_query_shared_bottleneck (:obj:`bool`, optional, defaults to :obj:`True`):
             Whether to use the same linear transformation for query&key in the bottleneck.
         num_feedforward_networks (:obj:`int`, optional, defaults to 4):
             Number of FFNs in a block.

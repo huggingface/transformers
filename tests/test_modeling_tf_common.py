@@ -73,8 +73,6 @@ class TFModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
-    test_torchscript = True
-    test_pruning = True
     test_resize_embeddings = True
     is_encoder_decoder = False
 
