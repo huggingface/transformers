@@ -234,7 +234,9 @@ class AutoTokenizer:
                 tokenizer_class_candidate = config.tokenizer_class
             tokenizer_class = globals().get(tokenizer_class_candidate)
             if tokenizer_class is None:
-                raise ValueError("Tokenizer class {} does not exist or is not currently imported.")
+                raise ValueError(
+                    "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)
+                )
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # if model is an encoder decoder, the encoder tokenizer class is used by default
