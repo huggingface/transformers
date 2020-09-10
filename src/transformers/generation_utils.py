@@ -395,10 +395,10 @@ class GenerationMixin:
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
-            if "retriever" in model_specific_kwargs:
+            if "retriever" in model_kwargs:
                 encoder_outputs: ModelOutput = encoder(
                     input_ids,
-                    retriever=model_specific_kwargs["retriever"],
+                    retriever=model_kwargs["retriever"],
                     attention_mask=attention_mask,
                     return_dict=True,
                 )

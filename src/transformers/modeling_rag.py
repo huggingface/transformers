@@ -51,12 +51,12 @@ class Seq2SeqLMOutputWithDocs(ModelOutput):
             Languaged modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)` if the ``logits are marginalized or :obj:`(batch_size * config.n_docs, sequence_length, config.vocab_size)` if they aren't):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        decoder_past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``decoder_past_key_values`` input) to speed up sequential decoding.
+            used (see ``past_key_values`` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -87,7 +87,7 @@ class Seq2SeqLMOutputWithDocs(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    decoder_past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -156,13 +156,13 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Used by the (:class:`~transformers.RagToken`) model during decoding.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for generation tasks. `None` by default, constuct as per instructions for the generator model you're using with your RAG instance.
-        decoder_past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`):
-            Tuple consists of two elements: ``encoder_outputs`` of the RAG model (see ``encoder_outputs``) and ``decoder_past_key_values`` of the underlying generator.
-            Can be used to speed up decoding. ``decoder_past_key_values`` are used in the (:class:`~transformers.RagToken`)
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`):
+            Tuple consists of two elements: ``encoder_outputs`` of the RAG model (see ``encoder_outputs``) and ``past_key_values`` of the underlying generator.
+            Can be used to speed up decoding. ``past_key_values`` are used in the (:class:`~transformers.RagToken`)
             model during decoding.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, ``decoder_past_key_values`` are returned and can be used to speed up decoding (see
-            ``decoder_past_key_values``).
+            If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
+            ``past_key_values``).
         generator_kwargs (remaining dictionary of keyword arguments, `optional`):
             Additional keyword arguments will be passed to the generator forward pass.
 """
@@ -234,7 +234,7 @@ class RagModel(torch.nn.Module):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=None,
         print_docs=False,
         **generator_kwargs
@@ -263,14 +263,14 @@ class RagModel(torch.nn.Module):
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
-            decoder_past_key_values=decoder_past_key_values,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             **generator_kwargs,
         )
         return Seq2SeqLMOutputWithDocs(
             loss=None,
             logits=outputs.logits,
-            decoder_past_key_values=outputs.decoder_past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -472,7 +472,7 @@ class RagSequence(PreTrainedRagModel):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=None,
         return_loss=False,
         reduce=False,
@@ -492,7 +492,7 @@ class RagSequence(PreTrainedRagModel):
             attention_mask,
             encoder_outputs,
             decoder_input_ids,
-            decoder_past_key_values,
+            past_key_values,
             use_cache,
             **generator_kwargs,
         )
@@ -510,7 +510,7 @@ class RagSequence(PreTrainedRagModel):
             return Seq2SeqLMOutputWithDocs(
                 loss=loss,
                 logits=outputs.logits,
-                decoder_past_key_values=outputs.decoder_past_key_values,
+                past_key_values=outputs.past_key_values,
                 decoder_hidden_states=outputs.decoder_hidden_states,
                 decoder_attentions=outputs.decoder_attentions,
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -522,7 +522,7 @@ class RagSequence(PreTrainedRagModel):
         return Seq2SeqLMOutputWithDocs(
             loss=None,
             logits=outputs.logits,
-            decoder_past_key_values=outputs.decoder_past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -714,10 +714,10 @@ class RagToken(PreTrainedRagModel):
             doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
             attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
             encoder_outputs = (_stack_ctxt(encoder_last_hidden_state), encoder_hidden_states, doc_scores)
-            decoder_past_key_values = None
+            past_key_values = None
         # past warm start
         else:
-            encoder_outputs, decoder_past_key_values = past
+            encoder_outputs, past_key_values = past
             attention_mask = encoder_outputs[-2]
 
         print_docs = getattr(kwargs, "print_docs", False)
@@ -728,7 +728,7 @@ class RagToken(PreTrainedRagModel):
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "decoder_past_key_values": decoder_past_key_values,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
             "marginalize": True,
             "print_docs": print_docs,
@@ -738,7 +738,7 @@ class RagToken(PreTrainedRagModel):
     def _reorder_cache(past, beam_idx):
         """Reorders cache for generation."""
 
-        (enc_out, enc_mask, attention_mask, doc_scores), decoder_past_key_values = past
+        (enc_out, enc_mask, attention_mask, doc_scores), past_key_values = past
         n_docs = doc_scores.shape[1]
 
         def _reorder_stacked(t):
@@ -751,18 +751,18 @@ class RagToken(PreTrainedRagModel):
                     attn_cache[k] = _reorder_stacked(input_buffer_k)
             return attn_cache
 
-        reordered_decoder_past_key_values = []
-        for layer_past in decoder_past_key_values:
+        reordered_past_key_values = []
+        for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {attn_key: _reorder_buffer(attn_cache) for attn_key, attn_cache in layer_past.items()}
-            reordered_decoder_past_key_values.append(layer_past_new)
+            reordered_past_key_values.append(layer_past_new)
 
         enc_out = _reorder_stacked(enc_out) if enc_out is not None else None
         enc_mask = _reorder_stacked(enc_mask) if enc_mask is not None else None
         doc_scores = doc_scores.index_select(0, beam_idx)
         attention_mask = _reorder_stacked(attention_mask)
 
-        return ((enc_out, enc_mask, attention_mask, doc_scores), reordered_decoder_past_key_values)
+        return ((enc_out, enc_mask, attention_mask, doc_scores), reordered_past_key_values)
 
     def marginalize(self, seq_logits, doc_scores):
         # RAG-token marginalization
@@ -782,7 +782,7 @@ class RagToken(PreTrainedRagModel):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=None,
         return_loss=False,
         reduce=False,
@@ -809,19 +809,19 @@ class RagToken(PreTrainedRagModel):
             attention_mask,
             encoder_outputs,
             decoder_input_ids,
-            decoder_past_key_values,
+            past_key_values,
             use_cache,
             **generator_kwargs,
         )
 
-        if outputs.decoder_past_key_values is not None:
-            (enc_out, enc_mask), decoder_past_key_values = outputs.decoder_past_key_values
-            decoder_past_key_values = (
+        if outputs.past_key_values is not None:
+            (enc_out, enc_mask), past_key_values = outputs.past_key_values
+            past_key_values = (
                 (enc_out, enc_mask, attention_mask, outputs.doc_scores),
-                decoder_past_key_values,
+                past_key_values,
             )
         else:
-            decoder_past_key_values = None
+            past_key_values = None
 
         if return_loss:
             assert decoder_input_ids is not None
@@ -831,7 +831,7 @@ class RagToken(PreTrainedRagModel):
             return Seq2SeqLMOutputWithDocs(
                 loss=loss,
                 logits=outputs.logits,
-                decoder_past_key_values=decoder_past_key_values,
+                past_key_values=past_key_values,
                 decoder_hidden_states=outputs.decoder_hidden_states,
                 decoder_attentions=outputs.decoder_attentions,
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -845,7 +845,7 @@ class RagToken(PreTrainedRagModel):
         return Seq2SeqLMOutputWithDocs(
             loss=None,
             logits=logits,
-            decoder_past_key_values=decoder_past_key_values,
+            past_key_values=past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
