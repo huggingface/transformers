@@ -8,7 +8,7 @@ datasets:
 # Roberta2Roberta_L-24_gigaword EncoderDecoder model
 
 The model was introduced in 
-[this paper](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn and first released in [this repository](https://tfhub.dev/google/bertseq2seq/roberta24_bbc/1). 
+[this paper](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn and first released in [this repository](https://tfhub.dev/google/bertseq2seq/roberta24_gigaword/1). 
 
 The model is an encoder-decoder model that was initialized on the `roberta-large` checkpoints for both the encoder 
 and decoder and fine-tuned on headline generation using the Gigaword dataset, which is linked above.
