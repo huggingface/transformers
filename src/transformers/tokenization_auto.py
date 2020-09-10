@@ -46,6 +46,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    replace_list_option_in_docstrings,
 )
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
@@ -112,34 +113,14 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
+SLOW_TOKENIZER_MAPPING = {k: v[0] for k, v in TOKENIZER_MAPPING.items()}
+
 
 class AutoTokenizer:
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
     that will be instantiated as one of the tokenizer classes of the library
     when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
     class method.
-
-    The `from_pretrained()` method takes care of returning the correct tokenizer class instance
-    based on the `model_type` property of the config object, or when it's missing,
-    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
-
-        - `t5`: T5Tokenizer (T5 model)
-        - `distilbert`: DistilBertTokenizer (DistilBert model)
-        - `albert`: AlbertTokenizer (ALBERT model)
-        - `camembert`: CamembertTokenizer (CamemBERT model)
-        - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-        - `longformer`: LongformerTokenizer (AllenAI Longformer model)
-        - `roberta`: RobertaTokenizer (RoBERTa model)
-        - `bert`: BertTokenizer (Bert model)
-        - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-        - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-        - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-        - `xlnet`: XLNetTokenizer (XLNet model)
-        - `xlm`: XLMTokenizer (XLM model)
-        - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-        - `electra`: ElectraTokenizer (Google ELECTRA model)
-        - `funnel`: FunnelTokenizer (Funnel Transformer model)
-        - `lxmert`: LxmertTokenizer (Lxmert model)
 
     This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -151,6 +132,7 @@ class AutoTokenizer:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(SLOW_TOKENIZER_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         r"""Instantiate one of the tokenizer classes of the library
         from a pre-trained model vocabulary.
@@ -159,24 +141,7 @@ class AutoTokenizer:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: T5Tokenizer (T5 model)
-            - `distilbert`: DistilBertTokenizer (DistilBert model)
-            - `albert`: AlbertTokenizer (ALBERT model)
-            - `camembert`: CamembertTokenizer (CamemBERT model)
-            - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-            - `longformer`: LongformerTokenizer (AllenAI Longformer model)
-            - `roberta`: RobertaTokenizer (RoBERTa model)
-            - `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
-            - `bert`: BertTokenizer (Bert model)
-            - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-            - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-            - `xlnet`: XLNetTokenizer (XLNet model)
-            - `xlm`: XLMTokenizer (XLM model)
-            - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-            - `electra`: ElectraTokenizer (Google ELECTRA model)
-            - `funnel`: FunnelTokenizer (Funnel Transformer model)
-            - `lxmert`: LxmertTokenizer (Lxmert model)
+        List options
 
         Params:
             pretrained_model_name_or_path: either:

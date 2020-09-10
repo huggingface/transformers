@@ -46,6 +46,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    replace_list_option_in_docstrings,
 )
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
@@ -416,6 +417,7 @@ class AutoModel:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -429,19 +431,7 @@ class AutoModel:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModel` (DistilBERT model)
-                - isInstance of `longformer` configuration class: :class:`~transformers.LongformerModel` (Longformer model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModel` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModel` (Bert model)
-                - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTModel` (OpenAI GPT model)
-                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2Model` (OpenAI GPT-2 model)
-                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
-                - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLModel` (Transformer-XL model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModel` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMModel` (XLM model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (Flaubert model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraModel` (Electra model)
-                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelModel` (Funnel Transformer model)
+                List options
 
         Examples::
 
@@ -459,6 +449,7 @@ class AutoModel:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the base model classes of the library
         from a pre-trained model configuration.
@@ -467,23 +458,7 @@ class AutoModel:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: :class:`~transformers.T5Model` (T5 model)
-            - `distilbert`: :class:`~transformers.DistilBertModel` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertModel` (ALBERT model)
-            - `camembert`: :class:`~transformers.CamembertModel` (CamemBERT model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaModel` (XLM-RoBERTa model)
-            - `longformer` :class:`~transformers.LongformerModel` (Longformer model)
-            - `roberta`: :class:`~transformers.RobertaModel` (RoBERTa model)
-            - `bert`: :class:`~transformers.BertModel` (Bert model)
-            - `openai-gpt`: :class:`~transformers.OpenAIGPTModel` (OpenAI GPT model)
-            - `gpt2`: :class:`~transformers.GPT2Model` (OpenAI GPT-2 model)
-            - `transfo-xl`: :class:`~transformers.TransfoXLModel` (Transformer-XL model)
-            - `xlnet`: :class:`~transformers.XLNetModel` (XLNet model)
-            - `xlm`: :class:`~transformers.XLMModel` (XLM model)
-            - `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
-            - `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
-            - `electra`: :class:`~transformers.ElectraModel` (Electra  model)
-            - `funnel`: :class:`~transformers.FunnelModel` (Funnel Transformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -575,6 +550,7 @@ class AutoModelForPreTraining:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_PRETRAINING_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -588,18 +564,7 @@ class AutoModelForPreTraining:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-                - isInstance of `longformer` configuration class: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertForPreTraining` (Bert model)
-                - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL  model)
-                - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForPreTraining` (Electra model)
+                List options
 
         Examples::
 
@@ -617,6 +582,7 @@ class AutoModelForPreTraining:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_PRETRAINING_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the model classes of the library -with the architecture used for pretraining this model– from a pre-trained model configuration.
 
@@ -624,22 +590,7 @@ class AutoModelForPreTraining:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
-            - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
-            - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
-            - `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-            - `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-            - `bert`: :class:`~transformers.BertForPreTraining` (Bert model)
-            - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-            - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-            - `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-            - `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-            - `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-            - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
-            - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-            - `electra`: :class:`~transformers.ElectraForPreTraining` (Electra model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -726,6 +677,7 @@ class AutoModelWithLMHead:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_WITH_LM_HEAD_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -739,19 +691,7 @@ class AutoModelWithLMHead:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-                - isInstance of `longformer` configuration class: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertForMaskedLM` (Bert model)
-                - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL  model)
-                - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
-                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
+                List options
 
         Examples::
 
@@ -773,6 +713,7 @@ class AutoModelWithLMHead:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_WITH_LM_HEAD_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
@@ -781,23 +722,7 @@ class AutoModelWithLMHead:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
-            - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
-            - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
-            - `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-            - `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-            - `bert`: :class:`~transformers.BertForMaskedLM` (Bert model)
-            - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-            - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-            - `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-            - `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-            - `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-            - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
-            - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-            - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
-            - `funnel`: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -888,6 +813,7 @@ class AutoModelForCausalLM:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_CAUSAL_LM_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -901,13 +827,7 @@ class AutoModelForCausalLM:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `bert` configuration class: :class:`~transformers.BertLMHeadModel` (Bert model)
-                - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL  model)
-                - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-                - isInstance of `reformer` configuration class: :class:`~transformers.ReformerModelWithLMHead` (Reformer model)
+                List options
 
         Examples::
 
@@ -925,6 +845,7 @@ class AutoModelForCausalLM:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_CAUSAL_LM_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
@@ -933,13 +854,7 @@ class AutoModelForCausalLM:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
-            - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-            - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-            - `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-            - `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-            - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
-            - `reformer`: :class:`~transformers.ReformerModelWithLMHead` (Google Reformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1026,6 +941,7 @@ class AutoModelForMaskedLM:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_MASKED_LM_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -1038,18 +954,8 @@ class AutoModelForMaskedLM:
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-                - isInstance of `longformer` configuration class: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertForMaskedLM` (Bert model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-                - isInstance of `xlm-roberta` configuration class: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-Roberta model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
-                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForMaskedLM` (Camembert model)
-                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForMaskedLM` (Albert model)
-                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
 
+                List options
 
         Examples::
 
@@ -1067,6 +973,7 @@ class AutoModelForMaskedLM:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_MASKED_LM_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
@@ -1075,17 +982,7 @@ class AutoModelForMaskedLM:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
-            - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
-            - `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-            - `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-            - `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-            - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-            - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
-            - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
-            - `funnel`: :class:`~transformers.FunnelForMaskedLM` (Funnel Transformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1172,6 +1069,7 @@ class AutoModelForSeq2SeqLM:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -1185,10 +1083,7 @@ class AutoModelForSeq2SeqLM:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `t5` configuration class: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
-                - isInstance of `bart` configuration class: :class:`~transformers.BartForConditionalGeneration` (Bart model)
-                - isInstance of `marian` configuration class: :class:`~transformers.MarianMTModel` (Marian model)
-                - isInstance of `encoder-decoder` configuration class: :class:`~transformers.EncoderDecoderModel` (Encoder Decoder model)
+                List options
 
         Examples::
 
@@ -1208,6 +1103,7 @@ class AutoModelForSeq2SeqLM:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
@@ -1216,10 +1112,7 @@ class AutoModelForSeq2SeqLM:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
-            - `bart`: :class:`~transformers.BartForConditionalGeneration` (Bert model)
-            - `marian`: :class:`~transformers.MarianMTModel` (Marian model)
-            - `encoder-decoder`: :class:`~transformers.EncoderDecoderModel` (Encoder Decoder model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1308,6 +1201,7 @@ class AutoModelForSequenceClassification:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -1321,16 +1215,7 @@ class AutoModelForSequenceClassification:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
-                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
-                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
-                - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaForSequenceClassification` (XLM-RoBERTa model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForSequenceClassification` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertForSequenceClassification` (Bert model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMForSequenceClassification` (XLM model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
-                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelModelForSequenceClassification` (Funnel Transformer model)
+                List options
 
         Examples::
 
@@ -1350,6 +1235,7 @@ class AutoModelForSequenceClassification:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the sequence classification model classes of the library
         from a pre-trained model configuration.
@@ -1358,15 +1244,7 @@ class AutoModelForSequenceClassification:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `distilbert`: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
-            - `camembert`: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaForSequenceClassification` (XLM-RoBERTa model)
-            - `roberta`: :class:`~transformers.RobertaForSequenceClassification` (RoBERTa model)
-            - `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
-            - `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
-            - `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
-            - `funnel`: :class:`~transformers.FunnelForSequenceClassification` (Funnel Transformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1462,6 +1340,7 @@ class AutoModelForQuestionAnswering:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_QUESTION_ANSWERING_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -1475,13 +1354,7 @@ class AutoModelForQuestionAnswering:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
-                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModelForQuestionAnswering` (Bert model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
-                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForQuestionAnswering` (Funnel Transformer model)
+                List options
 
         Examples::
 
@@ -1502,6 +1375,7 @@ class AutoModelForQuestionAnswering:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_QUESTION_ANSWERING_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the question answering model classes of the library
         from a pre-trained model configuration.
@@ -1510,13 +1384,7 @@ class AutoModelForQuestionAnswering:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `distilbert`: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
-            - `bert`: :class:`~transformers.BertForQuestionAnswering` (Bert model)
-            - `xlnet`: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
-            - `xlm`: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
-            - `flaubert`: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
-            - `funnel`: :class:`~transformers.FunnelForQuestionAnswering` (Funnel Transformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1610,6 +1478,7 @@ class AutoModelForTokenClassification:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""Instantiates one of the base model classes of the library
         from a configuration.
@@ -1623,17 +1492,7 @@ class AutoModelForTokenClassification:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForTokenClassification` (DistilBERT model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMForTokenClassification` (XLM model)
-                - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaModelForTokenClassification` (XLMRoberta model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModelForTokenClassification` (Bert model)
-                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForTokenClassification` (AlBert model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForTokenClassification` (XLNet model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
-                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
-                - isInstance of `funnel` configuration class: :class:`~transformers.FunnelForTokenClassification` (Funnel Transformer model)
+                List options
 
         Examples::
 
@@ -1654,6 +1513,7 @@ class AutoModelForTokenClassification:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiates one of the question answering model classes of the library
         from a pre-trained model configuration.
@@ -1662,16 +1522,7 @@ class AutoModelForTokenClassification:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `distilbert`: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
-            - `xlm`: :class:`~transformers.XLMForTokenClassification` (XLM model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaForTokenClassification` (XLM-RoBERTa?Para model)
-            - `camembert`: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
-            - `bert`: :class:`~transformers.BertForTokenClassification` (Bert model)
-            - `xlnet`: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
-            - `flaubert`: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
-            - `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
-            - `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
-            - `funnel`: :class:`~transformers.FunnelForTokenClassification` (Funnel Transformer model)
+        List options
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1765,7 +1616,27 @@ class AutoModelForMultipleChoice:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_MULTIPLE_CHOICE_MAPPING, use_model_types=False)
     def from_config(cls, config):
+        r"""Instantiates one of the base model classes of the library
+        from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = AutoModelForMultipleChoice.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
         for config_class, model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
@@ -1780,7 +1651,71 @@ class AutoModelForMultipleChoice:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_MULTIPLE_CHOICE_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""Instantiates one of the question answering model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+        List options
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Args:
+            pretrained_model_name_or_path:
+                Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                These arguments will be passed to the configuration and the model.
+
+        Examples::
+
+            model = AutoModelForForMultipleChoice.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = AutoModelForMultipleChoice.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForMultipleChoice.from_pretrained('bert-base-uncased', output_attentions=True)  # Update configuration during loading
+            assert model.config.output_attentions == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            model = AutoModelForMultipleChoice.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+
+        """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
