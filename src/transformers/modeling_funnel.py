@@ -425,9 +425,9 @@ def _relative_shift_gather(positional_attn, context_len, shift):
     # max_rel_len = 2 * context_len + shift -1 is the numbers of possible relative positions i-j
 
     # What's next is the same as doing the following gather, which might be clearer code but less efficient.
-    # idxs = context_len + torch.arange(0, context_len).unsqueeze(0) - torch.arange(0, context_len).unsqueeze(1)
+    # idxs = context_len + torch.arange(0, context_len).unsqueeze(0) - torch.arange(0, seq_len).unsqueeze(1)
     # # matrix of context_len + i-j
-    # return positional_attn.gather(3, idxs.expand([bs, n_head, context_len, context_len]))
+    # return positional_attn.gather(3, idxs.expand([batch_size, n_head, context_len, context_len]))
 
     positional_attn = torch.reshape(positional_attn, [batch_size, n_head, max_rel_len, seq_len])
     positional_attn = positional_attn[:, :, shift:, :]
@@ -526,9 +526,9 @@ class FunnelRelMultiheadAttention(nn.Module):
             token_type_attn *= cls_mask
         return token_type_attn
 
-    def forward(self, query, key, value, attention_inputs, head_mask=None, output_attentions=False):
-        # q has shape batch_size x seq_len x d_model
-        # k and v have shapes batch_size x context_len x d_model
+    def forward(self, query, key, value, attention_inputs, output_attentions=False):
+        # query has shape batch_size x seq_len x d_model
+        # key and value have shapes batch_size x context_len x d_model
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
 
         batch_size, seq_len, _ = query.shape
@@ -598,8 +598,8 @@ class FunnelLayer(nn.Module):
         self.attention = FunnelRelMultiheadAttention(config, block_index)
         self.ffn = FunnelPositionwiseFFN(config)
 
-    def forward(self, q, k, v, attention_inputs, output_attentions=False):
-        attn = self.attention(q, k, v, attention_inputs, output_attentions=output_attentions)
+    def forward(self, query, key, value, attention_inputs, output_attentions=False):
+        attn = self.attention(query, key, value, attention_inputs, output_attentions=output_attentions)
         output = self.ffn(attn[0])
         return (output, attn[1]) if output_attentions else (output,)
 
@@ -792,7 +792,7 @@ class FunnelClassificationHead(nn.Module):
 
     def forward(self, hidden):
         hidden = self.linear_hidden(hidden)
-        hidden = F.tanh(hidden)
+        hidden = torch.tanh(hidden)
         hidden = self.dropout(hidden)
         return self.linear_out(hidden)
 
@@ -954,7 +954,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare base Funnel Transformer Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Funnel Transformer Model transformer outputting raw hidden-states without any specific head on top.",
     FUNNEL_START_DOCSTRING,
 )
 class FunnelModel(FunnelPreTrainedModel):
@@ -1099,10 +1099,10 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = FunnelTokenizer.from_pretrained('funnel-transformer/small')
-            >>> model = FunnelForPreTraining.from_pretrained('funnel-transformer/small')
+            >>> model = FunnelForPreTraining.from_pretrained('funnel-transformer/small', return_dict=True)
 
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            >>> logits = model(input_ids).logits
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors= "pt")
+            >>> logits = model(**inputs).logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
