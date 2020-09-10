@@ -83,7 +83,7 @@ from .file_utils import (
     add_start_docstrings,
     cached_path,
     is_apex_available,
-    is_nlp_available,
+    is_datasets_available,
     is_psutil_available,
     is_py3nvml_available,
     is_tf_available,
