@@ -1245,7 +1245,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            heda_mask=head_mask,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1543,7 +1543,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
                 inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             start_positions = inputs.pop("start_positions", start_positions)
-            end_positions = inputs.pop("end_positions", start_positions)
+            end_positions = inputs.pop("end_positions", end_positions)
 
         outputs = self.bert(
             inputs=inputs,
