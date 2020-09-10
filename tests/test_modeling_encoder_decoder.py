@@ -21,7 +21,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
-from .test_modeling_bert_for_seq_generation import BertGenerationEncoderTester
+from .test_modeling_bert_generation import BertGenerationEncoderTester
 from .test_modeling_common import ids_tensor
 from .test_modeling_gpt2 import GPT2ModelTester
 from .test_modeling_roberta import RobertaModelTester
