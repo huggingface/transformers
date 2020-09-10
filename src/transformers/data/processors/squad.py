@@ -644,6 +644,10 @@ class SquadProcessor(DataProcessor):
                             start_position_character = answer["answer_start"]
                         else:
                             answers = qa["answers"]
+                            # Pick first start position and answer_text
+                            answer = answers[0]
+                            answer_text = answer["text"]
+                            start_position_character = answer["answer_start"]
 
                     example = SquadExample(
                         qas_id=qas_id,
