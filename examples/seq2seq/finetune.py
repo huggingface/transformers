@@ -3,7 +3,6 @@ import glob
 import logging
 import os
 import time
-import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -69,8 +68,6 @@ class SummarizationModule(BaseTransformer):
     def __init__(self, hparams, **kwargs):
         if hparams.sortish_sampler and hparams.gpus > 1:
             hparams.replace_sampler_ddp = False
-            # self.hparams.sortish_sampler = False
-            # warnings.warn("ignoring sortish_sampler as it is unsupported on multiple GPUs")
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)

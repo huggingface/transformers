@@ -16,7 +16,6 @@ from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
-from torch.utils.data.distributed import DistributedSampler
 
 from transformers import BartTokenizer
 
@@ -197,9 +196,6 @@ class SortishSampler(Sampler):
     def __init__(self, data, batch_size):
         self.data, self.bs = data, batch_size
 
-    def key(self, i):
-        return self.data[i]
-
     def __len__(self) -> int:
         return len(self.data)
 
@@ -207,8 +203,9 @@ class SortishSampler(Sampler):
         return iter(sortish_sampler_indices(self.data, self.bs))
 
 
-def sortish_sampler_indices(data, bs):
-    # raise NotImplementedError('')
+def sortish_sampler_indices(data: List, bs: int) -> np.array:
+    "Go through the text data by order of src length with a bit of randomness. From fastai repo."
+
     def key_fn(i):
         return data[i]
 
@@ -226,7 +223,9 @@ def sortish_sampler_indices(data, bs):
 
 
 class DistributedSortishSampler(Sampler):
-    def __init__(self, dataset, batch_size, num_replicas=None, rank=None, shuffle=True):
+    """Copied from torch DistributedSampler"""
+
+    def __init__(self, dataset, batch_size, num_replicas=None, rank=None):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -241,29 +240,27 @@ class DistributedSortishSampler(Sampler):
         self.epoch = 0
         self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
         self.total_size = self.num_samples * self.num_replicas
-        self.shuffle = shuffle
         self.batch_size = batch_size
 
-    def __iter__(self):
-        # deterministically shuffle based on epoch
+    def __iter__(self) -> Iterable:
         g = torch.Generator()
         g.manual_seed(self.epoch)
-        if self.shuffle:
-            indices = torch.randperm(len(self.dataset), generator=g).tolist()
-        else:
-            indices = list(range(len(self.dataset)))
+        available_indices = self.get_indices_for_rank()  # indices[self.rank: self.total_size: self.num_replicas]
 
-        # add extra samples to make it evenly divisible
-        indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size
-
-        # subsample
-        available_indices = indices[self.rank : self.total_size : self.num_replicas]
         sortish_data = [self.dataset.src_lens[i] for i in available_indices]
         sortish_indices = sortish_sampler_indices(sortish_data, self.batch_size)
         indices = [available_indices[i] for i in sortish_indices]
         assert len(indices) == self.num_samples
         return iter(indices)
+
+    def get_indices_for_rank(self) -> np.array:
+        indices = list(range(len(self.dataset)))
+        # add extra samples to make it evenly divisible
+        indices += indices[: (self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+        # subsample
+        available_indices = indices[self.rank : self.total_size : self.num_replicas]
+        return available_indices
 
     def __len__(self):
         return self.num_samples
