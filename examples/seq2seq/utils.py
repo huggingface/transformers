@@ -120,6 +120,7 @@ class AbstractSeq2SeqDataset(Dataset):
 
     @cached_property
     def tgt_lens(self):
+        """Length in characters of target documents"""
         return self.get_char_lens(self.tgt_file)
 
     def make_sortish_sampler(self, batch_size, distributed=False):
@@ -128,7 +129,7 @@ class AbstractSeq2SeqDataset(Dataset):
         else:
             return SortishSampler(self.src_lens, batch_size)
 
-    def make_dynamic_sampler(self, max_tokens_per_batch=1024, chars_per_token=4, **kwargs):
+    def make_dynamic_sampler(self, max_tokens_per_batch=1024, distributed=False, chars_per_token=4, **kwargs):
         # import ipdb; ipdb.set_trace()
         from fairseq.data.data_utils import batch_by_size
 
@@ -298,6 +299,30 @@ class DistributedSortishSampler(Sampler):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+class DistributedDynamicBatchSizeSampler(DistributedSortishSampler):
+    def __init__(self, dataset, max_tokens_per_batch, required_bs_mult=4, num_replicas=None, rank=None):
+        ss_bs = 2048 if len(self.dataset) > 2048 else len(self.dataset) // 2
+        self.ss = DistributedSortishSampler(dataset, ss_bs, num_replicas=num_replicas, rank=rank)
+        self.max_tokens_per_batch = max_tokens_per_batch
+        self.required_bs_mult = required_bs_mult
+
+    def __iter__(self):
+        from fairseq.data.data_utils import batch_by_size
+
+        sorted_available_indices: List[int] = list(self.ss)
+
+        def num_tokens_in_example(i):
+            return self.src_lens[i]
+
+        batch_sampler: List[List[int]] = batch_by_size(
+            sorted_available_indices,
+            num_tokens_fn=num_tokens_in_example,
+            max_tokens=self.max_tokens_per_batch,
+            required_batch_size_multiple=self.required_bs_mult,
+        )
+        return iter(batch_sampler)
 
 
 logger = getLogger(__name__)

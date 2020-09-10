@@ -274,9 +274,7 @@ class SummarizationModule(BaseTransformer):
             )
 
         elif self.hparams.max_tokens_per_batch is not None and type_path == "train":
-            # batch_sampler = pickle_load('dynamic_batches.pkl')
-            # batch_by_size
-            batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch)  # TODO(SS): shuffle this
+            batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch)
             return DataLoader(
                 dataset,
                 batch_sampler=batch_sampler,
