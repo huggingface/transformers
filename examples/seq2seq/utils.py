@@ -315,6 +315,7 @@ class DistributedDynamicBatchSizeSampler(BatchSampler):
         self.ss = DistributedSortishSampler(dataset, ss_bs, num_replicas=num_replicas, rank=rank)
         self.max_tokens_per_batch = max_tokens_per_batch
         self.required_bs_mult = required_bs_mult
+        self.num_samples = 10 # placeholder
 
     def __iter__(self):
         sorted_available_indices: List[int] = list(self.ss)
@@ -329,12 +330,13 @@ class DistributedDynamicBatchSizeSampler(BatchSampler):
             required_batch_size_multiple=self.required_bs_mult,
         )
         batch_sizes = lmap(len, batch_sampler)
+        self.num_samples = len(batch_sizes)
         if np.mean(batch_sizes) < 4:
             raise ValueError("DELETEME")
         return iter(batch_sampler)
 
     def __len__(self):
-        return self.ss.num_samples
+        return self.num_samples
 
     def set_epoch(self, epoch):
         self.epoch = epoch
