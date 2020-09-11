@@ -60,6 +60,7 @@ def generate_pseudolabels(
     num_beams: int = 10,
     gpus=1,
     task="summarization",
+    local_rank=None,
     **generate_kwargs,
 ) -> Dict:
     """Save model.generate results to <out_file>, and return how long it took."""
@@ -73,18 +74,17 @@ def generate_pseudolabels(
         model.to(device)
     else:
         model_name = str(model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
         torch.distributed.init_process_group(backend="c10_d", world_size=dist.get_world_size())
-        device = dist.get_rank()
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        device = local_rank
         print(f'setting device ={device}')
         save_dir, basename = Path(save_path).parent, Path(save_path).name
         save_path = save_dir.joinpath(f'dev_1_{device}_{basename}')
 
         # assume multi-gpu
-
         torch.cuda.set_device(device)
-
-        model = DistributedDataParallel(model, device_ids=[dist.get_rank()])
+        model = DistributedDataParallel(model, device_ids=[local_rank])
 
     if fp16:
         model = model.half()
