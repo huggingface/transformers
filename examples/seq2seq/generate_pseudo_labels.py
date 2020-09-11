@@ -80,8 +80,8 @@ def generate_summaries_or_translations(
         i+=1
 
         summaries = model.generate(
-            input_ids=batch.input_ids,
-            attention_mask=batch.attention_mask,
+            input_ids=batch['input_ids'],
+            attention_mask=batch['attention_mask'],
             num_beams=num_beams,
             num_return_sequences=num_return_sequences,
             **generate_kwargs,
