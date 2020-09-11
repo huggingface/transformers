@@ -4,7 +4,7 @@ import datasets
 import numpy as np
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_torch
+from transformers.testing_utils import get_tests_dir, require_non_multigpu, require_torch
 
 
 if is_torch_available():
@@ -111,6 +111,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.per_device_train_batch_size
 
+    @require_non_multigpu
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
         trainer = get_regression_trainer(learning_rate=0.1)
@@ -122,6 +123,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
+    @require_non_multigpu
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
         trainer = get_regression_trainer(learning_rate=0.1)
@@ -138,6 +140,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
+    @require_non_multigpu
     def test_train_and_eval_dataloaders(self):
         trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16)
         self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
@@ -200,6 +203,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         x = trainer.eval_dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
+    @require_non_multigpu
     def test_trainer_with_datasets(self):
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
@@ -228,6 +232,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    @require_non_multigpu
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
@@ -241,6 +246,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.abs(trainer.model.b - 2.5656) < 1e-4)
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
+    @require_non_multigpu
     def test_model_init(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression", learning_rate=0.1)
