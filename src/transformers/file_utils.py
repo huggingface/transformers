@@ -988,6 +988,8 @@ class ModelOutput(OrderedDict):
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
                         self[element[0]] = element[1]
+            elif first_field is not None:
+                self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
                 v = getattr(self, field.name)
@@ -1012,6 +1014,18 @@ class ModelOutput(OrderedDict):
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
+
+    def __setattr__(self, name, value):
+        if name in self.keys() and value is not None:
+            # Don't call self.__setitem__ to avoid recursion errors
+            super().__setitem__(name, value)
+        super().__setattr__(name, value)
+
+    def __setitem__(self, key, value):
+        # Will raise a KeyException if needed
+        super().__setitem__(key, value)
+        # Don't call self.__setattr__ to avoid recursion errors
+        super().__setattr__(key, value)
 
     def to_tuple(self) -> Tuple[Any]:
         """
