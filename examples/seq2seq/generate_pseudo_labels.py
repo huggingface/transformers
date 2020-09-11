@@ -7,18 +7,32 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from torch.utils.data import DataLoader
 
 
 logger = getLogger(__name__)
 
 try:
-    from .utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params, Seq2SeqDataset, save_json
+    from .utils import (
+        Seq2SeqDataset,
+        calculate_bleu,
+        calculate_rouge,
+        parse_numeric_cl_kwargs,
+        save_json,
+        use_task_specific_params,
+    )
 except ImportError:
-    from utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params, Seq2SeqDataset, save_json
+    from utils import (
+        Seq2SeqDataset,
+        calculate_bleu,
+        calculate_rouge,
+        parse_numeric_cl_kwargs,
+        save_json,
+        use_task_specific_params,
+    )
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -29,29 +43,43 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
+
+
 def generate_pseudolabels(
     data_dir,
     out_file: str,
     model_name: str,
     bs: int = 8,
-    max_source_length: int=1024,
+    max_source_length: int = 1024,
     device: str = DEFAULT_DEVICE,
     n_obs=None,
     fp16=False,
-    num_return_sequences:int=10,
-    num_beams: int=10,
+    num_return_sequences: int = 10,
+    num_beams: int = 10,
     gpus=1,
     task="summarization",
     **generate_kwargs,
 ) -> Dict:
     """Save model.generate results to <out_file>, and return how long it took."""
-    #fout = Path(out_file).open("w", encoding="utf-8")
+    # fout = Path(out_file).open("w", encoding="utf-8")
     Path(out_file).parent.mkdir(exist_ok=True)
     model_name = str(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    if isinstance(device, str):
+        model.to(device)
+
+    else:
+        # assume multi-gpu
+        assert isinstance(device, int)
+        torch.cuda.set_device(device)
+        torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size())
+        model = DistributedDataParallel(model, device_ids=[dist.get_rank()])
+
     if fp16:
         model = model.half()
-    if gpus >1:
+    if gpus > 1:
         model = torch.nn.DataParallel(model)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -60,42 +88,35 @@ def generate_pseudolabels(
     ds = Seq2SeqDataset(
         tokenizer,
         data_dir,
-        max_source_length, max_target_length=1024,
-        type_path='train',
+        max_source_length,
+        max_target_length=1024,
+        type_path="train",
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
     sampler = ds.make_sortish_sampler(bs, distributed=gpus > 1)
 
-
-    data_loader = DataLoader(
-        ds,
-        sampler=sampler,
-        batch_size=bs,
-        collate_fn=ds.collate_fn
-
-    )
+    data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
 
     start_time = time.time()
     # update config with task specific params
     i = 0
     results = []
     for batch in tqdm(data_loader):
-        i+=1
+        i += 1
 
         summaries = model.generate(
-            input_ids=batch['input_ids'].to(model.device),
-            attention_mask=batch['attention_mask'].to(model.device),
+            input_ids=batch["input_ids"].to(model.device),
+            attention_mask=batch["attention_mask"].to(model.device),
             num_beams=num_beams,
             num_return_sequences=num_return_sequences,
             **generate_kwargs,
         )
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        labels = tokenizer.batch_decode(batch['labels'], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        labels = tokenizer.batch_decode(batch["labels"], skip_special_tokens=True, clean_up_tokenization_spaces=False)
         chunked_preds = list(chunks(dec, num_return_sequences))
         for i, label in enumerate(labels):
             results.append(dict(preds=chunked_preds[i], label=label))
-
 
             # best_pred, best_score = '', -1
             # for j in range(num_return_sequences):
@@ -108,10 +129,13 @@ def generate_pseudolabels(
         save_json(results, out_file)
 
     runtime = int(time.time() - start_time)  # seconds
-    return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
+    return results
+
+
 import fire
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     fire.Fire(generate_pseudolabels)
 
 # def run_generate():
