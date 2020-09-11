@@ -89,16 +89,18 @@ def generate_pseudolabels(
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         labels = tokenizer.batch_decode(batch['labels'], skip_special_tokens=True, clean_up_tokenization_spaces=False)
         chunked_preds = list(chunks(dec, num_return_sequences))
+        for i, label in enumerate(labels):
+            results.append(dict(preds=chunked_preds[i], label=label))
 
-        for i,label in enumerate(labels):
-            best_pred, best_score = '', -1
-            for j in range(num_return_sequences):
-                pred = chunked_preds[i][j]
-                score = calculate_rouge([pred], [label])['rouge2']
-                if score > best_score:
-                    best_score = score
-                    best_pred = pred
-            results.append(dict(label=label, best_pred=best_pred, best_score=best_score))
+
+            # best_pred, best_score = '', -1
+            # for j in range(num_return_sequences):
+            #     pred = chunked_preds[i][j]
+            #     score = calculate_rouge([pred], [label])['rougeL']
+            #     if score > best_score:
+            #         best_score = score
+            #         best_pred = pred
+            # results.append(dict(label=label, best_pred=best_pred, best_score=best_score))
         save_json(results, out_file)
 
     runtime = int(time.time() - start_time)  # seconds
