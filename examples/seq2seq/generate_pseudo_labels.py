@@ -40,6 +40,7 @@ def generate_pseudolabels(
     fp16=False,
     num_return_sequences:int=10,
     num_beams: int=10,
+    gpus=1,
     task="summarization",
     **generate_kwargs,
 ) -> Dict:
@@ -50,6 +51,8 @@ def generate_pseudolabels(
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
     if fp16:
         model = model.half()
+    if gpus >1:
+        model = torch.nn.DataParallel(model)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
@@ -62,7 +65,8 @@ def generate_pseudolabels(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = ds.make_sortish_sampler(bs)
+    sampler = ds.make_sortish_sampler(bs, distributed=gpus > 1)
+
 
     data_loader = DataLoader(
         ds,
