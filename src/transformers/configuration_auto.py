@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Auto Config class. """
 
-
+import re
 from collections import OrderedDict
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
@@ -78,122 +78,126 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
-        (
-            "retribert",
-            RetriBertConfig,
-        ),
-        (
-            "t5",
-            T5Config,
-        ),
-        (
-            "mobilebert",
-            MobileBertConfig,
-        ),
-        (
-            "distilbert",
-            DistilBertConfig,
-        ),
-        (
-            "albert",
-            AlbertConfig,
-        ),
-        (
-            "bert-generation",
-            BertGenerationConfig,
-        ),
-        (
-            "camembert",
-            CamembertConfig,
-        ),
-        (
-            "xlm-roberta",
-            XLMRobertaConfig,
-        ),
+        ("retribert", RetriBertConfig),
+        ("t5", T5Config),
+        ("mobilebert", MobileBertConfig),
+        ("distilbert", DistilBertConfig),
+        ("albert", AlbertConfig),
+        ("bert-generation", BertGenerationConfig),
+        ("camembert", CamembertConfig),
+        ("xlm-roberta", XLMRobertaConfig),
         ("pegasus", PegasusConfig),
-        (
-            "marian",
-            MarianConfig,
-        ),
-        (
-            "mbart",
-            MBartConfig,
-        ),
-        (
-            "bart",
-            BartConfig,
-        ),
-        (
-            "reformer",
-            ReformerConfig,
-        ),
-        (
-            "longformer",
-            LongformerConfig,
-        ),
-        (
-            "roberta",
-            RobertaConfig,
-        ),
-        (
-            "flaubert",
-            FlaubertConfig,
-        ),
-        (
-            "bert",
-            BertConfig,
-        ),
-        (
-            "openai-gpt",
-            OpenAIGPTConfig,
-        ),
-        (
-            "gpt2",
-            GPT2Config,
-        ),
-        (
-            "transfo-xl",
-            TransfoXLConfig,
-        ),
-        (
-            "xlnet",
-            XLNetConfig,
-        ),
-        (
-            "xlm",
-            XLMConfig,
-        ),
-        (
-            "ctrl",
-            CTRLConfig,
-        ),
-        (
-            "electra",
-            ElectraConfig,
-        ),
-        (
-            "encoder-decoder",
-            EncoderDecoderConfig,
-        ),
-        (
-            "funnel",
-            FunnelConfig,
-        ),
-        (
-            "lxmert",
-            LxmertConfig,
-        ),
+        ("marian", MarianConfig),
+        ("mbart", MBartConfig),
+        ("bart", BartConfig),
+        ("reformer", ReformerConfig),
+        ("longformer", LongformerConfig),
+        ("roberta", RobertaConfig),
+        ("flaubert", FlaubertConfig),
+        ("bert", BertConfig),
+        ("openai-gpt", OpenAIGPTConfig),
+        ("gpt2", GPT2Config),
+        ("transfo-xl", TransfoXLConfig),
+        ("xlnet", XLNetConfig),
+        ("xlm", XLMConfig),
+        ("ctrl", CTRLConfig),
+        ("electra", ElectraConfig),
+        ("encoder-decoder", EncoderDecoderConfig),
+        ("funnel", FunnelConfig),
+        ("lxmert", LxmertConfig),
+    ]
+)
+
+MODEL_NAMES_MAPPING = OrderedDict(
+    [
+        ("retribert", "RetriBERT"),
+        ("t5", "T5"),
+        ("mobilebert", "MobileBERT"),
+        ("distilbert", "DistilBERT"),
+        ("albert", "ALBERT"),
+        ("bert-generation", "Bert Generation"),
+        ("camembert", "CamemBERT"),
+        ("xlm-roberta", "XLM-RoBERTa"),
+        ("pegasus", "Pegasus"),
+        ("marian", "Marian"),
+        ("mbart", "mBART"),
+        ("bart", "BART"),
+        ("reformer", "Reformer"),
+        ("longformer", "Longformer"),
+        ("roberta", "RoBERTa"),
+        ("flaubert", "FlauBERT"),
+        ("bert", "BERT"),
+        ("openai-gpt", "OpenAI GPT"),
+        ("gpt2", "OpenAI GPT-2"),
+        ("transfo-xl", "Transformer-XL"),
+        ("xlnet", "XLNet"),
+        ("xlm", "XLM"),
+        ("ctrl", "CTRL"),
+        ("electra", "ELECTRA"),
+        ("encoder-decoder", "Encoder decoder"),
+        ("funnel", "Funnel Transformer"),
+        ("lxmert", "LXMERT"),
     ]
 )
 
 
+def _list_model_options(indent, config_to_class=None, use_model_types=True):
+    if config_to_class is None and not use_model_types:
+        raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
+    if use_model_types:
+        if config_to_class is None:
+            model_type_to_name = {model_type: config.__name__ for model_type, config in CONFIG_MAPPING.items()}
+        else:
+            model_type_to_name = {
+                model_type: config_to_class[config].__name__
+                for model_type, config in CONFIG_MAPPING.items()
+                if config in config_to_class
+            }
+        lines = [
+            f"{indent}- **{model_type}** -- :class:`~transformers.{cls_name}` ({MODEL_NAMES_MAPPING[model_type]} model)"
+            for model_type, cls_name in model_type_to_name.items()
+        ]
+    else:
+        config_to_name = {config.__name__: clas.__name__ for config, clas in config_to_class.items()}
+        config_to_model_name = {
+            config.__name__: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING.items()
+        }
+        lines = [
+            f"{indent}- :class:`~transformers.{config_name}` configuration class: :class:`~transformers.{cls_name}` ({config_to_model_name[config_name]} model)"
+            for config_name, cls_name in config_to_name.items()
+        ]
+    return "\n".join(lines)
+
+
+def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True):
+    def docstring_decorator(fn):
+        docstrings = fn.__doc__
+        lines = docstrings.split("\n")
+        i = 0
+        while i < len(lines) and re.search(r"^(\s*)List options\s*$", lines[i]) is None:
+            i += 1
+        if i < len(lines):
+            indent = re.search(r"^(\s*)List options\s*$", lines[i]).groups()[0]
+            if use_model_types:
+                indent = f"{indent}    "
+            lines[i] = _list_model_options(indent, config_to_class=config_to_class, use_model_types=use_model_types)
+            docstrings = "\n".join(lines)
+        else:
+            raise ValueError(
+                f"The function {fn} should have an empty 'List options' in its docstring as placeholder, current docstring is:\n{docstrings}"
+            )
+        fn.__doc__ = docstrings
+        return fn
+
+    return docstring_decorator
+
+
 class AutoConfig:
     r"""
-    :class:`~transformers.AutoConfig` is a generic configuration class
-    that will be instantiated as one of the configuration classes of the library
-    when created with the :func:`~transformers.AutoConfig.from_pretrained` class method.
+    This is a generic configuration class that will be instantiated as one of the configuration classes of the library
+    when created with the :meth:`~transformers.AutoConfig.from_pretrained` class method.
 
-    The :func:`~transformers.AutoConfig.from_pretrained` method takes care of returning the correct model class instance
+    This method takes care of returning the correct model class instance
     based on the `model_type` property of the config object, or when it's missing,
     falling back to using pattern matching on the `pretrained_model_name_or_path` string.
     """
@@ -216,6 +220,7 @@ class AutoConfig:
         )
 
     @classmethod
+    @replace_list_option_in_docstrings()
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r""" Instantiates one of the configuration classes of the library
         from a pre-trained model configuration.
@@ -224,24 +229,7 @@ class AutoConfig:
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-            - `t5`: :class:`~transformers.T5Config` (T5 model)
-            - `distilbert`: :class:`~transformers.DistilBertConfig` (DistilBERT model)
-            - `albert`: :class:`~transformers.AlbertConfig` (ALBERT model)
-            - `camembert`: :class:`~transformers.CamembertConfig` (CamemBERT model)
-            - `xlm-roberta`: :class:`~transformers.XLMRobertaConfig` (XLM-RoBERTa model)
-            - `longformer`: :class:`~transformers.LongformerConfig` (Longformer model)
-            - `roberta`: :class:`~transformers.RobertaConfig` (RoBERTa model)
-            - `reformer`: :class:`~transformers.ReformerConfig` (Reformer model)
-            - `bert`: :class:`~transformers.BertConfig` (Bert model)
-            - `openai-gpt`: :class:`~transformers.OpenAIGPTConfig` (OpenAI GPT model)
-            - `gpt2`: :class:`~transformers.GPT2Config` (OpenAI GPT-2 model)
-            - `transfo-xl`: :class:`~transformers.TransfoXLConfig` (Transformer-XL model)
-            - `xlnet`: :class:`~transformers.XLNetConfig` (XLNet model)
-            - `xlm`: :class:`~transformers.XLMConfig` (XLM model)
-            - `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
-            - `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
-            - `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
-            - `funnel`: :class:`~transformers.FunnelConfig` (Funnel Transformer model)
+        List options
 
         Args:
             pretrained_model_name_or_path (:obj:`string`):
