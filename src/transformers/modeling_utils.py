@@ -784,9 +784,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
-            use_cn_mirror(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to use the mirror provided by Tuna of Tsinghua University. Enabling this would accelerate
-                downloads from China.
+            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+                Mirror source to use for downloads. It can be a URL or a string selected from a preset mirror sources.
+                For Chinese users, you can simply set this option to `tuna` to use the mirror provided by Tsinghua
+                University.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -825,7 +826,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
-        use_cn_mirror = kwargs.pop("use_cn_mirror", False)
+        mirror = kwargs.pop("mirror", False)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -877,7 +878,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     pretrained_model_name_or_path,
                     filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
                     use_cdn=use_cdn,
-                    use_cn_mirror=use_cn_mirror,
+                    mirror=mirror,
                 )
 
             try:
