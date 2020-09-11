@@ -403,7 +403,7 @@ def main(args, model=None) -> SummarizationModule:
         return model
     elif not args.do_train:
         ckpt_path = os.path.join(args.output_dir), 'dummy.ckpt'
-        trainer.save_checkpoint(ckpt_path, weights_only=False)
+        trainer.save_checkpoint(ckpt_path, weights_only=True)
         trainer.resume_from_checkpoint = ckpt_path
     else:
         model.hparams.test_checkpoint = ""
