@@ -67,7 +67,7 @@ def generate_pseudolabels(
     Path(out_file).parent.mkdir(exist_ok=True)
     model_name = str(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    if isinstance(device, str):
+    if isinstance(device, str) and device != 'ignore':
         model.to(device)
 
     else:
