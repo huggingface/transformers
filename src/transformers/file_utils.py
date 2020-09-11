@@ -143,7 +143,7 @@ S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 PRESET_MIRROR_DICT = {
     "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
-    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models"
+    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
 }
 
 
@@ -590,7 +590,13 @@ def hf_bucket_url(model_id: str, filename: str, use_cdn=True, mirror=None) -> st
     are not shared between the two because the cached file's name contains
     a hash of the url.
     """
-    endpoint = PRESET_MIRROR_DICT.get(mirror, mirror) if mirror else CLOUDFRONT_DISTRIB_PREFIX if use_cdn else S3_BUCKET_PREFIX
+    endpoint = (
+        PRESET_MIRROR_DICT.get(mirror, mirror)
+        if mirror
+        else CLOUDFRONT_DISTRIB_PREFIX
+        if use_cdn
+        else S3_BUCKET_PREFIX
+    )
     legacy_format = "/" not in model_id
     if legacy_format:
         return f"{endpoint}/{model_id}-{filename}"
