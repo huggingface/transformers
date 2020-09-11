@@ -30,8 +30,8 @@ logger = logging.get_logger(__name__)
 class ProcessorList(list):
 
     """
-    This class inherits from list and adds a special `__call__` 
-    method that call each distribution processing function one by one 
+    This class inherits from list and adds a special `__call__`
+    method that call each distribution processing function one by one
     and returns the processed scores
     """
 
@@ -61,9 +61,9 @@ class GenerationMixin:
         """
         return logits
 
-    def get_dist_warpper(self, tok_k=None, top_p=None, temperature=None, num_beams=None):
+    def get_dist_warpper(self, top_k=None, top_p=None, temperature=None, num_beams=None):
         """
-            This class returns a `ProcessorList` object, that contains all distribution pre processing functions 
+            This class returns a `ProcessorList` object, that contains all distribution pre processing functions
             that are ONLY related to sampling
         """
         # check that args are set if none, fall back to self.config.top_k
@@ -85,9 +85,9 @@ class GenerationMixin:
             warpers.append(generation_utils_samplers.TemperatureSampler(temperature))
         return warpers
 
-    def get_dist_pre_processor(self, repetition_penalty, no_repeat_ngram_size, bad_words_ids, min_length, eos_token_id)
+    def get_dist_pre_processor(self, repetition_penalty, no_repeat_ngram_size, bad_words_ids, min_length, eos_token_id):
         """
-            This class returns a `ProcessorList` object, that contains all distribution pre processing functions 
+            This class returns a `ProcessorList` object, that contains all distribution pre processing functions
             that are NOT related to sampling
         """
         # check that args are set if none, fall back to self.config.top_k
@@ -108,10 +108,10 @@ class GenerationMixin:
             processors.append(generation_utils_samplers.MinLengthSampler(min_length, eos_token_id))
         return processors
 
-
     def generate(
         self,
-        ... # all sampler arguments
+        input_ids,
+        # ... all sampler arguments
         model_kwargs
     ):
 
@@ -126,28 +126,27 @@ class GenerationMixin:
             dist_warper = self.get_dist_warpper(...)
 
         if num_beams > 1:
-            beam_scorer = generation_beam_search.BeamScorer() # refactor all important beam search functions out into BeamScorer class
-                                                              # could also use different beam scorer classes here
+            beam_scorer = generation_beam_search.BeamScorer()  # refactor all important beam search functions out into BeamScorer class
+                                                               # could also use different beam scorer classes here
 
         if do_sample is False and num_beams == 1:
-            return self.greedy_search(pre_processor, model_kwargs)
+            return self.greedy_search(input_ids, pre_processor, model_kwargs)
 
         elif do_sample is True and num_beams == 1:
-            return self.sample(pre_processor, dist_warper, model_kwargs)
+            return self.sample(input_ids, pre_processor, dist_warper, model_kwargs)
 
         elif do_sample is False and num_beams > 1:
-            return self.beam_search(pre_processor, beam_scorer, model_kwargs)
+            return self.beam_search(input_ids, pre_processor, beam_scorer, model_kwargs)
 
         elif do_sample is True and num_beams > 1:
-            return self.beam_sample(pre_processor, dist_warper, beam_scorer, model_kwargs)
-
+            return self.beam_sample(input_ids, pre_processor, dist_warper, beam_scorer, model_kwargs)
 
     @torch.no_grad()
-    def greedy_search(self, pre_processor, model_kwargs):
+    def greedy_search(self, input_ids, pre_processor, model_kwargs):
         unfinished_sents, sent_lengths = init(...)
 
         # add necessary encoder decoder code
-        ...
+        # ...
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -157,7 +156,7 @@ class GenerationMixin:
             scores = pre_processor(input_ids, next_token_logits)
             next_token = torch.argmax(scores)
 
-            # add code that transfomers next_token to tokens_to_add 
+            # add code that transfomers next_token to tokens_to_add
             ...
 
             # add token and increase length by one
@@ -171,17 +170,16 @@ class GenerationMixin:
                 break
 
         # add all post processing functions
-        ...
+        # ...
 
         return input_ids
 
-
     @torch.no_grad()
-    def sample(self, pre_processor, dist_wrapper, kwargs):
+    def sample(self, input_ids, pre_processor, dist_wrapper, kwargs):
         unfinished_sents, sent_lengths = init(...)
 
         # add necessary encoder decoder code
-        ...
+        # ...
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -193,7 +191,7 @@ class GenerationMixin:
             probs = F.softmax(scores, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-            # add code that transfomers next_token to tokens_to_add 
+            # add code that transfomers next_token to tokens_to_add
             ...
 
             # add token and increase length by one
@@ -207,16 +205,15 @@ class GenerationMixin:
                 break
 
         # add all post processing functions
-        ...
+        # ...
         return input_ids
 
-
     @torch.no_grad()
-    def beam_search(self, pre_processor, beam_scorer, post_processor, kwargs):
+    def beam_search(self, input_ids, pre_processor, beam_scorer, post_processor, kwargs):
         next_beam_scores, unfinished_sents, sent_lengths = init(...)
 
         # add necessary encoder decoder code
-        ...
+        # ...
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -240,22 +237,21 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[next_beam_idx, :], next_beam_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
 
-            past = self._reorder_cache(next_beam_idx) 
+            past = self._reorder_cache(next_beam_idx)
 
-            if beam_scorer.is_done()
+            if beam_scorer.is_done():
                 break
 
         # add all post processing functions
-        ...
+        # ...
         return input_ids
 
-
     @torch.no_grad()
-    def beam_sample(self, pre_processor, dist_wrapper, beam_scorer, post_processor, kwargs):
+    def beam_sample(self, input_ids, pre_processor, dist_wrapper, beam_scorer, post_processor, kwargs):
         next_beam_scores, unfinished_sents, sent_lengths = init(...)
 
         # add necessary encoder decoder code
-        ...
+        # ...
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -281,11 +277,11 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[next_beam_idx, :], next_beam_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
 
-            past = self._reorder_cache(next_beam_idx) 
+            past = self._reorder_cache(next_beam_idx)
 
-            if beam_scorer.is_done()
+            if beam_scorer.is_done():
                 break
 
         # add all post processing functions
-        ...
+        # ...
         return input_ids
