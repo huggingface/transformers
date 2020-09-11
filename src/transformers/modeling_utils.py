@@ -785,9 +785,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
             mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
-                Mirror source to use for downloads. It can be a URL or a string selected from a preset mirror sources.
-                For Chinese users, you can simply set this option to `tuna` to use the mirror provided by Tsinghua
-                University.
+                Mirror source to accelerate downloads in China. If you are from China and have accessibility problem,
+                you can set this option to resolve it. Note that we do not guarantee the timeliness or safety. Please
+                refer to the mirror site for more information.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
