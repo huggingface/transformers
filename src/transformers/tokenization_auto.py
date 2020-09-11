@@ -117,12 +117,11 @@ SLOW_TOKENIZER_MAPPING = {k: v[0] for k, v in TOKENIZER_MAPPING.items()}
 
 
 class AutoTokenizer:
-    r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
-    that will be instantiated as one of the tokenizer classes of the library
-    when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
-    class method.
+    r"""
+    This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library
+    when created with the :meth:`AutoTokenizer.from_pretrained` class method.
 
-    This class cannot be instantiated using `__init__()` (throw an error).
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
     def __init__(self):
@@ -134,44 +133,56 @@ class AutoTokenizer:
     @classmethod
     @replace_list_option_in_docstrings(SLOW_TOKENIZER_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        r"""Instantiate one of the tokenizer classes of the library
-        from a pre-trained model vocabulary.
+        r"""
+        Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 
-        The tokenizer class to instantiate is selected
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+        The tokenizer class to instantiate is selected based on the :obj:`model_type` property of the config object
+        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
+        missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
 
         List options
 
         Params:
-            pretrained_model_name_or_path: either:
+            pretrained_model_name_or_path (:obj:`str`):
+                Can be either:
 
-                - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
-                - a string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
-                - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
-
-            cache_dir: (`optional`) string:
-                Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
-
-            force_download: (`optional`) boolean, default False:
-                Force to (re-)download the vocabulary files and override the cached versions if they exists.
-
-            resume_download: (`optional`) boolean, default False:
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
-
-            proxies: (`optional`) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
-                The proxies are used on each request.
-
-            use_fast: (`optional`) boolean, default False:
-                Indicate if transformers should try to load the fast version of the tokenizer (True) or use the Python one (False).
-
-            inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
-
-            kwargs: (`optional`) keyword arguments: will be passed to the Tokenizer ``__init__`` method. Can be used to set special tokens like ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``. See parameters in the doc string of :class:`~transformers.PreTrainedTokenizer` for details.
+                    - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
+                      ``bert-base-uncased``.
+                    - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3,
+                      e.g., ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
+                      using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.,
+                      ``./my_model_directory/``.
+                    - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
+                      single vocabulary file (like Bert or XLNet), e.g.: ``./my_model_directory/vocab.txt``.
+                      (Not applicable to all derived classes)
+            inputs (additional positional arguments, `optional`):
+                Will be passed along to the Tokenizer ``__init__()`` method.
+            config (:class:`~transformers.PreTrainedConfig`, `optional`)
+                The configuration object used to dertermine the tokenizer class to instantiate.
+            cache_dir (:obj:`str`, `optional`):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to force the (re-)download the model weights and configuration files and override the
+                cached versions if they exist.
+            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
+                file exists.
+            proxies (:obj:`Dict[str, str]`, `optional`):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
+                request.
+            use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to try to load the fast version of the tokenizer.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
+                ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
+                ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__()`` for more details.
 
         Examples::
+
+            from transformers import AutoTokenizer
 
             # Download vocabulary from S3 and cache.
             tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
@@ -208,7 +219,10 @@ class AutoTokenizer:
         if isinstance(config, EncoderDecoderConfig):
             if type(config.decoder) is not type(config.encoder):  # noqa: E721
                 logger.warn(
-                    f"The encoder model config class: {config.encoder.__class__} is different from the decoder model config class: {config.decoder.__class}. It is not recommended to use the `AutoTokenizer.from_pretrained(..)` method in this case. Please use the encoder and decoder specific tokenizer classes."
+                    f"The encoder model config class: {config.encoder.__class__} is different from the decoder model "
+                    f"config class: {config.decoder.__class}. It is not recommended to use the "
+                    "`AutoTokenizer.from_pretrained()` method in this case. Please use the encoder and decoder "
+                    "specific tokenizer classes."
                 )
             config = config.encoder
 
