@@ -29,11 +29,11 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries_or_translations(
+def generate_pseudolabels(
     data_dir,
     out_file: str,
     model_name: str,
-    batch_size: int = 8,
+    bs: int = 8,
     max_source_length: int=1024,
     device: str = DEFAULT_DEVICE,
     n_obs=None,
@@ -62,12 +62,12 @@ def generate_summaries_or_translations(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = ds.make_sortish_sampler(batch_size)
+    sampler = ds.make_sortish_sampler(bs)
 
     data_loader = DataLoader(
         ds,
         sampler=sampler,
-        batch_size=batch_size,
+        batch_size=bs,
         collate_fn=ds.collate_fn
 
     )
@@ -88,7 +88,7 @@ def generate_summaries_or_translations(
         )
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         labels = tokenizer.batch_decode(batch['labels'], skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        chunked_preds = chunks(dec, num_return_sequences)
+        chunked_preds = list(chunks(dec, num_return_sequences))
 
         for i,label in enumerate(labels):
             best_pred, best_score = '', -1
@@ -106,7 +106,7 @@ def generate_summaries_or_translations(
 import fire
 
 if __name__ == '__main__':
-    fire.Fire(generate_summaries_or_translations)
+    fire.Fire(generate_pseudolabels)
 
 # def run_generate():
 #     # parser = argparse.ArgumentParser()
