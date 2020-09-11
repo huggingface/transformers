@@ -15,14 +15,17 @@
  See the License for the specific language governing permissions and
  limitations under the License.import copy
  """
+import os
 import sys
 from typing import Tuple
 
-import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
+
+import cv2
+from utils import get_image_from_url, img_tensorize
 
 
 class ResizeShortestEdge:
@@ -91,11 +94,17 @@ class Preprocess:
         self.pad_value = cfg.PAD_VALUE
         self.max_image_size = cfg.INPUT.MAX_SIZE_TEST
         self.device = cfg.MODEL.DEVICE
-        self.pixel_std = torch.tensor(cfg.MODEL.PIXEL_STD).to(self.device)
-        self.pixel_mean = torch.tensor(cfg.MODEL.PIXEL_MEAN).to(self.device)
-        self.normalizer = lambda x: (
-            x - self.pixel_mean.view(1, -1, 1, 1) / self.pixel_std.view(1, -1, 1, 1)
+        self.pixel_std = (
+            torch.tensor(cfg.MODEL.PIXEL_STD)
+            .to(self.device)
+            .view(len(cfg.MODEL.PIXEL_STD), 1, 1)
         )
+        self.pixel_mean = (
+            torch.tensor(cfg.MODEL.PIXEL_MEAN)
+            .to(self.device)
+            .view(len(cfg.MODEL.PIXEL_STD), 1, 1)
+        )
+        self.normalizer = lambda x: (x - self.pixel_mean) / self.pixel_std
 
     def pad(self, images):
         max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
@@ -111,38 +120,44 @@ class Preprocess:
 
         return torch.stack(images), torch.tensor(image_sizes)
 
-    def __call__(self, images, input_format="BGR"):
+    def __call__(self, images, single_image=False):
         with torch.no_grad():
             if not isinstance(images, list):
                 images = [images]
-            if self.input_format == "RGB":
-                images = [im[:, :, ::-1] for im in images]
+            if single_image:
+                assert len(images) == 1
+            for i in range(len(images)):
+                if isinstance(images[i], torch.Tensor):
+                    images.insert(i, images.pop(i).numpy())
+                elif not isinstance(images[i], np.ndarray):
+                    images.insert(
+                        i, img_tensorize(images.pop(i), input_format=self.input_format)
+                    )
             # resize shape
             raw_sizes = torch.tensor([im.shape[:2] for im in images])
             images = self.aug(images)
-            # reshape
+
             images = torch.as_tensor(images.astype("float32").transpose(0, 3, 1, 2)).to(
                 self.device
             )
             # Normalize
-            images = self.normalizer(images)
+            images = torch.stack([self.normalizer(x) for x in images])
+
             if self.size_divisibility > 0:
                 raise NotImplementedError()
             # pad
             images, sizes = self.pad(images)
             scales_yx = torch.true_divide(raw_sizes, sizes).tolist()
-            return images, sizes, scales_yx
+            if single_image:
+                return images[0], sizes[0], scales_yx[0]
+            else:
+                return images, sizes, scales_yx
 
 
 def _scale_box(boxes, scale_yx):
     boxes[:, 0::2] *= scale_yx[:, 1]
     boxes[:, 1::2] *= scale_yx[:, 0]
     return boxes
-
-
-def tensorize(im):
-    im = cv2.imread(im)
-    return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
 
 def _clip_box(tensor, box_size: Tuple[int, int]):

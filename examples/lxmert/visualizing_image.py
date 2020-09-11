@@ -25,7 +25,9 @@ import matplotlib.figure as mplfigure
 import numpy as np
 import torch
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.backends.backend_cairo import FigureCanvasCairo
+
+from utils import img_tensorize
+
 
 _SMALL_OBJ = 1000
 
@@ -50,6 +52,8 @@ class SingleImageViz:
         """
         if isinstance(img, torch.Tensor):
             img = img.numpy().astype("np.uint8")
+        if isinstance(img, str):
+            img = img_tensorize(img)
         assert isinstance(img, np.ndarray)
 
         width, height = img.shape[1], img.shape[0]
@@ -79,11 +83,7 @@ class SingleImageViz:
         self.pad = pad
         self.id2obj = id2obj
         self.id2attr = id2attr
-
-        if not self.pynb:
-            self.canvas = FigureCanvasAgg(fig)
-        else:
-            self.canvas = FigureCanvasCairo(fig)
+        self.canvas = FigureCanvasAgg(fig)
 
     def add_box(self, box, color=None):
         if color is None:
@@ -109,7 +109,19 @@ class SingleImageViz:
     ):
         if len(boxes.shape) > 2:
             boxes = boxes[0]
-        boxes = boxes.numpy()
+        if len(obj_ids.shape) > 1:
+            obj_ids = obj_ids[0]
+        if len(obj_scores.shape) > 1:
+            obj_scores = obj_scores[0]
+        if len(attr_ids.shape) > 1:
+            attr_ids = attr_ids[0]
+        if len(attr_scores.shape) > 1:
+            attr_scores = attr_scores[0]
+        if isinstance(boxes, torch.Tensor):
+            boxes = boxes.numpy()
+        if isinstance(boxes, list):
+            boxes = np.array(boxes)
+        assert isinstance(boxes, np.ndarray)
         areas = np.prod(boxes[:, 2:] - boxes[:, :2], axis=1)
         sorted_idxs = np.argsort(-areas).tolist()
         boxes = boxes[sorted_idxs] if boxes is not None else None
@@ -117,6 +129,7 @@ class SingleImageViz:
         obj_scores = obj_scores[sorted_idxs] if obj_scores is not None else None
         attr_ids = attr_ids[sorted_idxs] if attr_ids is not None else None
         attr_scores = attr_scores[sorted_idxs] if attr_scores is not None else None
+
         assigned_colors = [self._random_color(maximum=1) for _ in range(len(boxes))]
         assigned_colors = [assigned_colors[idx] for idx in sorted_idxs]
         if obj_ids is not None:
@@ -145,17 +158,11 @@ class SingleImageViz:
         font_size *= 0.75 * self.font_size
 
         self.draw_text(
-            text=label,
-            position=text_pos,
-            color=lighter_color,
+            text=label, position=text_pos, color=lighter_color,
         )
 
     def draw_text(
-        self,
-        text,
-        position,
-        color="g",
-        ha="left",
+        self, text, position, color="g", ha="left",
     ):
         rotation = 0
         font_size = self.font_size
@@ -187,8 +194,7 @@ class SingleImageViz:
             saveas = self.saveas
         if saveas.lower().endswith(".jpg") or saveas.lower().endswith(".png"):
             cv2.imwrite(
-                saveas,
-                self._get_buffer()[:, :, ::-1],
+                saveas, self._get_buffer()[:, :, ::-1],
             )
         else:
             self.fig.savefig(saveas)
