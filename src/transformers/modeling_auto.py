@@ -223,7 +223,7 @@ MODEL_MAPPING = OrderedDict(
         (ReformerConfig, ReformerModel),
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
-        (BertGenerationConfig, BertGenerationEncoder),    
+        (BertGenerationConfig, BertGenerationEncoder),
     ]
 )
 
@@ -318,7 +318,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
-        (FunnelConfig, FunnelForMaskedLM),        
+        (FunnelConfig, FunnelForMaskedLM),
     ]
 )
 
@@ -389,7 +389,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
-        (FunnelConfig, FunnelForTokenClassification),        
+        (FunnelConfig, FunnelForTokenClassification),
     ]
 )
 
