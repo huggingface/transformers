@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -393,13 +394,14 @@ def main():
 
         result = trainer.evaluate()
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results.json")
         if trainer.is_world_master():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in result.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+            logger.info("***** Eval results *****")
+            for key, value in result.items():
+                logger.info("  %s = %s", key, value)
+
+            with open(output_eval_file, "w") as f:
+                json.dump(result, f)
 
             eval_results.update(result)
 
@@ -407,14 +409,15 @@ def main():
         logging.info("*** Test ***")
 
         test_metrics = trainer.predict(test_dataset=test_dataset).metrics
-        output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
+        output_test_file = os.path.join(training_args.output_dir, "test_results.json")
 
         if trainer.is_world_master():
-            with open(output_test_file, "w") as writer:
-                logger.info("***** Test results *****")
-                for key, value in test_metrics.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+            logger.info("***** Test results *****")
+            for key, value in test_metrics.items():
+                logger.info("  %s = %s", key, value)
+
+            with open(output_test_file, "w") as f:
+                json.dump(test_metrics, f)
 
     return eval_results
 
