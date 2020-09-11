@@ -238,7 +238,7 @@ BERT_GENERATION_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare BertForSeqGeneration model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare BertGeneration model transformer outputting raw hidden-states without any specific head on top.",
     BERT_GENERATION_START_DOCSTRING,
 )
 class BertGenerationEncoder(BertGenerationPreTrainedModel):
