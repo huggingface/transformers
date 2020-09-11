@@ -526,7 +526,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
-        mirror = kwargs.pop("mirror", True)
+        mirror = kwargs.pop("mirror", None)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
