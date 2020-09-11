@@ -115,7 +115,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilebert", "MobileBERT"),
         ("distilbert", "DistilBERT"),
         ("albert", "ALBERT"),
-        ("bert-for-seq-generation", "Bert for Generation"),
+        ("bert-generation", "Bert Generation"),
         ("camembert", "CamemBERT"),
         ("xlm-roberta", "XLM-RoBERTa"),
         ("pegasus", "Pegasus"),
