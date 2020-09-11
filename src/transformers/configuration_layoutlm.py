@@ -71,7 +71,7 @@ class LayoutLMConfig(BertConfig):
         gradient_checkpointing (:obj:`bool`, optional, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         max_2d_position_embeddings (:obj:`int`, optional, defaults to 1024):
-            The maximum value that the 2D position embedding might ever used. 
+            The maximum value that the 2D position embedding might ever used.
             Typically set this to something large just in case (e.g., 1024).
 
     Example::
