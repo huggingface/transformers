@@ -88,8 +88,6 @@ def generate_pseudolabels(
 
     if fp16:
         model = model.half()
-    if gpus > 1:
-        model = torch.nn.DataParallel(model)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
