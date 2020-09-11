@@ -99,7 +99,7 @@ CONFIG_MAPPING = OrderedDict(
             AlbertConfig,
         ),
         (
-            "bert-for-seq-generation",
+            "bert-generation",
             BertGenerationConfig,
         ),
         (
