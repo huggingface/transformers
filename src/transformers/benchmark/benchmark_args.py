@@ -50,7 +50,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     @torch_required
     def _setup_devices(self) -> Tuple["torch.device", int]:
         logger.info("PyTorch: setting up devices")
-        if self.no_cuda:
+        if not self.cuda:
             device = torch.device("cpu")
             n_gpu = 0
         elif is_torch_tpu_available():
@@ -63,7 +63,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
 
     @property
     def is_tpu(self):
-        return is_torch_tpu_available() and not self.no_tpu
+        return is_torch_tpu_available() and self.tpu
 
     @property
     @torch_required

@@ -50,7 +50,7 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     @cached_property
     @tf_required
     def _setup_tpu(self) -> Tuple["tf.distribute.cluster_resolver.TPUClusterResolver"]:
-        if not self.no_tpu:
+        if self.tpu:
             try:
                 if self.tpu_name:
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver(self.tpu_name)
@@ -98,7 +98,7 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     @property
     @tf_required
     def n_gpu(self) -> int:
-        if not self.no_cuda:
+        if self.cuda:
             return len(self.gpu_list)
         return 0
 
