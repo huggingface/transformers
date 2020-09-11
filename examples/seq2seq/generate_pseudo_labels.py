@@ -64,20 +64,26 @@ def generate_pseudolabels(
 ) -> Dict:
     """Save model.generate results to <out_file>, and return how long it took."""
     # fout = Path(out_file).open("w", encoding="utf-8")
-    Path(save_path).parent.mkdir(exist_ok=True)
-    model_name = str(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    #Path(save_path).parent.mkdir(exist_ok=True)
+
+
     if device != 'ignore':
+        model_name = str(model_name)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
         model.to(device)
     else:
+        model_name = str(model_name)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        torch.distributed.init_process_group(backend="c10_d", world_size=dist.get_world_size())
         device = dist.get_rank()
         print(f'setting device ={device}')
         save_dir, basename = Path(save_path).parent, Path(save_path).name
         save_path = save_dir.joinpath(f'dev_1_{device}_{basename}')
+
         # assume multi-gpu
 
         torch.cuda.set_device(device)
-        torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size())
+
         model = DistributedDataParallel(model, device_ids=[dist.get_rank()])
 
     if fp16:
