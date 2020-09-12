@@ -61,7 +61,7 @@ def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForCo
     cfg_kwargs = DEFAULTS.copy()
     cfg_kwargs.update(cfg_updates)
 
-    cfg = PegasusConfig(**cfg_updates)
+    cfg = PegasusConfig(**cfg_kwargs)
     bart = PegasusForConditionalGeneration(cfg)
     sd = bart.model.state_dict()
     mapping = {}
@@ -106,7 +106,7 @@ def convert_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str):
     # save tokenizer first
     dataset = Path(ckpt_path).parent.name
     desired_max_model_length = task_specific_params[f"summarization_{dataset}"]["max_position_embeddings"]
-    tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
+    tok = PegasusTokenizer.from_pretrained("google/pegasus-aeslc", model_max_length=desired_max_model_length)
     assert tok.model_max_length == desired_max_model_length
     tok.save_pretrained(save_dir)
 
