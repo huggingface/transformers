@@ -210,7 +210,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
 
     # def test_auto_model(self):
     #     # XXX: add a tiny model to s3?
-    #     model_name = "stas/fsmt-wmt19-ru-en-tiny"
+    #     model_name = "stas/wmt19-ru-en-tiny"
     #     tiny = AutoModel.from_pretrained(model_name)  # same vocab size
     #     tok = AutoTokenizer.from_pretrained(model_name)  # same tokenizer
     #     inputs_dict = tok.batch_encode_plus(["Hello my friends"], return_tensors="pt")
@@ -378,7 +378,7 @@ TOLERANCE = 1e-4
 class FSMTModelIntegrationTests(unittest.TestCase):
     tokenizers_cache = {}
     models_cache = {}
-    default_mname = "stas/fsmt-wmt19-en-ru"
+    default_mname = "stas/wmt19-en-ru"
 
     @cached_property
     def default_tokenizer(self):
@@ -438,7 +438,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
 
         src, tgt = pair.split("-")
         print(f"Testing {src} -> {tgt}")
-        mname = f"stas/fsmt-wmt19-{pair}"
+        mname = f"stas/wmt19-{pair}"
 
         src_sentence = text[src]
         tgt_sentence = text[tgt]
