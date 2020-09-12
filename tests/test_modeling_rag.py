@@ -157,7 +157,11 @@ class RagModelTester:
 @require_torch
 @require_retrieval
 class RagModelTest(unittest.TestCase):
-    all_model_classes = (RagSequence, RagToken)
+    all_model_classes = (
+        (RagSequence, RagToken)
+        if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available()
+        else ()
+    )
 
     def setUp(self):
         self.model_tester = RagModelTester(self)
