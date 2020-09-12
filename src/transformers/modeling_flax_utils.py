@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from pickle import UnpicklingError
 from typing import Dict
 
-from flax.nn import Model, Module
+from flax.linen import Model, Module
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
@@ -34,7 +34,7 @@ class FlaxPreTrainedModel(ABC):
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
         self.state = state
-        self.model = Model(module, state)
+        self.model = module
 
     @staticmethod
     @abstractmethod
