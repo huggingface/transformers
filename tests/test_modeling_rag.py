@@ -59,6 +59,7 @@ class RagModelTester:
         self.max_combined_length = 123
         self.retrieval_vector_size = 768
         self.retrieval_batch_size = 8
+
         self.rag_config = RagConfig(
             n_docs=self.n_docs,
             vocab_size=self.vocab_size,
@@ -149,7 +150,8 @@ class RagModelTest(unittest.TestCase):
     )
 
     def setUp(self):
-        self.model_tester = RagModelTester(self)
+        if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available():
+            self.model_tester = RagModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RagConfig, hidden_size=37)
 
     def test_config(self):
