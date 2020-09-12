@@ -37,16 +37,16 @@ tar -xvzf wmt19.ru-en.ensemble.tar.gz
 # run conversions and uploads
 
 export PAIR=ru-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
 
 export PAIR=en-ru
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
 
 export PAIR=de-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
 
 export PAIR=en-de
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
 
 
 # upload
@@ -67,6 +67,132 @@ perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename 
 # 2. make sure you use: from_pretrained(..., use_cdn=False) everywhere
 
 # happy translations
+
+
+######################################################################################
+
+Convert fairseq transform wmt16 en-de checkpoints from https://github.com/jungokasai/deep-shallow
+
+
+pip install gdown
+
+# get data (run once)
+
+cd data
+gdown 'https://drive.google.com/uc?id=1x_G2cjvM1nW5hjAB8-vWxRqtQTlmIaQU'
+gdown 'https://drive.google.com/uc?id=1oA2aqZlVNj5FarxBlNXEHpBS4lRetTzU'
+gdown 'https://drive.google.com/uc?id=1Wup2D318QYBFPW_NKI1mfP_hXOfmUI9r'
+tar -xvzf trans_ende_12-1_0.2.tar.gz
+tar -xvzf trans_ende-dist_12-1_0.2.tar.gz
+tar -xvzf trans_ende-dist_6-1_0.2.tar.gz
+
+gdown 'https://drive.google.com/uc?id=1mNufoynJ9-Zy1kJh2TA_lHm2squji0i9'
+gdown 'https://drive.google.com/uc?id=1iO7um-HWoNoRKDtw27YUSgyeubn9uXqj'
+tar -xvzf wmt16.en-de.deep-shallow.dist.tar.gz
+tar -xvzf wmt16.en-de.deep-shallow.tar.gz
+
+cp wmt16.en-de.deep-shallow/data-bin/dict.*.txt trans_ende_12-1_0.2
+cp wmt16.en-de.deep-shallow.dist/data-bin/dict.*.txt trans_ende-dist_12-1_0.2
+cp wmt16.en-de.deep-shallow.dist/data-bin/dict.*.txt trans_ende-dist_6-1_0.2
+cp wmt16.en-de.deep-shallow/bpecodes trans_ende_12-1_0.2
+cp wmt16.en-de.deep-shallow.dist/bpecodes trans_ende-dist_12-1_0.2
+cp wmt16.en-de.deep-shallow.dist/bpecodes trans_ende-dist_6-1_0.2
+
+
+# another set wmt19-6-6-de-en
+gdown 'https://drive.google.com/uc?id=1j6z9fYdlUyOYsh7KJoumRlr1yHczxR5T'
+gdown 'https://drive.google.com/uc?id=1yT7ZjqfvUYOBXvMjeY8uGRHQFWoSo8Q5'
+gdown 'https://drive.google.com/uc?id=15gAzHeRUCs-QV8vHeTReMPEh1j8excNE'
+tar -xvzf wmt19.de-en.tar.gz
+tar -xvzf wmt19_deen_base_dr0.1_1.tar.gz
+tar -xvzf wmt19_deen_big_dr0.1_2.tar.gz
+cp wmt19.de-en/data-bin/dict.*.txt wmt19_deen_base_dr0.1_1
+cp wmt19.de-en/data-bin/dict.*.txt wmt19_deen_big_dr0.1_2
+
+cd -
+
+
+# run conversions and uploads
+
+# wmt16-en-de set
+
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/fsmt-wmt16-en-de-dist-12-1
+
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_6-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/fsmt-wmt16-en-de-dist-6-1
+
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/fsmt-wmt16-en-de-12-1
+
+
+# wmt19-de-en set
+
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_base_dr0.1_1/checkpoint_best.pt --pytorch_dump_folder_path data/fsmt-wmt19-de-en-6-6-base
+
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_big_dr0.1_2/checkpoint_best.pt --pytorch_dump_folder_path data/fsmt-wmt19-de-en-6-6-big
+
+
+
+# XXX: move into model card
+
+git clone https://github.com/huggingface/transformers
+cd transformers
+export PAIR=en-de
+export DATA_DIR=data/$PAIR
+export SAVE_DIR=data/$PAIR
+export BS=64
+export NUM_BEAMS=5
+mkdir -p $DATA_DIR
+sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
+sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
+
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt16-en-de-dist-12-1
+echo $PAIR $MODEL_PATH
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt16-en-de-dist-6-1
+echo $PAIR $MODEL_PATH
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt16-en-de-12-1
+echo $PAIR $MODEL_PATH
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+
+checkpoint_top5_average.pt:
+
+num_beams=5
+
+chkpt file| top5_average | best    |
+----------|--------------|---------|
+dist-12-1 | 29.9134      | 30.2591 |
+dist-6-1  | 29.9837      | 29.3349 |
+12-1      | 26.4008      | 24.1803 |
+
+checkpoint_best.pt
+
+
+# wmt19-de-en set
+
+export PAIR=de-en
+export DATA_DIR=data/$PAIR
+export SAVE_DIR=data/$PAIR
+export BS=64
+export NUM_BEAMS=5
+mkdir -p $DATA_DIR
+sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
+sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
+
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt19-de-en-6-6-base
+echo $PAIR $MODEL_PATH
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt19-de-en-6-6-big
+echo $PAIR $MODEL_PATH
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+
+
+
+
+```
+
 
 """
 
@@ -94,9 +220,7 @@ logging.basicConfig(level=logging.INFO)
 
 ORG_NAME = "stas"  # XXX: will become facebook
 
-
-DEBUG = 0
-json_indent = 2 if DEBUG else None
+json_indent = 2
 
 
 def rewrite_dict_keys(d):
@@ -235,22 +359,22 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
     print(f"Writing results to {pytorch_dump_folder_path}")
 
-    # XXX: Need to work out the ensemble as fairseq does, for now using just one chkpt
-    # checkpoint_file = 'model1.pt:model2.pt:model3.pt:model4.pt'
-    checkpoint_file = "model4.pt"  # proved to give the highest BLEU score for each pair
-    # model_name_or_path = 'transformer.wmt19.ru-en'
-    data_name_or_path = "."
+    # handle various types of models
+
+    checkpoint_file = basename(fsmt_checkpoint_path)
+    fsmt_folder_path = dirname(fsmt_checkpoint_path)
+
     cls = fairseq.model_parallel.models.transformer.ModelParallelTransformerModel
     models = cls.hub_models()
     kwargs = {"bpe": "fastbpe", "tokenizer": "moses"}
-    # print(f"using checkpoint {checkpoint_file}")
-
+    data_name_or_path = "."
     # note: since the model dump is old, fairseq has upgraded its model some
     # time later, and it does a whole lot of rewrites and splits on the saved
     # weights, therefore we can't use torch.load() directly on the model file.
     # see: upgrade_state_dict(state_dict) in fairseq_model.py
+    print(f"using checkpoint {checkpoint_file}")
     chkpt = hub_utils.from_pretrained(
-        fsmt_checkpoint_path, checkpoint_file, data_name_or_path, archive_map=models, **kwargs
+        fsmt_folder_path, checkpoint_file, data_name_or_path, archive_map=models, **kwargs
     )
 
     args = dict(vars(chkpt["args"]))
@@ -263,8 +387,8 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     proj_root = dirname(dirname(dirname(os.path.realpath(__file__))))
 
     # dicts
-    src_dict_file = os.path.join(fsmt_checkpoint_path, f"dict.{src_lang}.txt")
-    tgt_dict_file = os.path.join(fsmt_checkpoint_path, f"dict.{tgt_lang}.txt")
+    src_dict_file = os.path.join(fsmt_folder_path, f"dict.{src_lang}.txt")
+    tgt_dict_file = os.path.join(fsmt_folder_path, f"dict.{tgt_lang}.txt")
 
     src_dict = Dictionary.load(src_dict_file)
     src_vocab = rewrite_dict_keys(src_dict.indices)
@@ -284,7 +408,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     # merges_file (bpecodes)
     merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
-    fsmt_merges_file = os.path.join(fsmt_checkpoint_path, "bpecodes")
+    fsmt_merges_file = os.path.join(fsmt_folder_path, "bpecodes")
     with open(fsmt_merges_file, encoding="utf-8") as fin:
         merges = fin.read()
     merges = re.sub(r" \d+$", "", merges, 0, re.M)  # remove frequency number
@@ -294,6 +418,11 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     # model config
     fsmt_model_config_file = os.path.join(pytorch_dump_folder_path, "config.json")
+
+    # validate bpe/tokenizer config, as currently it's hardcoded to moses+fastbpe -
+    # may have to modify the tokenizer if a different type is used by a future model
+    assert args["bpe"] == "fastbpe", f"need to extend tokenizer to support bpe={args['bpe']}"
+    assert args["tokenizer"] == "moses", f"need to extend tokenizer to support bpe={args['tokenizer']}"
 
     model_conf = {
         "architectures": ["FSMTForConditionalGeneration"],
@@ -321,8 +450,8 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "pad_token_id": 1,
         "eos_token_id": 2,
         "is_encoder_decoder": True,
-        "scale_embedding": True,
-        "tie_word_embeddings": False,
+        "scale_embedding": not args["no_scale_embedding"],
+        "tie_word_embeddings": args["share_all_embeddings"],
     }
 
     print(f"Generating {fsmt_model_config_file}")
@@ -387,7 +516,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--fsmt_checkpoint_path", default=None, type=str, required=True, help="Path to the official PyTorch dump dir."
+        "--fsmt_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the official PyTorch checkpoint file which is expected to reside in the dump dir with dicts, bpecodes, etc.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
