@@ -28,6 +28,7 @@ from transformers import (
     T5ForConditionalGeneration,
     get_linear_schedule_with_warmup,
 )
+from transformers import logging as transformers_logging
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
@@ -50,8 +51,10 @@ from examples.seq2seq.utils import (  # noqa: E402 # isort:skip
     save_json,
 )
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+transformers_logging.set_verbosity_info()
 
 
 class AttrDict(dict):
@@ -171,8 +174,6 @@ class GenerativeQAModule(BaseTransformer):
             assert self.is_rag_model
             generator = self.model.model.generator
             if isinstance(generator, T5ForConditionalGeneration):
-                if isinstance(self.model, RagToken):
-                    raise NotImplementedError("Currently T5 support is not implemented for RAGToken.")
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
                     torch.cat(

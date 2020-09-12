@@ -15,7 +15,6 @@
 """RAG model implementation."""
 
 import copy
-import logging
 import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -28,17 +27,46 @@ from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
 from .modeling_auto import AutoModelForSeq2SeqLM
-from .modeling_bart import BartForConditionalGeneration
 from .modeling_dpr import DPRQuestionEncoder
 from .modeling_outputs import ModelOutput
 from .modeling_t5 import T5ForConditionalGeneration
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RagConfig"
+
+
+@dataclass
+class BaseModelOutputWithDocs(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
+            Scores of retrieved documents.
+    """
+
+    last_hidden_state: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    doc_scores: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -112,6 +140,10 @@ RAG_START_DOCSTRING = r"""
     to the retriever to extract relevant context documents. The documents are then prepended to the input.
     Such contextualized input is passed to the generator.
 
+    The model is compatible with :class:`~transformers.DPRQuestionEncoder` as the ``question_encoder``. As for the ``generator``,
+    two compatible architectures have been tested: :class:`~transformers.BartForConditionalGeneration`
+    and :class:`~transformers.T5ForConditionalGeneration`.
+
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -123,7 +155,7 @@ RAG_START_DOCSTRING = r"""
 """
 
 RAG_CORE_DOCSTRING = r"""
-    A base RAG model returning raw sequence logits and document retrieval scores.
+    A base RAG model calculating raw sequence logits and document retrieval scores.
     The model takes a question encoder and a generator  as inputs to the constructor, so it can be a base
     for various RAG architectures encapsualting different retrievers and generators.
 
@@ -144,7 +176,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             :class:`~transformers.RagConfig`, used to initialize the model, specifies which generator to use, it also specifies a compatible
             generator tokenizer. Use that tokenizer class to obtain the indices.
         retriever (:class:`~transformers.RagRetriever`):
-            A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
+            A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
@@ -202,7 +234,7 @@ class RagModel(torch.nn.Module):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes
                 it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
             retriever (:class:`~transformers.RagRetriever`):
-                A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
+                A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
             print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
 
@@ -225,7 +257,7 @@ class RagModel(torch.nn.Module):
         )
         return input_ids, attention_mask, doc_scores
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -249,10 +281,10 @@ class RagModel(torch.nn.Module):
 
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is not None:
-            doc_scores = encoder_outputs[-1]
+            doc_scores = encoder_outputs.doc_scores
         else:
             # Add context documents to input
-            input_ids, attention_mask, doc_scores = self.contextualize(input_ids, retriever)
+            input_ids, attention_mask, doc_scores = self.contextualize(input_ids, retriever, print_docs)
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -291,14 +323,21 @@ class RAGEncoder(torch.nn.Module):
         super().__init__()
         self.rag_model = rag_model
 
-    def forward(self, input_ids=None, retriever=None, attention_mask=None):
+    def forward(self, input_ids=None, retriever=None, attention_mask=None, return_dict=True):
         ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids, retriever)
-        encoder = self.rag_model.generator.get_encoder()  # stacked
-        encoder_outputs = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask, return_dict=True)
-        # needed to satisfy assertions in generation_utils
+        encoder = self.rag_model.generator.get_encoder()
+        encoder_outputs = encoder(
+            input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask, return_dict=return_dict
+        )
+        # needed to satisfy assertion that encoder_outputs.last_hidden_state.shape[0] == batch_size in generation_utils
         unstacked_x = _unstack_ctxt(encoder_outputs.last_hidden_state, self.rag_model.n_docs)
 
-        return (unstacked_x, encoder_outputs.hidden_states, ctxt_attention_mask, doc_scores)
+        return BaseModelOutputWithDocs(
+            last_hidden_state=unstacked_x,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=ctxt_attention_mask,
+            doc_scores=doc_scores,
+        )
 
 
 class PreTrainedRagModel(PreTrainedModel):
@@ -452,10 +491,6 @@ class PreTrainedRagModel(PreTrainedModel):
 @add_start_docstrings_to_callable(
     """A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass
     and specializes some of the functions of :class:`~transformers.PreTrainedModel` to enable RAG-sequence generation.
-
-    It is compatible with :class:`~transformers.DPRQuestionEncoder` as the ``question_encoder``. As for the ``generator``,
-    two compatible architectures have been tested: :class:`~transformers.BartForConditionalGeneration`
-    and :class:`~transformers.T5ForConditionalGeneration`.
     """,
     RAG_START_DOCSTRING,
 )
@@ -481,6 +516,10 @@ class RagSequence(PreTrainedRagModel):
         **generator_kwargs
     ):
         r"""
+            score (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                A flag passed as an argument to `:func:`~transformers.RagSequence.get_nll``. If :obj:`True`,
+                we exclude the BOS token's score while scoring the sequence.
+
         Returns:
         """
         if return_loss:
@@ -550,7 +589,7 @@ class RagSequence(PreTrainedRagModel):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes
                 it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
             retriever (:class:`~transformers.RagRetriever`):
-                A retriever class encapsulating a faiss index queried to obtain context documents used in generation.
+                A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
             dedup (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Controls whether we want to deduplicate the generations from different context documents for a given input.
                 Has to be set to :obj:`False` if used while training with distributed backend.
@@ -599,7 +638,7 @@ class RagSequence(PreTrainedRagModel):
             )
             top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
 
-            if logger.level == logging.DEBUG:
+            if logger.get_verbosity() == logging.DEBUG:
                 output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
                 logger.debug("Hypos with scores:")
                 for score, hypo in zip(outputs.loss, output_strings):
@@ -673,9 +712,6 @@ class RagSequence(PreTrainedRagModel):
 @add_start_docstrings_to_callable(
     """A RAG-token model impementation. It performs RAG-token specific marginalization in the forward pass
     and specializes some of the functions of :class:`~transformers.PreTrainedModel` to enable RAG-token generation.
-
-    It is compatible with :class:`~transformers.DPRQuestionEncoder` as the ``question_encoder``
-    and :class:`~transformers.BartForConditionalGeneration` as ``generator``.
     """,
     RAG_START_DOCSTRING,
 )
@@ -684,41 +720,25 @@ class RagToken(PreTrainedRagModel):
     base_model_prefix = "rag_token"
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        """BART-specific adjustment"""
-        assert isinstance(self.model.generator, BartForConditionalGeneration)
-        if cur_len == 1:
-            self._force_token_ids_generation(logits, self.config.bos_token_id)
-        if cur_len == max_length - 1 and self.config.eos_token_id is not None:
-            self._force_token_ids_generation(logits, self.config.eos_token_id)
-        return logits
+        return self.model.generator.adjust_logits_during_generation(logits, cur_len, max_length)
 
-    def _force_token_ids_generation(self, scores, token_ids) -> None:
-        """BART-specific adjustment - force one of token_ids to be generated by setting prob of all other tokens to 0"""
-        if isinstance(token_ids, int):
-            token_ids = [token_ids]
-        all_but_token_ids_mask = torch.tensor(
-            [x for x in range(self.config.vocab_size) if x not in token_ids],
-            dtype=torch.long,
-            device=next(self.parameters()).device,
+    def prepare_inputs_for_generation(
+        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+    ):
+        last_hidden_state = encoder_outputs["last_hidden_state"]
+        doc_scores = encoder_outputs["doc_scores"]
+        attention_mask = encoder_outputs["attentions"]
+
+        beam_size = decoder_input_ids.shape[0] // doc_scores.shape[0]
+        doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
+        attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
+
+        encoder_outputs = BaseModelOutputWithDocs(
+            last_hidden_state=_stack_ctxt(last_hidden_state),
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=attention_mask,
+            doc_scores=doc_scores,
         )
-        assert len(scores.shape) == 2, "scores should be of rank 2 with shape: [batch_size, vocab_size]"
-        scores[:, all_but_token_ids_mask] = -float("inf")
-
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        # past cold start
-        if past[1] is None:
-            encoder_last_hidden_state, encoder_hidden_states, attention_mask, doc_scores = past[0]
-            beam_size = encoder_last_hidden_state.shape[0] // doc_scores.shape[0]
-            doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
-            attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
-            encoder_outputs = (_stack_ctxt(encoder_last_hidden_state), encoder_hidden_states, doc_scores)
-            past_key_values = None
-        # past warm start
-        else:
-            encoder_outputs, past_key_values = past
-            attention_mask = encoder_outputs[-2]
 
         print_docs = getattr(kwargs, "print_docs", False)
 
@@ -728,7 +748,7 @@ class RagToken(PreTrainedRagModel):
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "past_key_values": past_key_values,
+            "past_key_values": past,
             "use_cache": use_cache,
             "marginalize": True,
             "print_docs": print_docs,
@@ -736,12 +756,10 @@ class RagToken(PreTrainedRagModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        """Reorders cache for generation."""
-
-        (enc_out, enc_mask, attention_mask, doc_scores), past_key_values = past
-        n_docs = doc_scores.shape[1]
+        """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
 
         def _reorder_stacked(t):
+            n_docs = t.shape[0] // beam_idx.shape[0]
             t = _unstack_ctxt(t, n_docs).index_select(0, beam_idx)
             return _stack_ctxt(t)
 
@@ -751,18 +769,13 @@ class RagToken(PreTrainedRagModel):
                     attn_cache[k] = _reorder_stacked(input_buffer_k)
             return attn_cache
 
-        reordered_past_key_values = []
-        for layer_past in past_key_values:
+        reordered_past = []
+        for layer_past in past:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {attn_key: _reorder_buffer(attn_cache) for attn_key, attn_cache in layer_past.items()}
-            reordered_past_key_values.append(layer_past_new)
+            reordered_past.append(layer_past_new)
 
-        enc_out = _reorder_stacked(enc_out) if enc_out is not None else None
-        enc_mask = _reorder_stacked(enc_mask) if enc_mask is not None else None
-        doc_scores = doc_scores.index_select(0, beam_idx)
-        attention_mask = _reorder_stacked(attention_mask)
-
-        return ((enc_out, enc_mask, attention_mask, doc_scores), reordered_past_key_values)
+        return reordered_past
 
     def marginalize(self, seq_logits, doc_scores):
         # RAG-token marginalization
@@ -814,15 +827,6 @@ class RagToken(PreTrainedRagModel):
             **generator_kwargs,
         )
 
-        if outputs.past_key_values is not None:
-            (enc_out, enc_mask), past_key_values = outputs.past_key_values
-            past_key_values = (
-                (enc_out, enc_mask, attention_mask, outputs.doc_scores),
-                past_key_values,
-            )
-        else:
-            past_key_values = None
-
         if return_loss:
             assert decoder_input_ids is not None
             loss = self.get_nll(
@@ -831,7 +835,7 @@ class RagToken(PreTrainedRagModel):
             return Seq2SeqLMOutputWithDocs(
                 loss=loss,
                 logits=outputs.logits,
-                past_key_values=past_key_values,
+                past_key_values=outputs.past_key_values,
                 decoder_hidden_states=outputs.decoder_hidden_states,
                 decoder_attentions=outputs.decoder_attentions,
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -845,7 +849,7 @@ class RagToken(PreTrainedRagModel):
         return Seq2SeqLMOutputWithDocs(
             loss=None,
             logits=logits,
-            past_key_values=past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,

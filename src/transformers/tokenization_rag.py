@@ -15,12 +15,8 @@
 """Tokenization classes for RAG."""
 
 
-import logging
-
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 
-
-logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

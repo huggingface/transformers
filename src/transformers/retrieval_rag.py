@@ -14,7 +14,6 @@
 # limitations under the License.
 """RAG Retriever model implementation."""
 
-import logging
 import os
 import pickle
 import time
@@ -29,9 +28,10 @@ from nlp import load_dataset
 from .tokenization_auto import AutoTokenizer
 from .tokenization_dpr import DPRQuestionEncoderTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class Index(object):
