@@ -22,6 +22,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_bert_generation import BertGenerationConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -83,7 +84,7 @@ from .file_utils import (
     cached_path,
     is_apex_available,
     is_faiss_available,
-    is_nlp_available,
+    is_datasets_available,
     is_psutil_available,
     is_py3nvml_available,
     is_tf_available,
@@ -143,6 +144,7 @@ from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
+from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
@@ -208,6 +210,7 @@ if is_torch_available():
         DataCollatorForLanguageModeling,
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorForSOP,
         DataCollatorWithPadding,
         default_data_collator,
     )
@@ -215,6 +218,7 @@ if is_torch_available():
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
+        LineByLineWithSOPTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
         TextDataset,
@@ -277,6 +281,11 @@ if is_torch_available():
         BertModel,
         BertPreTrainedModel,
         load_tf_weights_in_bert,
+    )
+    from .modeling_bert_generation import (
+        BertGenerationDecoder,
+        BertGenerationEncoder,
+        load_tf_weights_in_bert_generation,
     )
     from .modeling_camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -583,6 +592,17 @@ if is_tf_available():
         TFFlaubertForTokenClassification,
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
+    )
+    from .modeling_tf_funnel import (
+        TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFFunnelBaseModel,
+        TFFunnelForMaskedLM,
+        TFFunnelForMultipleChoice,
+        TFFunnelForPreTraining,
+        TFFunnelForQuestionAnswering,
+        TFFunnelForSequenceClassification,
+        TFFunnelForTokenClassification,
+        TFFunnelModel,
     )
     from .modeling_tf_gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,

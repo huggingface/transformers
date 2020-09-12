@@ -47,6 +47,7 @@ MODEL_NAME_TO_DOC_FILE = {
     "openai": "gpt.rst",
     "transfo_xl": "transformerxl.rst",
     "xlm_roberta": "xlmroberta.rst",
+    "bert_generation": "bertgeneration.rst",
 }
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -229,6 +230,9 @@ def _get_model_name(module):
         return "_".join(splits[-2:])
     # Secial case for xlm_roberta
     if splits[-1] == "roberta" and splits[-2] == "xlm":
+        return "_".join(splits[-2:])
+    # Special case for bert_generation
+    if splits[-1] == "generation" and splits[-2] == "bert":
         return "_".join(splits[-2:])
     return splits[-1]
 
