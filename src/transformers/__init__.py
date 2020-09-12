@@ -83,8 +83,8 @@ from .file_utils import (
     add_start_docstrings,
     cached_path,
     is_apex_available,
-    is_faiss_available,
     is_datasets_available,
+    is_faiss_available,
     is_psutil_available,
     is_py3nvml_available,
     is_tf_available,
@@ -713,7 +713,7 @@ if is_tf_available():
     from .trainer_tf import TFTrainer
 
 
-if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available():
+if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available():
     from .configuration_rag import RagConfig
     from .modeling_rag import RagModel, RagSequence, RagToken
     from .retrieval_rag import RagRetriever

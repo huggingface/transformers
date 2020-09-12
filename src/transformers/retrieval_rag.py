@@ -23,7 +23,7 @@ import numpy as np
 import psutil
 import torch
 import torch.distributed as dist
-from nlp import load_dataset
+from datasets import load_dataset
 
 from .tokenization_auto import AutoTokenizer
 from .tokenization_dpr import DPRQuestionEncoderTokenizer

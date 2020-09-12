@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import BartForConditionalGeneration, BartTokenizer, RagRetriever, RagSequence, RagToken
+from transformers import logging as transformers_logging
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # isort:skip
@@ -19,6 +20,8 @@ from examples.rag.utils import exact_match_score, f1_score  # noqa: E402 # isort
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+transformers_logging.set_verbosity_info()
 
 
 def infer_model_type(model_name_or_path):
