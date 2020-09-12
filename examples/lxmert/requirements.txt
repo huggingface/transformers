@@ -85,7 +85,7 @@ torchvision==0.7.0
 tornado==6.0.4
 tqdm==4.48.2
 traitlets==5.0.4
--e git+https://github.com/huggingface/transformers.git
+git+https://github.com/huggingface/transformers.git
 urllib3==1.25.8
 wcwidth==0.2.5
 webencodings==0.5.1
