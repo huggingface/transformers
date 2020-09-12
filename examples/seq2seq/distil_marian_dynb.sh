@@ -8,7 +8,6 @@ python distillation.py \
   --do_train \
   --do_predict \
   --fp16 --no_teacher \
-  --val_check_interval 0.25 \
   --data_dir $ENRO_DIR \
   --max_source_length $MAX_LEN --max_target_length $MAX_LEN --val_max_target_length $MAX_LEN --test_max_target_length $MAX_LEN \
   --freeze_encoder --freeze_embeds \
