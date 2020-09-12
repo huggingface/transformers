@@ -15,7 +15,6 @@
  See the License for the specific language governing permissions and
  limitations under the License.import copy
  """
-import os
 import sys
 from typing import Tuple
 
@@ -24,8 +23,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-import cv2
-from utils import get_image_from_url, img_tensorize
+from utils import img_tensorize
 
 
 class ResizeShortestEdge:
@@ -147,11 +145,11 @@ class Preprocess:
                 raise NotImplementedError()
             # pad
             images, sizes = self.pad(images)
-            scales_yx = torch.true_divide(raw_sizes, sizes).tolist()
+            scales_yx = torch.true_divide(raw_sizes, sizes)
             if single_image:
                 return images[0], sizes[0], scales_yx[0]
             else:
-                return images, sizes, scales_yx
+                return images, raw_sizes, sizes, scales_yx
 
 
 def _scale_box(boxes, scale_yx):
