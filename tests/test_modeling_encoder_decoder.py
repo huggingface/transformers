@@ -493,7 +493,7 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         self.assertEqual(summary, EXPECTED_SUMMARY)
 
 
-class BertForSeqGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
+class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return EncoderDecoderModel.from_encoder_decoder_pretrained(
             "google/bert_for_seq_generation_L-24_bbc_encoder", "google/bert_for_seq_generation_L-24_bbc_encoder"
