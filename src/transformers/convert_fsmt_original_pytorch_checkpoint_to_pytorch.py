@@ -37,28 +37,28 @@ tar -xvzf wmt19.ru-en.ensemble.tar.gz
 # run conversions and uploads
 
 export PAIR=ru-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
 
 export PAIR=en-ru
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
 
 export PAIR=de-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
 
 export PAIR=en-de
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/fsmt-wmt19-$PAIR
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
 
 
 # upload
 cd data
-transformers-cli upload -y fsmt-wmt19-ru-en
-transformers-cli upload -y fsmt-wmt19-en-ru
-transformers-cli upload -y fsmt-wmt19-de-en
-transformers-cli upload -y fsmt-wmt19-en-de
+transformers-cli upload -y wmt19-ru-en
+transformers-cli upload -y wmt19-en-ru
+transformers-cli upload -y wmt19-de-en
+transformers-cli upload -y wmt19-en-de
 cd -
 
 # if updating just small files and not the large models, here is a script to generate the right commands:
-perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for map { "fsmt-wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
+perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for map { "wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
 
 # Caching note: Unfortunately due to CDN caching the uploaded model may be unavailable for up to 24hs after upload
@@ -116,19 +116,28 @@ cd -
 
 # wmt16-en-de set
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/fsmt-wmt16-en-de-dist-12-1
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-dist-12-1
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_6-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/fsmt-wmt16-en-de-dist-6-1
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_6-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-dist-6-1
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/fsmt-wmt16-en-de-12-1
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-12-1
 
 
 # wmt19-de-en set
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_base_dr0.1_1/checkpoint_best.pt --pytorch_dump_folder_path data/fsmt-wmt19-de-en-6-6-base
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_base_dr0.1_1/checkpoint_best.pt --pytorch_dump_folder_path data/wmt19-de-en-6-6-base
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_big_dr0.1_2/checkpoint_best.pt --pytorch_dump_folder_path data/fsmt-wmt19-de-en-6-6-big
+PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_big_dr0.1_2/checkpoint_best.pt --pytorch_dump_folder_path data/wmt19-de-en-6-6-big
 
+
+# upload
+cd data
+transformers-cli upload -y wmt16-en-de-dist-12-1
+transformers-cli upload -y wmt16-en-de-dist-6-1
+transformers-cli upload -y wmt16-en-de-12-1
+transformers-cli upload -y wmt19-de-en-6-6-base
+transformers-cli upload -y wmt19-de-en-6-6-big
+cd -
 
 
 # XXX: move into model card
@@ -144,15 +153,15 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt16-en-de-dist-12-1
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt16-en-de-dist-12-1
 echo $PAIR $MODEL_PATH
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt16-en-de-dist-6-1
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt16-en-de-dist-6-1
 echo $PAIR $MODEL_PATH
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt16-en-de-12-1
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt16-en-de-12-1
 echo $PAIR $MODEL_PATH
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
@@ -180,11 +189,11 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt19-de-en-6-6-base
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt19-de-en-6-6-base
 echo $PAIR $MODEL_PATH
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/fsmt-wmt19-de-en-6-6-big
+MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt19-de-en-6-6-big
 echo $PAIR $MODEL_PATH
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
@@ -282,10 +291,10 @@ The abbreviation FSMT stands for FairSeqMachineTranslation
 
 All four models are available:
 
-* [fsmt-wmt19-en-ru](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-en-ru)
-* [fsmt-wmt19-ru-en](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-ru-en)
-* [fsmt-wmt19-en-de](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-en-de)
-* [fsmt-wmt19-de-en](https://huggingface.co/{ORG_NAME}/fsmt-wmt19-de-en)
+* [wmt19-en-ru](https://huggingface.co/{ORG_NAME}/wmt19-en-ru)
+* [wmt19-ru-en](https://huggingface.co/{ORG_NAME}/wmt19-ru-en)
+* [wmt19-en-de](https://huggingface.co/{ORG_NAME}/wmt19-en-de)
+* [wmt19-de-en](https://huggingface.co/{ORG_NAME}/wmt19-de-en)
 
 ## Intended uses & limitations
 
@@ -294,7 +303,7 @@ All four models are available:
 ```python
 from transformers.tokenization_fsmt import FSMTTokenizer
 from transformers.modeling_fsmt import FSMTForConditionalGeneration
-mname = "{ORG_NAME}/fsmt-wmt19-{src_lang}-{tgt_lang}"
+mname = "{ORG_NAME}/wmt19-{src_lang}-{tgt_lang}"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 
@@ -338,7 +347,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py {ORG_NAME}/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py {ORG_NAME}/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
 ## TODO

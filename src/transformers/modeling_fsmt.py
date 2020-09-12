@@ -120,7 +120,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 # (fairseq BLEU: 36.4 http://matrix.statmt.org/matrix/output/1914?score_id=37605)
 
@@ -135,7 +135,7 @@ export NUM_BEAMS=50
 mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 
 # (fairseq BLEU: 41.3 http://matrix.statmt.org/matrix/output/1907?run_id=6937)
@@ -152,7 +152,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 # (fairseq BLEU: 42.3 http://matrix.statmt.org/matrix/output/1902?run_id=6750)
 
@@ -168,7 +168,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/fsmt-wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 # (fairseq BLEU: 43.1 http://matrix.statmt.org/matrix/output/1909?run_id=6862)
 
@@ -191,7 +191,7 @@ FSMT_GENERATION_EXAMPLE = r"""
 
         from transformers import FSMTTokenizer, FSMTForConditionalGeneration
 
-        mname = "stas/fsmt-wmt19-ru-en"
+        mname = "stas/wmt19-ru-en"
         model = FSMTForConditionalGeneration.from_pretrained(mname)
         tokenizer = FSMTTokenizer.from_pretrained(mname)
 
@@ -894,7 +894,7 @@ class FSMTModel(PretrainedFSMTModel):
     @add_start_docstrings_to_callable(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="stas/fsmt-wmt19-ru-en",
+        checkpoint="stas/wmt19-ru-en",
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
