@@ -28,7 +28,7 @@ TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-config.json",
 }
 
-
+# TODO: delete params form docstring
 class TransfoXLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a :class:`~transformers.TransfoXLModel`.
@@ -125,8 +125,8 @@ class TransfoXLConfig(PretrainedConfig):
         div_val=4,
         pre_lnorm=False,
         n_layer=18,
-        tgt_len=128,
-        ext_len=0,
+        # tgt_len=128,
+        # ext_len=0,
         mem_len=1600,
         clamp_len=1000,
         same_length=True,
@@ -168,8 +168,8 @@ class TransfoXLConfig(PretrainedConfig):
         self.pre_lnorm = pre_lnorm
         self.n_layer = n_layer
         self.n_head = n_head
-        self.tgt_len = tgt_len
-        self.ext_len = ext_len
+        # self.tgt_len = tgt_len
+        # self.ext_len = ext_len
         self.mem_len = mem_len
         self.same_length = same_length
         self.attn_type = attn_type
@@ -187,7 +187,10 @@ class TransfoXLConfig(PretrainedConfig):
 
     @property
     def max_position_embeddings(self):
-        return self.tgt_len + self.ext_len + self.mem_len
+        # Message copied from Transformer-XL documentation
+        logger.warning(f"The model {self.model_type} is one of the few models that has no sequence length limit.")
+        return -1
+        # self.tgt_len + self.ext_len + self.mem_len
 
     @property
     def n_token(self):  # Backward compatibility

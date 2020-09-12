@@ -234,9 +234,9 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         d_head,
         dropout,
         dropatt=0,
-        tgt_len=None,
-        ext_len=None,
-        mem_len=None,
+        # tgt_len=None,
+        # ext_len=None,
+        # mem_len=None,
         pre_lnorm=False,
         r_r_bias=None,
         r_w_bias=None,
@@ -738,10 +738,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         self.n_layer = config.n_layer
 
-        self.tgt_len = config.tgt_len
+        # self.tgt_len = config.tgt_len
         self.mem_len = config.mem_len
-        self.ext_len = config.ext_len
-        self.max_klen = config.tgt_len + config.ext_len + config.mem_len
+        # self.ext_len = config.ext_len
+        # self.max_klen = config.tgt_len + config.ext_len + config.mem_len
 
         self.attn_type = config.attn_type
 
@@ -759,9 +759,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                         config.d_head,
                         config.d_inner,
                         config.dropout,
-                        tgt_len=config.tgt_len,
-                        ext_len=config.ext_len,
-                        mem_len=config.mem_len,
+                        # tgt_len=config.tgt_len,
+                        # ext_len=config.ext_len,
+                        # mem_len=config.mem_len,
                         dropatt=config.dropatt,
                         pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if config.untie_r else self.r_w_bias,
@@ -791,10 +791,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     def backward_compatible(self):
         self.sample_softmax = -1
 
-    def reset_length(self, tgt_len, ext_len, mem_len):
-        self.tgt_len = tgt_len
+    def reset_memory_length(self, mem_len):
         self.mem_len = mem_len
-        self.ext_len = ext_len
 
     def _prune_heads(self, heads):
         logger.info("Head pruning is not implemented for Transformer-XL model")
@@ -820,6 +818,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         # mems is not None
         assert len(hids) == len(mems), "len(hids) != len(mems)"
 
+        # TODO: remove comment with ext_len
         # There are `mlen + qlen` steps that can be cached into mems
         # For the next step, the last `ext_len` of the `qlen` tokens
         # will be used as the extended context. Hence, we only cache
@@ -827,7 +826,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         # to `mlen + qlen - self.ext_len`.
         with torch.no_grad():
             new_mems = []
-            end_idx = mlen + max(0, qlen - 0 - self.ext_len)
+            end_idx = mlen + max(0, qlen)
             beg_idx = max(0, end_idx - self.mem_len)
             for i in range(len(hids)):
 
@@ -1009,8 +1008,8 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
                     else:
                         self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
 
-    def reset_length(self, tgt_len, ext_len, mem_len):
-        self.transformer.reset_length(tgt_len, ext_len, mem_len)
+    def reset_memory_length(self, mem_len):
+        self.transformer.reset_memory_length(mem_len)
 
     def init_mems(self, bsz):
         return self.transformer.init_mems(bsz)
