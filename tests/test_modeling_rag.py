@@ -39,6 +39,19 @@ if is_torch_available() and is_nlp_available() and is_faiss_available() and is_p
     )
 
 
+def require_retrieval(test_case):
+    """
+    Decorator marking a test that requires a set of dependencies necessary for pefrorm retrieval with
+    :class:`~transformers.RagRetriever`.
+
+    These tests are skipped when respective libraries are not installed.
+
+    """
+    if not (is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available()):
+        test_case = unittest.skip("test requires PyTorch")(test_case)
+    return test_case
+
+
 class RagModelTester:
     def __init__(
         self,
@@ -142,16 +155,12 @@ class RagModelTester:
 
 
 @require_torch
+@require_retrieval
 class RagModelTest(unittest.TestCase):
-    all_model_classes = (
-        (RagSequence, RagToken)
-        if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available()
-        else ()
-    )
+    all_model_classes = (RagSequence, RagToken)
 
     def setUp(self):
-        if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available():
-            self.model_tester = RagModelTester(self)
+        self.model_tester = RagModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RagConfig, hidden_size=37)
 
     def test_config(self):
