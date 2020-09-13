@@ -78,7 +78,7 @@ def eval_data_dir(
     torch.cuda.set_device(local_rank)
     model.cuda()
 
-    model = DistributedDataParallel(model, device_ids=[local_rank])
+    #model = DistributedDataParallel(model, device_ids=[local_rank])
 
 
     if fp16:
@@ -96,7 +96,7 @@ def eval_data_dir(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = DistributedSampler(ds, num_replicas=world_size, rank=local_rank) #ds.make_sortish_sampler(bs, distributed=gpus > 1)
+    sampler = DistributedSampler(ds, rank=local_rank) #ds.make_sortish_sampler(bs, distributed=gpus > 1)
 
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
 
