@@ -38,55 +38,44 @@ except ImportError:
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def chunks(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i : i + n]
-
-
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
 
 def eval_data_dir(
     data_dir,
-    save_path: str,
+    save_dir: str,
     model_name: str,
     bs: int = 8,
     max_source_length: int = 1024,
-    device: str = DEFAULT_DEVICE,
     type_path='val',
     n_obs=None,
     fp16=False,
+    save_source=False,
     num_beams: int = 4,
     task="summarization",
     local_rank=None,
     **generate_kwargs,
 ) -> Dict:
-    """Save model.generate results to <out_file>, and return how long it took."""
+    """Run evaluation on part of the data for one gpu and save to {save_dir}/rank_{rank}_output.json"""
     model_name = str(model_name)
     assert local_rank is not None
     torch.distributed.init_process_group(backend="nccl", rank=local_rank)
-    #world_size = dist.get_world_size()
+
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
     #torch.cuda.set_device(f'cuda:{device}')
     #print(f'set device ={device}')
-    save_dir, basename = Path(save_path).parent, Path(save_path).name
-    save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
-    print(f'rank: {local_rank} saving to {save_path}')
-    # assume multi-gpu
+    #save_dir, basename = Path(save_dir).parent, Path(save_dir).name
+    save_dir = Path(save_dir)
+    save_path = save_dir.joinpath(f'rank_{local_rank}_output.json')
     torch.cuda.set_device(local_rank)
     model.cuda()
-
-    #model = DistributedDataParallel(model, device_ids=[local_rank])
-    DistributedDataParallel
-
     if fp16:
         model = model.half()
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
-    use_task_specific_params(model, task)
+    use_task_specific_params(model, task)  # update config with task specific params
     ds = Seq2SeqDataset(
         tokenizer,
         data_dir,
@@ -96,36 +85,35 @@ def eval_data_dir(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = DistributedSampler(ds, rank=local_rank) #ds.make_sortish_sampler(bs, distributed=gpus > 1)
-
+    sampler = ds.make_sortish_sampler(bs, distributed=True)
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
-
-    #start_time = time.time()
-    # update config with task specific params
-    i = 0
+    dec_kwargs = dict(skip_special_tokens=True, clean_up_tokenization_spaces=False)  # tokenizer.decode
     results = []
     for batch in tqdm(data_loader):
-        i += 1
-
         summaries = model.generate(
             input_ids=batch["input_ids"].to(model.device),
             attention_mask=batch["attention_mask"].to(model.device),
             num_beams=num_beams,
             **generate_kwargs,
         )
-        dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        labels = tokenizer.batch_decode(batch["labels"], skip_special_tokens=True, clean_up_tokenization_spaces=False)
-
-        for pred, label in zip(dec, labels):
-            results.append(dict(pred=pred, label=label))
-        save_json(results, save_path)
+        preds = tokenizer.batch_decode(summaries, **dec_kwargs)
+        labels = tokenizer.batch_decode(batch["labels"], **dec_kwargs)
+        if save_source:
+            docs = tokenizer.batch_decode(batch['input_ids'], **dec_kwargs)
+        for i in range(len(labels)):
+            label, pred = labels[i], preds[i]
+            if save_source:
+                results.append(dict(pred=pred, label=label, source=docs[i]))
+            else:
+                results.append(dict(pred=pred, label=label))
+    save_json(results, save_path)
     return results
 
 def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source", default='xsum')
     parser.add_argument("--model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.", default='sshleifer/distilbart-xsum-12-3')
-    parser.add_argument("--save_path", type=str, help="where to save", default='multigpu_generations.json')
+    parser.add_argument("--save_dir", type=str, help="where to save", default='multigpu_generations.json')
     parser.add_argument("--prefix", type=str, default='test', help="where to save summaries")
 
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
@@ -139,17 +127,18 @@ def run_generate():
         "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
     )
     parser.add_argument("--fp16", action="store_true")
-    # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
+    parser.add_argument("--save_source", action="store_true")
+    parser.add_help('Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate')
     args, rest = parser.parse_known_args()
     parsed = parse_numeric_cl_kwargs(rest)
     if parsed:
         print(f"parsed the following generate kwargs: {parsed}")
-    Path(args.save_path).parent.mkdir(exist_ok=True)
+    Path(args.save_dir).mkdir(exist_ok=True)
     if args.reference_path is None and Path(args.score_path).exists():
         warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
-    eval_data_dir(
+    results = eval_data_dir(
         args.input_path,
-        args.save_path,
+        args.save_dir,
         args.model_name,
         prefix=args.prefix,
         batch_size=args.bs,
@@ -158,6 +147,7 @@ def run_generate():
         task=args.task,
         local_rank=args.local_rank,
         n_obs=args.n_obs,
+        save_source=args.save_source,
         **parsed,
     )
 
