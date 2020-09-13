@@ -1,15 +1,12 @@
 import argparse
-import json
-import time
 import warnings
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import fire
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -17,30 +14,12 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 logger = getLogger(__name__)
 
 try:
-    from .utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        parse_numeric_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-    )
+    from .utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
 except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        parse_numeric_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-    )
+    from utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data import DistributedSampler
 
 def eval_data_dir(
     data_dir,
@@ -48,7 +27,7 @@ def eval_data_dir(
     model_name: str,
     bs: int = 8,
     max_source_length: int = 1024,
-    type_path='val',
+    type_path="val",
     n_obs=None,
     fp16=False,
     save_source=False,
@@ -62,9 +41,8 @@ def eval_data_dir(
     assert local_rank is not None
     torch.distributed.init_process_group(backend="nccl", rank=local_rank)
 
-
     save_dir = Path(save_dir)
-    save_path = save_dir.joinpath(f'rank_{local_rank}_output.json')
+    save_path = save_dir.joinpath(f"rank_{local_rank}_output.json")
     torch.cuda.set_device(local_rank)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
     if fp16:
@@ -96,7 +74,7 @@ def eval_data_dir(
         preds = tokenizer.batch_decode(summaries, **dec_kwargs)
         labels = tokenizer.batch_decode(batch["labels"], **dec_kwargs)
         if save_source:
-            docs = tokenizer.batch_decode(batch['input_ids'], **dec_kwargs)
+            docs = tokenizer.batch_decode(batch["input_ids"], **dec_kwargs)
         for i in range(len(labels)):
             label, pred = labels[i], preds[i]
             if save_source:
@@ -106,17 +84,27 @@ def eval_data_dir(
     save_json(results, save_path)
     return results
 
+
 def run_generate():
-    parser = argparse.ArgumentParser(epilog='Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate')
-    parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source", default='xsum')
-    parser.add_argument("--model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.", default='sshleifer/distilbart-xsum-12-3')
-    parser.add_argument("--save_dir", type=str, help="where to save", default='multigpu_generations')
-    parser.add_argument("--prefix", type=str, default='test', help="where to save summaries")
+    parser = argparse.ArgumentParser(
+        epilog="Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate"
+    )
+    parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source", default="xsum")
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        help="like facebook/bart-large-cnn,t5-base, etc.",
+        default="sshleifer/distilbart-xsum-12-3",
+    )
+    parser.add_argument("--save_dir", type=str, help="where to save", default="multigpu_generations")
+    parser.add_argument("--prefix", type=str, default="test", help="where to save summaries")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
-    parser.add_argument("--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch")
+    parser.add_argument(
+        "--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch"
+    )
 
     parser.add_argument(
         "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
@@ -131,7 +119,7 @@ def run_generate():
     Path(args.save_dir).mkdir(exist_ok=True)
     if args.reference_path is None and Path(args.score_path).exists():
         warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
-    results = eval_data_dir(
+    eval_data_dir(
         args.input_path,
         args.save_dir,
         args.model_name,

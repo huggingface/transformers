@@ -424,7 +424,6 @@ def _long_tensor(tok_lst):
 
 
 TOLERANCE = 1e-4
-XSUM_ENTRY_LONGER = """ The London trio are up for best UK act and best album, as well as getting two nominations in the best song category."We got told like this morning 'Oh I think you're nominated'", said Dappy."And I was like 'Oh yeah, which one?' And now we've got nominated for four awards. I mean, wow!"Bandmate Fazer added: "We thought it's best of us to come down and mingle with everyone and say hello to the cameras. And now we find we've got four nominations."The band have two shots at the best song prize, getting the nod for their Tynchy Stryder collaboration Number One, and single Strong Again.Their album Uncle B will also go up against records by the likes of Beyonce and Kanye West.N-Dubz picked up the best newcomer Mobo in 2007, but female member Tulisa said they wouldn't be too disappointed if they didn't win this time around."At the end of the day we're grateful to be where we are in our careers."If it don't happen then it don't happen - live to fight another day and keep on making albums and hits for the fans."Dappy also revealed they could be performing live several times on the night.The group will be doing Number One and also a possible rendition of the War Child single, I Got Soul.The charity song is a  re-working of The Killers' All These Things That I've Done and is set to feature artists like Chipmunk, Ironik and Pixie Lott.This year's Mobos will be held outside of London for the first time, in Glasgow on 30 September.N-Dubz said they were looking forward to performing for their Scottish fans and boasted about their recent shows north of the border."We just done Edinburgh the other day," said Dappy."We smashed up an N-Dubz show over there. We done Aberdeen about three or four months ago - we smashed up that show over there! Everywhere we go we smash it up!" """
 
 
 @require_torch
@@ -525,44 +524,6 @@ class BartModelIntegrationTests(unittest.TestCase):
             skip_special_tokens=True,
         )
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
-
-    @slow
-    def test_xsum_nbest_summarization_same_as_fairseq(self):
-        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum").to(torch_device)
-        self.assertFalse(model.config.is_valid_mbart())
-        tok = self.default_tokenizer
-
-        EXPECTED_SUMMARY = (
-            "California's largest power company has begun shutting off electricity to thousands of "
-            "customers in the state."
-        )
-        dct = tok.batch_encode_plus(
-            [PGE_ARTICLE, XSUM_ENTRY_LONGER],
-            max_length=1024,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        ).to(torch_device)
-
-        hypotheses_batch = model.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-            num_beams=10,
-            num_return_sequences=10,
-            max_length=62,
-            min_length=11,
-            length_penalty=1.0,
-            no_repeat_ngram_size=3,
-            early_stopping=True,
-        )
-
-        decoded = tok.batch_decode(
-            hypotheses_batch,
-            skip_special_tokens=True,
-        )
-        import ipdb
-
-        ipdb.set_trace()
 
     def test_xsum_config_generation_params(self):
         config = BartConfig.from_pretrained("facebook/bart-large-xsum")
