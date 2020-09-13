@@ -65,6 +65,7 @@ def generate_pseudolabels(
 ) -> Dict:
     """Save model.generate results to <out_file>, and return how long it took."""
     model_name = str(model_name)
+    torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size(), rank=local_rank)
     world_size = dist.get_world_size()
     if local_rank is None:
         local_rank = torch.distributed.get_rank()
