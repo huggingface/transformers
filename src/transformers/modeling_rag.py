@@ -638,7 +638,7 @@ class RagSequence(PreTrainedRagModel):
             )
             top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
 
-            if logger.get_verbosity() == logging.DEBUG:
+            if logging.get_verbosity() == logging.DEBUG:
                 output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
                 logger.debug("Hypos with scores:")
                 for score, hypo in zip(outputs.loss, output_strings):

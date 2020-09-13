@@ -19,9 +19,10 @@ import unittest
 from unittest.mock import patch
 
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_modeling_bart import TOLERANCE, _assert_tensors_equal
 from .test_modeling_common import ids_tensor
 
 
@@ -34,6 +35,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
         DPRConfig,
         DPRQuestionEncoder,
         RagConfig,
+        RagRetriever,
         RagSequence,
         RagToken,
     )
@@ -358,3 +360,91 @@ class RagModelTest(unittest.TestCase):
                 result.doc_scores.shape, (self.model_tester.batch_size, self.model_tester.rag_config.n_docs)
             )
             self.assertEqual(result.loss.shape, torch.Size([]))
+
+
+@require_torch
+@require_retrieval
+class RagModelIntegrationTests(unittest.TestCase):
+    def get_rag_config(self):
+        return RagConfig(
+            bos_token_id=0,
+            decoder_start_token_id=2,
+            eos_token_id=2,
+            is_encoder_decoder=True,
+            pad_token_id=1,
+            vocab_size=50264,
+            title_sep=" / ",
+            doc_sep=" // ",
+            n_docs=5,
+            max_combined_length=300,
+            retriever_type="hf_retriever",
+            dataset="wiki_dpr",
+            dataset_split="train",
+            index_name="exact",
+            index_path=None,
+            dummy=True,
+            retrieval_vector_size=768,
+            retrieval_batch_size=8,
+            pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
+            pretrained_generator_tokenizer_name_or_path="facebook/bart-large-cnn",
+            pretrained_generator_name_or_path="facebook/bart-large-cnn",
+        )
+
+    @slow
+    def test_rag_sequence_inference(self):
+        rag_config = self.get_rag_config()
+        rag_retriever = RagRetriever(rag_config)
+
+        input_ids = torch.tensor([[0, 8155, 22707, 473, 37, 657, 162, 19, 5898, 102, 2]])
+        attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        decoder_input_ids = torch.tensor([[0, 574, 8865, 2505, 2]])
+
+        rag_sequence = RagSequence.from_pretrained(config=rag_config).to(torch_device)
+
+        with torch.no_grad():
+            output = rag_sequence(
+                input_ids,
+                retriever=rag_retriever,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                return_loss=True,
+                print_docs=True,
+            )
+
+        expected_shape = torch.Size([5, 5, 50264])
+        self.assertEqual(output.logits.shape, expected_shape)
+
+        expected_loss = torch.tensor([38.7446])
+        _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
+
+        expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
+        _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)
+
+    @slow
+    def test_rag_token_inference(self):
+        rag_config = self.get_rag_config()
+        rag_retriever = RagRetriever(rag_config)
+
+        input_ids = torch.tensor([[0, 8155, 22707, 473, 37, 657, 162, 19, 5898, 102, 2]])
+        attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        decoder_input_ids = torch.tensor([[0, 574, 8865, 2505, 2]])
+
+        rag_token = RagToken.from_pretrained(config=rag_config).to(torch_device)
+
+        with torch.no_grad():
+            output = rag_token(
+                input_ids,
+                retriever=rag_retriever,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                return_loss=True,
+            )
+
+        expected_shape = torch.Size([5, 5, 50264])
+        self.assertEqual(output.logits.shape, expected_shape)
+
+        expected_loss = torch.tensor([38.7045])
+        _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
+
+        expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
+        _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)

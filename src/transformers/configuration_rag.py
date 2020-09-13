@@ -62,6 +62,8 @@ RAG_CONFIG_DOC = r"""
             The path to the serialized faiss index on disk.
         passages_path: (:obj:`str`, optional, defaults to ``None``):
             A path to text passages compatible with the faiss index. Required if using :class:`~transformers.retrieval_rag.LegacyIndex`
+        dummy (:obj:`bool`, optional, defaults to ``False``)
+            Whether to load a ``dummy`` variant of the dataset specified by ``dataset`` argument.
         pretrained_question_encoder_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
             A string specifying the ``question_encoder`` tokenizer to be loaded.
         pretrained_question_encoder_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
@@ -110,6 +112,7 @@ class RagConfig(PretrainedConfig):
         index_name="embeddings",
         index_path=None,
         passages_path=None,
+        dummy=False,
         pretrained_question_encoder_tokenizer_name_or_path="facebook/dpr-question_encoder-single-nq-base",
         pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
         pretrained_generator_tokenizer_name_or_path="facebook/bart-large",
@@ -140,6 +143,7 @@ class RagConfig(PretrainedConfig):
         self.retrieval_batch_size = retrieval_batch_size
         self.passages_path = passages_path
         self.index_path = index_path
+        self.dummy = dummy
 
         self.pretrained_question_encoder_tokenizer_name_or_path = pretrained_question_encoder_tokenizer_name_or_path
         self.pretrained_question_encoder_name_or_path = pretrained_question_encoder_name_or_path

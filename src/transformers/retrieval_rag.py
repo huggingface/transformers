@@ -150,12 +150,12 @@ class LegacyIndex(Index):
 
 class HFIndex(Index):
     """
-    A wrapper around an instance of :class:`~nlp.Datasets`. If ``index_path`` is set to ``None``,
-    we load the pre-computed index available with the :class:`~nlp.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
+    A wrapper around an instance of :class:`~datasets.Datasets`. If ``index_path`` is set to ``None``,
+    we load the pre-computed index available with the :class:`~datasets.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
 
     Args:
         dataset (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``nlp.list_datasets()``).
+            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``datasets.list_datasets()``).
         dataset_split (:obj:`str`, optional, defaults to ``train``)
             Which split of the ``dataset`` to load.
         index_name (:obj:`str`, optional, defaults to ``train``)
@@ -170,13 +170,15 @@ class HFIndex(Index):
         dataset_split,
         index_name,
         index_path,
+        dummy,
     ):
         super().__init__()
         self.dataset = dataset
         self.dataset_split = dataset_split
         self.index_name = index_name
         self.index_path = index_path
-        self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split)
+        self.dummy = dummy
+        self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.dummy)
         self._index_initialize = False
 
     def is_initialized(self):
@@ -186,16 +188,23 @@ class HFIndex(Index):
         if self.index_path is not None:
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
-            self.index = load_dataset(self.dataset, with_embeddings=True, with_index=True, split=self.dataset_split)
+            self.index = load_dataset(
+                self.dataset,
+                with_embeddings=True,
+                with_index=True,
+                split=self.dataset_split,
+                index_name=self.index_name,
+                dummy=self.dummy,
+            )
         self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids):
         return [self.index[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
     def get_top_docs(self, query_vectors, n_docs=5):
-        _, docs = self.index.get_nearest_examples_batch(self.index_name, query_vectors, n_docs)
+        _, docs = self.index.get_nearest_examples_batch("embeddings", query_vectors, n_docs)
         ids = [[int(i) for i in doc["id"]] for doc in docs]
-        vectors = [doc[self.index_name] for doc in docs]
+        vectors = [doc["embeddings"] for doc in docs]
         return torch.tensor(ids), torch.tensor(vectors)
 
 
@@ -217,7 +226,7 @@ class RagRetriever(object):
         ), "invalid retirever type"
 
         self.retriever = (
-            HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path)
+            HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path, config.dummy)
             if config.retriever_type == "hf_retriever"
             else LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
         )
