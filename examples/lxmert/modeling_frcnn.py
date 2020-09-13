@@ -44,7 +44,12 @@ def norm_box(boxes, raw_sizes):
     return normalized_boxes
 
 
-def pad_list_tensors(list_tensors, preds_per_image, max_detections=None, return_tensors=None, padding=None, pad_value=0):
+def pad_list_tensors(list_tensors, preds_per_image, max_detections=None, return_tensors=None, padding=None, pad_value=0, location=None):
+    """
+    location will always be cpu for np tensors
+    """
+    if location is None:
+        location = "cpu"
     assert return_tensors in {"pt", "np", None}
     assert padding in {"max_detections", "max_batch", None}
     new = []
@@ -53,18 +58,21 @@ def pad_list_tensors(list_tensors, preds_per_image, max_detections=None, return_
             return list_tensors
         elif return_tensors == "pt":
             if not isinstance(list_tensors, torch.Tensor):
-                return torch.stack(list_tensors)
+                return torch.stack(list_tensors).to(location)
             else:
-                return list_tensors
+                return list_tensors.to(location)
         else:
-            return np.array(list_tensors)
+            if not isinstance(list_tensors, list):
+                return np.array(list_tensors.to(location))
+            else:
+                return list_tensors.to(location)
     if padding == "max_detections":
         assert max_detections is not None, "specify max number of detections per batch"
     elif padding == "max_batch":
         max_detections = max(preds_per_image)
     for i in range(len(list_tensors)):
         too_small = False
-        tensor_i = list_tensors.pop(i)
+        tensor_i = list_tensors.pop(0)
         if tensor_i.ndim < 2:
             too_small = True
             tensor_i = tensor_i.unsqueeze(-1)
@@ -73,9 +81,16 @@ def pad_list_tensors(list_tensors, preds_per_image, max_detections=None, return_
         if too_small:
             tensor_i = tensor_i.squeeze(-1)
         if return_tensors is None:
-            tensor_i = tensor_i.list()
-        elif return_tensors == "np":
-            tensor_i == tensor_i.numpy()
+            if location == "cpu":
+                tensor_i = tensor_i.cpu()
+            tensor_i = tensor_i.tolist()
+        if return_tensors == "np":
+            if location == "cpu":
+                tensor_i = tensor_i.cpu()
+            tensor_i = tensor_i.numpy()
+        else:
+            if location == "cpu":
+                tensor_i = tensor_i.cpu()
         new.append(tensor_i)
     if return_tensors == "np":
         return np.stack(new, axis=0)
@@ -1833,7 +1848,8 @@ class GeneralizedRCNN(nn.Module):
     def forward(self, images, image_shapes, gt_boxes=None, proposals=None, scales_yx=None, **kwargs):
         '''
         kwargs:
-            max_detections, return_tensors, padding, pad_value
+            max_detections (int), return_tensors {"np", "pt", None}, padding {None,
+            "max_detections"}, pad_value (int), location = {"cuda", "cpu"}
         '''
         if self.training:
             raise NotImplementedError()
