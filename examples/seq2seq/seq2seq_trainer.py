@@ -79,8 +79,6 @@ class Seq2SeqTrainer(Trainer):
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
-        has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
-
         inputs = self._prepare_inputs(inputs)
 
         max_length = (
