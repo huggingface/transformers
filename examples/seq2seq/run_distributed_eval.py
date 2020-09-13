@@ -9,6 +9,7 @@ from typing import Dict, List
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import fire
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -45,7 +46,7 @@ def chunks(lst, n):
 
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-
+from torch.utils.data import DistributedSampler
 
 def generate_pseudolabels(
     data_dir,
@@ -58,33 +59,25 @@ def generate_pseudolabels(
     fp16=False,
     num_return_sequences: int = 1,
     num_beams: int = 4,
-    gpus=1,
     task="summarization",
     local_rank=None,
     **generate_kwargs,
 ) -> Dict:
     """Save model.generate results to <out_file>, and return how long it took."""
-    # fout = Path(out_file).open("w", encoding="utf-8")
-    #Path(save_path).parent.mkdir(exist_ok=True)
+    model_name = str(model_name)
+    world_size = dist.get_world_size()
+    if local_rank is None:
+        local_rank = torch.distributed.get_rank()
+    torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size(), rank=local_rank)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    print(f'setting device ={device}')
+    torch.cuda.set_device(device)
+    save_dir, basename = Path(save_path).parent, Path(save_path).name
+    save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
+    print(f'rank: {local_rank} saving to {save_path}')
+    # assume multi-gpu
+    model = DistributedDataParallel(model, device_ids=[local_rank], world_size=world_size)
 
-
-    if device != 'ignore':
-        model_name = str(model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        model.to(device)
-    else:
-        model_name = str(model_name)
-
-        torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size(), rank=local_rank)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        print(f'setting device ={device}')
-        save_dir, basename = Path(save_path).parent, Path(save_path).name
-        save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
-        print(f'rank: {local_rank} saving to {save_path}')
-
-        # assume multi-gpu
-        torch.cuda.set_device(device)
-        model = DistributedDataParallel(model, device_ids=[local_rank])
 
     if fp16:
         model = model.half()
@@ -101,7 +94,7 @@ def generate_pseudolabels(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = ds.make_sortish_sampler(bs, distributed=gpus > 1)
+    sampler = DistributedSampler(ds, num_replicas=world_size, rank=local_rank) #ds.make_sortish_sampler(bs, distributed=gpus > 1)
 
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
 
@@ -124,22 +117,13 @@ def generate_pseudolabels(
         chunked_preds = list(chunks(dec, num_return_sequences))
         for i, label in enumerate(labels):
             results.append(dict(preds=chunked_preds[i], label=label))
-
-            # best_pred, best_score = '', -1
-            # for j in range(num_return_sequences):
-            #     pred = chunked_preds[i][j]
-            #     score = calculate_rouge([pred], [label])['rougeL']
-            #     if score > best_score:
-            #         best_score = score
-            #         best_pred = pred
-            # results.append(dict(label=label, best_pred=best_pred, best_score=best_score))
         save_json(results, save_path)
 
     runtime = int(time.time() - start_time)  # seconds
     return results
 
 
-import fire
+
 
 
 if __name__ == "__main__":
