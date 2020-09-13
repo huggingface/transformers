@@ -29,7 +29,7 @@ SPIECE_UNDERLINE = "▁"
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
-class BertForSeqGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertGenerationTokenizer
 
