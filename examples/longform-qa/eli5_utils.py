@@ -4,8 +4,8 @@ import os  # noqa: F401
 from random import choice, randint
 from time import time
 
+import datasets  # noqa: F401
 import faiss  # noqa: F401
-import nlp  # noqa: F401
 import numpy as np
 import pandas as pd
 import torch

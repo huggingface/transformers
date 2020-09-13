@@ -358,7 +358,7 @@ class GenerationMixin:
             )
             pad_token_id = eos_token_id
 
-        # current position and vocab size
+        # vocab size
         if hasattr(self.config, "vocab_size"):
             vocab_size = self.config.vocab_size
         elif (
@@ -367,6 +367,8 @@ class GenerationMixin:
             and hasattr(self.config.decoder, "vocab_size")
         ):
             vocab_size = self.config.decoder.vocab_size
+        else:
+            raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size needs to be defined")
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -381,7 +383,11 @@ class GenerationMixin:
                 # see if BOS token can be used for decoder_start_token_id
                 if bos_token_id is not None:
                     decoder_start_token_id = bos_token_id
-                elif hasattr(self.config, "decoder") and hasattr(self.config.decoder, "bos_token_id"):
+                elif (
+                    hasattr(self.config, "decoder")
+                    and hasattr(self.config.decoder, "bos_token_id")
+                    and self.config.decoder.bos_token_id is not None
+                ):
                     decoder_start_token_id = self.config.decoder.bos_token_id
                 else:
                     raise ValueError(
@@ -411,7 +417,7 @@ class GenerationMixin:
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
-            # create empty decoder_input_ids
+            # create empty decoder input_ids
             input_ids = torch.full(
                 (effective_batch_size * num_beams, 1),
                 decoder_start_token_id,
@@ -839,21 +845,19 @@ class GenerationMixin:
                 sent_lengths[effective_batch_idx] = len(best_hyp)
                 best.append(best_hyp)
 
-        # shorter batches are padded
+        # prepare for adding eos
+        sent_max_len = min(sent_lengths.max().item() + 1, max_length)
+        decoded = input_ids.new(output_batch_size, sent_max_len)
+        # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
-            sent_max_len = min(sent_lengths.max().item() + 1, max_length)
-            decoded = input_ids.new(output_batch_size, sent_max_len).fill_(pad_token_id)
+            assert pad_token_id is not None, "`pad_token_id` has to be defined"
+            decoded.fill_(pad_token_id)
 
-            # fill with hypothesis and eos_token_id if necessary
-            for i, hypo in enumerate(best):
-                decoded[i, : sent_lengths[i]] = hypo
-                if sent_lengths[i] < max_length:
-                    decoded[i, sent_lengths[i]] = eos_token_id
-        else:
-            # none of the hypotheses have an eos_token
-            assert (len(hypo) == max_length for hypo in best)
-            decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
+        # fill with hypotheses and eos_token_id if the latter fits in
+        for i, hypo in enumerate(best):
+            decoded[i, : sent_lengths[i]] = hypo
+            if sent_lengths[i] < max_length:
+                decoded[i, sent_lengths[i]] = eos_token_id
 
         return decoded
 

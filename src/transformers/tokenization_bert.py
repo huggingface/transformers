@@ -632,6 +632,8 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
                 unk_token=unk_token,
                 sep_token=sep_token,
                 cls_token=cls_token,
+                pad_token=pad_token,
+                mask_token=mask_token,
                 clean_text=clean_text,
                 handle_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
