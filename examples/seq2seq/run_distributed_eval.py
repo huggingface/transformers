@@ -79,7 +79,7 @@ def eval_data_dir(
     model.cuda()
 
     #model = DistributedDataParallel(model, device_ids=[local_rank])
-
+    DistributedDataParallel
 
     if fp16:
         model = model.half()
@@ -136,7 +136,7 @@ def run_generate():
     parser.add_argument("--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch")
 
     parser.add_argument(
-        "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
+        "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
     )
     parser.add_argument("--fp16", action="store_true")
     # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
@@ -157,6 +157,7 @@ def run_generate():
         fp16=args.fp16,
         task=args.task,
         local_rank=args.local_rank,
+        n_obs=args.n_obs,
         **parsed,
     )
 

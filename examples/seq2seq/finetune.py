@@ -401,17 +401,12 @@ def main(args, model=None) -> SummarizationModule:
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
         return model
-    elif not args.do_train:
-        #ckpt_path = os.path.join(args.output_dir), 'dummy.ckpt'
-        #trainer.save_checkpoint(ckpt_path, weights_only=True)
-        #trainer.resume_from_checkpoint = ckpt_path
-        trainer.test(model=model)
-    else:
-        model.hparams.test_checkpoint = ""
-        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
-        if checkpoints:
-            model.hparams.test_checkpoint = checkpoints[-1]
-            trainer.resume_from_checkpoint = checkpoints[-1]
+
+    model.hparams.test_checkpoint = ""
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
+    if checkpoints:
+        model.hparams.test_checkpoint = checkpoints[-1]
+        trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
 
     # test() without a model tests using the best checkpoint automatically
