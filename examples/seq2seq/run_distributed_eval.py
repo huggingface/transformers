@@ -122,8 +122,8 @@ def eval_data_dir(
 
 def run_generate():
     parser = argparse.ArgumentParser()
-    parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
-    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
+    parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source", default='xsum')
+    parser.add_argument("--model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.", default='sshleifer/distilbart-xsum-12-3')
     parser.add_argument("--save_path", type=str, help="where to save", default='multigpu_generations.json')
     parser.add_argument("--prefix", type=str, default='test', help="where to save summaries")
 
