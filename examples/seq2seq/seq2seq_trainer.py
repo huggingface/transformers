@@ -90,7 +90,7 @@ class Seq2SeqTrainer(Trainer):
         )
 
         with torch.no_grad():
-            if self.args.predict_with_generate:
+            if self.args.predict_with_generate and not prediction_loss_only:
                 generated_tokens = model.generate(
                     inputs["input_ids"],
                     attention_mask=inputs["attention_mask"],
@@ -103,20 +103,13 @@ class Seq2SeqTrainer(Trainer):
                     generated_tokens, max_length, model.config.pad_token_id
                 )
 
-                if has_labels:
-                    outputs = model(**inputs)
-                    loss = outputs[0]
-                    loss = loss.mean().item()
-                else:
-                    loss = None
+            outputs = model(**inputs)
+            loss = outputs[0]
+            loss = loss.mean().item()
+            if prediction_loss_only:
+                logits = None
             else:
-                outputs = model(**inputs)
-                if has_labels:
-                    loss, logits = outputs[:2]
-                    loss = loss.mean().item()
-                else:
-                    loss = None
-                    logits = outputs[0]
+                logits = generated_tokens if self.args.predict_with_generate else outputs[1]
 
         if prediction_loss_only:
             return (loss, None, None)
