@@ -69,7 +69,7 @@ def eval_data_dir(
     torch.distributed.init_process_group(backend="nccl", rank=local_rank)
     #world_size = dist.get_world_size()
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    torch.cuda.set_device(device)
+    torch.cuda.set_device(f'cuda:{device}')
     print(f'set device ={device}')
     save_dir, basename = Path(save_path).parent, Path(save_path).name
     save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
