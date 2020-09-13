@@ -65,19 +65,17 @@ def eval_data_dir(
 ) -> Dict:
     """Save model.generate results to <out_file>, and return how long it took."""
     model_name = str(model_name)
-    torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size(), rank=local_rank)
-    world_size = dist.get_world_size()
-    if local_rank is None:
-        local_rank = torch.distributed.get_rank()
-    torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size(), rank=local_rank)
+    assert local_rank is not None
+    torch.distributed.init_process_group(backend="nccl", rank=local_rank)
+    #world_size = dist.get_world_size()
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    print(f'setting device ={device}')
     torch.cuda.set_device(device)
+    print(f'set device ={device}')
     save_dir, basename = Path(save_path).parent, Path(save_path).name
     save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
     print(f'rank: {local_rank} saving to {save_path}')
     # assume multi-gpu
-    model = DistributedDataParallel(model, device_ids=[local_rank], world_size=world_size)
+    model = DistributedDataParallel(model, device_ids=[local_rank])
 
 
     if fp16:
