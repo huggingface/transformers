@@ -62,14 +62,11 @@ def eval_data_dir(
     assert local_rank is not None
     torch.distributed.init_process_group(backend="nccl", rank=local_rank)
 
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    #torch.cuda.set_device(f'cuda:{device}')
-    #print(f'set device ={device}')
-    #save_dir, basename = Path(save_dir).parent, Path(save_dir).name
+
     save_dir = Path(save_dir)
     save_path = save_dir.joinpath(f'rank_{local_rank}_output.json')
     torch.cuda.set_device(local_rank)
-    model.cuda()
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
     if fp16:
         model = model.half()
 
@@ -110,7 +107,7 @@ def eval_data_dir(
     return results
 
 def run_generate():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(epilog='Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate')
     parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source", default='xsum')
     parser.add_argument("--model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.", default='sshleifer/distilbart-xsum-12-3')
     parser.add_argument("--save_dir", type=str, help="where to save", default='multigpu_generations.json')
@@ -118,7 +115,6 @@ def run_generate():
 
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
-    parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument("--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch")
@@ -128,7 +124,7 @@ def run_generate():
     )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--save_source", action="store_true")
-    parser.add_help('Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate')
+
     args, rest = parser.parse_known_args()
     parsed = parse_numeric_cl_kwargs(rest)
     if parsed:
@@ -142,7 +138,6 @@ def run_generate():
         args.model_name,
         prefix=args.prefix,
         batch_size=args.bs,
-        device=args.device,
         fp16=args.fp16,
         task=args.task,
         local_rank=args.local_rank,
