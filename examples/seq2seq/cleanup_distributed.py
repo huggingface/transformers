@@ -32,12 +32,12 @@ def combine_partial_results(
         save_prefix = "generated"
         print("using generated as prefix")
 
-    tgt_path = save_dir.joinpath(save_prefix, ".target")
+    tgt_path = save_dir.joinpath(f"{save_prefix}.target")
     write_txt_file(labels, tgt_path)
-    pred_path = save_dir.joinpath(save_prefix, ".pred_target")
+    pred_path = save_dir.joinpath(f"{save_prefix}.pred_target")
     write_txt_file(preds, pred_path)
     if "source" in records[0]:
-        src_path = save_dir.joinpath(save_prefix, ".source")
+        src_path = save_dir.joinpath(f"{save_prefix}.source")
         write_txt_file([x["source"] for x in records], src_path)
 
 
