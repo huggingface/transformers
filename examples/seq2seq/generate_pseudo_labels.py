@@ -79,7 +79,8 @@ def generate_pseudolabels(
         model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
         print(f'setting device ={device}')
         save_dir, basename = Path(save_path).parent, Path(save_path).name
-        save_path = save_dir.joinpath(f'dev_1_{device}_{basename}')
+        save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
+        print(f'rank: {local_rank} saving to {save_path}')
 
         # assume multi-gpu
         torch.cuda.set_device(device)

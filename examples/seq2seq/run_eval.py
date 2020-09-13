@@ -15,21 +15,9 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 logger = getLogger(__name__)
 
 try:
-    from .utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        parse_numeric_cl_kwargs,
-        use_task_specific_params,
-    )
+    from .utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        parse_numeric_cl_kwargs,
-        use_task_specific_params,
-    )
+    from utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -41,7 +29,7 @@ def chunks(lst, n):
 
 
 def generate_summaries_or_translations(
-    data_dir: str,
+    examples: List[str],
     out_file: str,
     model_name: str,
     batch_size: int = 8,
