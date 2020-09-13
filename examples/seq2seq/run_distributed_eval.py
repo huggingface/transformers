@@ -75,6 +75,9 @@ def eval_data_dir(
     save_path = save_dir.joinpath(f'rank_{local_rank}_{basename}')
     print(f'rank: {local_rank} saving to {save_path}')
     # assume multi-gpu
+    torch.cuda.set_device(local_rank)
+    model.cuda()
+
     model = DistributedDataParallel(model, device_ids=[local_rank])
 
 
