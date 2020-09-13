@@ -160,6 +160,7 @@ conversion utilities for the following models:
     model_sharing
     tokenizer_summary
     multilingual
+    testing
 
 .. toctree::
     :maxdepth: 2
