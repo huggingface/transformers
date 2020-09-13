@@ -56,8 +56,8 @@ def generate_pseudolabels(
     device: str = DEFAULT_DEVICE,
     n_obs=None,
     fp16=False,
-    num_return_sequences: int = 10,
-    num_beams: int = 10,
+    num_return_sequences: int = 1,
+    num_beams: int = 4,
     gpus=1,
     task="summarization",
     local_rank=None,
@@ -75,9 +75,8 @@ def generate_pseudolabels(
     else:
         model_name = str(model_name)
 
-        torch.distributed.init_process_group(backend="c10_d", world_size=dist.get_world_size())
+        torch.distributed.init_process_group(backend="nccl", world_size=dist.get_world_size(), rank=local_rank)
         model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        device = local_rank
         print(f'setting device ={device}')
         save_dir, basename = Path(save_path).parent, Path(save_path).name
         save_path = save_dir.joinpath(f'dev_1_{device}_{basename}')
