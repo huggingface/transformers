@@ -48,13 +48,14 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
 
-def generate_pseudolabels(
+def eval_data_dir(
     data_dir,
     save_path: str,
     model_name: str,
     bs: int = 8,
     max_source_length: int = 1024,
     device: str = DEFAULT_DEVICE,
+    type_path='val',
     n_obs=None,
     fp16=False,
     num_return_sequences: int = 1,
@@ -91,7 +92,7 @@ def generate_pseudolabels(
         data_dir,
         max_source_length,
         max_target_length=1024,
-        type_path="train",
+        type_path=type_path,
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
@@ -123,47 +124,44 @@ def generate_pseudolabels(
     runtime = int(time.time() - start_time)  # seconds
     return results
 
+def run_generate():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
+    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
+    parser.add_argument("type_path", type=str, default='test', help="where to save summaries")
+    parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
+    parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
+    parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
+    parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
+    parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
+    parser.add_argument("--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch")
 
-
+    parser.add_argument(
+        "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
+    )
+    parser.add_argument("--fp16", action="store_true")
+    # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
+    args, rest = parser.parse_known_args()
+    parsed = parse_numeric_cl_kwargs(rest)
+    if parsed:
+        print(f"parsed the following generate kwargs: {parsed}")
+    Path(args.save_path).parent.mkdir(exist_ok=True)
+    if args.reference_path is None and Path(args.score_path).exists():
+        warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
+    eval_data_dir(
+        args.input_path,
+        args.save_path,
+        args.model_name,
+        type_path=args.type_path,
+        batch_size=args.bs,
+        device=args.device,
+        fp16=args.fp16,
+        task=args.task,
+        local_rank=args.local_rank,
+        **parsed,
+    )
 
 
 if __name__ == "__main__":
-    fire.Fire(generate_pseudolabels)
-
-# def run_generate():
-#     # parser = argparse.ArgumentParser()
-#     # parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
-#     # parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
-#     # parser.add_argument("save_path", type=str, help="where to save summaries")
-#     # parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
-#     # parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
-#     # parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
-#     # parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
-#     # parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
-#     # parser.add_argument(
-#     #     "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
-#     # )
-#     # parser.add_argument("--fp16", action="store_true")
-#     # # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
-#     # args, rest = parser.parse_known_args()
-#     # parsed = parse_numeric_cl_kwargs(rest)
-#     # if parsed:
-#     #     print(f"parsed the following generate kwargs: {parsed}")
-#     # Path(args.save_path).parent.mkdir(exist_ok=True)
-#     # if args.reference_path is None and Path(args.score_path).exists():
-#     #     warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
-#     generate_summaries_or_translations(
-#         args.input_path,
-#         args.save_path,
-#         args.model_name,
-#         batch_size=args.bs,
-#         device=args.device,
-#         fp16=args.fp16,
-#         task=args.task,
-#         **parsed,
-#     )
-#
-#
-# if __name__ == "__main__":
-#     # Usage for MT:
-#     run_generate()
+    # Usage for MT:
+    run_generate()
