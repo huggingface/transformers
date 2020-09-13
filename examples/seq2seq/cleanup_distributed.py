@@ -16,10 +16,10 @@ def combine_partial_results(
     src_dir = Path(result_dir)
     save_dir = Path(save_dir)
     save_dir.mkdir(exist_ok=True)
+    paths_to_combine = list(src_dir.glob("rank*.json"))
     records = []
-    for partial_result in src_dir.glob("*.json"):
+    for partial_result in paths_to_combine:
         records.extend(load_json(partial_result))
-
     preds = [x["pred"] for x in records]
     labels = [x["label"] for x in records]
     score_fn = calculate_bleu if calc_bleu else calculate_rouge
