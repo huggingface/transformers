@@ -72,11 +72,11 @@ class BertLayerNorm(nn.Module):
         var = mean2 - jax.lax.square(mean)
         mul = jax.lax.rsqrt(var + self.epsilon)
         if self.scale:
-            mul = mul * jnp.asarray(self.param("gamma", (features,), self.scale_init), 
+            mul = mul * jnp.asarray(self.param("gamma", self.scale_init, (features,)), 
                                     self.dtype)
         y = (x - mean) * mul
         if self.bias:
-            y = y + jnp.asarray(self.param("beta", (features,), self.bias_init),
+            y = y + jnp.asarray(self.param("beta", self.bias_init, (features,)),
                                 self.dtype)
         return y
 
@@ -93,7 +93,7 @@ class BertEmbedding(nn.Module):
 
     @compact
     def __call__(self, input):
-        embedding = self.param("weight", (self.vocab_size, self.hidden_size), self.emb_init)
+        embedding = self.param("weight", self.emb_init, (self.vocab_size, self.hidden_size))
         return jnp.take(embedding, input, axis=0)
 
 
@@ -107,9 +107,9 @@ class BertEmbeddings(nn.Module):
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
 
         # Embed
-        w_emb = BertEmbedding(vocab_size, hidden_size, name="word_embeddings")(jnp.atleast_2d(input_ids.astype("i4")))
-        p_emb = BertEmbedding(max_length, hidden_size, name="position_embeddings")(jnp.atleast_2d(position_ids.astype("i4")))
-        t_emb = BertEmbedding(type_vocab_size, hidden_size, , name="token_type_embeddings")(jnp.atleast_2d(token_type_ids.astype("i4")))
+        w_emb = BertEmbedding(self.vocab_size, self.hidden_size, name="word_embeddings")(jnp.atleast_2d(input_ids.astype("i4")))
+        p_emb = BertEmbedding(self.max_length, self.hidden_size, name="position_embeddings")(jnp.atleast_2d(position_ids.astype("i4")))
+        t_emb = BertEmbedding(self.type_vocab_size, self.hidden_size, name="token_type_embeddings")(jnp.atleast_2d(token_type_ids.astype("i4")))
 
         # Sum all embeddings
         summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
@@ -139,7 +139,7 @@ class BertIntermediate(nn.Module):
     @compact
     def __call__(self, hidden_state):
         # TODO: Add ACT2FN reference to change activation function
-        dense = nn.Dense(features=output_size, name="dense")(hidden_state)
+        dense = nn.Dense(features=self.output_size, name="dense")(hidden_state)
         return gelu(dense)
 
 
@@ -158,8 +158,8 @@ class BertLayer(nn.Module):
 
     @compact
     def __call__(self, hidden_state, attention_mask):
-        attention = BertAttention(num_heads, head_size, name="attention")(hidden_state, attention_mask)
-        intermediate = BertIntermediate(intermediate_size, name="intermediate")(attention)
+        attention = BertAttention(self.num_heads, self.head_size, name="attention")(hidden_state, attention_mask)
+        intermediate = BertIntermediate(self.intermediate_size, name="intermediate")(attention)
         output = BertOutput(name="output")(intermediate, attention)
 
         return output
@@ -175,15 +175,15 @@ class BertLayerCollection(nn.Module):
     intermediate_size: int
 
     @compact
-    def _call__(self, inputs, attention_mask):
-        assert num_layers > 0, "num_layers should be >= 1, got ({})".format(self.num_layers)
+    def __call__(self, inputs, attention_mask):
+        assert self.num_layers > 0, "num_layers should be >= 1, got ({})".format(self.num_layers)
 
         # Initialize input / output
-        input_i = output_i = self.inputs
+        input_i = output_i = inputs
 
         # Forward over all encoders
-        for i in range(num_layers):
-            layer = BertLayer(num_heads, head_size, intermediate_size, name="{}".format(i))
+        for i in range(self.num_layers):
+            layer = BertLayer(self.num_heads, self.head_size, self.intermediate_size, name="{}".format(i))
             output_i = layer(input_i, attention_mask)
             input_i = output_i
         return output_i
@@ -197,8 +197,8 @@ class BertEncoder(nn.Module):
 
     @compact
     def __call__(self, hidden_state, attention_mask):
-        layer = BertLayerCollection(num_layers, num_heads, head_size, 
-            intermediate_size, name="layer")(hidden_state, attention_mask)
+        layer = BertLayerCollection(self.num_layers, self.num_heads, self.head_size, 
+            self.intermediate_size, name="layer")(hidden_state, attention_mask)
         return layer
 
 
@@ -226,12 +226,12 @@ class BertModel(nn.Module):
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
 
         # Embedding
-        embeddings = BertEmbeddings(vocab_size, hidden_size, type_vocab_size,
-            max_length, name="embeddings")(input_ids, token_type_ids, position_ids, attention_mask)
+        embeddings = BertEmbeddings(self.vocab_size, self.hidden_size, self.type_vocab_size,
+            self.max_length, name="embeddings")(input_ids, token_type_ids, position_ids, attention_mask)
 
         # N stacked encoding layers
-        encoder = BertEncoder(num_encoder_layers, num_heads, head_size, intermediate_size, 
-            name="encoder")(embeddings, attention_mask)
+        encoder = BertEncoder(self.num_encoder_layers, self.num_heads, self.head_size, 
+            self.intermediate_size, name="encoder")(embeddings, attention_mask)
 
         pooled = BertPooler(name="pooler")(encoder)
         return encoder, pooled
@@ -341,12 +341,13 @@ class FlaxBertModel(FlaxPreTrainedModel):
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
         @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-            return self.module.apply(
+            return self.model.apply(
                 {"params": self.state},
                 jnp.array(input_ids, dtype="i4"),
                 jnp.array(token_type_ids, dtype="i4"),
                 jnp.array(position_ids, dtype="i4"),
                 jnp.array(attention_mask, dtype="i4"),
+                rngs={"param": self.key}
             )
 
         if token_type_ids is None:

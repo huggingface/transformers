@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from pickle import UnpicklingError
 from typing import Dict
 
-from flax.linen import Model, Module
+from flax.linen import Module
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
@@ -142,5 +142,5 @@ class FlaxPreTrainedModel(ABC):
             os.mkdir(folder_abs)
 
         with open(os.path.join(folder_abs, "{}.flax".format(self._config.model_type)), "wb") as f:
-            model_bytes = to_bytes(self.model)
+            model_bytes = to_bytes(self.init_params)
             f.write(model_bytes)
