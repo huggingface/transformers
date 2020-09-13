@@ -58,7 +58,6 @@ def eval_data_dir(
     type_path='val',
     n_obs=None,
     fp16=False,
-    num_return_sequences: int = 1,
     num_beams: int = 4,
     task="summarization",
     local_rank=None,
@@ -100,7 +99,7 @@ def eval_data_dir(
 
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
 
-    start_time = time.time()
+    #start_time = time.time()
     # update config with task specific params
     i = 0
     results = []
@@ -111,24 +110,23 @@ def eval_data_dir(
             input_ids=batch["input_ids"].to(model.device),
             attention_mask=batch["attention_mask"].to(model.device),
             num_beams=num_beams,
-            num_return_sequences=num_return_sequences,
             **generate_kwargs,
         )
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         labels = tokenizer.batch_decode(batch["labels"], skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        chunked_preds = list(chunks(dec, num_return_sequences))
-        for i, label in enumerate(labels):
-            results.append(dict(preds=chunked_preds[i], label=label))
-        save_json(results, save_path)
 
-    runtime = int(time.time() - start_time)  # seconds
+        for pred, label in zip(dec, labels):
+            results.append(dict(pred=pred, label=label))
+        save_json(results, save_path)
     return results
 
 def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
     parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
-    parser.add_argument("type_path", type=str, default='test', help="where to save summaries")
+    parser.add_argument("--save_path", type=str, help="where to save", default='multigpu_generations.json')
+    parser.add_argument("--prefix", type=str, default='test', help="where to save summaries")
+
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
@@ -152,7 +150,7 @@ def run_generate():
         args.input_path,
         args.save_path,
         args.model_name,
-        type_path=args.type_path,
+        prefix=args.prefix,
         batch_size=args.bs,
         device=args.device,
         fp16=args.fp16,
