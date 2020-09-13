@@ -25,6 +25,7 @@ def combine_partial_results(
     score_fn = calculate_bleu if calc_bleu else calculate_rouge
     metrics = score_fn(preds, labels)
     save_json(metrics, save_dir.joinpath("metrics.json"))  # better would be be {prefix}_{rouge|bleu}.json
+    print(metrics)
     if just_metrics:
         return
 
