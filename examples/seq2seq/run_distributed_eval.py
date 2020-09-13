@@ -89,15 +89,15 @@ def run_generate():
     parser = argparse.ArgumentParser(
         epilog="Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate"
     )
-    parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source", default="xsum")
+    parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source")
     parser.add_argument(
         "--model_name",
         type=str,
         help="like facebook/bart-large-cnn,t5-base, etc.",
         default="sshleifer/distilbart-xsum-12-3",
     )
-    parser.add_argument("--save_dir", type=str, help="where to save", default="multigpu_generations")
-    parser.add_argument("--prefix", type=str, default="test", help="where to save summaries")
+    parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
+    parser.add_argument("--prefix", type=str, default="test", help="which subset to evaluate typically train/val/test")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
