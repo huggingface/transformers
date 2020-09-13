@@ -27,13 +27,13 @@ from utils import img_tensorize
 
 
 class ResizeShortestEdge:
-    def __init__(self, short_edge_length, max_size=sys.maxsize, interp=Image.BILINEAR):
+    def __init__(self, short_edge_length, max_size=sys.maxsize):
         """
         Args:
             short_edge_length (list[min, max])
             max_size (int): maximum allowed longest edge length.
         """
-        self.interp_method = interp
+        self.interp_method = "bilinear"
         self.max_size = max_size
         self.short_edge_length = short_edge_length
 
@@ -61,25 +61,16 @@ class ResizeShortestEdge:
 
             if img.dtype == np.uint8:
                 pil_image = Image.fromarray(img)
-                pil_image = pil_image.resize((neww, newh), self.interp_method)
-                ret = np.asarray(pil_image)
+                pil_image = pil_image.resize((neww, newh), Image.BILINEAR)
+                img = np.asarray(pil_image)
             else:
-                if any(x < 0 for x in img.strides):
-                    img = np.ascontiguousarray(img)
-                img = torch.from_numpy(img)
-                shape = list(img.shape)
-                shape_4d = shape[:2] + [1] * (4 - len(shape)) + shape[2:]
-                img = img.view(shape_4d).permute(2, 3, 0, 1)  # hw(c) -> nchw
+                img = img.permute(2, 0, 1).unsqueeze(0)  # 3, 0, 1)  # hw(c) -> nchw
                 img = F.interpolate(
                     img, (newh, neww), mode=self.interp_method, align_corners=False
-                )
-                shape[:2] = (newh, neww)
-                ret = img.permute(2, 3, 0, 1).view(shape).numpy()  # nchw -> hw(c)
-            img_augs.append(ret)
+                ).squeeze(0)
+            img_augs.append(img)
 
-        ret = np.stack(img_augs)
-
-        return ret
+        return img_augs
 
 
 class Preprocess:
@@ -126,30 +117,35 @@ class Preprocess:
                 assert len(images) == 1
             for i in range(len(images)):
                 if isinstance(images[i], torch.Tensor):
-                    images.insert(i, images.pop(i).numpy())
-                elif not isinstance(images[i], np.ndarray):
+                    images.insert(i, images.pop(i).to(self.device).float())
+                elif not isinstance(images[i], torch.Tensor):
                     images.insert(
-                        i, img_tensorize(images.pop(i), input_format=self.input_format)
+                        i,
+                        torch.as_tensor(
+                            img_tensorize(images.pop(i), input_format=self.input_format)
+                        )
+                        .to(self.device)
+                        .float(),
                     )
-            # resize shape
+            # resize smallest edge
             raw_sizes = torch.tensor([im.shape[:2] for im in images])
             images = self.aug(images)
-
-            images = torch.as_tensor(images.astype("float32").transpose(0, 3, 1, 2)).to(
-                self.device
-            )
+            # transpose images and convert to torch tensors
+            # images = [torch.as_tensor(i.astype("float32")).permute(2, 0, 1).to(self.device) for i in images]
+            # now normalize before pad to aoid useless arithmatic
+            images = [self.normalizer(x) for x in images]
+            # now pad them to do the following operations
+            images, sizes = self.pad(images)
             # Normalize
-            images = torch.stack([self.normalizer(x) for x in images])
 
             if self.size_divisibility > 0:
                 raise NotImplementedError()
             # pad
-            images, sizes = self.pad(images)
             scales_yx = torch.true_divide(raw_sizes, sizes)
             if single_image:
                 return images[0], sizes[0], scales_yx[0]
             else:
-                return images, raw_sizes, sizes, scales_yx
+                return images, sizes, scales_yx
 
 
 def _scale_box(boxes, scale_yx):
