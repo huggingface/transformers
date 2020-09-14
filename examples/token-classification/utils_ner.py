@@ -27,7 +27,7 @@ from transformers import logging as hf_logging
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
-logger = hf_logging.getLogger()
+logger = hf_logging.get_logger()
 
 
 @dataclass

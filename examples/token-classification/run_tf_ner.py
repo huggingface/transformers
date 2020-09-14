@@ -31,7 +31,7 @@ handler = logging.StreamHandler()
 formatter = logging.Formatter('[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s')
 handler.setFormatter(formatter)
 
-logger = hf_logging.getLogger()
+logger = hf_logging.get_logger()
 
 logger.handlers.clear()
 logger.addHandler(handler)
