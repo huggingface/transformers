@@ -33,8 +33,8 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
 
     from transformers import (
         BartConfig,
-        BartTokenizer,
         BartForConditionalGeneration,
+        BartTokenizer,
         DPRConfig,
         DPRQuestionEncoder,
         RagConfig,

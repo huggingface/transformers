@@ -410,18 +410,30 @@ class PreTrainedRagModel(PreTrainedModel):
                 **kwargs,
             )
 
+        assert pretrained_model_name_or_path is not None or config.pretrained_question_encoder_name_or_path is not None
+        pretrained_question_encoder_name_or_path = (
+            config.pretrained_question_encoder_name_or_path
+            if config.pretrained_question_encoder_name_or_path is not None
+            else os.path.join(pretrained_model_name_or_path, "question_encoder")
+        )
         # TODO(piktus): To be replaced with AutoModel once it supports DPRQuestionEncoder
         question_encoder = DPRQuestionEncoder.from_pretrained(
-            config.pretrained_question_encoder_name_or_path, config=question_encoder_config
+            pretrained_question_encoder_name_or_path, config=question_encoder_config
         )
 
+        assert pretrained_model_name_or_path is not None or config.pretrained_generator_name_or_path is not None
+        pretrained_generator_name_or_path = (
+            config.pretrained_generator_name_or_path
+            if config.pretrained_generator_name_or_path is not None
+            else os.path.join(pretrained_model_name_or_path, "generator")
+        )
         generator_kwargs = {}
         if generator_config is not None:
             setattr(generator_config, "return_dict", True)
             generator_kwargs["config"] = generator_config
         else:
             generator_kwargs["return_dict"] = True
-        generator = AutoModelForSeq2SeqLM.from_pretrained(config.pretrained_generator_name_or_path, **generator_kwargs)
+        generator = AutoModelForSeq2SeqLM.from_pretrained(pretrained_generator_name_or_path, **generator_kwargs)
 
         return cls(config, question_encoder, generator)
 

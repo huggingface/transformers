@@ -196,10 +196,10 @@ def get_args():
         "ans - a single line of the gold file contains the expected answer string",
     )
     parser.add_argument(
-        "--predictions_filename",
+        "--predictions_path",
         type=str,
         default="predictions.txt",
-        help="Name of the predictions file, to be stored in the checkpoints directry",
+        help="Path under which to store prediction files. The base dir needs to exists, the file will be generated.",
     )
     parser.add_argument(
         "--eval_all_checkpoints",
@@ -268,15 +268,14 @@ def main(args):
     evaluate_batch_fn = evaluate_batch_e2e if args.eval_mode == "e2e" else evaluate_batch_retrieval
 
     for checkpoint in checkpoints:
-        predictions_path = os.path.join(checkpoint, args.predictions_filename)
-        if os.path.exists(predictions_path) and (not args.recalculate):
-            logger.info("Calculating metrics based on an existing predictions file: {}".format(predictions_path))
-            score_fn(args, predictions_path, args.gold_data_path)
+        if os.path.exists(args.predictions_path) and (not args.recalculate):
+            logger.info("Calculating metrics based on an existing predictions file: {}".format(args.predictions_path))
+            score_fn(args, args.predictions_path, args.gold_data_path)
             continue
 
         logger.info("***** Running evaluation for {} *****".format(checkpoint))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        logger.info("  Predictions will be stored under {}".format(predictions_path))
+        logger.info("  Predictions will be stored under {}".format(args.predictions_path))
 
         model = model_class.from_pretrained(checkpoint, **model_kwargs)
         model.to(args.device)
@@ -291,7 +290,7 @@ def main(args):
         if args.model_type != "bart":
             retriever.init_retrieval(distributed_port=12345)
 
-        with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
+        with open(args.evaluation_set, "r") as eval_file, open(args.predictions_path, "w") as preds_file:
             questions = []
             for line in tqdm(eval_file):
                 questions.append(line.strip())
@@ -305,7 +304,7 @@ def main(args):
                 preds_file.write("\n".join(answers))
                 preds_file.flush()
 
-            score_fn(args, predictions_path, args.gold_data_path)
+            score_fn(args, args.predictions_path, args.gold_data_path)
 
 
 if __name__ == "__main__":

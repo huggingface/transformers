@@ -65,9 +65,9 @@ python examples/rag/eval_rag.py \
     --model_type rag_sequence \ # RAG model type (rag_token or rag_sequence)
     --evaluation_set path/to/output/biencoder-nq-dev.questions \ # an input dataset for evaluation
     --gold_data_path path/to/output/biencoder-nq-dev.pages \ # a dataset containing ground truth answers for samples from the evaluation_set
-    --predictions_filename retrieval_preds.tsv  \ # name of file in which predictions will be stored
+    --predictions_path path/to/retrieval_preds.tsv  \ # path to a file in which predictions will be stored
     --eval_mode retrieval  \ # indicates whether we're performing retrieval evaluation or e2e evaluation
-    --recalculate # if predictions_filename already exists, and this option is set - we regenerate the answers, otherwise we reuse the predicsion file to calculate metrics.
+    --recalculate # if predictions_path already exists, and this option is set - we regenerate the answers, otherwise we reuse the predicsion file to calculate metrics.
 ```
 
 
@@ -78,7 +78,7 @@ python examples/rag/eval_rag.py \
     --model_type rag_sequence \
     --evaluation_set path/to/test.source \
     --gold_data_path path/to/gold_data \
-    --predictions_filename e2e_preds.txt \
+    --predictions_path path/to/e2e_preds.txt \
     --eval_mode e2e  \ # indicates whether we're performing retrieval evaluation or e2e evaluation (default)
     --n_docs 5 \ # You can experiment with retrieving different number of documents at evaluation time
     --print_predictions

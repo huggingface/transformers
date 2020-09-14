@@ -50,7 +50,7 @@ RAG_CONFIG_DOC = r"""
         retriever_type (:obj:`str`, optional, defaults to ``hf_retriever``):
             A type of index encapsulated by the ``retriever``. Possible options include:
 
-                - ``hf_retriever`` - and index build for an instance of :class:`~nlp.Datasets`
+                - ``hf_retriever`` - and index build for an instance of :class:`~datasets.Datasets`
                 - ``legacy_retriever`` - an index build with the native DPR implementation (see https://github.com/facebookresearch/DPR for details).
         dataset (:obj:`str`, optional, defaults to ``wiki_dpr``):
             A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``nlp.list_datasets()``).
@@ -59,19 +59,28 @@ RAG_CONFIG_DOC = r"""
         index_name (:obj:`str`, optional, defaults to ``train``)
             The index_name of the index associated with the ``dataset``.
         index_path (:obj:`str`, optional, defaults to ``None``)
-            The path to the serialized faiss index on disk.
-        passages_path: (:obj:`str`, optional, defaults to ``None``):
-            A path to text passages compatible with the faiss index. Required if using :class:`~transformers.retrieval_rag.LegacyIndex`
+            Can be either:
+
+                - A path to a serialized faiss index on disk, compatible with :class:`~transformers.retrieval_rag.HFIndex`
+                - A string with the `shortcut name` of a pretrained index compatible with
+                  :class:`~transformers.retrieval_rag.LegacyIndex` to load from cache or download,
+                  e.g. ``facebook/rag-index``.
+                - A path to a `directory` containing index files compatible with
+                  :class:`~transformers.retrieval_rag.LegacyIndex`
         dummy (:obj:`bool`, optional, defaults to ``False``)
             Whether to load a ``dummy`` variant of the dataset specified by ``dataset`` argument.
         pretrained_question_encoder_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
             A string specifying the ``question_encoder`` tokenizer to be loaded.
         pretrained_question_encoder_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
-            A string specifying the ``question_encoder`` model to be loaded.
+            A string specifying the ``question_encoder`` model to be loaded. If a RAG model is loaded from ``pretrained_model_name_or_path``
+            and ``pretrained_question_encoder_name_or_path`` is not ``None``, ``pretrained_question_encoder_name_or_path`` takes precedence
+            over the question encoder model specified by the ``pretrained_model_name_or_path``.
         pretrained_generator_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
             A string specifying the ``generator`` tokenizer to be loaded.
         pretrained_generator_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
-            A string specifying the ``generator`` model to be loaded.
+            A string specifying the ``generator`` model to be loaded.  If a RAG model is loaded from ``pretrained_model_name_or_path``
+            and ``pretrained_generator_name_or_path`` is not ``None``, ``pretrained_generator_name_or_path`` takes precedence
+            over the generator model specified by the ``pretrained_model_name_or_path``.
 
     Args linked to the tokenizer - they have to be compatible with equivalent parameters of the ``generator``:
         prefix (:obj:`str`, `optional`):
@@ -111,12 +120,11 @@ class RagConfig(PretrainedConfig):
         dataset_split="train",
         index_name="embeddings",
         index_path=None,
-        passages_path=None,
         dummy=False,
         pretrained_question_encoder_tokenizer_name_or_path="facebook/dpr-question_encoder-single-nq-base",
-        pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
+        pretrained_question_encoder_name_or_path=None,
         pretrained_generator_tokenizer_name_or_path="facebook/bart-large",
-        pretrained_generator_name_or_path="facebook/bart-large",
+        pretrained_generator_name_or_path=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -141,7 +149,6 @@ class RagConfig(PretrainedConfig):
 
         self.retrieval_vector_size = retrieval_vector_size
         self.retrieval_batch_size = retrieval_batch_size
-        self.passages_path = passages_path
         self.index_path = index_path
         self.dummy = dummy
 

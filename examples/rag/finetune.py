@@ -89,13 +89,14 @@ class GenerativeQAModule(BaseTransformer):
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
-            generator_config = AutoConfig.from_pretrained(
-                config.pretrained_generator_name_or_path, prefix=config.prefix
+            pretrained_generator_name_or_path = (
+                config.pretrained_generator_name_or_path
+                if config.pretrained_generator_name_or_path is not None
+                else os.path.join(hparams.model_name_or_path, "generator")
             )
+            generator_config = AutoConfig.from_pretrained(pretrained_generator_name_or_path, prefix=config.prefix)
             hparams, generator_config = set_extra_model_params(extra_model_params, hparams, generator_config)
-            model = self.model_class.from_pretrained(
-                hparams.model_name_or_path, config=config, generator_config=generator_config
-            )
+            model = self.model_class.from_pretrained(hparams.model_name_or_path, generator_config=generator_config)
         else:
             if args.prefix is not None:
                 setattr(config, "prefix", args.prefix)

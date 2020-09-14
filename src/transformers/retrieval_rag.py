@@ -25,6 +25,7 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
+from .file_utils import cached_path, is_remote_url
 from .tokenization_auto import AutoTokenizer
 from .tokenization_dpr import DPRQuestionEncoderTokenizer
 from .tokenization_t5 import T5Tokenizer
@@ -91,25 +92,60 @@ class LegacyIndex(Index):
         vector_size (:obj:`int`):
             The dimension of indexed vectors.
         index_path (:obj:`str`):
-            The path to the serialized faiss index on disk.
-        passages_path: (:obj:`str`):
-            A path to text passages on disk, compatible with the faiss index.
+            Can be either
+
+                - A string with the `identifier name` of a pretrained index compatible with
+                  :class:`~transformers.retrieval_rag.LegacyIndex` to load from cache or download,
+                  e.g. ``facebook/rag-index``.
+                - A path to a `directory` containing index files compatible with
+                  :class:`~transformers.retrieval_rag.LegacyIndex`
     """
 
-    def __init__(self, vector_size, index_path, passages_path):
+    INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
+    PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
+
+    def __init__(self, vector_size, index_path):
         self.index_id_to_db_id = []
-        with open(passages_path, "rb") as passages_file:
-            self.passages = pickle.load(passages_file)
         self.index_path = index_path
+        self.passages = self._load_passages()
         self.vector_size = vector_size
         self.index = None
         self._index_initialize = False
 
-    def _deserialize_from(self, index_path: str):
-        logger.info("Loading index from {}".format(index_path))
-        self.index = faiss.read_index(index_path + ".index.dpr")
-        with open(index_path + ".index_meta.dpr", "rb") as reader:
-            self.index_id_to_db_id = pickle.load(reader)
+    def _resolve_path(self, index_path, filename):
+        assert os.path.isdir(index_path) or is_remote_url(index_path), "Please specify a valid ``index_path``."
+        archive_file = os.path.join(index_path, filename)
+        try:
+            # Load from URL or cache if already cached
+            resolved_archive_file = cached_path(archive_file)
+            if resolved_archive_file is None:
+                raise EnvironmentError
+        except EnvironmentError:
+            msg = (
+                f"Can't load '{archive_file}'. Make sure that:\n\n"
+                f"- '{index_path}' is a correct identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
+            )
+            raise EnvironmentError(msg)
+        if resolved_archive_file == archive_file:
+            logger.info("loading file {}".format(archive_file))
+        else:
+            logger.info("loading file {} from cache at {}".format(archive_file, resolved_archive_file))
+        return resolved_archive_file
+
+    def _load_passages(self):
+        passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
+        with open(passages_path, "rb") as passages_file:
+            passages = pickle.load(passages_file)
+        return passages
+
+    def _deserialize_index(self):
+        logger.info("Loading index from {}".format(self.index_path))
+        resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
+        self.index = faiss.read_index(resolved_index_path)
+        resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
+        with open(resolved_meta_path, "rb") as metadata_file:
+            self.index_id_to_db_id = pickle.load(metadata_file)
         assert (
             len(self.index_id_to_db_id) == self.index.ntotal
         ), "Deserialized index_id_to_db_id should match faiss index size"
@@ -122,7 +158,7 @@ class LegacyIndex(Index):
         index.hnsw.efSearch = 128
         index.hnsw.efConstruction = 200
         self.index = index
-        self._deserialize_from(self.index_path)
+        self._deserialize_index()
         self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids):
@@ -228,7 +264,7 @@ class RagRetriever(object):
         self.retriever = (
             HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path, config.dummy)
             if config.retriever_type == "hf_retriever"
-            else LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
+            else LegacyIndex(config.retrieval_vector_size, config.index_path)
         )
         self.generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
         # TODO(piktus): To be replaced with AutoTokenizer once it supports DPRQuestionEncoderTokenizer
