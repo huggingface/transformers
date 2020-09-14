@@ -249,7 +249,7 @@ When using `run_eval.py`, the following features can be useful:
     [...]
     --num_beams 10 --length_penalty 1.2 --early_stopping false
 ```
-    On completion this function prints a markdown table of the results sorted by the best BLEU score and the winning arguments.
+   On completion this function prints a markdown table of the results sorted by the best BLEU score and the winning arguments.
 
 ```
 bleu  | num_beams | length_penalty | early_stopping
