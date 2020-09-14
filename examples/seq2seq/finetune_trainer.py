@@ -64,25 +64,25 @@ class Seq2SeqDataCollator:
     def __call__(self, batch) -> Dict[str, torch.Tensor]:
         if hasattr(self.tokenizer, "prepare_seq2seq_batch"):
             batch = self._encode(batch)
-            input_ids, attention_mask, target_ids = (
+            input_ids, attention_mask, labels = (
                 batch["input_ids"],
                 batch["attention_mask"],
-                batch["decoder_input_ids"],
+                batch["labels"],
             )
         else:
             input_ids = torch.stack([x["input_ids"] for x in batch])
             attention_mask = torch.stack([x["attention_mask"] for x in batch])
-            target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+            labels = torch.stack([x["labels"] for x in batch])
 
-            target_ids = trim_batch(target_ids, self.pad_token_id)
+            labels = trim_batch(labels, self.pad_token_id)
             input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
 
         if isinstance(self.tokenizer, T5Tokenizer):
-            decoder_input_ids = self._shift_right_t5(target_ids)
-            labels = target_ids
+            decoder_input_ids = self._shift_right_t5(labels)
+            labels = labels
         else:
-            decoder_input_ids = shift_tokens_right(target_ids, self.pad_token_id)
-            labels = target_ids
+            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id)
+            labels = labels
 
         batch = {
             "input_ids": input_ids,
@@ -384,7 +384,7 @@ def main():
         trainer.save_model()
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
@@ -395,7 +395,7 @@ def main():
         result = trainer.evaluate()
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.json")
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             logger.info("***** Eval results *****")
             for key, value in result.items():
                 logger.info("  %s = %s", key, value)
@@ -411,7 +411,7 @@ def main():
         test_metrics = trainer.predict(test_dataset=test_dataset).metrics
         output_test_file = os.path.join(training_args.output_dir, "test_results.json")
 
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             logger.info("***** Test results *****")
             for key, value in test_metrics.items():
                 logger.info("  %s = %s", key, value)
