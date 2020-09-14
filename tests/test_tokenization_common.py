@@ -156,7 +156,7 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                self.assertNotEqual(tokenizer.max_len, 42)
+                self.assertNotEqual(tokenizer.model_max_length, 42)
 
         # Now let's start the test
         tokenizers = self.get_tokenizers()
