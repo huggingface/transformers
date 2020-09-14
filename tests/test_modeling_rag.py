@@ -22,8 +22,10 @@ from transformers.file_utils import is_datasets_available, is_faiss_available, i
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_bart import TOLERANCE, _assert_tensors_equal
 from .test_modeling_common import ids_tensor
+
+
+TOLERANCE = 1e-4
 
 
 if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available():
@@ -31,6 +33,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
 
     from transformers import (
         BartConfig,
+        BartTokenizer,
         BartForConditionalGeneration,
         DPRConfig,
         DPRQuestionEncoder,
@@ -39,6 +42,21 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
         RagSequence,
         RagToken,
     )
+
+
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
+        return True
+    try:
+        if torch.allclose(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
+        msg = "{} != {}".format(a, b)
+        if prefix:
+            msg = prefix + ": " + msg
+        raise AssertionError(msg)
 
 
 def require_retrieval(test_case):
@@ -394,10 +412,13 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
         rag_retriever = RagRetriever(rag_config)
+        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-        input_ids = torch.tensor([[0, 8155, 22707, 473, 37, 657, 162, 19, 5898, 102, 2]])
-        attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        decoder_input_ids = torch.tensor([[0, 574, 8865, 2505, 2]])
+        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
+        decoder_input_ids = rag_tokenizer("Linda Davis", return_tensors="pt").input_ids
+
+        input_ids = input_ids.to(torch_device)
+        decoder_input_ids = decoder_input_ids.to(torch_device)
 
         rag_sequence = RagSequence.from_pretrained(config=rag_config).to(torch_device)
 
@@ -405,7 +426,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             output = rag_sequence(
                 input_ids,
                 retriever=rag_retriever,
-                attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 return_loss=True,
                 print_docs=True,
@@ -424,10 +444,13 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_token_inference(self):
         rag_config = self.get_rag_config()
         rag_retriever = RagRetriever(rag_config)
+        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-        input_ids = torch.tensor([[0, 8155, 22707, 473, 37, 657, 162, 19, 5898, 102, 2]])
-        attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        decoder_input_ids = torch.tensor([[0, 574, 8865, 2505, 2]])
+        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
+        decoder_input_ids = rag_tokenizer("Linda Davis", return_tensors="pt").input_ids
+
+        input_ids = input_ids.to(torch_device)
+        decoder_input_ids = decoder_input_ids.to(torch_device)
 
         rag_token = RagToken.from_pretrained(config=rag_config).to(torch_device)
 
@@ -435,7 +458,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             output = rag_token(
                 input_ids,
                 retriever=rag_retriever,
-                attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 return_loss=True,
             )

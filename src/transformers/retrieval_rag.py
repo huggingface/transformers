@@ -237,7 +237,11 @@ class RagRetriever(object):
         )
         self.process_group = None
         self.n_docs = config.n_docs
-        self.batch_size = config.retrieval_batch_size * torch.cuda.device_count()
+        self.batch_size = config.retrieval_batch_size
+
+        if torch.cuda.is_available():
+            self.batch_size *= torch.cuda.device_count()
+
         self.config = config
 
     def init_retrieval(self, distributed_port):
