@@ -470,3 +470,23 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
         _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)
+
+    @slow
+    def test_rag_sequence_generate(self):
+        rag_config = self.get_rag_config()
+        rag_retriever = RagRetriever(rag_config)
+        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+
+        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
+        input_ids = input_ids.to(torch_device)
+
+        rag_sequence = RagSequence.from_pretrained(config=rag_config).to(torch_device)
+        output_ids = rag_sequence.generate(
+            input_ids,
+            retriever=rag_retriever,
+        )
+        # sequence generate test
+        output_text = rag_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_TEXT = """The album showed a songwriting maturity and depth of feeling distinctly lacking from their earlier recordings. The album\'s title track refers to secret meetings held against the approval of totalitarian governments in Soviet-dominated states. The only major single release, "One of Us", proved to be the last of ABBA\'s nine number-one singles in Germany."""
+        self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)

@@ -570,6 +570,7 @@ class RagSequence(PreTrainedRagModel):
             doc_scores=outputs.doc_scores,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         input_ids,
