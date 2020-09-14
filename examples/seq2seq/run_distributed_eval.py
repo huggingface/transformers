@@ -2,6 +2,7 @@ import argparse
 from logging import getLogger
 from pathlib import Path
 from typing import Dict
+import time
 
 import torch
 from torch.utils.data import DataLoader
@@ -14,12 +15,13 @@ logger = getLogger(__name__)
 
 try:
     from .utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
+    from .aggregate_distributed_results import combine_partial_results
 except ImportError:
     from utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
-
+    from aggregate_distributed_results import combine_partial_results
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
+import time
 
 def eval_data_dir(
     data_dir,
@@ -85,7 +87,7 @@ def eval_data_dir(
             else:
                 results.append(dict(pred=pred, label=label, id=ids[i].item()))
     save_json(results, save_path)
-    return results
+    return results, sampler.num_replicas
 
 
 def run_generate():
@@ -116,13 +118,13 @@ def run_generate():
     )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--save_source", action="store_true")
-
+    real_start = time.time()
     args, rest = parser.parse_known_args()
     generate_kwargs = parse_numeric_cl_kwargs(rest)
     if generate_kwargs:
         print(f"parsed the following generate kwargs: {generate_kwargs}")
     Path(args.save_dir).mkdir(exist_ok=True)
-    eval_data_dir(
+    results, num_replicas = eval_data_dir(
         args.input_path,
         args.save_dir,
         args.model_name,
@@ -136,6 +138,21 @@ def run_generate():
         max_source_length=args.max_source_length,
         **generate_kwargs,
     )
+    save_dir = Path(args.save_dir)
+    if args.local_rank <= 0:
+        wait_for_all_nodes_complete(num_replicas, save_dir)
+        combine_partial_results(args.save_dir, args.save_dir, save_prefix=args.type_path, just_metrics=False,
+                                calc_bleu='translation' in args.task)
+
+
+def wait_for_all_nodes_complete(num_replicas, save_dir):
+    # WAIT FOR lots of .json files
+    start_wait = time.time()
+    timeout = 15  # make higher
+    while (time.time() - start_wait) < timeout:
+        json_files = list(save_dir.glob('rank_*.json'))
+        if len(json_files) >= num_replicas:
+            break
 
 
 if __name__ == "__main__":
