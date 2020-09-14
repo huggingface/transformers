@@ -128,6 +128,9 @@ def run_generate():
     parser.add_argument(
         "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
     )
+    parser.add_argument(
+        "--sync_timeout", type=int, default=600, required=False, help="How long should master process wait for other processes to finish."
+    )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--debug", action="store_true")
     start_time = time.time()
@@ -160,7 +163,7 @@ def run_generate():
     if args.local_rank <= 0:
         save_dir = Path(args.save_dir)
         save_dir.mkdir(exist_ok=True)
-        partial_results = gather_results_from_each_node(num_replicas, json_save_dir)
+        partial_results = gather_results_from_each_node(num_replicas, json_save_dir, args.sync_timeout)
         preds, labels = combine_partial_results(partial_results)
 
         calc_bleu = "translation" in args.task
@@ -192,7 +195,7 @@ def combine_partial_results(partial_results) -> Tuple[List, List]:
     return preds, labels
 
 
-def gather_results_from_each_node(num_replicas, save_dir, timeout=120) -> List[Dict[str, List]]:
+def gather_results_from_each_node(num_replicas, save_dir, timeout) -> List[Dict[str, List]]:
     # WAIT FOR lots of .json files
     start_wait = time.time()
     logger.info("waiting for all nodes to finish")
