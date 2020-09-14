@@ -159,7 +159,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
-            self.assertLess(result["perplexity"], 35)
+            self.assertLess(result["perplexity"], 42)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
