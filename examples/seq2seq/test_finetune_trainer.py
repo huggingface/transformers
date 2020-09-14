@@ -3,13 +3,11 @@ import sys
 import tempfile
 from unittest.mock import patch
 
-import pytest
-
 from transformers import BartForConditionalGeneration, MarianMTModel
 from transformers.testing_utils import slow
 
 from .finetune_trainer import main
-from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
+from .test_seq2seq_examples import MBART_TINY
 from .utils import load_json
 
 
@@ -19,7 +17,6 @@ MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
 @slow
-@pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
 def test_model_download():
     """This warms up the cache so that we can time the next test without including download time, which varies between machines."""
     BartForConditionalGeneration.from_pretrained(MODEL_NAME)
@@ -27,7 +24,6 @@ def test_model_download():
 
 
 @slow
-@pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
 def test_finetune_trainer():
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     output_dir = tempfile.mkdtemp(prefix="marian_output")
