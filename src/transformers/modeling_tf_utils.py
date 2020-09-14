@@ -699,7 +699,7 @@ class TFConv1D(tf.keras.layers.Layer):
 
 
 class TFSharedEmbeddings(tf.keras.layers.Layer):
-    """
+    r"""
     Construct shared token embeddings.
 
     The weights of the embedding layer is usually shared with the weights of the linear decoder when doing
