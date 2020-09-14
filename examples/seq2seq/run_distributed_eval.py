@@ -83,7 +83,7 @@ def eval_data_dir(
             if save_source:
                 results.append(dict(pred=pred, label=label, source=docs[i], id=ids[i]))
             else:
-                results.append(dict(pred=pred, label=label, id=ids[i]))
+                results.append(dict(pred=pred, label=label, id=ids[i].item()))
     save_json(results, save_path)
     return results
 
