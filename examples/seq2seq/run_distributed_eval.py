@@ -129,7 +129,11 @@ def run_generate():
         "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
     )
     parser.add_argument(
-        "--sync_timeout", type=int, default=600, required=False, help="How long should master process wait for other processes to finish."
+        "--sync_timeout",
+        type=int,
+        default=600,
+        required=False,
+        help="How long should master process wait for other processes to finish.",
     )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--debug", action="store_true")
