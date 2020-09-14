@@ -138,6 +138,7 @@ class BartConfig(PretrainedConfig):
         static_position_embeddings=False,
         add_bias_logits=False,
         force_bos_token_to_be_generated=False,
+        layernorm_eps=1e-5,
         **common_kwargs
     ):
         r"""
@@ -161,6 +162,7 @@ class BartConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )
+        self.layernorm_eps = layernorm_eps
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.encoder_ffn_dim = encoder_ffn_dim

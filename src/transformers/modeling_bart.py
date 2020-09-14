@@ -219,6 +219,12 @@ def make_padding_mask(input_ids, padding_idx=1):
     return padding_mask
 
 
+def log_stats(t):
+    return t.abs().max()
+
+def log_tensor(msg, t):
+    print(f' {msg}: absmax: {t.abs().max()}, shape: {t.shape}')
+
 # Helper Modules
 
 
@@ -385,17 +391,17 @@ class DecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.normalize_before = config.normalize_before
 
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim, eps=config.layernorm_eps)
         self.encoder_attn = Attention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
         )
-        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, eps=config.layernorm_eps)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim, eps=config.layernorm_eps)
 
     def forward(
         self,
@@ -493,8 +499,8 @@ class BartDecoder(nn.Module):
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
-        self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
-        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layernorm_embedding = LayerNorm(config.d_model, eps=config.layernorm_eps) if config.normalize_embedding else nn.Identity()
+        self.layer_norm = LayerNorm(config.d_model, eps=config.layernorm_eps) if config.add_final_layer_norm else None
 
     def forward(
         self,
