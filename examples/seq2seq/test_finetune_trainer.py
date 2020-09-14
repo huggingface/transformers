@@ -5,7 +5,6 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
-import timeout_decorator
 
 from transformers import BartForConditionalGeneration, MarianMTModel
 from transformers.testing_utils import slow
@@ -28,14 +27,13 @@ def test_model_download():
     MarianMTModel.from_pretrained(MARIAN_MODEL)
 
 
-@timeout_decorator.timeout(600)
 @slow
 @pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
 def test_finetune_trainer():
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     output_dir = tempfile.mkdtemp(prefix="marian_output")
-    max_len = "56"
-    num_train_epochs = 6
+    max_len = "128"
+    num_train_epochs = 4
     eval_steps = 2
     argv = [
         "--model_name_or_path",
@@ -64,13 +62,13 @@ def test_finetune_trainer():
         "--per_device_eval_batch_size",
         "4",
         "--learning_rate",
-        "1e-3",
+        "3e-4",
         "--warmup_steps",
-        "10",
+        "8",
         "--evaluate_during_training",
         "--predict_with_generate",
         "--logging_steps",
-        str(eval_steps),
+        0,
         "--save_steps",
         str(eval_steps),
         "--eval_steps",
@@ -78,30 +76,22 @@ def test_finetune_trainer():
         "--sortish_sampler",
         "--label_smoothing",
         "0.1",
+        "--task",
+        "translation",
     ]
 
     testargs = ["finetune_trainer.py"] + argv
     with patch.object(sys, "argv", testargs):
         main()
 
-    # TODO: check that saved files work
-
-    # check checkpoint dirs
-    ckpt_dirs = glob.glob(f"{output_dir}/checkpoint*")
-    num_expected_ckpt = 6
-    assert len(ckpt_dirs) == num_expected_ckpt
-
     # Check metrics
-    first_metrics_save_path = os.path.join(ckpt_dirs[0], "eval_results.json")
-    first_step_stats = load_json(first_metrics_save_path)
-    last_metrics_save_path = os.path.join(ckpt_dirs[-1], "eval_results.json")
-    last_step_stats = load_json(last_metrics_save_path)
+    logs = load_json(os.path.join(output_dir, "log_history.json"))
+    eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
+    first_step_stats = eval_metrics[0]
+    last_step_stats = eval_metrics[-1]
 
-    assert last_step_stats["val_avg_gen_time"] >= 0.01
-
-    assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]  # model learned nothing
-    assert 1.0 >= last_step_stats["val_avg_gen_time"]  # model hanging on generate. Maybe bad config was saved.
-    assert isinstance(last_step_stats["val_avg_bleu"], float)
+    assert first_step_stats["eval_bleu"] < last_step_stats["eval_bleu"]  # model learned nothing
+    assert isinstance(last_step_stats["eval_bleu"], float)
 
     # TODO(SS): turn on args.do_predict when PL bug fixed.
     # if args.do_predict:
