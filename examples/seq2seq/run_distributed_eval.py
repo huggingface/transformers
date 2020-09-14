@@ -169,7 +169,7 @@ def run_generate():
         save_dir.mkdir(exist_ok=True)
         partial_results = gather_results_from_each_node(num_replicas, json_save_dir, args.sync_timeout)
         preds, labels = combine_partial_results(partial_results)
-
+        # Calculate metrics, save metrics,  and save _generations.txt
         calc_bleu = "translation" in args.task
         score_fn = calculate_bleu if calc_bleu else calculate_rouge
         metric_name = "bleu" if calc_bleu else "rouge"
@@ -189,7 +189,7 @@ def run_generate():
 
 
 def combine_partial_results(partial_results) -> Tuple[List, List]:
-    """Write first n lines of each file f in src_dir to dest_dir/f """
+    """Concatenate partial results into one file, then sort it by id."""
     records = []
     for partial_result in partial_results:
         records.extend(partial_result)
