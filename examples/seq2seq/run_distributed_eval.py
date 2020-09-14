@@ -1,5 +1,4 @@
 import argparse
-import warnings
 from logging import getLogger
 from pathlib import Path
 from typing import Dict
@@ -17,6 +16,7 @@ try:
     from .utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
 except ImportError:
     from utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
+
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -58,7 +58,7 @@ def eval_data_dir(
         max_target_length=1024,
         type_path=type_path,
         n_obs=n_obs,
-        prefix=model.config.prefix,
+        prefix=model.config.prefix or '',
     )
     sampler = ds.make_sortish_sampler(bs, distributed=True)
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
@@ -97,7 +97,9 @@ def run_generate():
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
-    parser.add_argument("--type_path", type=str, default="test", help="which subset to evaluate typically train/val/test")
+    parser.add_argument(
+        "--type_path", type=str, default="test", help="which subset to evaluate typically train/val/test"
+    )
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
@@ -112,9 +114,9 @@ def run_generate():
     parser.add_argument("--save_source", action="store_true")
 
     args, rest = parser.parse_known_args()
-    parsed = parse_numeric_cl_kwargs(rest)
-    if parsed:
-        print(f"parsed the following generate kwargs: {parsed}")
+    generate_kwargs = parse_numeric_cl_kwargs(rest)
+    if generate_kwargs:
+        print(f"parsed the following generate kwargs: {generate_kwargs}")
     Path(args.save_dir).mkdir(exist_ok=True)
     eval_data_dir(
         args.input_path,
@@ -127,7 +129,7 @@ def run_generate():
         local_rank=args.local_rank,
         n_obs=args.n_obs,
         save_source=args.save_source,
-        **parsed,
+        **generate_kwargs,
     )
 
 
