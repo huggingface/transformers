@@ -27,6 +27,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    DPRConfig,
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
@@ -93,6 +94,9 @@ from .modeling_distilbert import (
     DistilBertForSequenceClassification,
     DistilBertForTokenClassification,
     DistilBertModel,
+)
+from .modeling_dpr import (
+    DPRQuestionEncoder
 )
 from .modeling_electra import (
     ElectraForMaskedLM,
@@ -217,6 +221,7 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
+        (DPRConfig, DPRQuestionEncoder),
     ]
 )
 

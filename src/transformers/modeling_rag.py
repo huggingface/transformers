@@ -134,6 +134,264 @@ def _unstack_ctxt(tensor, n_docs):
     return tensor.view(-1, n_docs, *tensor.shape[1:])
 
 
+class RagPreTrainedModel(PreTrainedModel):
+    r"""
+    RAG models encapsulate two trainable components - a question encoder and a generator, but as such they don't have any trainable parameters.
+    We specialize `:func:`~transformers.PreTrainedModel.from_pretrained`` and `:func:`~transformers.PreTrainedModel.save_pretrained`` to reflect this.
+    """
+    config_class = RagConfig
+    base_model_prefix = "rag"
+    authorized_missing_keys = [r"position_ids"]
+
+
+@add_start_docstrings_to_callable(RAG_CORE_DOCSTRING)
+class RagModel(RagPreTrainedModel):
+    def __init__(
+        self,
+        config: Optional[PretrainedConfig] = None,
+        encoder: Optional[PreTrainedModel] = None,
+        generator: Optional[PreTrainedModel] = None,
+        **kwargs,
+    ):
+        assert config is not None or (
+            encoder is not None and generator is not None
+        ), "Either a configuration or an encoder and a generator has to be provided."
+        if config is None:
+            config = RagConfig.from_encoder_generator_configs(encoder.config, generator.config, **kwargs)
+
+        super().__init__(config)
+        self.config = config
+        self.encoder = encoder
+        self.generator = generator
+        self.n_docs = self.config.n_docs
+
+    def contextualize(self, input_ids, retriever, print_docs=False):
+        """
+        Adds context to every input in the batch by querying the retriever.
+
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
+                it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            retriever (:class:`~transformers.RagRetriever`):
+                A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
+            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
+
+        Return:
+            :obj:`tuple(tuple(torch.FloatTensor)`: a tuple consisting od three elements: contextualized ``input_ids``,
+                compatible ``attention_mask`` and scores of the retrieved documents.
+        """
+        question_encoder_input_ids, input_strings = retriever.preprocess_query(input_ids, self.generator.config.prefix)
+        query_vectors = self.question_encoder(question_encoder_input_ids)[0]
+        doc_vectors, docs = retriever.retrieve(query_vectors.cpu().detach().to(torch.float32), n_docs=self.n_docs)
+        doc_vectors = doc_vectors.to(query_vectors)
+        doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
+
+        # T5 tokenizer doesn't add eos token by default even with add_special_tokens set to True
+        add_eos = (input_ids == self.config.eos_token_id).any() and isinstance(
+            self.generator, T5ForConditionalGeneration
+        )
+        input_ids, attention_mask = retriever.postprocess_docs(
+            doc_scores, docs, input_strings, add_eos, self.generator.config.prefix, print_docs
+        )
+        return input_ids, attention_mask, doc_scores
+
+    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids,
+        retriever: RagRetriever,
+        attention_mask=None,
+        encoder_outputs=None,
+        decoder_input_ids=None,
+        past_key_values=None,
+        use_cache=None,
+        print_docs=False,
+        **generator_kwargs
+    ):
+        r"""
+            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                If :obj:`True`, documents retrieved during the forward pass will be logged. Intended for debugging purposes.
+
+        Returns:
+
+        """
+
+        # encoder_outputs are pre-computed during RAG-token generation
+        if encoder_outputs is not None:
+            doc_scores = encoder_outputs.doc_scores
+        else:
+            # Add context documents to input
+            input_ids, attention_mask, doc_scores = self.contextualize(input_ids, retriever, print_docs)
+
+        # Decoder input without context documents
+        if decoder_input_ids is not None:
+            decoder_input_ids = decoder_input_ids.repeat_interleave(self.n_docs, dim=0)
+
+        outputs = self.generator(
+            input_ids,
+            attention_mask=attention_mask,
+            encoder_outputs=encoder_outputs,
+            decoder_input_ids=decoder_input_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **generator_kwargs,
+        )
+        return Seq2SeqLMOutputWithDocs(
+            loss=None,
+            logits=outputs.logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            doc_scores=doc_scores,
+        )
+
+    def __init__(
+        self,
+        config: RagConfig,
+        question_encoder: PreTrainedModel = None,
+        generator: PreTrainedModel = None,
+    ):
+        super().__init__(config)
+
+        self.config = config
+        if question_encoder is None:
+            # TODO(piktus): To be replaced with AutoConfig / AutoModel once it supports DPRQuestionEncoder
+            question_encoder_config = DPRConfig.from_pretrained(self.config.pretrained_question_encoder_name_or_path)
+            question_encoder = DPRQuestionEncoder(question_encoder_config)
+
+        if generator is None:
+            generaotr_config = AutoConfig.from_pretrained(self.config.pretrained_generator_name_or_path)
+            generator = AutoModelForSeq2SeqLM.from_config(generaotr_config)
+
+        self.n_docs = self.config.n_docs
+        self._validate_configs_match(self.config, generator.config)
+
+        self.model = RagModel(config, question_encoder, generator)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path=None, **kwargs):
+        r"""
+        Instantiates a pretrained RAG model from a pre-trained model configuration. Since RAG doesn't have any trainable parameters
+        other than those encapsulated by the ``question _encoder`` and the ``generator``, we call `:func:`~transformers.PreTrainedModel.from_pretrained``
+        for the ``question_encoder`` and the ``generator`` respectively.
+
+        Parameters:
+            pretrained_model_name_or_path (:obj:`str`, `optional`):
+                A string specifying the model to be loaded. See :func:`~transformers.PreTrainedModel.from_pretrained`` for details.
+            config (:obj:`Union[PretrainedConfig, str]`, `optional`):
+                Can be either:
+
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
+
+                See :func:`~transformers.PreTrainedModel.from_pretrained`` for more details.
+            generator_config (:obj:`str`, `optional`):
+                A string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`. Will be passed
+                to the :func:`~transformers.PreTrainedModel.from_pretrained`` function initializing the ``generator`` model.
+            question_encoder_config (:obj:`str`, `optional`):
+                A string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`. Will be passed
+                to the :func:`~transformers.PreTrainedModel.from_pretrained`` function initializing the ``question_encoder`` model.
+            kwargs (remaining dictionary of keyword arguments, `optional`):
+                `kwargs`` will be passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`).
+                Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
+                with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
+                attribute will be passed to the underlying model's ``__init__`` function.
+        """
+        config = kwargs.pop("config", None)
+        generator_config = kwargs.pop("generator_config", None)
+        question_encoder_config = kwargs.pop("question_encoder_config", None)
+
+        assert pretrained_model_name_or_path is not None or config is not None
+        if not isinstance(config, PretrainedConfig):
+            config = cls.config_class.from_pretrained(
+                config if config is not None else pretrained_model_name_or_path,
+                **kwargs,
+            )
+
+        # TODO(piktus): To be replaced with AutoModel once it supports DPRQuestionEncoder
+        question_encoder = DPRQuestionEncoder.from_pretrained(
+            config.pretrained_question_encoder_name_or_path, config=question_encoder_config
+        )
+
+        generator_kwargs = {}
+        if generator_config is not None:
+            setattr(generator_config, "return_dict", True)
+            generator_kwargs["config"] = generator_config
+        else:
+            generator_kwargs["return_dict"] = True
+        generator = AutoModelForSeq2SeqLM.from_pretrained(config.pretrained_generator_name_or_path, **generator_kwargs)
+
+        return cls(config, question_encoder, generator)
+
+    def save_pretrained(self, save_directory):
+        r"""
+        Save a model and its configuration file to a directory, so that it can be re-loaded using the
+        `:func:`~transformers.PreTrainedRagModel.from_pretrained`` class method.
+
+        Arguments:
+            save_directory (:obj:`str`):
+                Base directory to which to save. Will be created if it doesn't exist. The generator model
+                will be saved to save_directory/generator directory. The question encoder model will be saved
+                to save_directory/genquestion_encoder directory.
+        """
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
+        generator_output_dir = os.path.join(save_directory, "generator")
+        self.model.generator.save_pretrained(generator_output_dir)
+        qe_output_dir = os.path.join(save_directory, "question_encoder")
+        self.model.question_encoder.save_pretrained(qe_output_dir)
+        config = copy.deepcopy(self.config)
+        config.pretrained_generator_name_or_path = generator_output_dir
+        config.pretrained_question_encoder_name_or_path = qe_output_dir
+        config.vocab_size = self.model.generator.config.vocab_size
+        config.save_pretrained(save_directory)
+
+    def shift_tokens_left(self, input_ids, pad_token_id=None):
+        """Shift input ids one token to the left, and add a pad to right"""
+        if pad_token_id is None:
+            pad_token_id = self.config.pad_token_id
+        return torch.cat([input_ids[:, 1:], input_ids.new(input_ids.shape[0], 1).fill_(pad_token_id)], 1)
+
+    def shift_tokens_right(self, input_ids, start_token_id=None):
+        """Shift input ids one token to the right, and pad with start_token_id"""
+        if start_token_id is None:
+            start_token_id = self.config.decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+        shifted_input_ids[:, 0] = start_token_id
+        return shifted_input_ids
+
+    def _validate_configs_match(self, rag_config, gen_config):
+        assert rag_config.pad_token_id == gen_config.pad_token_id, "pad_token_id mismatch: {} vs. {}".format(
+            rag_config.pad_token_id, gen_config.pad_token_id
+        )
+        assert rag_config.bos_token_id == gen_config.bos_token_id, "bos_token_id mismatch: {} vs. {}".format(
+            rag_config.bos_token_id, gen_config.bos_token_id
+        )
+        assert rag_config.eos_token_id == gen_config.eos_token_id, "eos_token_id mismatch: {} vs. {}".format(
+            rag_config.eos_token_id, gen_config.eos_token_id
+        )
+        assert (
+            rag_config.decoder_start_token_id == gen_config.decoder_start_token_id
+        ), "decoder_start_token_id mismatch: {} vs. {}".format(
+            rag_config.decoder_start_token_id, gen_config.decoder_start_token_id
+        )
+        assert (
+            rag_config.is_encoder_decoder == gen_config.is_encoder_decoder
+        ), "pad_token_id mismatch: {} vs. {}".format(rag_config.is_encoder_decoder, gen_config.is_encoder_decoder)
+        assert rag_config.vocab_size == gen_config.vocab_size, "vocab_size mismatch: {} vs. {}".format(
+            rag_config.vocab_size, gen_config.vocab_size
+        )
+
+
 RAG_START_DOCSTRING = r"""
     RAG is a seq2seq model which encapsulates two core components: a question encoder and a generator.
     During a forward pass, we encode the input with the question encoder and pass it
@@ -210,7 +468,6 @@ RAG_LOSS_INPUTS_DOCSTRING = r"""
             If set to ``0.0``, no label smoothing is performed.
 """
 
-
 @add_start_docstrings_to_callable(RAG_CORE_DOCSTRING)
 class RagModel(torch.nn.Module):
     def __init__(
@@ -242,19 +499,6 @@ class RagModel(torch.nn.Module):
             :obj:`tuple(tuple(torch.FloatTensor)`: a tuple consisting od three elements: contextualized ``input_ids``,
                 compatible ``attention_mask`` and scores of the retrieved documents.
         """
-        question_encoder_input_ids, input_strings = retriever.preprocess_query(input_ids, self.generator.config.prefix)
-        query_vectors = self.question_encoder(question_encoder_input_ids)[0]
-        doc_vectors, docs = retriever.retrieve(query_vectors.cpu().detach().to(torch.float32), n_docs=self.n_docs)
-        doc_vectors = doc_vectors.to(query_vectors)
-        doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
-
-        # T5 tokenizer doesn't add eos token by default even with add_special_tokens set to True
-        add_eos = (input_ids == self.config.eos_token_id).any() and isinstance(
-            self.generator, T5ForConditionalGeneration
-        )
-        input_ids, attention_mask = retriever.postprocess_docs(
-            doc_scores, docs, input_strings, add_eos, self.generator.config.prefix, print_docs
-        )
         return input_ids, attention_mask, doc_scores
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
@@ -265,7 +509,9 @@ class RagModel(torch.nn.Module):
         retriever: RagRetriever,
         attention_mask=None,
         encoder_outputs=None,
+        doc_scores=None,
         decoder_input_ids=None,
+        decoder_attention_mask=None,
         past_key_values=None,
         use_cache=None,
         print_docs=False,
@@ -280,19 +526,40 @@ class RagModel(torch.nn.Module):
         """
 
         # encoder_outputs are pre-computed during RAG-token generation
-        if encoder_outputs is not None:
-            doc_scores = encoder_outputs.doc_scores
-        else:
+        if encoder_outputs is None:
             # Add context documents to input
             input_ids, attention_mask, doc_scores = self.contextualize(input_ids, retriever, print_docs)
+            encoder_input_ids, attention_mask = retriever.preprocess_query(input_ids, self.generator.config.prefix)
+            query_vectors = self.question_encoder(encoder_input_ids, attention_mask=attention_mask)[0]
+
+            processed_query_vectors = query_vectors.cpu().detach().to(torch.float32)
+            context_ids, context_attention_mask, doc_vectors = retriever(processed_query_vectors, n_docs=self.n_docs)
+
+
+            # T5 tokenizer doesn't add eos token by default even with add_special_tokens set to True
+            # TODO: move all this stuff to retriever
+            add_eos = (input_ids == self.config.eos_token_id).any() and isinstance(
+                self.generator, T5ForConditionalGeneration
+            )
+            input_ids, attention_mask = retriever.postprocess_docs(
+                doc_scores, docs, input_strings, add_eos, self.generator.config.prefix, print_docs
+            )
+
+            # compute doc scores
+            doc_vectors = doc_vectors.to(query_vectors)
+            doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
 
         # Decoder input without context documents
-        if decoder_input_ids is not None:
+        # For now maybe force decode
+        if decoder_input_ids is None:
+            pass
+            # prepare for T5 like
+        else:
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.n_docs, dim=0)
 
         outputs = self.generator(
-            input_ids,
-            attention_mask=attention_mask,
+            context_ids,
+            attention_mask=context_attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
             past_key_values=past_key_values,
