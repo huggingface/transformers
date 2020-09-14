@@ -70,7 +70,7 @@ if is_torch_available():
         def forward(self, input_x=None, labels=None):
             y = input_x * self.a + self.b
             if labels is None:
-                return ((y,y) if self.double_output else (y,))
+                return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 

@@ -1300,7 +1300,7 @@ class Trainer:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
-                preds = logits if preds is None else tuple(torch.cat((p, l), dim=0) for p,l in zip(preds, logits))
+                preds = logits if preds is None else tuple(torch.cat((p, l), dim=0) for p, l in zip(preds, logits))
             if labels is not None:
                 label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
 
