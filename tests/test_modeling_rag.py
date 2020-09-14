@@ -36,6 +36,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
         BartTokenizer,
         BartForConditionalGeneration,
         DPRConfig,
+        DPRQuestionEncoderTokenizer,
         DPRQuestionEncoder,
         RagConfig,
         RagRetriever,
@@ -411,10 +412,16 @@ class RagModelIntegrationTests(unittest.TestCase):
     @slow
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
-        rag_retriever = RagRetriever(rag_config)
+        rag_retriever = RagRetriever.from_pretrained(rag_config)
+        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+
+#        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
+        input_ids = rag_question_encoder_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
         decoder_input_ids = rag_tokenizer("Linda Davis", return_tensors="pt").input_ids
 
         input_ids = input_ids.to(torch_device)
