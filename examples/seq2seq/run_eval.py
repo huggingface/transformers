@@ -54,6 +54,7 @@ def generate_summaries_or_translations(
     use_task_specific_params(model, task)
     if prefix is None:
         prefix = getattr(model.config, "prefix", "")
+
     for examples_chunk in tqdm(list(chunks(examples, batch_size))):
         examples_chunk = [prefix + text for text in examples_chunk]
         batch = tokenizer(examples_chunk, return_tensors="pt", truncation=True, padding="longest").to(device)
