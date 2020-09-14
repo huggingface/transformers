@@ -110,7 +110,7 @@ def _reset_library_root_logger() -> None:
         _lock.release()
 
 
-def get_logger() -> logging.Logger:
+def get_logger(name: Optional[str]) -> logging.Logger:
     """
     Return a transformers root logger.
 
