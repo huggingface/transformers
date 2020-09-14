@@ -75,6 +75,7 @@ def eval_data_dir(
         )
         preds = tokenizer.batch_decode(summaries, **dec_kwargs)
         labels = tokenizer.batch_decode(batch["labels"], **dec_kwargs)
+        ids = batch['ids']
         if save_source:
             docs = tokenizer.batch_decode(batch["input_ids"], **dec_kwargs)
         for i in range(len(labels)):

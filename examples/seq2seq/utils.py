@@ -174,11 +174,12 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
         return {
             "tgt_texts": tgt_line,
             "src_texts": source_line,
+            "id": index - 1
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         """Call prepare_seq2seq_batch."""
-        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
+        batch_encoding: Dict[str, torch.Tensor] = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],
@@ -187,8 +188,9 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
             max_target_length=self.max_target_length,
             return_tensors="pt",
             add_prefix_space=self.add_prefix_space,
-        )
-        return batch_encoding.data
+        ).data
+        batch_encoding['ids'] = torch.tensor([x['id'] for x in batch])
+        return batch_encoding
 
 
 class SortishSampler(Sampler):
