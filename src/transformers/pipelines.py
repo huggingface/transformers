@@ -998,7 +998,6 @@ class TokenClassificationPipeline(Pipeline):
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        skip_special_tokens: bool = False,
         ignore_subwords: bool = False,
     ):
         super().__init__(
@@ -1021,20 +1020,30 @@ class TokenClassificationPipeline(Pipeline):
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
-        self.skip_special_tokens = skip_special_tokens
         self.ignore_subwords = ignore_subwords
 
     def __call__(self, *args, **kwargs):
         inputs = self._args_parser(*args, **kwargs)
         answers = []
-        for sentence in inputs:
+
+        for i, sentence in enumerate(inputs):
+            if "offset_mapping" in kwargs:
+                offset_mapping = kwargs["offset_mapping"][i]
 
             # Manage correct placement of the tensors
             with self.device_placement():
 
                 tokens = self.tokenizer(
-                    sentence, return_attention_mask=False, return_tensors=self.framework, truncation=True,
+                    sentence,
+                    return_attention_mask=False,
+                    return_tensors=self.framework,
+                    truncation=True,
+                    return_special_tokens_mask=True,
+                    return_offsets_mapping=self.tokenizer.is_fast,
                 )
+                if "offset_mapping" in tokens:
+                    offset_mapping = tokens["offset_mapping"].cpu().numpy()
+                    del tokens["offset_mapping"]
 
                 # Forward
                 if self.framework == "tf":
@@ -1042,6 +1051,8 @@ class TokenClassificationPipeline(Pipeline):
                     input_ids = tokens["input_ids"].numpy()[0]
                 else:
                     with torch.no_grad():
+                        special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
+                        del tokens["special_tokens_mask"]
                         tokens = self.ensure_tensor_on_device(**tokens)
                         entities = self.model(**tokens)[0][0].cpu().numpy()
                         input_ids = tokens["input_ids"].cpu().numpy()[0]
@@ -1058,12 +1069,19 @@ class TokenClassificationPipeline(Pipeline):
             ]
 
             for idx, label_idx in filtered_labels_idx:
-                word = self.tokenizer.convert_ids_to_tokens(
-                    [int(input_ids[idx])], skip_special_tokens=self.skip_special_tokens
-                )
-                if word:
+
+                if not special_tokens_mask[idx]:
+                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                        if offset_mapping is not None:
+                            start_ind, end_ind = offset_mapping[idx]
+                            word = sentence[start_ind:end_ind]
+                        else:
+                            raise Exception("Use a fast tokenizer or provide offset_mapping parameter")
+                    else:
+                        word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
+
                     entity = {
-                        "word": word[0],
+                        "word": word,
                         "score": score[idx][label_idx].item(),
                         "entity": self.model.config.id2label[label_idx],
                         "index": idx,
@@ -1094,22 +1112,36 @@ class TokenClassificationPipeline(Pipeline):
         entity_group = {
             "entity_group": entity,
             "score": np.mean(scores),
-            "word": self.tokenizer.convert_tokens_to_string(tokens),
+            "word": self.convert_tokens_to_string(tokens),
         }
         return entity_group
+
+    def is_subword_fn(self, token: str) -> bool:
+        if token.startswith("##"):
+            return True
+        return False
+
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        if hasattr(self.tokenizer, "convert_tokens_to_string"):
+            # fast tokenizers dont have convert_tokens_to_string?!
+            return self.tokenizer.convert_tokens_to_string(tokens)
+        else:
+            out_string = " ".join(tokens).replace(" ##", "").strip()
+            return out_string
 
     def group_entities(self, entities: List[dict]) -> List[dict]:
         """
         Returns grouped entities
         """
 
-        def is_subword(token: str) -> bool:
-            if token.startswith("##"):
-                return True
-            return False
-
         entity_groups = []
         entity_group_disagg = []
+
+        if hasattr(self.tokenizer, "is_subword_fn"):
+            is_subword_fn = self.tokenizer.is_subword_fn
+        else:
+            is_subword_fn = self.is_subword_fn
 
         if entities:
             last_idx = entities[-1]["index"]
@@ -1117,7 +1149,7 @@ class TokenClassificationPipeline(Pipeline):
         for entity in entities:
 
             is_last_idx = entity["index"] == last_idx
-            is_subword = self.ignore_subwords and is_subword(entity["word"])
+            is_subword = self.ignore_subwords and is_subword_fn(entity["word"])
             if not entity_group_disagg:
                 entity_group_disagg += [entity]
                 if is_last_idx:
@@ -1128,14 +1160,17 @@ class TokenClassificationPipeline(Pipeline):
             # The split is meant to account for the "B" and "I" suffixes
             # Shouldn't merge if both entities are B-type
             if (
-                entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
-                and entity["entity"].split("-")[0] != "B"
+                (
+                    (entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1])
+                    and entity["entity"].split("-")[0] != "B"
+                )
                 and entity["index"] == entity_group_disagg[-1]["index"] + 1
             ) or is_subword:
                 # Modify subword type to be previous_type
                 if is_subword:
                     entity["entity"] = entity_group_disagg[-1]["entity"].split("-")[-1]
-                    entity["score"] = np.nan  # Handle ignored scores as 0/nan?
+                    entity["entity"] = None  # and use np.nanmean
+                    # How to handle scores? 0?
                     # How to handle index?
                 entity_group_disagg += [entity]
                 # Group the entities at the last entity
