@@ -20,7 +20,8 @@ import unittest
 from transformers import BatchEncoding
 from transformers.file_utils import cached_property
 from transformers.testing_utils import _torch_available
-from transformers.tokenization_t5 import T5Tokenizer
+from transformers.tokenization_t5 import T5Tokenizer, T5TokenizerFast
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -34,6 +35,7 @@ FRAMEWORK = "pt" if _torch_available else "tf"
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = T5Tokenizer
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
@@ -111,6 +113,54 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @cached_property
     def t5_base_tokenizer(self):
         return T5Tokenizer.from_pretrained("t5-base")
+
+    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+        return T5TokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+
+    @cached_property
+    def t5_base_tokenizer_fast(self):
+        return T5TokenizerFast.from_pretrained("t5-base")
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
+
+        # With lower casing
+        tokenizer = self.get_tokenizer(do_lower_case=True)
+        rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
 
     def test_eos_treatment(self):
         tokenizer = self.t5_base_tokenizer

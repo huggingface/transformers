@@ -7,17 +7,19 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     DistilBertTokenizer,
+    DistilBertTokenizerFast,
     GPT2Tokenizer,
     GPT2TokenizerFast,
     OpenAIGPTTokenizer,
+    OpenAIGPTTokenizerFast,
     PreTrainedTokenizer,
     RobertaTokenizer,
+    RobertaTokenizerFast,
+    T5Tokenizer,
+    T5TokenizerFast,
     is_torch_available,
 )
 from transformers.testing_utils import get_tests_dir
-from transformers.tokenization_distilbert import DistilBertTokenizerFast
-from transformers.tokenization_openai import OpenAIGPTTokenizerFast
-from transformers.tokenization_roberta import RobertaTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -738,10 +740,8 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
     def fast_only(self, tokenizer_r):
         super().fast_only(tokenizer_r)
+        # In addition we test the offsets
         self.assert_offsets_with_special_characters(tokenizer_r)
-
-    def assert_add_special_tokens(self, tokenizer_r):
-        super().assert_add_special_tokens(tokenizer_r)
 
     def assert_offsets_with_special_characters(self, tokenizer_r):
         sentence = "A, naïve [MASK] AllenNLP sentence."
@@ -893,3 +893,14 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
             max_length=max_length,
             padding="max_length",
         )
+
+class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
+    """
+    Override specific methods to test SentencePiece behavior
+    """
+
+    TOKENIZERS_CLASSES = frozenset(
+        [
+            Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
+        ]
+    )
