@@ -167,8 +167,9 @@ def run_generate():
         score_fn = calculate_bleu if calc_bleu else calculate_rouge
         metric_name = "bleu" if calc_bleu else "rouge"
         metrics: Dict = score_fn(preds, labels)
-        metrics['n_obs'] = len(preds)
-        metrics["seconds_per_sample"] = metrics["n_obs"] / time.time() - start_time
+        metrics["n_obs"] = len(preds)
+        runtime = time.time() - start_time
+        metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 2)
         # TODO(@stas00): add whatever metadata to metrics
         metrics_save_path = save_dir.joinpath(f"{args.type_path}_{metric_name}.json")
         save_json(metrics, metrics_save_path)
