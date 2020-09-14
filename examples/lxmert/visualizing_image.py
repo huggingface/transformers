@@ -18,7 +18,6 @@
 import colorsys
 import io
 
-import cv2
 import matplotlib as mpl
 import matplotlib.colors as mplc
 import matplotlib.figure as mplfigure
@@ -26,6 +25,7 @@ import numpy as np
 import torch
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
+import cv2
 from utils import img_tensorize
 
 
@@ -104,9 +104,7 @@ class SingleImageViz:
             )
         )
 
-    def draw_boxes(
-        self, boxes, obj_ids=None, obj_scores=None, attr_ids=None, attr_scores=None
-    ):
+    def draw_boxes(self, boxes, obj_ids=None, obj_scores=None, attr_ids=None, attr_scores=None):
         if len(boxes.shape) > 2:
             boxes = boxes[0]
         if len(obj_ids.shape) > 1:
@@ -133,9 +131,7 @@ class SingleImageViz:
         assigned_colors = [self._random_color(maximum=1) for _ in range(len(boxes))]
         assigned_colors = [assigned_colors[idx] for idx in sorted_idxs]
         if obj_ids is not None:
-            labels = self._create_text_labels_attr(
-                obj_ids, obj_scores, attr_ids, attr_scores
-            )
+            labels = self._create_text_labels_attr(obj_ids, obj_scores, attr_ids, attr_scores)
             for i in range(len(boxes)):
                 color = assigned_colors[i]
                 self.add_box(boxes[i], color)
@@ -158,11 +154,17 @@ class SingleImageViz:
         font_size *= 0.75 * self.font_size
 
         self.draw_text(
-            text=label, position=text_pos, color=lighter_color,
+            text=label,
+            position=text_pos,
+            color=lighter_color,
         )
 
     def draw_text(
-        self, text, position, color="g", ha="left",
+        self,
+        text,
+        position,
+        color="g",
+        ha="left",
     ):
         rotation = 0
         font_size = self.font_size
@@ -194,7 +196,8 @@ class SingleImageViz:
             saveas = self.saveas
         if saveas.lower().endswith(".jpg") or saveas.lower().endswith(".png"):
             cv2.imwrite(
-                saveas, self._get_buffer()[:, :, ::-1],
+                saveas,
+                self._get_buffer()[:, :, ::-1],
             )
         else:
             self.fig.savefig(saveas)
@@ -204,9 +207,7 @@ class SingleImageViz:
         attr_labels = [self.id2attr[i] for i in attr_classes]
         labels = [
             f"{label} {score:.2f} {attr} {attr_score:.2f}"
-            for label, score, attr, attr_score in zip(
-                labels, scores, attr_labels, attr_scores
-            )
+            for label, score, attr, attr_score in zip(labels, scores, attr_labels, attr_scores)
         ]
         return labels
 
@@ -216,9 +217,7 @@ class SingleImageViz:
             if labels is None:
                 labels = ["{:.0f}%".format(s * 100) for s in scores]
             else:
-                labels = [
-                    "{} {:.0f}%".format(li, s * 100) for li, s in zip(labels, scores)
-                ]
+                labels = ["{} {:.0f}%".format(li, s * 100) for li, s in zip(labels, scores)]
         return labels
 
     def _random_color(self, maximum=255):
@@ -249,9 +248,7 @@ class SingleImageViz:
         try:
             import numexpr as ne  # fuse them with numexpr
 
-            visualized_image = ne.evaluate(
-                "img * (1 - alpha / 255.0) + rgb * (alpha / 255.0)"
-            )
+            visualized_image = ne.evaluate("img * (1 - alpha / 255.0) + rgb * (alpha / 255.0)")
         except ImportError:
             alpha = alpha.astype("float32") / 255.0
             visualized_image = img * (1 - alpha) + rgb * alpha
@@ -265,9 +262,7 @@ class SingleImageViz:
         modified_lightness = polygon_color[1] + (brightness_factor * polygon_color[1])
         modified_lightness = 0.0 if modified_lightness < 0.0 else modified_lightness
         modified_lightness = 1.0 if modified_lightness > 1.0 else modified_lightness
-        modified_color = colorsys.hls_to_rgb(
-            polygon_color[0], modified_lightness, polygon_color[2]
-        )
+        modified_color = colorsys.hls_to_rgb(polygon_color[0], modified_lightness, polygon_color[2])
         return modified_color
 
 

@@ -34,13 +34,14 @@ from pathlib import Path
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
-import cv2
 import numpy as np
+from PIL import Image
+from tqdm.auto import tqdm
+
+import cv2
 import requests
 import wget
 from filelock import FileLock
-from PIL import Image
-from tqdm.auto import tqdm
 from yaml import Loader, dump, load
 
 
@@ -58,9 +59,7 @@ try:
     torch_cache_home = _get_torch_home()
 except ImportError:
     torch_cache_home = os.path.expanduser(
-        os.getenv(
-            "TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch")
-        )
+        os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
     )
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
@@ -71,12 +70,8 @@ PATH = "/".join(str(Path(__file__).resolve()).split("/")[:-1])
 CONFIG = os.path.join(PATH, "config.yaml")
 ATTRIBUTES = os.path.join(PATH, "attributes.txt")
 OBJECTS = os.path.join(PATH, "objects.txt")
-PYTORCH_PRETRAINED_BERT_CACHE = os.getenv(
-    "PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path
-)
-PYTORCH_TRANSFORMERS_CACHE = os.getenv(
-    "PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE
-)
+PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
+PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 WEIGHTS_NAME = "pytorch_model.bin"
 CONFIG_NAME = "config.yaml"
@@ -181,9 +176,7 @@ class Config:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs):
-        config_dict, kwargs = cls.get_config_dict(
-            pretrained_model_name_or_path, **kwargs
-        )
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         return cls(config_dict)
 
     @classmethod
@@ -197,14 +190,10 @@ class Config:
 
         if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(
-            pretrained_model_name_or_path
-        ):
+        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False
-            )
+            config_file = hf_bucket_url(pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False)
 
         try:
             # Load from URL or cache if already cached
@@ -265,7 +254,11 @@ def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
 
 
 def http_get(
-    url, temp_file, proxies=None, resume_size=0, user_agent=None,
+    url,
+    temp_file,
+    proxies=None,
+    resume_size=0,
+    user_agent=None,
 ):
     ua = "python/{}".format(sys.version.split()[0])
     if _torch_available:
@@ -283,7 +276,11 @@ def http_get(
     content_length = response.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
     progress = tqdm(
-        unit="B", unit_scale=True, total=total, initial=resume_size, desc="Downloading",
+        unit="B",
+        unit_scale=True,
+        total=total,
+        initial=resume_size,
+        desc="Downloading",
     )
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
@@ -313,9 +310,7 @@ def get_from_cache(
     etag = None
     if not local_files_only:
         try:
-            response = requests.head(
-                url, allow_redirects=True, proxies=proxies, timeout=etag_timeout
-            )
+            response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
             if response.status_code == 200:
                 etag = response.headers.get("ETag")
         except (EnvironmentError, requests.exceptions.Timeout):
@@ -379,9 +374,7 @@ def get_from_cache(
             else:
                 resume_size = 0
         else:
-            temp_file_manager = partial(
-                tempfile.NamedTemporaryFile, dir=cache_dir, delete=False
-            )
+            temp_file_manager = partial(tempfile.NamedTemporaryFile, dir=cache_dir, delete=False)
             resume_size = 0
 
         # Download to temporary file, then copy to cache dir once finished.
@@ -465,9 +458,7 @@ def cached_path(
         raise EnvironmentError("file {} not found".format(url_or_filename))
     else:
         # Something unknown
-        raise ValueError(
-            "unable to parse {} as a URL or as a local path".format(url_or_filename)
-        )
+        raise ValueError("unable to parse {} as a URL or as a local path".format(url_or_filename))
 
     if extract_compressed_file:
         if not is_zipfile(output_path) and not tarfile.is_tarfile(output_path):
@@ -479,11 +470,7 @@ def cached_path(
         output_extract_dir_name = output_file.replace(".", "-") + "-extracted"
         output_path_extracted = os.path.join(output_dir, output_extract_dir_name)
 
-        if (
-            os.path.isdir(output_path_extracted)
-            and os.listdir(output_path_extracted)
-            and not force_extract
-        ):
+        if os.path.isdir(output_path_extracted) and os.listdir(output_path_extracted) and not force_extract:
             return output_path_extracted
 
         # Prevent parallel extractions
@@ -500,9 +487,7 @@ def cached_path(
                 tar_file.extractall(output_path_extracted)
                 tar_file.close()
             else:
-                raise EnvironmentError(
-                    "Archive format of {} could not be identified".format(output_path)
-                )
+                raise EnvironmentError("Archive format of {} could not be identified".format(output_path))
 
         return output_path_extracted
 
