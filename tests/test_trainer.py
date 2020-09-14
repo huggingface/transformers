@@ -240,13 +240,11 @@ class TrainerIntegrationTest(unittest.TestCase):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
         model = RegressionModel()
-        import pdb; pdb.set_trace()
         optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
         lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
         trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
         trainer.train()
 
-        import pdb; pdb.set_trace()
         self.assertTrue(torch.abs(trainer.model.a - 1.8950) < 1e-4)
         self.assertTrue(torch.abs(trainer.model.b - 2.5656) < 1e-4)
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
