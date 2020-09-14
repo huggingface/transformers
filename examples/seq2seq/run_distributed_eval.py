@@ -51,6 +51,8 @@ def eval_data_dir(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
     use_task_specific_params(model, task)  # update config with task specific params
+    if max_source_length is None:
+        max_source_length = tokenizer.model_max_length
     ds = Seq2SeqDataset(
         tokenizer,
         data_dir,
@@ -97,6 +99,7 @@ def run_generate():
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
+    parser.add_argument('--max_source_length', type=int, default=None)
     parser.add_argument(
         "--type_path", type=str, default="test", help="which subset to evaluate typically train/val/test"
     )
@@ -129,6 +132,7 @@ def run_generate():
         local_rank=args.local_rank,
         n_obs=args.n_obs,
         save_source=args.save_source,
+        max_source_length=args.max_source_length,
         **generate_kwargs,
     )
 
