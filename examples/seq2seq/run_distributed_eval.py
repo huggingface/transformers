@@ -62,7 +62,7 @@ def eval_data_dir(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = ds.make_sortish_sampler(bs, distributed=True)
+    sampler = ds.make_sortish_sampler(bs, distributed=True, add_extra_examples=False)
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
     dec_kwargs = dict(skip_special_tokens=True, clean_up_tokenization_spaces=False)  # tokenizer.decode
     results = []
@@ -75,15 +75,15 @@ def eval_data_dir(
         )
         preds = tokenizer.batch_decode(summaries, **dec_kwargs)
         labels = tokenizer.batch_decode(batch["labels"], **dec_kwargs)
-        ids = batch['ids']
+        ids = batch["ids"]
         if save_source:
             docs = tokenizer.batch_decode(batch["input_ids"], **dec_kwargs)
         for i in range(len(labels)):
             label, pred = labels[i], preds[i]
             if save_source:
-                results.append(dict(pred=pred, label=label, source=docs[i]))
+                results.append(dict(pred=pred, label=label, source=docs[i], id=ids[i]))
             else:
-                results.append(dict(pred=pred, label=label))
+                results.append(dict(pred=pred, label=label, id=ids[i]))
     save_json(results, save_path)
     return results
 
