@@ -98,7 +98,8 @@ class AbstractSeq2SeqDataset(Dataset):
         self.max_target_length = max_target_length
         assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
         self.tokenizer = tokenizer
-        self.prefix = prefix
+        self.prefix = prefix if prefix is not None else ""
+
         if n_obs is not None:
             self.src_lens = self.src_lens[:n_obs]
         self.pad_token_id = self.tokenizer.pad_token_id
@@ -387,3 +388,10 @@ def parse_numeric_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, fl
 
         result[unparsed_args[i][2:]] = value
     return result
+
+
+def write_txt_file(ordered_tgt, path):
+    f = Path(path).open("w")
+    for ln in ordered_tgt:
+        f.write(ln + "\n")
+        f.flush()

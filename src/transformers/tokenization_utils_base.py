@@ -1483,7 +1483,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, use_cdn=False
+                            pretrained_model_name_or_path, filename=file_name, use_cdn=False, mirror=None
                         )
 
                     vocab_files[file_id] = full_file_name
