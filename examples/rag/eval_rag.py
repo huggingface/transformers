@@ -10,7 +10,13 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from transformers import BartForConditionalGeneration, BartTokenizer, RagRetriever, RagSequenceForGeneration, RagTokenForGeneration
+from transformers import (
+    BartForConditionalGeneration,
+    BartTokenizer,
+    RagRetriever,
+    RagSequenceForGeneration,
+    RagTokenForGeneration,
+)
 from transformers import logging as transformers_logging
 
 

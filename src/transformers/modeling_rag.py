@@ -194,11 +194,15 @@ class RagPreTrainedModel(PreTrainedModel):
         """
 
         kwargs_question_encoder = {
-            argument[len("question_question_encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("question_encoder_")
+            argument[len("question_question_encoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("question_encoder_")
         }
 
         kwargs_generator = {
-            argument[len("generator_") :]: value for argument, value in kwargs.items() if argument.startswith("generator_")
+            argument[len("generator_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("generator_")
         }
 
         # remove question_encoder, generator kwargs from kwargs
@@ -223,8 +227,9 @@ class RagPreTrainedModel(PreTrainedModel):
                 question_encoder_config = AutoConfig.from_pretrained(question_encoder_pretrained_model_name_or_path)
                 kwargs_question_encoder["config"] = question_encoder_config
 
-            question_encoder = AutoModel.from_pretrained(question_encoder_pretrained_model_name_or_path, *model_args, **kwargs_question_encoder)
-#            question_encoder = DPRQuestionEncoder.from_pretrained(question_encoder_pretrained_model_name_or_path, *model_args, **kwargs_question_encoder)
+            question_encoder = AutoModel.from_pretrained(
+                question_encoder_pretrained_model_name_or_path, *model_args, **kwargs_question_encoder
+            )
 
         generator = kwargs_generator.pop("model", None)
         if generator is None:
@@ -239,7 +244,9 @@ class RagPreTrainedModel(PreTrainedModel):
                 generator_config = AutoConfig.from_pretrained(generator_pretrained_model_name_or_path)
                 kwargs_generator["config"] = generator_config
 
-            generator = AutoModelForSeq2SeqLM.from_pretrained(generator_pretrained_model_name_or_path, **kwargs_generator)
+            generator = AutoModelForSeq2SeqLM.from_pretrained(
+                generator_pretrained_model_name_or_path, **kwargs_generator
+            )
 
         # instantiate config with corresponding kwargs
         config = RagConfig.from_question_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
@@ -338,7 +345,9 @@ class RagModel(RagPreTrainedModel):
         ), "Either a configuration or an question_encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_question_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
         else:
             assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(
                 config, self.config_class
@@ -360,7 +369,6 @@ class RagModel(RagPreTrainedModel):
 
         self.question_encoder = question_encoder
         self.generator = generator
-        self.n_docs = self.config.n_docs
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
@@ -379,7 +387,7 @@ class RagModel(RagPreTrainedModel):
         **kwargs
     ):
         r"""
-            Returns:
+        Returns:
         """
 
         # TODO(Patrick) kwargs should be split into generator and question_encoder => TODO later
@@ -389,8 +397,12 @@ class RagModel(RagPreTrainedModel):
 
             if self.retriever is not None and context_input_ids is None:
                 # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
-                import ipdb; ipdb.set_trace()
-                context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(input_ids, question_hidden_states.cpu().detach().to(torch.float32), prefix=self.generator.config.prefix, n_docs=self.n_docs)
+                context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
+                    input_ids,
+                    question_hidden_states.cpu().detach().to(torch.float32),
+                    prefix=self.generator.config.prefix,
+                    n_docs=self.config.n_docs,
+                )
 
                 # set to correct device
                 retrieved_doc_embeds = retrieved_doc_embeds.to(question_hidden_states)
@@ -399,7 +411,7 @@ class RagModel(RagPreTrainedModel):
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
-            decoder_input_ids = decoder_input_ids.repeat_interleave(self.n_docs, dim=0)
+            decoder_input_ids = decoder_input_ids.repeat_interleave(self.config.n_docs, dim=0)
 
         outputs = self.generator(
             input_ids=context_input_ids,
@@ -415,7 +427,9 @@ class RagModel(RagPreTrainedModel):
         # compute `doc_scores` here or maybe just in `ForTokenGeneration` and `ForSequenceGeneration`
         doc_scores = None
         if return_doc_scores:
-            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1)
+            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
+                1
+            )
 
         return Seq2SeqLMOutputWithDocs(
             loss=None,
@@ -437,23 +451,22 @@ class RagModel(RagPreTrainedModel):
     RAG_START_DOCSTRING,
 )
 class RagSequenceForGeneration(RagPreTrainedModel):
-
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,
-        encoder: Optional[PreTrainedModel] = None,
+        question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
         assert config is not None or (
-            encoder is not None and generator is not None
+            question_encoder is not None and generator is not None
         ), "Either a configuration or an encoder and a generator has to be provided."
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
         super().__init__(config)
 
-        self.rag = RagModel(config=config, encoder=encoder, generator=generator, retriever=retriever)
+        self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
@@ -534,6 +547,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     def retriever(self):
         return self.rag.retriever
 
+    @property
+    def generator(self):
+        return self.rag.generator
+
+    @property
+    def question_encoder(self):
+        return self.rag.question_encoder
+
     @torch.no_grad()
     def generate(
         self,
@@ -541,7 +562,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         context_input_ids=None,  # NEW
         doc_vectors=None,  # NEW
         dedup=True,
-        print_docs=False,
         num_return_sequences=1,
         num_beams=1,
         attention_mask=None,
@@ -559,8 +579,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             dedup (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Controls whether we want to deduplicate the generations from different context documents for a given input.
                 Has to be set to :obj:`False` if used while training with distributed backend.
-            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this is not the value
                 we pass to the ``generator``'s  `:func:`~transformers.PreTrainedModel.generate`` function, where we set ``num_return_sequences``
@@ -583,15 +601,32 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         def _get_unique_rows(_input_ids):
             return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
 
-        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, self.retriever, print_docs=print_docs)
+        #        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, self.retriever, print_docs=print_docs)
+        # TODO(patrick) - clean up generate here
+
+        if self.retriever is not None and context_input_ids is None:
+            # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
+            question_hidden_states = self.question_encoder(input_ids)[0]
+            context_input_ids, _, _ = self.retriever(
+                input_ids,
+                question_hidden_states.cpu().detach().to(torch.float32),
+                prefix=self.generator.config.prefix,
+                n_docs=self.config.n_docs,
+            )
+
+            # set to correct device
+            context_input_ids = context_input_ids.to(input_ids)
+
         rag_num_return_sequences = num_return_sequences
         hypos = []
 
         for index in range(len(input_ids)):
             # first, generate beams from documents:
-            generator_input_ids = ctxt_input_ids[index * self.n_docs : (index + 1) * self.n_docs]  # (n_docs, max_len)
+            generator_input_ids = context_input_ids[
+                index * self.config.n_docs : (index + 1) * self.config.n_docs
+            ]  # (n_docs, max_len)
 
-            output_sequences = self.model.generator.generate(
+            output_sequences = self.generator.generate(
                 generator_input_ids, num_return_sequences=num_beams, num_beams=num_beams, attention_mask=None, **kwargs
             )  # n_docs * n_beam, tgt_len
             if dedup:
@@ -599,9 +634,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
-            outputs = self.forward(
-                new_input_ids, retriever=self.retriever, decoder_input_ids=output_sequences, return_loss=True, score=True
-            )
+            outputs = self(new_input_ids, decoder_input_ids=output_sequences, return_loss=True, score=True)
             top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
 
             if logging.get_verbosity() == logging.DEBUG:
@@ -612,11 +645,13 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
             hypos.append(output_sequences[top_cand_inds])
 
-        return self._cat_and_pad(hypos, pad_token_id=self.config.pad_token_id)
+        return self._cat_and_pad(hypos, pad_token_id=self.config.generator.pad_token_id)
 
     def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0, score=False):
         # shift tokens left
-        target = torch.cat([target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1)
+        target = torch.cat(
+            [target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1
+        )
 
         # bos_token_id is None for T5
         use_bos = self.config.bos_token_id is not None and target[:, 0].eq(self.config.bos_token_id).all()
@@ -684,22 +719,21 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     RAG_START_DOCSTRING,
 )
 class RagTokenForGeneration(RagPreTrainedModel):
-
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,
-        encoder: Optional[PreTrainedModel] = None,
+        question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
         assert config is not None or (
-            encoder is not None and generator is not None
+            question_encoder is not None and generator is not None
         ), "Either a configuration or an encoder and a generator has to be provided."
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
         super().__init__(config)
-        self.rag = RagModel(config=config, encoder=encoder, generator=generator, retriever=retriever)
+        self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         return self.model.generator.adjust_logits_during_generation(logits, cur_len, max_length)
@@ -724,7 +758,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         return {
             "input_ids": None,
-            "retriever": kwargs["retriever"],
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
@@ -736,6 +769,14 @@ class RagTokenForGeneration(RagPreTrainedModel):
     @property
     def retriever(self):
         return self.rag.retriever
+
+    @property
+    def generator(self):
+        return self.rag.generator
+
+    @property
+    def question_encoder(self):
+        return self.rag.question_encoder
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -763,7 +804,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def marginalize(self, seq_logits, doc_scores):
         # RAG-token marginalization
         seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
-            seq_logits.shape[0] // self.n_docs, self.n_docs, -1, seq_logits.size(-1)
+            seq_logits.shape[0] // self.config.n_docs, self.config.n_docs, -1, seq_logits.size(-1)
         )
         doc_logprobs = torch.log_softmax(doc_scores, dim=1)
         log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
@@ -774,13 +815,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def forward(
         self,
         input_ids,
-        retriever,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
         past_key_values=None,
         context_input_ids=None,  # NEW
-        doc_vectors=None,  # NEW
+        retrieved_doc_embeds=None,  # NEW
         use_cache=None,
         return_loss=False,
         reduce=False,
@@ -802,15 +842,15 @@ class RagTokenForGeneration(RagPreTrainedModel):
             use_cache = False
 
         outputs = self.rag(
-            input_ids,
-            retriever,
-            attention_mask,
-            encoder_outputs,
-            decoder_input_ids,
-            context_input_ids,  # NEW
-            doc_vectors,  # NEW
-            past_key_values,
-            use_cache,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_outputs=encoder_outputs,
+            decoder_input_ids=decoder_input_ids,
+            context_input_ids=context_input_ids,  # NEW
+            retrieved_doc_embeds=retrieved_doc_embeds,  # NEW
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            return_doc_scores=True,
             **generator_kwargs,
         )
 
@@ -851,9 +891,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def get_output_embeddings(self):
         return self.model.generator.get_output_embeddings()
 
-# TODO(Patrick) see how to get rid of RAGEncoder
-#    def get_encoder(self):
-#        return RAGEncoder(self.model)
+    # TODO(Patrick) see how to get rid of RAGEncoder
+    #    def get_encoder(self):
+    #        return RAGEncoder(self.model)
 
     def shift_tokens_right(self, input_ids, start_token_id=None):
         """Shift input ids one token to the right, and pad with start_token_id"""
@@ -866,7 +906,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
     def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0):
         # shift tokens left
-        target = torch.cat([target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1)
+        target = torch.cat(
+            [target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1
+        )
 
         def _mask_pads(ll, smooth_obj):
             pad_mask = target.eq(self.config.generator.pad_token_id)

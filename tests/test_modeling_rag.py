@@ -34,11 +34,11 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
     from transformers import (
         AutoConfig,
         BartConfig,
-        BartTokenizer,
         BartForConditionalGeneration,
+        BartTokenizer,
         DPRConfig,
-        DPRQuestionEncoderTokenizer,
         DPRQuestionEncoder,
+        DPRQuestionEncoderTokenizer,
         RagConfig,
         RagRetriever,
         RagSequenceForGeneration,
@@ -415,14 +415,22 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
-        rag_retriever = RagRetriever(rag_config, question_encoder_tokenizer=rag_question_encoder_tokenizer, generator_tokenizer=rag_decoder_tokenizer)
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
 
-        rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator("facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn", retriever=rag_retriever)
+        rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn", retriever=rag_retriever
+        )
 
-#        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
-        input_ids = rag_question_encoder_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
-
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="pt").input_ids
 
         input_ids = input_ids.to(torch_device)
@@ -447,21 +455,31 @@ class RagModelIntegrationTests(unittest.TestCase):
     @slow
     def test_rag_token_inference(self):
         rag_config = self.get_rag_config()
-        rag_retriever = RagRetriever(rag_config)
-        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
 
-        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
-        decoder_input_ids = rag_tokenizer("Linda Davis", return_tensors="pt").input_ids
+        rag_token = RagTokenForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn", retriever=rag_retriever
+        )
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="pt").input_ids
 
         input_ids = input_ids.to(torch_device)
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
-        rag_token = RagTokenForGeneration.from_pretrained(config=rag_config).to(torch_device)
-
         with torch.no_grad():
             output = rag_token(
                 input_ids,
-                retriever=rag_retriever,
                 decoder_input_ids=decoder_input_ids,
                 return_loss=True,
             )
@@ -469,28 +487,40 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
 
-        expected_loss = torch.tensor([38.7045])
-        _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
-
         expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
         _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)
+
+        expected_loss = torch.tensor([38.7045])
+        _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
     @slow
     def test_rag_sequence_generate(self):
         rag_config = self.get_rag_config()
-        rag_retriever = RagRetriever(rag_config)
-        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
 
-        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
+        rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn", retriever=rag_retriever
+        )
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
+
         input_ids = input_ids.to(torch_device)
 
-        rag_sequence = RagSequenceForGeneration.from_pretrained(config=rag_config).to(torch_device)
         output_ids = rag_sequence.generate(
             input_ids,
-            retriever=rag_retriever,
         )
         # sequence generate test
-        output_text = rag_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        output_text = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
         EXPECTED_OUTPUT_TEXT = """The album showed a songwriting maturity and depth of feeling distinctly lacking from their earlier recordings. The album\'s title track refers to secret meetings held against the approval of totalitarian governments in Soviet-dominated states. The only major single release, "One of Us", proved to be the last of ABBA\'s nine number-one singles in Germany."""
         self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)

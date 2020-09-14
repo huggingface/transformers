@@ -350,10 +350,10 @@ class RagRetriever(object):
             if prefix is None:
                 prefix = ""
             # TODO(Patrick, piktus, quention) with current master, T5Tokenizer should add eos token => so `add_eos` is not needed anymore
-#            suffix = self.generator_tokenizer.eos_token if add_eos else ""
-            out = (
-                prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string
-            ).replace("  ", " ")
+            #            suffix = self.generator_tokenizer.eos_token if add_eos else ""
+            out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
+                "  ", " "
+            )
             return out
 
         rag_input_strings = [
@@ -403,7 +403,9 @@ class RagRetriever(object):
             start_time = time.time()
             ids, vectors = self.retriever.get_top_docs(question_hidden_states.numpy(), self.n_docs)
             logger.debug(
-                "index search time: {} sec, batch size {}".format(time.time() - start_time, question_hidden_states.shape)
+                "index search time: {} sec, batch size {}".format(
+                    time.time() - start_time, question_hidden_states.shape
+                )
             )
             ids_batched.append(ids)
             vectors_batched.append(vectors)
@@ -457,7 +459,9 @@ class RagRetriever(object):
             scatter_ids = self._chunk_tensor(ids, n_queries)
             scatter_vectors = self._chunk_tensor(vectors, n_queries)
         doc_ids = self._scattered(scatter_ids, [n_queries, self.n_docs], target_type=torch.int64)
-        retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, self.n_docs, question_hidden_states.shape[1]])
+        retrieved_doc_embeds = self._scattered(
+            scatter_vectors, [n_queries, self.n_docs, question_hidden_states.shape[1]]
+        )
 
         return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
 
