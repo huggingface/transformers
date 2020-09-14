@@ -1169,7 +1169,7 @@ class TokenClassificationPipeline(Pipeline):
                 # Modify subword type to be previous_type
                 if is_subword:
                     entity["entity"] = entity_group_disagg[-1]["entity"].split("-")[-1]
-                    entity["entity"] = None  # and use np.nanmean
+                    entity["score"] = np.nan  # and use np.nanmean
                     # How to handle scores? 0?
                     # How to handle index?
                 entity_group_disagg += [entity]
