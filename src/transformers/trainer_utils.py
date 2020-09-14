@@ -1,5 +1,5 @@
 import random
-from typing import Any, Dict, List, NamedTuple, Optional, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -42,12 +42,12 @@ class EvalPrediction(NamedTuple):
         label_ids (:obj:`np.ndarray`): Targets to be matched.
     """
 
-    predictions: np.ndarray
+    predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: np.ndarray
 
 
 class PredictionOutput(NamedTuple):
-    predictions: np.ndarray
+    predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: Optional[np.ndarray]
     metrics: Optional[Dict[str, float]]
 
