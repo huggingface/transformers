@@ -1326,6 +1326,8 @@ class Trainer:
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
             preds = tuple(p.cpu().numpy() for p in preds)
+            if len(preds) == 0:
+                preds = preds[0]
         if label_ids is not None:
             label_ids = label_ids.cpu().numpy()
 
@@ -1348,8 +1350,6 @@ class Trainer:
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
-        if len(preds) == 0:
-            preds = preds[0]
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def prediction_step(
