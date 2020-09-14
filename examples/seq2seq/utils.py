@@ -395,3 +395,10 @@ def parse_numeric_n_bool_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[
 
         result[unparsed_args[i][2:]] = value
     return result
+
+
+def write_txt_file(ordered_tgt, path):
+    f = Path(path).open("w")
+    for ln in ordered_tgt:
+        f.write(ln + "\n")
+        f.flush()
