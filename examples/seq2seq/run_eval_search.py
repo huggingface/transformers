@@ -20,14 +20,22 @@ def run_search():
 
     All the arguments except ``--search`` are passed to ``run_eval.py`` as is. The values inside of "--search" are parsed, reformatted and fed to ``run_eval.py`` as additional args.
 
-    The format for ``--search`` value is a simple string like ``"num_beams=5:10 length_penalty=0.8:1.0:1.2 early_stopping=true:false"``, which will generate 12 (2*3*2) searches for a product of each hparam. For example this example will invoke ``run_eval.py`` repeatedly with:
-
-    ``--num_beams 5 --length_penalty 0.8 --early_stopping true``
-    ``--num_beams 5 --length_penalty 0.8 --early_stopping false``
+   The format for the ``--search`` value is a simple string with hparams and colon separated values to try, e.g.:
+   ```
+    --search "num_beams=5:10 length_penalty=0.8:1.0:1.2 early_stopping=true:false"
+   ```
+   which will generate ``12`` ``(2*3*2)`` searches for a product of each hparam. For example the example that was just used will invoke ``run_eval.py`` repeatedly with:
+   
+   ```
+    --num_beams 5 --length_penalty 0.8 --early_stopping true
+    --num_beams 5 --length_penalty 0.8 --early_stopping false
     [...]
-    ``--num_beams 10 --length_penalty 1.2 --early_stopping false``
+    --num_beams 10 --length_penalty 1.2 --early_stopping false
+   ```
+   
+   On completion, this function prints a markdown table of the results sorted by the best BLEU score and the winning arguments.
 
-    On completion this function prints a markdown table of the results sorted by the best BLEU score and the winning arguments.
+
     """
     prog = sys.argv[0]
 
