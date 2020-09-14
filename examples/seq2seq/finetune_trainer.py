@@ -373,7 +373,6 @@ def main():
         eval_dataset=eval_dataset,
         data_collator=Seq2SeqDataCollator(tokenizer, data_args),
         compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_with_generate else None,
-        prediction_loss_only=training_args.prediction_loss_only,
     )
 
     # Training
