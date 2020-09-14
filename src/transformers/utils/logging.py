@@ -29,7 +29,7 @@ from typing import Optional
 
 
 _lock = threading.Lock()
-_default_handler: Optional[logging.Handler] = None
+_root_logger = None
 
 log_levels = {
     "debug": logging.DEBUG,
@@ -60,58 +60,63 @@ def _get_default_logging_level():
 
 
 def _get_library_name() -> str:
-
     return __name__.split(".")[0]
 
 
 def _get_library_root_logger() -> logging.Logger:
-
     return logging.getLogger(_get_library_name())
 
 
 def _configure_library_root_logger() -> None:
+    global _root_logger
 
-    global _default_handler
+    if _root_logger:
+        return _root_logger
 
-    with _lock:
-        if _default_handler:
-            # This library has already configured the library root logger.
-            return
-        _default_handler = logging.StreamHandler()  # Set sys.stderr as stream.
+    _lock.acquire()
 
-        # Apply our default configuration to the library root logger.
-        library_root_logger = _get_library_root_logger()
-        library_root_logger.addHandler(_default_handler)
-        library_root_logger.setLevel(_get_default_logging_level())
-        library_root_logger.propagate = False
+    try:
+        if _root_logger:
+            return _root_logger
+
+        logger = _get_library_root_logger()
+
+        if not logging.getLogger().handlers:
+            _handler = logging.StreamHandler()
+            _handler.setFormatter(logging.Formatter(logging.BASIC_FORMAT, None))
+            logger.addHandler(_handler)
+
+        _root_logger = logger
+
+        return _root_logger
+
+    finally:
+        _lock.release()
 
 
 def _reset_library_root_logger() -> None:
+    global _root_logger
 
-    global _default_handler
+    _lock.acquire()
 
-    with _lock:
-        if not _default_handler:
-            return
-
+    try:
         library_root_logger = _get_library_root_logger()
-        library_root_logger.removeHandler(_default_handler)
+
+        for handler in library_root_logger.handlers:
+            library_root_logger.removeHandler(handler)
+
         library_root_logger.setLevel(logging.NOTSET)
-        _default_handler = None
+    finally:
+        _lock.release()
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger() -> logging.Logger:
     """
-    Return a logger with the specified name.
+    Return a transformers root logger.
 
     This function is not supposed to be directly accessed unless you are writing a custom transformers module.
     """
-
-    if name is None:
-        name = _get_library_name()
-
-    _configure_library_root_logger()
-    return logging.getLogger(name)
+    return _configure_library_root_logger()
 
 
 def get_verbosity() -> int:
@@ -173,24 +178,6 @@ def set_verbosity_debug():
 def set_verbosity_error():
     """Set the verbosity to the :obj:`ERROR` level."""
     return set_verbosity(ERROR)
-
-
-def disable_default_handler() -> None:
-    """Disable the default handler of the HuggingFace Transformers's root logger."""
-
-    _configure_library_root_logger()
-
-    assert _default_handler is not None
-    _get_library_root_logger().removeHandler(_default_handler)
-
-
-def enable_default_handler() -> None:
-    """Enable the default handler of the HuggingFace Transformers's root logger."""
-
-    _configure_library_root_logger()
-
-    assert _default_handler is not None
-    _get_library_root_logger().addHandler(_default_handler)
 
 
 def disable_propagation() -> None:
