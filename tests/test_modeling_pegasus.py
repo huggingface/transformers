@@ -29,7 +29,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @cached_property
     def model(self):
-        return PegasusForConditionalGeneration.from_pretrained(self.checkpoint_name, layernorm_eps=1e3).to(torch_device)
+        return PegasusForConditionalGeneration.from_pretrained(self.checkpoint_name, layernorm_eps=1e-1).to(torch_device)
 
     @slow
     def test_pegasus_xsum_summary(self):
@@ -57,7 +57,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         )
         assert inputs.input_ids.shape == (2, 421)
 
-        self.model(inputs.input_ids, attention_mask=inputs.attention_mask, labels=)
+        self.model(inputs.input_ids, attention_mask=inputs.attention_mask)
 
 
 class PegasusConfigTests(unittest.TestCase):
