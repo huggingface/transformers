@@ -99,7 +99,7 @@ def run_generate():
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
-    parser.add_argument('--max_source_length', type=int, default=None)
+    parser.add_argument("--max_source_length", type=int, default=None)
     parser.add_argument(
         "--type_path", type=str, default="test", help="which subset to evaluate typically train/val/test"
     )
