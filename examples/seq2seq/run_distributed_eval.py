@@ -58,7 +58,7 @@ def eval_data_dir(
         max_target_length=1024,
         type_path=type_path,
         n_obs=n_obs,
-        prefix=model.config.prefix or '',
+        prefix=model.config.prefix,
     )
     sampler = ds.make_sortish_sampler(bs, distributed=True)
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
