@@ -777,3 +777,20 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             A tuple of :obj:`str`: The files saved.
         """
         raise NotImplementedError
+
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = "None",
+        truncation=True,
+        **kwargs,
+    ) -> BatchEncoding:
+        raise NotImplementedError(
+            "If your model requires more than input_ids for a typical forward pass, you should implement this method. "
+            "Returned keys should be [input_ids, attention_mask, labels]. See MarianTokenizer or T5Tokenizer for a "
+            "reference implementation."
+        )
