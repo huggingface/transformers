@@ -116,8 +116,6 @@ def run_generate():
     if parsed:
         print(f"parsed the following generate kwargs: {parsed}")
     Path(args.save_dir).mkdir(exist_ok=True)
-    if args.reference_path is None and Path(args.score_path).exists():
-        warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
     eval_data_dir(
         args.input_path,
         args.save_dir,
