@@ -337,7 +337,9 @@ class PretrainedConfig(object):
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False)
+            config_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+            )
 
         try:
             # Load from URL or cache if already cached
