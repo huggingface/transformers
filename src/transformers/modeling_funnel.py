@@ -127,7 +127,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
         skipped = False
         for m_name in name[1:]:
             if not isinstance(pointer, FunnelPositionwiseFFN) and re.fullmatch(r"layer_\d+", m_name):
-                layer_index = int(re.search("layer_(\d+)", m_name).groups()[0])
+                layer_index = int(re.search(r"layer_(\d+)", m_name).groups()[0])
                 if layer_index < config.num_hidden_layers:
                     block_idx = 0
                     while layer_index >= config.block_sizes[block_idx]:

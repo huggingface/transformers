@@ -98,7 +98,8 @@ class AbstractSeq2SeqDataset(Dataset):
         self.max_target_length = max_target_length
         assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
         self.tokenizer = tokenizer
-        self.prefix = prefix
+        self.prefix = prefix if prefix is not None else ""
+
         if n_obs is not None:
             self.src_lens = self.src_lens[:n_obs]
         self.pad_token_id = self.tokenizer.pad_token_id
