@@ -4,12 +4,12 @@ import time
 import warnings
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import torch
 from tqdm import tqdm
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, PreTrainedModel
 
 
 logger = getLogger(__name__)
@@ -42,7 +42,11 @@ def generate_summaries_or_translations(
     """Save model.generate results to <out_file>, and return how long it took."""
     fout = Path(out_file).open("w", encoding="utf-8")
     model_name = str(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+    if not isinstance(model_name, PreTrainedModel):
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+    else:
+        model = model_name
+        
     if fp16:
         model = model.half()
 
