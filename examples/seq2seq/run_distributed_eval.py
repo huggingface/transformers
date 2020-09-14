@@ -94,7 +94,7 @@ def run_generate():
     parser = argparse.ArgumentParser(
         epilog="Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate"
     )
-    parser.add_argument("--input_path", type=str, help="like cnn_dm/test.source")
+    parser.add_argument("--data_dir", type=str, help="like cnn_dm/test.source")
     parser.add_argument(
         "--model_name",
         type=str,
@@ -125,7 +125,7 @@ def run_generate():
         print(f"parsed the following generate kwargs: {generate_kwargs}")
     Path(args.save_dir).mkdir(exist_ok=True)
     results, num_replicas = eval_data_dir(
-        args.input_path,
+        args.data_dir,
         args.save_dir,
         args.model_name,
         type_path=args.type_path,

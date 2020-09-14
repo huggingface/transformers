@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import fire
-
+from typing import Dict
 
 try:
     from .utils import calculate_bleu, calculate_rouge, load_json, save_json, write_txt_file
@@ -11,7 +11,7 @@ except ImportError:
 
 def combine_partial_results(
     result_dir: str, save_dir: str = None, save_prefix=None, calc_bleu=False, just_metrics=False
-):
+) -> Dict:
     """Write first n lines of each file f in src_dir to dest_dir/f """
     src_dir = Path(result_dir)
     save_dir = Path(save_dir)
@@ -20,6 +20,7 @@ def combine_partial_results(
     records = []
     for partial_result in paths_to_combine:
         records.extend(load_json(partial_result))
+    records = list(sorted(records, key=lambda x: x['id']))
     preds = [x["pred"] for x in records]
     labels = [x["label"] for x in records]
     score_fn = calculate_bleu if calc_bleu else calculate_rouge
