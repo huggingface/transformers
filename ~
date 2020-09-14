@@ -379,7 +379,10 @@ class RagModel(RagPreTrainedModel):
         **kwargs
     ):
         r"""
+                print_docs  (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                    If :obj:`True`, documents retrieved during the forward pass will be logged. Intended for debugging purposes.
             Returns:
+
         """
 
         # TODO(Patrick) kwargs should be split into generator and question_encoder => TODO later
@@ -389,7 +392,6 @@ class RagModel(RagPreTrainedModel):
 
             if self.retriever is not None and context_input_ids is None:
                 # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
-                import ipdb; ipdb.set_trace()
                 context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(input_ids, question_hidden_states.cpu().detach().to(torch.float32), prefix=self.generator.config.prefix, n_docs=self.n_docs)
 
                 # set to correct device
@@ -482,6 +484,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         """
         if return_loss:
             use_cache = False
+
+        import ipdb; ipdb.set_trace()
 
         outputs = self.rag(
             input_ids=input_ids,

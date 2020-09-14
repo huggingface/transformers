@@ -14,6 +14,7 @@
 # limitations under the License.
 """ RAG model configuration """
 
+import copy
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
@@ -120,6 +121,19 @@ class RagConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
+        assert (
+            "question_encoder" in kwargs and "generator" in kwargs
+        ), "Config has to be initialized with question_encoder and generator config"
+        question_encoder_config = kwargs.pop("question_encoder")
+        question_encoder_model_type = question_encoder_config.pop("model_type")
+        decoder_config = kwargs.pop("generator")
+        decoder_model_type = decoder_config.pop("model_type")
+
+        from .configuration_auto import AutoConfig
+
+        self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
+        self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
+
         self.vocab_size = vocab_size
         self.is_encoder_decoder = is_encoder_decoder
         self.prefix = prefix
@@ -145,7 +159,27 @@ class RagConfig(PretrainedConfig):
         self.index_path = index_path
         self.dummy = dummy
 
-        self.pretrained_question_encoder_tokenizer_name_or_path = pretrained_question_encoder_tokenizer_name_or_path
-        self.pretrained_question_encoder_name_or_path = pretrained_question_encoder_name_or_path
-        self.pretrained_generator_tokenizer_name_or_path = pretrained_generator_tokenizer_name_or_path
-        self.pretrained_generator_name_or_path = pretrained_generator_name_or_path
+    @classmethod
+    def from_question_encoder_generator_configs(
+        cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
+    ) -> PretrainedConfig:
+        r"""
+        Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model configuration and decoder model configuration.
+
+        Returns:
+            :class:`EncoderDecoderConfig`: An instance of a configuration object
+        """
+        return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig`.
+
+        Returns:
+            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["question_encoder"] = self.question_encoder.to_dict()
+        output["generator"] = self.generator.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output

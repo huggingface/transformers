@@ -32,6 +32,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
     import torch
 
     from transformers import (
+        AutoConfig,
         BartConfig,
         BartTokenizer,
         BartForConditionalGeneration,
@@ -385,7 +386,11 @@ class RagModelTest(unittest.TestCase):
 @require_retrieval
 class RagModelIntegrationTests(unittest.TestCase):
     def get_rag_config(self):
-        return RagConfig(
+        question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        generator_config = AutoConfig.from_pretrained("facebook/bart-large-cnn")
+        return RagConfig.from_question_encoder_generator_configs(
+            question_encoder_config,
+            generator_config,
             bos_token_id=0,
             decoder_start_token_id=2,
             eos_token_id=2,
@@ -404,47 +409,40 @@ class RagModelIntegrationTests(unittest.TestCase):
             dummy=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
-            pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
-            pretrained_generator_tokenizer_name_or_path="facebook/bart-large-cnn",
-            pretrained_generator_name_or_path="facebook/bart-large-cnn",
         )
 
     @slow
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
-        rag_retriever = RagRetriever.from_pretrained(rag_config)
-        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        rag_retriever = RagRetriever(rag_config, question_encoder_tokenizer=rag_question_encoder_tokenizer, generator_tokenizer=rag_decoder_tokenizer)
 
-        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
-            "facebook/dpr-question_encoder-single-nq-base"
-        )
+        rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator("facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn", retriever=rag_retriever)
 
 #        input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
         input_ids = rag_question_encoder_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
-        decoder_input_ids = rag_tokenizer("Linda Davis", return_tensors="pt").input_ids
+
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="pt").input_ids
 
         input_ids = input_ids.to(torch_device)
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
-        rag_sequence = RagSequenceForGeneration.from_pretrained_encoder_generator(config=rag_config).to(torch_device)
-
         with torch.no_grad():
             output = rag_sequence(
                 input_ids,
-                retriever=rag_retriever,
                 decoder_input_ids=decoder_input_ids,
                 return_loss=True,
-                print_docs=True,
             )
 
         expected_shape = torch.Size([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
 
-        expected_loss = torch.tensor([38.7446])
-        _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
-
         expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
         _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)
+
+        expected_loss = torch.tensor([38.7446])
+        _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
     @slow
     def test_rag_token_inference(self):

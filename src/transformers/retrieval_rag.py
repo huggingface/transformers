@@ -26,7 +26,6 @@ import torch.distributed as dist
 from datasets import load_dataset
 
 from .tokenization_auto import AutoTokenizer
-from .tokenization_dpr import DPRQuestionEncoderTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .utils import logging
 
@@ -52,12 +51,12 @@ class Index(object):
         """
         pass
 
-    def get_top_docs(self, query_vectors, n_docs):
+    def get_top_docs(self, question_hidden_states, n_docs):
         """
         For each query in the batch, retrieves ``n_docs`` documents.
 
         Args:
-            query_vectors (:obj:`np.array` of shape :obj:`(batch_size, vector_size):
+            question_hidden_states (:obj:`np.array` of shape :obj:`(batch_size, vector_size):
                 An array of query vectors.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
@@ -139,9 +138,9 @@ class LegacyIndex(Index):
             doc_dicts.append(doc_dict)
         return doc_dicts
 
-    def get_top_docs(self, query_vectors: np.array, n_docs: int = 5):
-        aux_dim = np.zeros(len(query_vectors), dtype="float32").reshape(-1, 1)
-        query_nhsw_vectors = np.hstack((query_vectors, aux_dim))
+    def get_top_docs(self, question_hidden_states: np.array, n_docs: int = 5):
+        aux_dim = np.zeros(len(question_hidden_states), dtype="float32").reshape(-1, 1)
+        query_nhsw_vectors = np.hstack((question_hidden_states, aux_dim))
         _, docs_ids = self.index.search(query_nhsw_vectors, n_docs)
         vectors = [[self.index.reconstruct(int(doc_id))[:-1] for doc_id in doc_ids] for doc_ids in docs_ids]
         ids = [[int(self.index_id_to_db_id[doc_id]) for doc_id in doc_ids] for doc_ids in docs_ids]
@@ -201,8 +200,8 @@ class HFIndex(Index):
     def get_doc_dicts(self, doc_ids):
         return [self.index[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
-    def get_top_docs(self, query_vectors, n_docs=5):
-        _, docs = self.index.get_nearest_examples_batch("embeddings", query_vectors, n_docs)
+    def get_top_docs(self, question_hidden_states, n_docs=5):
+        _, docs = self.index.get_nearest_examples_batch("embeddings", question_hidden_states, n_docs)
         ids = [[int(i) for i in doc["id"]] for doc in docs]
         vectors = [doc["embeddings"] for doc in docs]
         return torch.tensor(ids), torch.tensor(vectors)
@@ -219,7 +218,7 @@ class RagRetriever(object):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, generator_tokenizer=None, question_encoder_tokenizer=None):
         super().__init__()
         assert (
             config.retriever_type == "hf_retriever" or config.retriever_type == "legacy_retriever"
@@ -230,11 +229,9 @@ class RagRetriever(object):
             if config.retriever_type == "hf_retriever"
             else LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
         )
-        self.generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
-        # TODO(piktus): To be replaced with AutoTokenizer once it supports DPRQuestionEncoderTokenizer
-        self.question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
-            config.pretrained_question_encoder_tokenizer_name_or_path
-        )
+        self.generator_tokenizer = generator_tokenizer
+        self.question_encoder_tokenizer = question_encoder_tokenizer
+
         self.process_group = None
         self.n_docs = config.n_docs
         self.batch_size = config.retrieval_batch_size
@@ -243,6 +240,11 @@ class RagRetriever(object):
             self.batch_size *= torch.cuda.device_count()
 
         self.config = config
+
+    @classmethod
+    def from_pretrained(cls):
+        # TODO
+        pass
 
     def init_retrieval(self, distributed_port):
         """
@@ -317,7 +319,7 @@ class RagRetriever(object):
 
         return retriever_inputs["input_ids"].to(input_ids.device), input_strings
 
-    def postprocess_docs(self, doc_scores, docs, input_strings, add_eos, prefix, print_docs=False):
+    def postprocess_docs(self, docs, input_strings, prefix):
         r"""
         Postprocessing retrieved ``docs`` and combining them with ``input_strings``.
 
@@ -328,8 +330,6 @@ class RagRetriever(object):
                 Retrieved documents.
             input_strings (:obj:`str`):
                 Input strings decoded by ``preprocess_query``.
-            add_eos (:obj:`bool`):
-                A boolean flag signalling that eos token needs to be added to the contextualized input.
             prefix (:obj:`str`):
                 Prefix added at the beginning of each input, typically used with T5-based models.
             print_docs  (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -340,7 +340,7 @@ class RagRetriever(object):
                 a tuple consisting od two elements: contextualized ``input_ids`` and a compatible ``attention_mask``.
         """
 
-        def cat_input_and_doc(doc_score, doc_title, doc_text, input_string, add_eos, prefix, print_docs=False):
+        def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
             # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
             # TODO(piktus): better handling of truncation
             if doc_title.startswith('"'):
@@ -349,23 +349,19 @@ class RagRetriever(object):
                 doc_title = doc_title[:-1]
             if prefix is None:
                 prefix = ""
-            suffix = self.generator_tokenizer.eos_token if add_eos else ""
+            # TODO(Patrick, piktus, quention) with current master, T5Tokenizer should add eos token => so `add_eos` is not needed anymore
+#            suffix = self.generator_tokenizer.eos_token if add_eos else ""
             out = (
-                prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string + suffix
+                prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string
             ).replace("  ", " ")
-            if print_docs:
-                logger.info("{} {}".format(doc_score, out))
             return out
 
         rag_input_strings = [
             cat_input_and_doc(
-                doc_scores[i][j],
                 docs[i]["title"][j],
                 docs[i]["text"][j],
                 input_strings[i],
-                add_eos,
                 prefix,
-                print_docs,
             )
             for i in range(len(docs))
             for j in range(self.n_docs)
@@ -377,7 +373,7 @@ class RagRetriever(object):
             return_tensors="pt",
             padding="max_length",
             truncation=True,
-        ).to(doc_scores.device)
+        )
 
         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
 
@@ -399,27 +395,27 @@ class RagRetriever(object):
         ifname = next((addr for addr in addrs if addr.startswith("e")), None)
         return ifname
 
-    def _main_retrieve(self, query_vectors):
-        query_vectors_batched = self._chunk_tensor(query_vectors, self.batch_size)
+    def _main_retrieve(self, question_hidden_states):
+        question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
         ids_batched = []
         vectors_batched = []
-        for query_vectors in query_vectors_batched:
+        for question_hidden_states in question_hidden_states_batched:
             start_time = time.time()
-            ids, vectors = self.retriever.get_top_docs(query_vectors.numpy(), self.n_docs)
+            ids, vectors = self.retriever.get_top_docs(question_hidden_states.numpy(), self.n_docs)
             logger.debug(
-                "index search time: {} sec, batch size {}".format(time.time() - start_time, query_vectors.shape)
+                "index search time: {} sec, batch size {}".format(time.time() - start_time, question_hidden_states.shape)
             )
             ids_batched.append(ids)
             vectors_batched.append(vectors)
         return torch.cat(ids_batched), torch.cat(vectors_batched)
 
-    def retrieve(self, query_vectors, n_docs):
+    def retrieve(self, question_hidden_states, n_docs):
         """
-        Retrieves documents for specified ``query_vectors``. The main process, which has the access to the index stored in memory, gathers queries
+        Retrieves documents for specified ``question_hidden_states``. The main process, which has the access to the index stored in memory, gathers queries
         from all the processes in the main training process group, performs the retrieval and scatters back the results.
 
         Args:
-            query_vectors (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`:
+            question_hidden_states (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
@@ -439,8 +435,8 @@ class RagRetriever(object):
 
         # single GPU training
         if not dist.is_initialized():
-            doc_ids, doc_vectors = self._main_retrieve(query_vectors)
-            return doc_vectors, self.retriever.get_doc_dicts(doc_ids)
+            doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states)
+            return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
 
         # distributed training
         world_size = dist.get_world_size(group=self.process_group)
@@ -448,11 +444,11 @@ class RagRetriever(object):
         # gather logic
         gather_list = None
         if self._is_main():
-            gather_list = [torch.empty(query_vectors.shape, dtype=torch.float32) for _ in range(world_size)]
-        dist.gather(query_vectors, dst=0, gather_list=gather_list, group=self.process_group)
+            gather_list = [torch.empty(question_hidden_states.shape, dtype=torch.float32) for _ in range(world_size)]
+        dist.gather(question_hidden_states, dst=0, gather_list=gather_list, group=self.process_group)
 
         # scatter logic
-        n_queries = query_vectors.shape[0]
+        n_queries = question_hidden_states.shape[0]
         scatter_ids = []
         scatter_vectors = []
         if self._is_main():
@@ -461,6 +457,16 @@ class RagRetriever(object):
             scatter_ids = self._chunk_tensor(ids, n_queries)
             scatter_vectors = self._chunk_tensor(vectors, n_queries)
         doc_ids = self._scattered(scatter_ids, [n_queries, self.n_docs], target_type=torch.int64)
-        doc_vectors = self._scattered(scatter_vectors, [n_queries, self.n_docs, query_vectors.shape[1]])
+        retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, self.n_docs, question_hidden_states.shape[1]])
 
-        return doc_vectors, self.retriever.get_doc_dicts(doc_ids)
+        return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
+
+    def __call__(self, question_input_ids, question_hidden_states, prefix, n_docs=None):
+        # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
+        n_docs = n_docs if n_docs is not None else self.n_docs
+        retrieved_doc_embeds, docs = self.retrieve(question_hidden_states, n_docs)
+
+        input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
+        context_input_ids, context_attention_mask = self.postprocess_docs(docs, input_strings, prefix)
+
+        return context_input_ids, context_attention_mask, retrieved_doc_embeds
