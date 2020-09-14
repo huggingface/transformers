@@ -140,17 +140,18 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertEqual(train_output.global_step, 10)
 
     def test_train_and_eval_dataloaders(self):
+        n_gpu = max(1, torch.cuda.device_count())
         trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16)
-        self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
+        self.assertEqual(trainer.get_train_dataloader().batch_size, 16 * n_gpu)
         trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16)
-        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16)
+        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16 * n_gpu)
 
         # Check drop_last works
         trainer = get_regression_trainer(
             train_len=66, eval_len=74, learning_rate=0.1, per_device_train_batch_size=16, per_device_eval_batch_size=32
         )
-        self.assertEqual(len(trainer.get_train_dataloader()), 66 // 16 + 1)
-        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // 32 + 1)
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
 
         trainer = get_regression_trainer(
             train_len=66,
@@ -160,12 +161,12 @@ class TrainerIntegrationTest(unittest.TestCase):
             per_device_eval_batch_size=32,
             dataloader_drop_last=True,
         )
-        self.assertEqual(len(trainer.get_train_dataloader()), 66 // 16)
-        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // 32)
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
 
-        # Check passing a new dataset fpr evaluation wors
+        # Check passing a new dataset for evaluation wors
         new_eval_dataset = RegressionDataset(length=128)
-        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // 32)
+        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
     def test_evaluate(self):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
