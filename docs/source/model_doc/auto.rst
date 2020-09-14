@@ -14,7 +14,7 @@ Instantiating one of :class:`~transformers.AutoConfig`, :class:`~transformers.Au
 
     model = AutoModel.from_pretrained('bert-base-cased')
 
-will create a model that is an instance of :class:`~transformers.BertModel`).
+will create a model that is an instance of :class:`~transformers.BertModel`.
 
 There is one class of :obj:`AutoModel` for each task, and for each backend (PyTorch or TensorFlow).
 
