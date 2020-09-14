@@ -10,6 +10,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers.trainer_utils import set_seed
 
 
 logger = getLogger(__name__)
@@ -20,6 +21,9 @@ except ImportError:
     from utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+set_seed(42)
 
 
 def chunks(lst, n):

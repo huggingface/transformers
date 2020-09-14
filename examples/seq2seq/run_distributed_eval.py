@@ -11,6 +11,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers.trainer_utils import set_seed
+
+
+set_seed(42)
 
 
 logger = getLogger(__name__)
