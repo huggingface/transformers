@@ -24,10 +24,11 @@ def combine_partial_results(
     labels = [x["label"] for x in records]
     score_fn = calculate_bleu if calc_bleu else calculate_rouge
     metrics = score_fn(preds, labels)
+    metrics['n_obs'] = len(preds)
     save_json(metrics, save_dir.joinpath("metrics.json"))  # better would be be {prefix}_{rouge|bleu}.json
     print(metrics)
     if just_metrics:
-        return
+        return metrics
 
     if save_prefix is None:
         save_prefix = "generated"
@@ -40,7 +41,7 @@ def combine_partial_results(
     if "source" in records[0]:
         src_path = save_dir.joinpath(f"{save_prefix}.source")
         write_txt_file([x["source"] for x in records], src_path)
-
+    return metrics
 
 if __name__ == "__main__":
     fire.Fire(combine_partial_results)
