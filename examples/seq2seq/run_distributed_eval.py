@@ -97,9 +97,8 @@ def run_generate():
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
-    parser.add_argument("--prefix", type=str, default="test", help="which subset to evaluate typically train/val/test")
+    parser.add_argument("--type_path", type=str, default="test", help="which subset to evaluate typically train/val/test")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
-    parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument(
@@ -123,7 +122,7 @@ def run_generate():
         args.input_path,
         args.save_dir,
         args.model_name,
-        prefix=args.prefix,
+        type_path=args.type_path,
         batch_size=args.bs,
         fp16=args.fp16,
         task=args.task,
