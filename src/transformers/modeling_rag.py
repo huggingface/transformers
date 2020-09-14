@@ -196,12 +196,12 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`, `doc_scores`)
             `last_hidden_state` of shape :obj:`(batch_size, n_docs * sequence_length, hidden_size)` is a sequence of hidden-states at the output of the last layer of the encoder.
             `doc_scores` of shape :obj:`(batch_size, n_docs)` store retrieval scores of documents retrieved for each input in the batch.
-            Used by the (:class:`~transformers.RagToken`) model during decoding.
+            Used by the (:class:`~transformers.RagTokenForGeneration`) model during decoding.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for generation tasks. `None` by default, constuct as per instructions for the generator model you're using with your RAG instance.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`):
             Tuple consists of two elements: ``encoder_outputs`` of the RAG model (see ``encoder_outputs``) and ``past_key_values`` of the underlying generator.
-            Can be used to speed up decoding. ``past_key_values`` are used in the (:class:`~transformers.RagToken`)
+            Can be used to speed up decoding. ``past_key_values`` are used in the (:class:`~transformers.RagTokenForGeneration`)
             model during decoding.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
@@ -377,7 +377,7 @@ class RagModel(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
-class RagForSequenceGeneration(RagPreTrainedModel):
+class RagSequenceForGeneration(RagPreTrainedModel):
 
     def __init__(
         self,
@@ -396,10 +396,131 @@ class RagForSequenceGeneration(RagPreTrainedModel):
 
         self.rag = RagModel(config=config, encoder=encoder, generator=generator, retriever=retriever)
 
+
     @classmethod
-    def from_pretrained_encoder_generator(cls, encoder_path, generator_path, retriever=None, **kwargs):
-        # load correct encoder and generator models and config
-        return cls(config=config, encoder=encoder, generator=generator, retriever=retriever, **kwargs)
+    def from_pretrained_question_encoder_generator(
+        cls,
+        question_encoder_pretrained_model_name_or_path: str = None,
+        generator_pretrained_model_name_or_path: str = None,
+        retriever: RagRetriever = None,
+        *model_args,
+        **kwargs
+    ) -> PreTrainedModel:
+        r"""Instantiates an question_encoder and a generator from one or two base classes of the library from pre-trained model checkpoints.
+
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated).
+        To train the model, you need to first set it back in training mode with `model.train()`.
+
+        Params:
+            question_encoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                information necessary to initiate the question_encoder. Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/question_encoder``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            generator_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                information necessary to initiate the generator. Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/generator``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments.
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``).
+                - To update the question_encoder configuration, use the prefix `question_encoder_` for each configuration parameter
+                - To update the generator configuration, use the prefix `generator_` for each configuration parameter
+                - To update the parent model configuration, do not use a prefix for each configuration parameter
+                Behave differently depending on whether a :obj:`config` is provided or automatically loaded.
+
+        Examples::
+
+            >>> from transformers import EncoderDecoderModel
+            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_question_encoder_generator_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2bert")
+            >>> # load fine-tuned model
+            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
+
+        """
+
+        kwargs_question_encoder = {
+            argument[len("question_question_encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("question_encoder_")
+        }
+
+        kwargs_generator = {
+            argument[len("generator_") :]: value for argument, value in kwargs.items() if argument.startswith("generator_")
+        }
+
+        # remove question_encoder, generator kwargs from kwargs
+        for key in kwargs_question_encoder.keys():
+            del kwargs["question_encoder_" + key]
+        for key in kwargs_generator.keys():
+            del kwargs["generator_" + key]
+
+        # Load and initialize the question_encoder and generator
+        # The distinction between question_encoder and generator at the model level is made
+        # by the value of the flag `is_generator` that we need to set correctly.
+        question_encoder = kwargs_question_encoder.pop("model", None)
+        if question_encoder is None:
+            assert (
+                question_encoder_pretrained_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
+            from .modeling_auto import AutoModel
+
+            if "config" not in kwargs_question_encoder:
+                from .configuration_auto import AutoConfig
+
+                question_encoder_config = AutoConfig.from_pretrained(question_encoder_pretrained_model_name_or_path)
+                if question_encoder_config.is_generator is True or question_encoder_config.add_cross_attention is True:
+
+                    logger.info(
+                        f"Initializing {question_encoder_pretrained_model_name_or_path} as a question_encoder model from a generator model. Cross-attention and casual mask are disabled."
+                    )
+                    question_encoder_config.is_generator = False
+                    question_encoder_config.add_cross_attention = False
+
+                    kwargs_question_encoder["config"] = question_encoder_config
+
+            question_encoder = AutoModel.from_pretrained(question_encoder_pretrained_model_name_or_path, *model_args, **kwargs_question_encoder)
+
+        generator = kwargs_generator.pop("model", None)
+        if generator is None:
+            assert (
+                generator_pretrained_model_name_or_path is not None
+            ), "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
+            from .modeling_auto import AutoModelForCausalLM
+
+            if "config" not in kwargs_generator:
+                from .configuration_auto import AutoConfig
+
+                generator_config = AutoConfig.from_pretrained(generator_pretrained_model_name_or_path)
+                if generator_config.is_generator is False or generator_config.add_cross_attention is False:
+                    logger.info(
+                        f"Initializing {generator_pretrained_model_name_or_path} as a generator model. Cross attention layers are added to {generator_pretrained_model_name_or_path} and randomly initialized if {generator_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                    )
+                    generator_config.is_generator = True
+                    generator_config.add_cross_attention = True
+
+                kwargs_generator["config"] = generator_config
+
+            if kwargs_generator["config"].is_generator is False or generator_config.add_cross_attention is False:
+                logger.warning(
+                    f"Decoder model {generator_pretrained_model_name_or_path} is not initialized as a generator. In order to initialize {generator_pretrained_model_name_or_path} as a generator, make sure that the attributes `is_generator` and `add_cross_attention` of `generator_config` passed to `.from_question_encoder_generator_pretrained(...)` are set to `True` or do not pass a `generator_config` to `.from_question_encoder_generator_pretrained(...)`"
+                )
+
+            generator = AutoModelForCausalLM.from_pretrained(generator_pretrained_model_name_or_path, **kwargs_generator)
+
+        # instantiate config with corresponding kwargs
+        config = EncoderDecoderConfig.from_question_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+        return cls(question_encoder=question_encoder, generator=generator, config=config)
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
@@ -422,7 +543,7 @@ class RagForSequenceGeneration(RagPreTrainedModel):
     ):
         r"""
             score (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                A flag passed as an argument to `:func:`~transformers.RagSequence.get_nll``. If :obj:`True`,
+                A flag passed as an argument to `:func:`~transformers.RagSequenceForGeneration.get_nll``. If :obj:`True`,
                 we exclude the BOS token's score while scoring the sequence.
 
         Returns:
@@ -627,7 +748,7 @@ class RagForSequenceGeneration(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
-class RagForTokenGeneration(PreTrainedRagModel):
+class RagTokenForGeneration(PreTrainedRagModel):
 
     def __init__(
         self,
@@ -647,9 +768,129 @@ class RagForTokenGeneration(PreTrainedRagModel):
 
 
     @classmethod
-    def from_pretrained_encoder_generator(cls, encoder_path, generator_path, retriever=None, **kwargs):
-        # load correct encoder and generator models and config
-        return cls(config=config, encoder=encoder, generator=generator, retriever=retriever, **kwargs)
+    def from_pretrained_encoder_generator(
+        cls,
+        encoder_pretrained_model_name_or_path: str = None,
+        generator_pretrained_model_name_or_path: str = None,
+        retriever: str = None,
+        *model_args,
+        **kwargs
+    ) -> PreTrainedModel:
+        r"""Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
+
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated).
+        To train the model, you need to first set it back in training mode with `model.train()`.
+
+        Params:
+            encoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                information necessary to initiate the encoder. Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/encoder``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                information necessary to initiate the decoder. Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/decoder``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments.
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``).
+                - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter
+                - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter
+                - To update the parent model configuration, do not use a prefix for each configuration parameter
+                Behave differently depending on whether a :obj:`config` is provided or automatically loaded.
+
+        Examples::
+
+            >>> from transformers import EncoderDecoderModel
+            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2bert")
+            >>> # load fine-tuned model
+            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
+
+        """
+
+        kwargs_encoder = {
+            argument[len("question_encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+        }
+
+        kwargs_decoder = {
+            argument[len("generator_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+        }
+
+        # remove encoder, decoder kwargs from kwargs
+        for key in kwargs_encoder.keys():
+            del kwargs["encoder_" + key]
+        for key in kwargs_decoder.keys():
+            del kwargs["decoder_" + key]
+
+        # Load and initialize the encoder and decoder
+        # The distinction between encoder and decoder at the model level is made
+        # by the value of the flag `is_decoder` that we need to set correctly.
+        encoder = kwargs_encoder.pop("model", None)
+        if encoder is None:
+            assert (
+                encoder_pretrained_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            from .modeling_auto import AutoModel
+
+            if "config" not in kwargs_encoder:
+                from .configuration_auto import AutoConfig
+
+                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+
+                    logger.info(
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                    )
+                    encoder_config.is_decoder = False
+                    encoder_config.add_cross_attention = False
+
+                    kwargs_encoder["config"] = encoder_config
+
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+
+        decoder = kwargs_decoder.pop("model", None)
+        if decoder is None:
+            assert (
+                decoder_pretrained_model_name_or_path is not None
+            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            from .modeling_auto import AutoModelForCausalLM
+
+            if "config" not in kwargs_decoder:
+                from .configuration_auto import AutoConfig
+
+                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                    logger.info(
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                    )
+                    decoder_config.is_decoder = True
+                    decoder_config.add_cross_attention = True
+
+                kwargs_decoder["config"] = decoder_config
+
+            if kwargs_decoder["config"].is_decoder is False or decoder_config.add_cross_attention is False:
+                logger.warning(
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                )
+
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+        # instantiate config with corresponding kwargs
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        return cls(encoder=encoder, decoder=decoder, config=config)
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         return self.model.generator.adjust_logits_during_generation(logits, cur_len, max_length)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Option 1 - all in one forward pass
 
-tokenizer = RagTokenizer.from_pretrained("facebook/rag")
+tokenizer = RagTokenForGenerationizer.from_pretrained("facebook/rag")
 retriever = RagRetriever.from_pretrained("facebook/rag")
 rag = RagForSequenceGeneration.from_pretrained("facebook/rage", retriever=retriever)
 
@@ -13,7 +13,7 @@ answer_ids = rag.generate(input_ids=question_encoder_input_ids)
 
 
 # Option 2 - step by step manually
-tokenizer = RagTokenizer.from_pretrained("facebook/rag")
+tokenizer = RagTokenForGenerationizer.from_pretrained("facebook/rag")
 retriever = RagRetriever.from_pretrained("facebook/rag")
 rag = RagForSequenceGeneration.from_pretrained("facebook/rag") # Note now there is no retriever used as an input
 

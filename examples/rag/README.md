@@ -2,7 +2,7 @@
 RAG (for Retrieval Augmented Generation) is a seq2seq model which encapsulates two core components: a question encoder and a generator. During a forward pass, we encode the input with the question encoder and pass it
 to the retriever to extract relevant context documents. The documents are then prepended to the input. Such contextualized input is passed to the generator. See [the paper](https://arxiv.org/pdf/2005.11401.pdf) for mored details.
 
-We implement two variants of the model, both presented in the paper - `RagSequence` and `RagToken`. In both cases we use `DPRQuestionEncoder` as the question encoder. As for the generator, two compatible architectures have been tested: `BartForConditionalGeneration`  and `T5ForConditionalGeneration`.
+We implement two variants of the model, both presented in the paper - `RagSequenceForGeneration. and `RagTokenForGeneration`. In both cases we use `DPRQuestionEncoder` as the question encoder. As for the generator, two compatible architectures have been tested: `BartForConditionalGeneration`  and `T5ForConditionalGeneration`.
 
 Key files:
 - `modeling_rag.py`, `tokenization_rag.py`, `configuration_rag.py` the core model implementation

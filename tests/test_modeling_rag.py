@@ -40,8 +40,8 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
         DPRQuestionEncoder,
         RagConfig,
         RagRetriever,
-        RagSequence,
-        RagToken,
+        RagSequenceForGeneration,
+        RagTokenForGeneration,
     )
 
 
@@ -179,7 +179,7 @@ class RagModelTester:
 @require_retrieval
 class RagModelTest(unittest.TestCase):
     all_model_classes = (
-        (RagSequence, RagToken)
+        (RagSequenceForGeneration, RagTokenForGeneration)
         if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available()
         else ()
     )
@@ -320,8 +320,8 @@ class RagModelTest(unittest.TestCase):
             )
             self.assertIsNone(result.loss)
 
-            # marginalization in RagToken + no cache
-            if isinstance(model_class, RagToken):
+            # marginalization in RagTokenForGeneration + no cache
+            if isinstance(model_class, RagTokenForGeneration):
                 result = model(
                     input_ids,
                     decoder_input_ids=decoder_input_ids,
@@ -414,7 +414,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         rag_config = self.get_rag_config()
         rag_retriever = RagRetriever.from_pretrained(rag_config)
         rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-        rag_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
         rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
             "facebook/dpr-question_encoder-single-nq-base"
@@ -427,7 +426,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         input_ids = input_ids.to(torch_device)
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
-        rag_sequence = RagSequence.from_pretrained(config=rag_config).to(torch_device)
+        rag_sequence = RagSequenceForGeneration.from_pretrained_encoder_generator(config=rag_config).to(torch_device)
 
         with torch.no_grad():
             output = rag_sequence(
@@ -459,7 +458,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         input_ids = input_ids.to(torch_device)
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
-        rag_token = RagToken.from_pretrained(config=rag_config).to(torch_device)
+        rag_token = RagTokenForGeneration.from_pretrained(config=rag_config).to(torch_device)
 
         with torch.no_grad():
             output = rag_token(
@@ -487,7 +486,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         input_ids = rag_tokenizer("who sings does he love me with reba", return_tensors="pt").input_ids
         input_ids = input_ids.to(torch_device)
 
-        rag_sequence = RagSequence.from_pretrained(config=rag_config).to(torch_device)
+        rag_sequence = RagSequenceForGeneration.from_pretrained(config=rag_config).to(torch_device)
         output_ids = rag_sequence.generate(
             input_ids,
             retriever=rag_retriever,

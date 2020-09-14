@@ -23,8 +23,8 @@ from transformers import (
     BartForConditionalGeneration,
     RagConfig,
     RagRetriever,
-    RagSequence,
-    RagToken,
+    RagSequenceForGeneration,
+    RagTokenForGeneration,
     T5ForConditionalGeneration,
     get_linear_schedule_with_warmup,
 )
@@ -74,9 +74,9 @@ class GenerativeQAModule(BaseTransformer):
         if isinstance(hparams, dict):
             hparams = AttrDict(hparams)
         if hparams.model_type == "rag_sequence":
-            self.model_class = RagSequence
+            self.model_class = RagSequenceForGeneration
         elif hparams.model_type == "rag_token":
-            self.model_class = RagToken
+            self.model_class = RagTokenForGeneration
         elif hparams.model_type == "bart":
             self.model_class = BartForConditionalGeneration
         else:

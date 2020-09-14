@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from transformers import BartForConditionalGeneration, BartTokenizer, RagRetriever, RagSequence, RagToken
+from transformers import BartForConditionalGeneration, BartTokenizer, RagRetriever, RagSequenceForGeneration, RagTokenForGeneration
 from transformers import logging as transformers_logging
 
 
@@ -247,7 +247,7 @@ def main(args):
         args.model_type = infer_model_type(args.model_name_or_path)
         assert args.model_type is not None
     if args.model_type.startswith("rag"):
-        model_class = RagToken if args.model_type == "rag_token" else RagSequence
+        model_class = RagTokenForGeneration if args.model_type == "rag_token" else RagSequenceForGeneration
         model_kwargs["n_docs"] = args.n_docs
         if args.retriever_type is not None:
             model_kwargs["retriever_type"] = args.retriever_type
