@@ -103,13 +103,13 @@ class LegacyIndex(Index):
                   :class:`~transformers.retrieval_rag.LegacyIndex`
     """
 
-    LEGACY_INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
-    LEGACY_PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
+    INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
+    PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
     def __init__(self, vector_size, index_path):
         self.index_id_to_db_id = []
-        self.passages = self._load_passages()
         self.index_path = index_path
+        self.passages = self._load_passages()
         self.vector_size = vector_size
         self.index = None
         self._index_initialize = False
@@ -380,7 +380,7 @@ class RagRetriever(object):
 
         return retriever_inputs["input_ids"].to(input_ids.device), input_strings
 
-    def postprocess_docs(self, docs, input_strings, prefix):
+    def postprocess_docs(self, docs, input_strings, prefix, n_docs):
         r"""
         Postprocessing retrieved ``docs`` and combining them with ``input_strings``.
 
@@ -425,7 +425,7 @@ class RagRetriever(object):
                 prefix,
             )
             for i in range(len(docs))
-            for j in range(self.n_docs)
+            for j in range(n_docs)
         ]
 
         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
@@ -456,13 +456,13 @@ class RagRetriever(object):
         ifname = next((addr for addr in addrs if addr.startswith("e")), None)
         return ifname
 
-    def _main_retrieve(self, question_hidden_states):
+    def _main_retrieve(self, question_hidden_states, n_docs):
         question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
         ids_batched = []
         vectors_batched = []
         for question_hidden_states in question_hidden_states_batched:
             start_time = time.time()
-            ids, vectors = self.retriever.get_top_docs(question_hidden_states.numpy(), self.n_docs)
+            ids, vectors = self.retriever.get_top_docs(question_hidden_states.numpy(), n_docs)
             logger.debug(
                 "index search time: {} sec, batch size {}".format(
                     time.time() - start_time, question_hidden_states.shape
@@ -498,7 +498,7 @@ class RagRetriever(object):
 
         # single GPU training
         if not dist.is_initialized():
-            doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states)
+            doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
             return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
 
         # distributed training
@@ -516,13 +516,11 @@ class RagRetriever(object):
         scatter_vectors = []
         if self._is_main():
             assert len(gather_list) == world_size
-            ids, vectors = self._main_retrieve(torch.cat(gather_list))
+            ids, vectors = self._main_retrieve(torch.cat(gather_list), n_docs)
             scatter_ids = self._chunk_tensor(ids, n_queries)
             scatter_vectors = self._chunk_tensor(vectors, n_queries)
-        doc_ids = self._scattered(scatter_ids, [n_queries, self.n_docs], target_type=torch.int64)
-        retrieved_doc_embeds = self._scattered(
-            scatter_vectors, [n_queries, self.n_docs, question_hidden_states.shape[1]]
-        )
+        doc_ids = self._scattered(scatter_ids, [n_queries, n_docs], target_type=torch.int64)
+        retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, n_docs, question_hidden_states.shape[1]])
 
         return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
 
@@ -532,6 +530,6 @@ class RagRetriever(object):
         retrieved_doc_embeds, docs = self.retrieve(question_hidden_states, n_docs)
 
         input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
-        context_input_ids, context_attention_mask = self.postprocess_docs(docs, input_strings, prefix)
+        context_input_ids, context_attention_mask = self.postprocess_docs(docs, input_strings, prefix, n_docs)
 
         return context_input_ids, context_attention_mask, retrieved_doc_embeds
