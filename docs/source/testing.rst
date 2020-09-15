@@ -6,8 +6,8 @@ Let's take a look at how 🤗 Transformer models are tested and how you can writ
 
 There are 2 test suites in the repository:
 
-1. `tests`: tests for the general API
-2. `examples`: tests primarily for various applications that aren't part of the API
+1. ``tests`` -- tests for the general API
+2. ``examples`` -- tests primarily for various applications that aren't part of the API
 
 How transformers are tested
 ---------------------------
@@ -18,7 +18,7 @@ How transformers are tested
    
 2. There are 3 jobs run by `github actions <https://github.com/huggingface/transformers/actions>`__:
 
-   * `torch hub integration <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__ - checks whether torch hub integration works. Julien is in charge if that breaks. It doesn’t break very often.
+   * `torch hub integration <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__:  checks whether torch hub integration works. Julien is in charge if that breaks. It doesn’t break very often.
 
    * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__: runs fast tests on GPU every PR.
      
@@ -43,10 +43,7 @@ Running tests
 Choosing which tests to run
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`Full documentation <https://docs.pytest.org/en/latest/usage.html>`__.
-
-For nuances of configuring pytest's repo-wide behavior see
-`collection <https://docs.pytest.org/en/latest/example/pythoncollection.html>`__.
+This document goes into many details of how tests can be run. If after reading everything, you need even more details you will find them `here <https://docs.pytest.org/en/latest/usage.html>`__.
 
 Here are some most useful ways of running tests.
 
@@ -161,10 +158,7 @@ And you can combine the two patterns in one:
 Run only modified tests
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Run the tests related to the unstaged files or the current branch
-(according to Git).
-
-`pytest-picked <https://github.com/anapaulagomes/pytest-picked>`__
+You can run the tests related to the unstaged files or the current branch (according to Git) by using `pytest-picked <https://github.com/anapaulagomes/pytest-picked>`__. This is a great way of quickly testing your changes didn't break anything, since it won't run the tests related to files you didn't touch.
 
 .. code-block:: bash
 
@@ -193,9 +187,9 @@ which again a full run is performed.
 
 To enter the mode: ``pytest -f`` or ``pytest --looponfail``
 
-File changes are detected by looking at looponfailingroots root
+File changes are detected by looking at ``looponfailroots`` root
 directories and all of their contents (recursively). If the default for
-this value does not work for you you can change it in your project by
+this value does not work for you, you can change it in your project by
 setting a configuration option in ``setup.cfg``:
 
 .. code-block:: ini
@@ -274,10 +268,12 @@ And then run every test multiple times (50 by default):
 .. code-block:: bash
 
    pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
-
-note: this plugin doesn't work with `-n` flag from ``pytest-xdist``.
-
-note: there is another plugin ``pytest-repeat``, but it doesn't work with `unittest`.
+   
+.. note::
+   This plugin doesn't work with ``-n`` flag from ``pytest-xdist``.
+   
+.. note::
+   There is another plugin ``pytest-repeat``, but it doesn't work with ``unittest``.
 
 
 Run tests in a random order
@@ -334,13 +330,7 @@ shuffle the files on the module levels. It can also shuffle on
 ``class``, ``package``, ``global`` and ``none`` levels. For the complete
 details please see its `documentation <https://github.com/jbasko/pytest-random-order>`__.
 
-Randomization alternatives:
-
--  ```pytest-randomly`` <https://github.com/pytest-dev/pytest-randomly>`__
-
-This module has a very similar functionality/interface, but it doesn't
-have the bucket modes available in ``pytest-random-order``. It has the
-same problem of imposing itself once installed.
+Another randomization alternative is: ``pytest-randomly`` <https://github.com/pytest-dev/pytest-randomly>`__. This module has a very similar functionality/interface, but it doesn't have the bucket modes available in ``pytest-random-order``. It has the same problem of imposing itself once installed.
 
 Look and feel variations
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -395,13 +385,13 @@ test session.
 To GPU or not to GPU
 ~~~~~~~~~~~~~~~~~~~~
 
-On a GPU-enabled setup, to test in CPU-only mode add
-``CUDA_VISIBLE_DEVICES=""``:
-``CUDA_VISIBLE_DEVICES="" pytest tests/test_vision.py``
+On a GPU-enabled setup, to test in CPU-only mode add ``CUDA_VISIBLE_DEVICES=""``:
 
-XXX: Currently we have ``USE_CUDA=1`` which is currently False by default, but most likely this will change.
+.. code-block:: bash
+                
+    CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
 
-And we have these decorators that require the condition described by the marker, some are also about to change.
+And we have these decorators that require the condition described by the marker.
 
 ```
 @require_torch
@@ -412,6 +402,8 @@ And we have these decorators that require the condition described by the marker,
 @require_torch_and_cuda
 ```
 
+This section will be expanded soon once our work in progress on those decorators is finished.
+
 Inside tests:
 
 * How many GPUs are available:
@@ -420,7 +412,6 @@ Inside tests:
 
    torch.cuda.device_count()
 
-XXX: complete this section once we sort out all the cpu/gpu decorators
 
    
 
@@ -559,9 +550,11 @@ In this and all the following scenarios the temp dir will be auto-removed at the
    def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
 
-Note 1: In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will get nuked. i.e. please always pass paths that start with `./`
+.. note::
+   In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will get nuked. i.e. please always pass paths that start with `./`
 
-Note 2: Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
+.. note::
+   Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
 
 
 Skipping tests
@@ -642,7 +635,7 @@ Skip all tests in a module if some import is missing:
 
     docutils = pytest.importorskip("docutils", minversion="0.3")
 
--  Skip if:
+-  Skip a test based on a condition:
 
 .. code-block:: python
 
@@ -656,7 +649,7 @@ or:
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_feature_x():
    
-or the whole module:
+or skip the whole module:
 
 .. code-block:: python
 

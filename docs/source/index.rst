@@ -160,7 +160,6 @@ conversion utilities for the following models:
     model_sharing
     tokenizer_summary
     multilingual
-    testing
 
 .. toctree::
     :maxdepth: 2
@@ -173,6 +172,7 @@ conversion utilities for the following models:
     converting_tensorflow_models
     migration
     contributing
+    testing
     serialization
 
 .. toctree::
