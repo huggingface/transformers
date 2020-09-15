@@ -18,18 +18,8 @@
 
 import logging
 
+import datasets
 from conllu import parse_incr
-from datasets import (
-    BuilderConfig,
-    DatasetInfo,
-    Features,
-    GeneratorBasedBuilder,
-    Sequence,
-    Split,
-    SplitGenerator,
-    Value,
-    Version,
-)
 
 
 _CITATION = """\
@@ -58,7 +48,7 @@ _DEV_FILE = "en_ewt-ud-dev.conllu"
 _TEST_FILE = "en_ewt-ud-test.conllu"
 
 
-class UDEnglishEWTConfig(BuilderConfig):
+class UDEnglishEWTConfig(datasets.BuilderConfig):
     """BuilderConfig for UDEnglishEWT."""
 
     def __init__(self, **kwargs):
@@ -70,26 +60,26 @@ class UDEnglishEWTConfig(BuilderConfig):
         super(UDEnglishEWTConfig, self).__init__(**kwargs)
 
 
-class UDEnglishEWT(GeneratorBasedBuilder):
+class UDEnglishEWT(datasets.GeneratorBasedBuilder):
     """Universal Dependencies - English Dependency Treebank Universal Dependencies English Web Treebank dataset."""
 
     BUILDER_CONFIGS = [
         UDEnglishEWTConfig(
             name="ud_english_ewt",
-            version=Version("1.0.0"),
+            version=datasets.Version("1.0.0"),
             description="Universal Dependencies - English Dependency Treebank Universal Dependencies English Web Treebank ",
         ),
     ]
 
     def _info(self):
         """See https://universaldependencies.org/format.html for CoNLL-U Format details"""
-        return DatasetInfo(
+        return datasets.DatasetInfo(
             description=_DESCRIPTION,
-            features=Features(
+            features=datasets.Features(
                 {
-                    "id": Value("string"),
-                    "form": Sequence(Value("string")),
-                    "upos": Sequence(Value("string")),
+                    "id": datasets.Value("string"),
+                    "form": datasets.Sequence(datasets.Value("string")),
+                    "upos": datasets.Sequence(datasets.Value("string")),
                 }
             ),
             supervised_keys=None,
@@ -107,9 +97,9 @@ class UDEnglishEWT(GeneratorBasedBuilder):
         downloaded_files = dl_manager.download_and_extract(urls_to_download)
 
         return [
-            SplitGenerator(name=Split.TRAIN, gen_kwargs={"filepath": downloaded_files["train"]}),
-            SplitGenerator(name=Split.VALIDATION, gen_kwargs={"filepath": downloaded_files["dev"]}),
-            SplitGenerator(name=Split.TEST, gen_kwargs={"filepath": downloaded_files["test"]}),
+            datasets.SplitGenerator(name=datasets.Split.TRAIN, gen_kwargs={"filepath": downloaded_files["train"]}),
+            datasets.SplitGenerator(name=datasets.Split.VALIDATION, gen_kwargs={"filepath": downloaded_files["dev"]}),
+            datasets.SplitGenerator(name=datasets.Split.TEST, gen_kwargs={"filepath": downloaded_files["test"]}),
         ]
 
     def _generate_examples(self, filepath):

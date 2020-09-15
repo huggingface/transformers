@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 HuggingFace NLP Authors.
+# Copyright 2020 HuggingFace datasets Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 
 import logging
 
-import nlp
+import datasets
 
 
 _CITATION = """\
@@ -43,7 +43,7 @@ _DEV_FILE = "valid.txt"
 _TEST_FILE = "test.txt"
 
 
-class Conll2003Config(nlp.BuilderConfig):
+class Conll2003Config(datasets.BuilderConfig):
     """BuilderConfig for Conll2003"""
 
     def __init__(self, **kwargs):
@@ -55,23 +55,23 @@ class Conll2003Config(nlp.BuilderConfig):
         super(Conll2003Config, self).__init__(**kwargs)
 
 
-class Conll2003(nlp.GeneratorBasedBuilder):
+class Conll2003(datasets.GeneratorBasedBuilder):
     """Conll2003 dataset."""
 
     BUILDER_CONFIGS = [
-        Conll2003Config(name="conll2003", version=nlp.Version("1.0.0"), description="Conll2003 dataset"),
+        Conll2003Config(name="conll2003", version=datasets.Version("1.0.0"), description="Conll2003 dataset"),
     ]
 
     def _info(self):
-        return nlp.DatasetInfo(
+        return datasets.DatasetInfo(
             description=_DESCRIPTION,
-            features=nlp.Features(
+            features=datasets.Features(
                 {
-                    "id": nlp.Value("string"),
-                    "word": nlp.Sequence(nlp.Value("string")),
-                    "pos": nlp.Sequence(nlp.Value("string")),
-                    "chunk": nlp.Sequence(nlp.Value("string")),
-                    "ner": nlp.Sequence(nlp.Value("string")),
+                    "id": datasets.Value("string"),
+                    "word": datasets.Sequence(datasets.Value("string")),
+                    "pos": datasets.Sequence(datasets.Value("string")),
+                    "chunk": datasets.Sequence(datasets.Value("string")),
+                    "ner": datasets.Sequence(datasets.Value("string")),
                 }
             ),
             supervised_keys=None,
@@ -89,9 +89,9 @@ class Conll2003(nlp.GeneratorBasedBuilder):
         downloaded_files = dl_manager.download_and_extract(urls_to_download)
 
         return [
-            nlp.SplitGenerator(name=nlp.Split.TRAIN, gen_kwargs={"filepath": downloaded_files["train"]}),
-            nlp.SplitGenerator(name=nlp.Split.VALIDATION, gen_kwargs={"filepath": downloaded_files["dev"]}),
-            nlp.SplitGenerator(name=nlp.Split.TEST, gen_kwargs={"filepath": downloaded_files["test"]}),
+            datasets.SplitGenerator(name=datasets.Split.TRAIN, gen_kwargs={"filepath": downloaded_files["train"]}),
+            datasets.SplitGenerator(name=datasets.Split.VALIDATION, gen_kwargs={"filepath": downloaded_files["dev"]}),
+            datasets.SplitGenerator(name=datasets.Split.TEST, gen_kwargs={"filepath": downloaded_files["test"]}),
         ]
 
     def _generate_examples(self, filepath):
