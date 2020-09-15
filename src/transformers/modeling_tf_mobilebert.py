@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import tensorflow as tf
+from tensorflow.python.framework.tensor_conversion_registry import get
 
 from . import MobileBertConfig
 from .file_utils import (
@@ -30,7 +31,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import TFBertIntermediate, gelu, gelu_new, swish
+from .modeling_tf_bert import TFBertIntermediate
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -54,6 +55,7 @@ from .modeling_tf_utils import (
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
+from .activations_tf import get_tf_activation
 
 
 logger = logging.get_logger(__name__)
@@ -65,10 +67,6 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mobilebert-uncased",
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
-
-
-def mish(x):
-    return x * tf.tanh(tf.math.softplus(x))
 
 
 class TFLayerNorm(tf.keras.layers.LayerNormalization):
@@ -89,12 +87,6 @@ class TFNoNorm(tf.keras.layers.Layer):
         return inputs * self.weight + self.bias
 
 
-ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-    "gelu_new": tf.keras.layers.Activation(gelu_new),
-}
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
@@ -621,7 +613,7 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
+            self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm")

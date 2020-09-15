@@ -25,7 +25,7 @@ from .file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_callable,
 )
-from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu
+from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer
 from .modeling_tf_outputs import (
     TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
@@ -47,6 +47,7 @@ from .modeling_tf_utils import (
 )
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
+from .activations_tf import get_tf_activation
 
 
 logger = logging.get_logger(__name__)
@@ -237,7 +238,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.act = tf.keras.layers.Activation(gelu)
+        self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
