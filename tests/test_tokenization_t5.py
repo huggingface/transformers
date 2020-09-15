@@ -143,25 +143,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
 
-        # With lower casing
-        tokenizer = self.get_tokenizer(do_lower_case=True)
-        rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
-
-        sequence = "I was born in 92000, and this is falsé."
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
     def test_eos_treatment(self):
         tokenizer = self.t5_base_tokenizer
         batch_with_eos_added = tokenizer(["hi</s>", "I went to the gym</s>", "</s>"])

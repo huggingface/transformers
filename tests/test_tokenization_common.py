@@ -394,6 +394,7 @@ class TokenizerTesterMixin:
                 tokenizer.add_tokens(new_toks)
                 input = "[ABC] [DEF] [ABC] [DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
                 encoded = tokenizer.encode(input, add_special_tokens=False)
+                print(encoded)
                 decoded = tokenizer.decode(encoded)
                 self.assertEqual(decoded, input)
 

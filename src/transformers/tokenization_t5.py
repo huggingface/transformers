@@ -23,6 +23,7 @@ from shutil import copyfile
 from typing import List, Optional
 
 from tokenizers import SentencePieceUnigramTokenizer
+from tokenizers.processors import TemplateProcessing
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -449,12 +450,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         sp.Load(vocab_file)
         vocab_filename = f"mymodel.json"
         vocab = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.piece_size())]
-        data = {"unk_id": sp.unk_id(), "vocab": vocab}
-        with open(vocab_filename, "w") as f:
-            json.dump(data, f, indent=4)
 
         super().__init__(
-            SentencePieceUnigramTokenizer(vocab_filename),
+            SentencePieceUnigramTokenizer(vocab, sp.unk_id()),
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
@@ -463,6 +461,12 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
+
+        self.backend_tokenizer._tokenizer.post_processor = TemplateProcessing(
+            seq_a=f"$0 {str(eos_token)}",
+            seq_b=f"$1 {str(eos_token)}",
+            special_tokens=[(str(eos_token), self.convert_tokens_to_ids(eos_token))],
+        )
 
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
