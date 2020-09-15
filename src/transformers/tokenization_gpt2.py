@@ -16,7 +16,6 @@
 
 
 import json
-import logging
 import os
 from functools import lru_cache
 
@@ -26,9 +25,10 @@ from tokenizers import ByteLevelBPETokenizer
 from .tokenization_utils import AddedToken, PreTrainedTokenizer
 from .tokenization_utils_base import BatchEncoding
 from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

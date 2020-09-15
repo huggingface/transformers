@@ -1,7 +1,7 @@
 ---
 language: fr
 datasets:
-- PIAF
+- piaf
 - FQuAD
 - SQuAD-FR
 widget:

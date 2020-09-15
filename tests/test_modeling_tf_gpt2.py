@@ -25,18 +25,20 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers.modeling_tf_gpt2 import (
-        TFGPT2Model,
-        TFGPT2LMHeadModel,
-        TFGPT2DoubleHeadsModel,
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFGPT2DoubleHeadsModel,
+        TFGPT2LMHeadModel,
+        TFGPT2Model,
         shape_list,
     )
 
 
 class TFGPT2ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -236,7 +238,7 @@ class TFGPT2ModelTester:
         }
         result = model(inputs)
         self.parent.assertEqual(
-            result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
+            result.logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 

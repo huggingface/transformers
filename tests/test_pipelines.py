@@ -28,6 +28,9 @@ TRANSLATION_FINETUNED_MODELS = [
 ]
 TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translation_en_to_fr")]
 
+TEXT2TEXT_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
+TF_TEXT2TEXT_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
+
 DIALOGUE_FINETUNED_MODELS = ["microsoft/DialoGPT-medium"]
 
 expected_fill_mask_result = [
@@ -164,7 +167,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
             for result, expect in zip(multi_result, expected_multi_result):
                 for key in expected_check_keys or []:
                     self.assertEqual(
-                        set([o[key] for o in result]), set([o[key] for o in expect]),
+                        set([o[key] for o in result]),
+                        set([o[key] for o in expect]),
                     )
 
         if isinstance(multi_result[0], list):
@@ -214,7 +218,13 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "This is"  # No mask_token is not supported
         ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
+            nlp = pipeline(
+                task="fill-mask",
+                model=model_name,
+                tokenizer=model_name,
+                framework="pt",
+                topk=2,
+            )
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
             )
@@ -231,7 +241,13 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "This is"  # No mask_token is not supported
         ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2,)
+            nlp = pipeline(
+                task="fill-mask",
+                model=model_name,
+                tokenizer=model_name,
+                framework="tf",
+                topk=2,
+            )
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
             )
@@ -274,7 +290,13 @@ class MonoColumnInputTestCase(unittest.TestCase):
         ]
         valid_targets = [" Patrick", " Clara"]
         for model_name in LARGE_FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
+            nlp = pipeline(
+                task="fill-mask",
+                model=model_name,
+                tokenizer=model_name,
+                framework="pt",
+                topk=2,
+            )
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -343,7 +365,12 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model_name in TF_SUMMARIZATION_FINETUNED_MODELS:
-            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf",)
+            nlp = pipeline(
+                task="summarization",
+                model=model_name,
+                tokenizer=model_name,
+                framework="tf",
+            )
             self._test_mono_column_pipeline(
                 nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs, **SUMMARIZATION_KWARGS
             )
@@ -355,7 +382,10 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for model_name, task in TRANSLATION_FINETUNED_MODELS:
             nlp = pipeline(task=task, model=model_name, tokenizer=model_name)
             self._test_mono_column_pipeline(
-                nlp, VALID_INPUTS, mandatory_keys, invalid_inputs,
+                nlp,
+                VALID_INPUTS,
+                mandatory_keys,
+                invalid_inputs,
             )
 
     @require_tf
@@ -368,16 +398,40 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs)
 
     @require_torch
+    def test_torch_text2text(self):
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["generated_text"]
+        for model_name in TEXT2TEXT_FINETUNED_MODELS:
+            nlp = pipeline(task="text2text-generation", model=model_name, tokenizer=model_name)
+            self._test_mono_column_pipeline(
+                nlp,
+                VALID_INPUTS,
+                mandatory_keys,
+                invalid_inputs,
+            )
+
+    @require_tf
+    @slow
+    def test_tf_text2text(self):
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["generated_text"]
+        for model in TEXT2TEXT_FINETUNED_MODELS:
+            nlp = pipeline(task="text2text-generation", model=model, tokenizer=model, framework="tf")
+            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs)
+
+    @require_torch
     def test_torch_text_generation(self):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="pt")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+        self._test_mono_column_pipeline(nlp, VALID_INPUTS, {}, prefix="This is ")
 
     @require_tf
     def test_tf_text_generation(self):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+        self._test_mono_column_pipeline(nlp, VALID_INPUTS, {}, prefix="This is ")
 
     @slow
     @require_torch
@@ -655,7 +709,9 @@ class QAPipelineTests(unittest.TestCase):
 
 class NerPipelineTests(unittest.TestCase):
     def _test_ner_pipeline(
-        self, nlp: Pipeline, output_keys: Iterable[str],
+        self,
+        nlp: Pipeline,
+        output_keys: Iterable[str],
     ):
 
         ungrouped_ner_inputs = [

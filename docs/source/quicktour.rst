@@ -214,7 +214,7 @@ Using the model
 
 Once your input has been preprocessed by the tokenizer, you can send it directly to the model. As we mentioned, it will
 contain all the relevant information the model needs. If you're using a TensorFlow model, you can pass the
-dictionary keys directly to tensor, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
+dictionary keys directly to tensors, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
 
 .. code-block::
 

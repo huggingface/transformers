@@ -1,3 +1,5 @@
+import inspect
+import logging
 import os
 import re
 import shutil
@@ -13,6 +15,7 @@ from .file_utils import _tf_available, _torch_available, _torch_tpu_available
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
+DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.
 
 
@@ -119,6 +122,20 @@ def require_multigpu(test_case):
     return test_case
 
 
+def require_non_multigpu(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
+    """
+    if not _torch_available:
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() > 1:
+        return unittest.skip("test requires 0 or 1 GPU")(test_case)
+    return test_case
+
+
 def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
@@ -142,6 +159,15 @@ def require_torch_and_cuda(test_case):
         return unittest.skip("test requires CUDA")
     else:
         return test_case
+
+
+def get_tests_dir():
+    """
+    returns the full path to the `tests` dir, so that the tests can be invoked from anywhere
+    """
+    # this function caller's __file__
+    caller__file__ = inspect.stack()[1][1]
+    return os.path.abspath(os.path.dirname(caller__file__))
 
 
 #
@@ -169,7 +195,7 @@ def assert_screenout(out, what):
 
 
 class CaptureStd:
-    """ Context manager to capture:
+    """Context manager to capture:
     stdout, clean it up and make it available via obj.out
     stderr, and make it available via obj.err
 
@@ -260,6 +286,46 @@ class CaptureStderr(CaptureStd):
         super().__init__(out=False)
 
 
+class CaptureLogger:
+    """Context manager to capture `logging` streams
+
+    Args:
+    - logger: 'logging` logger object
+
+    Results:
+        The captured output is available via `self.out`
+
+    Example:
+
+    from transformers import logging
+    from transformers.testing_utils import CaptureLogger
+
+    msg = "Testing 1, 2, 3"
+    logging.set_verbosity_info()
+    logger = logging.get_logger("transformers.tokenization_bart")
+    with CaptureLogger(logger) as cl:
+        logger.info(msg)
+    assert cl.out, msg+"\n"
+    """
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.io = StringIO()
+        self.sh = logging.StreamHandler(self.io)
+        self.out = ""
+
+    def __enter__(self):
+        self.logger.addHandler(self.sh)
+        return self
+
+    def __exit__(self, *exc):
+        self.logger.removeHandler(self.sh)
+        self.out = self.io.getvalue()
+
+    def __repr__(self):
+        return f"captured: {self.out}\n"
+
+
 class TestCasePlus(unittest.TestCase):
     """This class extends `unittest.TestCase` with additional features.
 
@@ -305,7 +371,7 @@ class TestCasePlus(unittest.TestCase):
     def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
         """
         Args:
-            tmp_dir (:obj:`string`, `optional`, defaults to :obj:`None`):
+            tmp_dir (:obj:`string`, `optional`):
                 use this path, if None a unique path will be assigned
             before (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 if `True` and tmp dir already exists make sure to empty it right away
@@ -347,3 +413,14 @@ class TestCasePlus(unittest.TestCase):
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
+
+
+def mockenv(**kwargs):
+    """this is a convenience wrapper, that allows this:
+
+    @mockenv(USE_CUDA=True, USE_TF=False)
+    def test_something():
+        use_cuda = os.getenv("USE_CUDA", False)
+        use_tf = os.getenv("USE_TF", False)
+    """
+    return unittest.mock.patch.dict(os.environ, kwargs)

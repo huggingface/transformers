@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
 import numpy as np
 import tensorflow as tf
 
+from .utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 class TFGenerationMixin:
@@ -96,7 +96,7 @@ class TFGenerationMixin:
                 Whether to stop the beam search when at least ``num_beams`` sentences are finished per batch or not.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
-            temperature (:obj:`float`, `optional`, defaults tp 1.0):
+            temperature (:obj:`float`, `optional`, defaults to 1.0):
                 The value used to module the next token probabilities.
             top_k (:obj:`int`, `optional`, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
@@ -177,7 +177,7 @@ class TFGenerationMixin:
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
-            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
+            input_context = 'My cute dog'
             bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
@@ -284,7 +284,7 @@ class TFGenerationMixin:
             pad_token_id = eos_token_id
 
         # current position and vocab size
-        cur_len = shape_list(input_ids)[1]
+        cur_len = shape_list(input_ids)[1]  # unused
         vocab_size = self.config.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
@@ -329,7 +329,13 @@ class TFGenerationMixin:
         if self.config.is_encoder_decoder:
 
             # create empty decoder_input_ids
-            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32,) * decoder_start_token_id
+            input_ids = (
+                tf.ones(
+                    (effective_batch_size * num_beams, 1),
+                    dtype=tf.int32,
+                )
+                * decoder_start_token_id
+            )
             cur_len = 1
 
             assert (
@@ -366,10 +372,8 @@ class TFGenerationMixin:
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
                 length_penalty=length_penalty,
@@ -392,10 +396,8 @@ class TFGenerationMixin:
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 vocab_size=vocab_size,
                 encoder_outputs=encoder_outputs,
@@ -418,18 +420,16 @@ class TFGenerationMixin:
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         vocab_size,
         encoder_outputs,
         attention_mask,
         use_cache,
     ):
-        """ Generate sequences for each example without beam search (num_beams == 1).
-            All returned sequence are generated independantly.
+        """Generate sequences for each example without beam search (num_beams == 1).
+        All returned sequence are generated independantly.
         """
 
         # length of generated sentences / unfinished sentences
@@ -582,9 +582,7 @@ class TFGenerationMixin:
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
-        decoder_start_token_id,
         eos_token_id,
         batch_size,
         num_return_sequences,
@@ -595,8 +593,7 @@ class TFGenerationMixin:
         attention_mask,
         use_cache,
     ):
-        """ Generate sequences for each example with beam search.
-        """
+        """Generate sequences for each example with beam search."""
 
         # generated hypotheses
         generated_hyps = [
@@ -616,6 +613,7 @@ class TFGenerationMixin:
 
         # cache compute states
         past = encoder_outputs
+        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # done sentences
         done = [False for _ in range(batch_size)]
@@ -967,14 +965,14 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
 
 
 def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (batch size, vocabulary size)
-            if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-            if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-            Make sure we keep at least min_tokens_to_keep per batch example in the output
-        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
+    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    Args:
+        logits: logits distribution shape (batch size, vocabulary size)
+        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        Make sure we keep at least min_tokens_to_keep per batch example in the output
+    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     logits_shape = shape_list(logits)
 
@@ -1008,7 +1006,8 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove = tf.roll(sorted_indices_to_remove, 1, axis=-1)
         sorted_indices_to_remove = tf.concat(
-            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]], -1,
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]],
+            -1,
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
@@ -1034,9 +1033,9 @@ def set_tensor_by_indices_to_value(tensor, indices, value):
 
 def sample_without_replacement(logits, num_samples):
     """
-        categorical sampling witouth replacement is currently not implemented
-        the gumbel-max trick will do for now
-        see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    categorical sampling witouth replacement is currently not implemented
+    the gumbel-max trick will do for now
+    see https://github.com/tensorflow/tensorflow/issues/9260 for more info
     """
     z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
     _, indices = tf.nn.top_k(logits + z, num_samples)

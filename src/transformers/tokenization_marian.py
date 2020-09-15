@@ -33,12 +33,12 @@ class MarianTokenizer(PreTrainedTokenizer):
         >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
         >>> batch_enc: BatchEncoding = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts)
-        >>> # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
+        >>> # keys  [input_ids, attention_mask, labels].
         >>> # model(**batch) should work
     """
 
     vocab_files_names = vocab_files_names
-    model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
+    model_input_names = ["attention_mask"]
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
@@ -137,9 +137,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         padding="longest",
         **unused,
     ) -> BatchEncoding:
-        """Prepare model inputs for translation. For best performance, translate one sentence at a time.
-
-        """
+        """Prepare model inputs for translation. For best performance, translate one sentence at a time."""
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
         self.current_spm = self.spm_source
@@ -162,9 +160,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             tokenizer_kwargs["max_length"] = max_target_length
 
         self.current_spm = self.spm_target
-        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
+        model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         self.current_spm = self.spm_source
         return model_inputs
 
