@@ -25,6 +25,19 @@ from typing import Callable, Dict, Optional
 
 import numpy as np
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, EvalPrediction, GlueDataset
 from transformers import GlueDataTrainingArguments as DataTrainingArguments
 from transformers import (
@@ -36,9 +49,6 @@ from transformers import (
     glue_tasks_num_labels,
     set_seed,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

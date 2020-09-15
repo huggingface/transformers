@@ -17,16 +17,16 @@
 
 import collections
 import json
-import logging
 import math
 
+from transformers import logging as hf_logging
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 
 # Required by XLNet evaluation method to compute optimal threshold (see write_predictions_extended() method)
 from utils_squad_evaluate import find_all_best_thresh_v2, get_raw_scores, make_qid_to_has_ans
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class SquadExample(object):

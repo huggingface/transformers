@@ -24,12 +24,18 @@ import time
 import numpy as np
 
 from transformers import BertTokenizer, GPT2Tokenizer, RobertaTokenizer
+from transformers import logging as hf_logging
 
 
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def main():

@@ -23,6 +23,19 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
@@ -34,9 +47,6 @@ from transformers import (
     set_seed,
 )
 from utils_hans import HansDataset, InputFeatures, hans_processors, hans_tasks_num_labels
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

@@ -20,12 +20,19 @@ import unittest
 from time import time
 from unittest.mock import patch
 
+from transformers import logging as hf_logging
 from transformers.testing_utils import require_torch_tpu
 
 
-logging.basicConfig(level=logging.DEBUG)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
 
-logger = logging.getLogger()
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 
 @require_torch_tpu

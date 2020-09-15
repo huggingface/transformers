@@ -9,15 +9,25 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import glue_output_modes
 from transformers import glue_processors as processors
 from transformers import glue_tasks_num_labels
-
-
-logger = logging.getLogger(__name__)
 
 
 class GLUETransformer(BaseTransformer):

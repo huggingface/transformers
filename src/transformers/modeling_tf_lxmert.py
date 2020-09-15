@@ -16,8 +16,6 @@
 # limitations under the License.
 """ TF 2.0 LXMERT model. """
 
-
-import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -35,9 +33,10 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "LxmertConfig"

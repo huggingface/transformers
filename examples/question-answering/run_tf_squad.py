@@ -23,6 +23,19 @@ from typing import Optional
 
 import tensorflow as tf
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -33,9 +46,6 @@ from transformers import (
     squad_convert_examples_to_features,
 )
 from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

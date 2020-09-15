@@ -15,13 +15,13 @@
 """ XXX model configuration """
 
 
-import logging
 from typing import Callable, Union
 
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 XXX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-config.json",

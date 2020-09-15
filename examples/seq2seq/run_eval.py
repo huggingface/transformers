@@ -1,18 +1,29 @@
 import argparse
 import json
+import logging
 import time
 import warnings
-from logging import getLogger
 from pathlib import Path
 from typing import Dict, List
 
 import torch
 from tqdm import tqdm
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-
-logger = getLogger(__name__)
 
 try:
     from .utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params

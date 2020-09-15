@@ -5,12 +5,19 @@ import unittest
 from unittest.mock import patch
 
 import run_glue_deebert
+from transformers import logging as hf_logging
 from transformers.testing_utils import slow
 
 
-logging.basicConfig(level=logging.DEBUG)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
 
-logger = logging.getLogger()
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 
 def get_setup_file():
@@ -21,10 +28,6 @@ def get_setup_file():
 
 
 class DeeBertTests(unittest.TestCase):
-    def setup(self) -> None:
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
     @slow
     def test_glue_deebert_train(self):
 

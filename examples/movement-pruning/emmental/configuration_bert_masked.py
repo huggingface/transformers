@@ -17,12 +17,11 @@
 and adapts it to the specificities of MaskedBert (`pruning_method`, `mask_init` and `mask_scale`."""
 
 
-import logging
-
+from transformers import logging as hf_logging
 from transformers.configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class MaskedBertConfig(PretrainedConfig):

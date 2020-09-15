@@ -15,7 +15,6 @@
 """ PyTorch LXMERT model. """
 
 
-import logging
 import math
 import os
 from dataclasses import dataclass
@@ -35,9 +34,10 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LxmertConfig"
 _TOKENIZER_FOR_DOC = "LxmertTokenizer"

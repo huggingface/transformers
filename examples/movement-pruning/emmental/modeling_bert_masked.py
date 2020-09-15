@@ -18,8 +18,6 @@
 compute the adaptive mask.
 Built on top of `transformers.modeling_bert`"""
 
-
-import logging
 import math
 
 import torch
@@ -28,12 +26,13 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from emmental import MaskedBertConfig
 from emmental.modules import MaskedLinear
+from transformers import logging as hf_logging
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from transformers.modeling_bert import ACT2FN, BertLayerNorm, load_tf_weights_in_bert
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class BertEmbeddings(nn.Module):

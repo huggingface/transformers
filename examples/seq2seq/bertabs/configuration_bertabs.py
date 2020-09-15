@@ -14,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BertAbs configuration """
-import logging
-
 from transformers import PretrainedConfig
+from transformers import logging as hf_logging
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 BERTABS_FINETUNED_CONFIG_MAP = {

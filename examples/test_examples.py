@@ -40,10 +40,18 @@ if SRC_DIRS is not None:
     import run_pl_glue
     import run_squad
 
+from transformers import logging as hf_logging
 
-logging.basicConfig(level=logging.DEBUG)
 
-logger = logging.getLogger()
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 
 def get_setup_file():

@@ -1,4 +1,3 @@
-import logging
 import os
 from pathlib import Path
 
@@ -8,6 +7,8 @@ import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.utilities import rank_zero_only
 
+from transformers import logging as hf_logging
+
 
 def count_trainable_parameters(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -15,7 +16,7 @@ def count_trainable_parameters(model):
     return params
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class Seq2SeqLoggingCallback(pl.Callback):

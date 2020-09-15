@@ -12,6 +12,19 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
+
 import lightning_base
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.hf_api import HfApi
@@ -26,9 +39,6 @@ from .run_eval import generate_summaries_or_translations, run_generate
 from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
 
 
-logging.basicConfig(level=logging.DEBUG)
-
-logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
     "supervise_forward": True,

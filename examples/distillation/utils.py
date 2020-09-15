@@ -24,13 +24,10 @@ import git
 import numpy as np
 import torch
 
+from transformers import logging as hf_logging
 
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - PID: %(process)d -  %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+
+logger = hf_logging.get_logger(__name__)
 
 
 def git_log(folder_path: str):

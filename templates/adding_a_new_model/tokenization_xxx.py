@@ -16,14 +16,14 @@
 
 
 import collections
-import logging
 import os
 from typing import List, Optional
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 ####################################################
 # In this template, replace all the XXX (various casings) with your model name

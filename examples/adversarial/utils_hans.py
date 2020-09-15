@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import os
 from dataclasses import dataclass
 from typing import List, Optional, Union
@@ -33,9 +32,10 @@ from transformers import (
     is_tf_available,
     is_torch_available,
 )
+from transformers import logging as hf_logging
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 @dataclass(frozen=True)

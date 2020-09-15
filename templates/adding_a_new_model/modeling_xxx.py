@@ -37,9 +37,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XXXConfig"
 _TOKENIZER_FOR_DOC = "XXXTokenizer"

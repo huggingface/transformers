@@ -28,11 +28,18 @@ import torch
 from model_bertabs import BertAbsSummarizer
 from models.model_builder import AbsSummarizer  # The authors' implementation
 from transformers import BertTokenizer
+from transformers import logging as hf_logging
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
 
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 

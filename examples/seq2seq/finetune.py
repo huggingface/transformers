@@ -14,7 +14,19 @@ from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import MBartTokenizer, T5ForConditionalGeneration
+from transformers import logging as hf_logging
 from transformers.modeling_bart import shift_tokens_right
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 try:
@@ -55,8 +67,6 @@ except ImportError:
         save_json,
         use_task_specific_params,
     )
-
-logger = logging.getLogger(__name__)
 
 
 class SummarizationModule(BaseTransformer):

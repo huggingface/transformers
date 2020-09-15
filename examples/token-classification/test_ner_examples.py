@@ -4,12 +4,19 @@ import unittest
 from unittest.mock import patch
 
 import run_ner
+from transformers import logging as hf_logging
 from transformers.testing_utils import slow
 
 
-logging.basicConfig(level=logging.INFO)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
 
-logger = logging.getLogger()
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 
 class ExamplesTests(unittest.TestCase):

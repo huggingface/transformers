@@ -6,10 +6,18 @@ import fire
 import torch
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from transformers.utils.logging import get_logger
+from transformers import logging as hf_logging
 
 
-logger = get_logger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def remove_prefix(text: str, prefix: str):

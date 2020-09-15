@@ -38,6 +38,19 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from tqdm import tqdm, trange
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from transformers import (
     CONFIG_NAME,
     WEIGHTS_NAME,
@@ -46,12 +59,6 @@ from transformers import (
     OpenAIGPTTokenizer,
     get_linear_schedule_with_warmup,
 )
-
-
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
 
 
 def accuracy(out, labels):

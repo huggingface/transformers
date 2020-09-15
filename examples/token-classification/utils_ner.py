@@ -15,19 +15,17 @@
 # limitations under the License.
 """ Named entity recognition fine-tuning: utilities to work with CoNLL-2003 task. """
 
-
-import logging
 import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Union
 
 from filelock import FileLock
-from transformers import logging as hf_logging
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
+from transformers import logging as hf_logging
 
 
-logger = hf_logging.get_logger()
+logger = hf_logging.get_logger(__name__)
 
 
 @dataclass

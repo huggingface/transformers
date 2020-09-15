@@ -23,12 +23,12 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
-import tensorflow as tf
 
 from transformers import logging as hf_logging
 
+
 handler = logging.StreamHandler()
-formatter = logging.Formatter('[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s')
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
 handler.setFormatter(formatter)
 
 logger = hf_logging.get_logger()
@@ -36,10 +36,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-tf.get_logger().handlers.clear()
-tf.get_logger().addHandler(handler)
-tf.get_logger().setLevel(logging.INFO)
 
 from transformers import (
     AutoConfig,

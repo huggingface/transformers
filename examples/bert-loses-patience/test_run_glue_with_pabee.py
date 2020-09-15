@@ -4,12 +4,19 @@ import sys
 from unittest.mock import patch
 
 import run_glue_with_pabee
+from transformers import logging as hf_logging
 from transformers.testing_utils import TestCasePlus
 
 
-logging.basicConfig(level=logging.DEBUG)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
 
-logger = logging.getLogger()
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 
 def get_setup_file():
@@ -21,9 +28,6 @@ def get_setup_file():
 
 class PabeeTests(TestCasePlus):
     def test_run_glue(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue_with_pabee.py

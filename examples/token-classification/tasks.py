@@ -1,13 +1,13 @@
-import logging
 import os
 from typing import List, TextIO, Union
 
 from conllu import parse_incr
 
+from transformers import logging as hf_logging
 from utils_ner import InputExample, Split, TokenClassificationTask
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class NER(TokenClassificationTask):

@@ -1,8 +1,8 @@
 import argparse
+import logging
+from json import JSONDecodeError
 import shutil
 import time
-from json import JSONDecodeError
-from logging import getLogger
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -10,10 +10,21 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-
-logger = getLogger(__name__)
 
 try:
     from .utils import (

@@ -21,22 +21,31 @@ import logging
 import torch
 
 from transformers import XxxConfig, XxxForPreTraining, load_tf_weights_in_xxx
+from transformers import logging as hf_logging
 
 
-logging.basicConfig(level=logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
     config = XxxConfig.from_json_file(config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    logger.info("Building PyTorch model from configuration: {}".format(str(config)))
     model = XxxForPreTraining(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_xxx(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    logger.info("Save PyTorch model to {}".format(pytorch_dump_path))
     torch.save(model.state_dict(), pytorch_dump_path)
 
 

@@ -1,5 +1,4 @@
 import argparse
-import logging
 import os
 from pathlib import Path
 from typing import Any, Dict
@@ -21,6 +20,7 @@ from transformers import (
     PretrainedConfig,
     PreTrainedTokenizer,
 )
+from transformers import logging as hf_logging
 from transformers.optimization import (
     Adafactor,
     get_cosine_schedule_with_warmup,
@@ -30,7 +30,7 @@ from transformers.optimization import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 MODEL_MODES = {
