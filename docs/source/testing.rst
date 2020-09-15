@@ -606,7 +606,7 @@ or the ``xfail`` way:
     @pytest.mark.xfail
     def test_feature_x():
 
--  Based on some internal check inside the test:
+Here is how to skip a test based on some internal check inside the test:
 
 .. code-block:: python
 
