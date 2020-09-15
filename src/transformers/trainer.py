@@ -1269,6 +1269,13 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
+        assert not getattr(
+            self.model.config, "output_attentions", False
+        ), "The prediction loop does not work with `output_attentions=True`."
+        assert not getattr(
+            self.model.config, "output_hidden_states", False
+        ), "The prediction loop does not work with `output_hidden_states=True`."
+
         model = self.model
         # multi-gpu eval
         if self.args.n_gpu > 1:
@@ -1300,7 +1307,7 @@ class Trainer:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
-                preds = logits if preds is None else torch.cat((preds, logits), dim=0)
+                preds = logits if preds is None else tuple(torch.cat((p, l), dim=0) for p, l in zip(preds, logits))
             if labels is not None:
                 label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
 
@@ -1311,13 +1318,13 @@ class Trainer:
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
             if preds is not None:
-                preds = distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
+                preds = tuple(distributed_concat(p, num_total_examples=self.num_examples(dataloader)) for p in preds)
             if label_ids is not None:
                 label_ids = distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
         elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
-                preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
+                preds = tuple(xm.mesh_reduce(f"eval_preds_{i}", p, torch.cat) for i, p in enumerate(preds))
             if label_ids is not None:
                 label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
             if eval_losses is not None:
@@ -1325,7 +1332,9 @@ class Trainer:
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
-            preds = preds.cpu().numpy()
+            preds = tuple(p.cpu().numpy() for p in preds)
+            if len(preds) == 1:
+                preds = preds[0]
         if label_ids is not None:
             label_ids = label_ids.cpu().numpy()
 
@@ -1380,11 +1389,13 @@ class Trainer:
         with torch.no_grad():
             outputs = model(**inputs)
             if has_labels:
-                loss, logits = outputs[:2]
-                loss = loss.mean().item()
+                # The .mean() is to reduce in case of distributed training
+                loss = outputs[0].mean().item()
+                logits = outputs[1:]
             else:
                 loss = None
-                logits = outputs[0]
+                # Slicing so we get a tuple even if `outputs` is a `ModelOutput`.
+                logits = outputs[:]
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
 
@@ -1394,7 +1405,7 @@ class Trainer:
         labels = inputs.get("labels")
         if labels is not None:
             labels = labels.detach()
-        return (loss, logits.detach(), labels)
+        return (loss, tuple(l.detach() for l in logits), labels)
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
