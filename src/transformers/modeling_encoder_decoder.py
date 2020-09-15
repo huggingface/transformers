@@ -250,7 +250,7 @@ class EncoderDecoderModel(PreTrainedModel):
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
 
-                    kwargs_encoder["config"] = encoder_config
+                kwargs_encoder["config"] = encoder_config
 
             encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
