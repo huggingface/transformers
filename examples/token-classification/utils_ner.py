@@ -20,15 +20,31 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, TextIO
+from typing import Iterator, List, Optional, TextIO
 
-from datasets import Dataset, load_dataset, Split
+from datasets import Dataset, Split
 
 from filelock import FileLock
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class InputExample:
+    """
+    A single training/test example for token classification.
+    Args:
+        guid: Unique id for the example.
+        words: list. The words of the sequence.
+        labels: (Optional) list. The labels for each word of the sequence. This should be
+        specified for train and dev examples, but not for test examples.
+    """
+
+    guid: str
+    words: List[str]
+    labels: Optional[List[str]]
 
 
 @dataclass
@@ -55,7 +71,13 @@ class TokenClassificationTask(ABC):
     def get_source_column(self) -> str:
         return self.source_column
 
-    @abstractmethod
+    def get_input_examples(self, split: Split) -> Iterator[InputExample]:
+        dataset: Dataset = self.get_dataset(split)
+        for (ex_index, example) in enumerate(dataset):
+            yield InputExample(
+                guid=ex_index, words=example[self.get_source_column()], labels=example[self.get_target_column()]
+            )
+
     def get_dataset(self, split: Split) -> Dataset:
         raise NotImplementedError
 
@@ -65,11 +87,10 @@ class TokenClassificationTask(ABC):
 
     def write_predictions_to_file(self, writer: TextIO, preds_list: List):
         example_id = 0
-        dataset = self.get_dataset(split=Split.TEST)
-        for entry in dataset:
+        for entry in self.get_input_examples(Split.TEST):
             s_p = preds_list[example_id]
             out = ""
-            for source, target in zip(entry[self.get_source_column()], entry[self.get_target_column()]):
+            for source, target in zip(entry.words, entry.labels):
                 out += f"{source} ({target}|{s_p.pop(0)}) "
             out += "\n"
             writer.write(out)
@@ -101,16 +122,13 @@ class TokenClassificationTask(ABC):
         pad_token_segment_id = tokenizer.pad_token_type_id
 
         features = []
-        dataset: Dataset = self.get_dataset(split)
-        for (ex_index, example) in enumerate(dataset):
-            if ex_index % 10_000 == 0:
-                logger.info("Writing example %d of %d", ex_index, len(dataset))
+        for input_example in self.get_input_examples(split):
+            if input_example.guid % 10_000 == 0:
+                logger.info("Writing example %d", input_example.guid)
 
             tokens = []
             label_ids = []
-            words = example[self.get_source_column()]
-            labels = example[self.get_target_column()]
-            for word, label in zip(words, labels):
+            for word, label in zip(input_example.words, input_example.labels):
                 word_tokens = tokenizer.tokenize(word)
 
                 # bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
@@ -184,9 +202,9 @@ class TokenClassificationTask(ABC):
             assert len(segment_ids) == max_seq_length
             assert len(label_ids) == max_seq_length
 
-            if ex_index < 5:
+            if input_example.guid < 5:
                 logger.info("*** Example ***")
-                logger.info("guid: %s", ex_index)
+                logger.info("guid: %s", input_example.guid)
                 logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
                 logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
                 logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
