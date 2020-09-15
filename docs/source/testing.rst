@@ -629,7 +629,7 @@ or the ``xfail`` way:
     def test_feature_x():
         pytest.xfail("expected to fail until bug XYZ is fixed")
 
-Skip all tests in a module if some import is missing:
+Here is how to skip all tests in a module if some import is missing:
 
 .. code-block:: python
 
