@@ -23,7 +23,18 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
+    default_data_collator,
+)
 from transformers import logging as hf_logging
+from transformers import set_seed
+from utils_hans import HansDataset, InputFeatures, hans_processors, hans_tasks_num_labels
 
 
 handler = logging.StreamHandler()
@@ -35,18 +46,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    AutoConfig,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    default_data_collator,
-    set_seed,
-)
-from utils_hans import HansDataset, InputFeatures, hans_processors, hans_tasks_num_labels
 
 
 @dataclass

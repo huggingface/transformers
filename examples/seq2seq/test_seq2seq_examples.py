@@ -12,7 +12,19 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
+import lightning_base
+from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers import logging as hf_logging
+from transformers.hf_api import HfApi
+from transformers.modeling_bart import shift_tokens_right
+from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
+
+from .convert_pl_checkpoint_to_hf import convert_pl_to_hf
+from .distillation import distill_main, evaluate_checkpoint
+from .finetune import SummarizationModule, main
+from .pack_dataset import pack_data_dir
+from .run_eval import generate_summaries_or_translations, run_generate
+from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
 
 
 handler = logging.StreamHandler(sys.stdout)
@@ -24,19 +36,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
-
-import lightning_base
-from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
-from transformers.hf_api import HfApi
-from transformers.modeling_bart import shift_tokens_right
-from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
-
-from .convert_pl_checkpoint_to_hf import convert_pl_to_hf
-from .distillation import distill_main, evaluate_checkpoint
-from .finetune import SummarizationModule, main
-from .pack_dataset import pack_data_dir
-from .run_eval import generate_summaries_or_translations, run_generate
-from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
 
 
 CUDA_AVAILABLE = torch.cuda.is_available()

@@ -25,7 +25,18 @@ from typing import Callable, Dict, Optional
 
 import numpy as np
 
+from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, EvalPrediction, GlueDataset
+from transformers import GlueDataTrainingArguments as DataTrainingArguments
+from transformers import (
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
+    glue_compute_metrics,
+    glue_output_modes,
+    glue_tasks_num_labels,
+)
 from transformers import logging as hf_logging
+from transformers import set_seed
 
 
 handler = logging.StreamHandler()
@@ -37,18 +48,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, EvalPrediction, GlueDataset
-from transformers import GlueDataTrainingArguments as DataTrainingArguments
-from transformers import (
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    glue_compute_metrics,
-    glue_output_modes,
-    glue_tasks_num_labels,
-    set_seed,
-)
 
 
 @dataclass

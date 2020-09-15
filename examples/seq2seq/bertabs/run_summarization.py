@@ -2,14 +2,23 @@
 import argparse
 import logging
 import os
-import sys
 from collections import namedtuple
 
 import torch
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
+from modeling_bertabs import BertAbs, build_predictor
+from transformers import BertTokenizer
 from transformers import logging as hf_logging
+
+from .utils_summarization import (
+    CNNDMDataset,
+    build_mask,
+    compute_token_type_ids,
+    encode_for_summarization,
+    truncate_or_pad,
+)
 
 
 handler = logging.StreamHandler()
@@ -21,17 +30,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from modeling_bertabs import BertAbs, build_predictor
-from transformers import BertTokenizer
-
-from .utils_summarization import (
-    CNNDMDataset,
-    build_mask,
-    compute_token_type_ids,
-    encode_for_summarization,
-    truncate_or_pad,
-)
 
 
 Batch = namedtuple("Batch", ["document_names", "batch_size", "src", "segs", "mask_src", "tgt_str"])

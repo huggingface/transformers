@@ -30,7 +30,18 @@ from torch.utils.data import DataLoader, SequentialSampler, Subset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    GlueDataset,
+    default_data_collator,
+    glue_compute_metrics,
+    glue_output_modes,
+    glue_processors,
+)
 from transformers import logging as hf_logging
+from transformers import set_seed
 
 
 handler = logging.StreamHandler()
@@ -42,18 +53,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    AutoConfig,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    GlueDataset,
-    default_data_collator,
-    glue_compute_metrics,
-    glue_output_modes,
-    glue_processors,
-    set_seed,
-)
 
 
 def entropy(p):

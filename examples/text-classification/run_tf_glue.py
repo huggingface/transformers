@@ -8,19 +8,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Optional
 
-from transformers import logging as hf_logging
-
-
-handler = logging.StreamHandler()
-formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
-handler.setFormatter(formatter)
-
-logger = hf_logging.get_logger()
-
-logger.handlers.clear()
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -40,6 +27,18 @@ from transformers import (
     glue_processors,
     glue_tasks_num_labels,
 )
+from transformers import logging as hf_logging
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 class Split(Enum):

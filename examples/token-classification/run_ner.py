@@ -25,7 +25,18 @@ import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
 
+from transformers import (
+    AutoConfig,
+    AutoModelForTokenClassification,
+    AutoTokenizer,
+    EvalPrediction,
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
+)
 from transformers import logging as hf_logging
+from transformers import set_seed
+from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 
 handler = logging.StreamHandler()
@@ -37,18 +48,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    AutoConfig,
-    AutoModelForTokenClassification,
-    AutoTokenizer,
-    EvalPrediction,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    set_seed,
-)
-from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 
 @dataclass

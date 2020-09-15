@@ -23,7 +23,18 @@ from typing import Dict, Optional
 
 import numpy as np
 
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    EvalPrediction,
+    HfArgumentParser,
+    TFAutoModelForMultipleChoice,
+    TFTrainer,
+    TFTrainingArguments,
+)
 from transformers import logging as hf_logging
+from transformers import set_seed
+from utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
 
 
 handler = logging.StreamHandler()
@@ -35,18 +46,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    EvalPrediction,
-    HfArgumentParser,
-    TFAutoModelForMultipleChoice,
-    TFTrainer,
-    TFTrainingArguments,
-    set_seed,
-)
-from utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
 
 
 def simple_accuracy(preds, labels):

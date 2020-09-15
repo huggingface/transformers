@@ -22,6 +22,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer, HfArgumentParser, SquadDataset
+from transformers import SquadDataTrainingArguments as DataTrainingArguments
+from transformers import Trainer, TrainingArguments
 from transformers import logging as hf_logging
 
 
@@ -34,10 +37,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer, HfArgumentParser, SquadDataset
-from transformers import SquadDataTrainingArguments as DataTrainingArguments
-from transformers import Trainer, TrainingArguments
 
 
 @dataclass

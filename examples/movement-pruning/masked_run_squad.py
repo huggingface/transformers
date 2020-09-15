@@ -31,19 +31,6 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from transformers import logging as hf_logging
-
-
-handler = logging.StreamHandler()
-formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
-handler.setFormatter(formatter)
-
-logger = hf_logging.get_logger()
-
-logger.handlers.clear()
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
 from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from transformers import (
     WEIGHTS_NAME,
@@ -52,8 +39,9 @@ from transformers import (
     BertForQuestionAnswering,
     BertTokenizer,
     get_linear_schedule_with_warmup,
-    squad_convert_examples_to_features,
 )
+from transformers import logging as hf_logging
+from transformers import squad_convert_examples_to_features
 from transformers.data.metrics.squad_metrics import (
     compute_predictions_log_probs,
     compute_predictions_logits,
@@ -66,6 +54,17 @@ try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
     from tensorboardX import SummaryWriter
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 MODEL_CLASSES = {

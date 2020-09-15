@@ -9,7 +9,14 @@ from typing import Dict, List
 import torch
 from tqdm import tqdm
 
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers import logging as hf_logging
+
+
+try:
+    from .utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
+except ImportError:
+    from utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 
 
 handler = logging.StreamHandler()
@@ -22,13 +29,6 @@ logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-
-try:
-    from .utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
-except ImportError:
-    from utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

@@ -16,6 +16,7 @@ from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 
+from transformers import BartTokenizer
 from transformers import logging as hf_logging
 
 

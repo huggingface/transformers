@@ -24,7 +24,17 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
 
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    EvalPrediction,
+    HfArgumentParser,
+    TFAutoModelForTokenClassification,
+    TFTrainer,
+    TFTrainingArguments,
+)
 from transformers import logging as hf_logging
+from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
 
 
 handler = logging.StreamHandler()
@@ -36,17 +46,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    EvalPrediction,
-    HfArgumentParser,
-    TFAutoModelForTokenClassification,
-    TFTrainer,
-    TFTrainingArguments,
-)
-from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
 
 
 @dataclass

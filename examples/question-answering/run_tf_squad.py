@@ -23,7 +23,17 @@ from typing import Optional
 
 import tensorflow as tf
 
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    HfArgumentParser,
+    TFAutoModelForQuestionAnswering,
+    TFTrainer,
+    TFTrainingArguments,
+)
 from transformers import logging as hf_logging
+from transformers import squad_convert_examples_to_features
+from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor
 
 
 handler = logging.StreamHandler()
@@ -35,17 +45,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    HfArgumentParser,
-    TFAutoModelForQuestionAnswering,
-    TFTrainer,
-    TFTrainingArguments,
-    squad_convert_examples_to_features,
-)
-from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor
 
 
 @dataclass

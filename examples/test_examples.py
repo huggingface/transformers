@@ -22,8 +22,20 @@ from unittest.mock import patch
 
 import torch
 
+from transformers import logging as hf_logging
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import TestCasePlus, torch_device
+
+
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 
 SRC_DIRS = [
@@ -39,19 +51,6 @@ if SRC_DIRS is not None:
     import run_language_modeling
     import run_pl_glue
     import run_squad
-
-from transformers import logging as hf_logging
-
-
-handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
-handler.setFormatter(formatter)
-
-logger = hf_logging.get_logger()
-
-logger.handlers.clear()
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
 
 
 def get_setup_file():

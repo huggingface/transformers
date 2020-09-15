@@ -38,6 +38,14 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from tqdm import tqdm, trange
 
+from transformers import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    AdamW,
+    OpenAIGPTDoubleHeadsModel,
+    OpenAIGPTTokenizer,
+    get_linear_schedule_with_warmup,
+)
 from transformers import logging as hf_logging
 
 
@@ -50,15 +58,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    AdamW,
-    OpenAIGPTDoubleHeadsModel,
-    OpenAIGPTTokenizer,
-    get_linear_schedule_with_warmup,
-)
 
 
 def accuracy(out, labels):

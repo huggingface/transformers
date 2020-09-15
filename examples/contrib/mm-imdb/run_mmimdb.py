@@ -31,7 +31,24 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    AutoConfig,
+    AutoModel,
+    AutoTokenizer,
+    MMBTConfig,
+    MMBTForClassification,
+    get_linear_schedule_with_warmup,
+)
 from transformers import logging as hf_logging
+from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
+
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    from tensorboardX import SummaryWriter
 
 
 handler = logging.StreamHandler()
@@ -43,24 +60,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from transformers import (
-    WEIGHTS_NAME,
-    AdamW,
-    AutoConfig,
-    AutoModel,
-    AutoTokenizer,
-    MMBTConfig,
-    MMBTForClassification,
-    get_linear_schedule_with_warmup,
-)
-from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
-
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except ImportError:
-    from tensorboardX import SummaryWriter
 
 
 def set_seed(args):

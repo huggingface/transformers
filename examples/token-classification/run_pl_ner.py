@@ -11,7 +11,9 @@ from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset
 
+from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import logging as hf_logging
+from utils_ner import TokenClassificationTask
 
 
 handler = logging.StreamHandler()
@@ -23,9 +25,6 @@ logger = hf_logging.get_logger()
 logger.handlers.clear()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-from lightning_base import BaseTransformer, add_generic_args, generic_train
-from utils_ner import TokenClassificationTask
 
 
 class NERTransformer(BaseTransformer):
