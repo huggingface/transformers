@@ -477,7 +477,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         context_input_ids=None,  # NEW
         retrieved_doc_embeds=None,  # NEW
         use_cache=None,
-        return_loss=False,
+        labels=None,
         reduce=False,
         label_smoothing=0.0,
         score=False,
@@ -490,7 +490,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         Returns:
         """
-        if return_loss:
+        if labels is not None:
+            if decoder_input_ids is None:
+                decoder_input_ids = labels
             use_cache = False
 
         outputs = self.rag(
@@ -506,8 +508,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             **generator_kwargs,
         )
 
-        if return_loss:
-            assert decoder_input_ids is not None
+        if labels is not None:
             loss = self.get_nll(
                 outputs.logits,
                 outputs.doc_scores,
@@ -819,7 +820,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         context_input_ids=None,  # NEW
         retrieved_doc_embeds=None,  # NEW
         use_cache=None,
-        return_loss=False,
+        labels=None,
         reduce=False,
         label_smoothing=0.0,
         marginalize=False,
@@ -835,7 +836,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         Returns:
         """
 
-        if return_loss:
+        if labels is not None:
+            if decoder_input_ids is None:
+                decoder_input_ids = labels
             use_cache = False
 
         outputs = self.rag(
@@ -851,7 +854,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             **generator_kwargs,
         )
 
-        if return_loss:
+        if labels is not None:
             assert decoder_input_ids is not None
             loss = self.get_nll(
                 outputs.logits, outputs.doc_scores, decoder_input_ids, reduce=reduce, epsilon=label_smoothing
