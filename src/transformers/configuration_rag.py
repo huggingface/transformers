@@ -134,6 +134,9 @@ class RagConfig(PretrainedConfig):
         self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
         self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
 
+        self.pretrained_question_encoder_tokenizer_name_or_path = pretrained_question_encoder_tokenizer_name_or_path
+        self.pretrained_generator_tokenizer_name_or_path = pretrained_generator_tokenizer_name_or_path
+
         self.vocab_size = vocab_size
         self.is_encoder_decoder = is_encoder_decoder
         self.prefix = prefix
