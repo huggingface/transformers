@@ -12,205 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
 
-Convert fairseq transform wmt19 checkpoint.
-
-To convert run:
-assuming the fairseq data is under data/wmt19.ru-en.ensemble, data/wmt19.en-ru.ensemble, etc
-
-export ROOT=/code/huggingface/transformers-fair-wmt
-cd $ROOT
-mkdir data
-
-# get data (run once)
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-de.joined-dict.ensemble.tar.gz
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.de-en.joined-dict.ensemble.tar.gz
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-ru.ensemble.tar.gz
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.ru-en.ensemble.tar.gz
-tar -xvzf wmt19.en-de.joined-dict.ensemble.tar.gz
-tar -xvzf wmt19.de-en.joined-dict.ensemble.tar.gz
-tar -xvzf wmt19.en-ru.ensemble.tar.gz
-tar -xvzf wmt19.ru-en.ensemble.tar.gz
-
-
-# run conversions and uploads
-
-export PAIR=ru-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
-
-export PAIR=en-ru
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
-
-export PAIR=de-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
-
-export PAIR=en-de
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
-
-
-# upload
-cd data
-transformers-cli upload -y wmt19-ru-en
-transformers-cli upload -y wmt19-en-ru
-transformers-cli upload -y wmt19-de-en
-transformers-cli upload -y wmt19-en-de
-cd -
-
-# if updating just small files and not the large models, here is a script to generate the right commands:
-perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for map { "wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
-# add/remove files as needed
-
-# Caching note: Unfortunately due to CDN caching the uploaded model may be unavailable for up to 24hs after upload
-# So the only way to start using the new model sooner is either:
-# 1. download it to a local path and use that path as model_name
-# 2. make sure you use: from_pretrained(..., use_cdn=False) everywhere
-
-# happy translations
-
-
-######################################################################################
-
-Convert fairseq transform wmt16 en-de checkpoints from https://github.com/jungokasai/deep-shallow
-
-
-pip install gdown
-
-# get data (run once)
-
-cd data
-gdown 'https://drive.google.com/uc?id=1x_G2cjvM1nW5hjAB8-vWxRqtQTlmIaQU'
-gdown 'https://drive.google.com/uc?id=1oA2aqZlVNj5FarxBlNXEHpBS4lRetTzU'
-gdown 'https://drive.google.com/uc?id=1Wup2D318QYBFPW_NKI1mfP_hXOfmUI9r'
-tar -xvzf trans_ende_12-1_0.2.tar.gz
-tar -xvzf trans_ende-dist_12-1_0.2.tar.gz
-tar -xvzf trans_ende-dist_6-1_0.2.tar.gz
-
-gdown 'https://drive.google.com/uc?id=1mNufoynJ9-Zy1kJh2TA_lHm2squji0i9'
-gdown 'https://drive.google.com/uc?id=1iO7um-HWoNoRKDtw27YUSgyeubn9uXqj'
-tar -xvzf wmt16.en-de.deep-shallow.dist.tar.gz
-tar -xvzf wmt16.en-de.deep-shallow.tar.gz
-
-cp wmt16.en-de.deep-shallow/data-bin/dict.*.txt trans_ende_12-1_0.2
-cp wmt16.en-de.deep-shallow.dist/data-bin/dict.*.txt trans_ende-dist_12-1_0.2
-cp wmt16.en-de.deep-shallow.dist/data-bin/dict.*.txt trans_ende-dist_6-1_0.2
-cp wmt16.en-de.deep-shallow/bpecodes trans_ende_12-1_0.2
-cp wmt16.en-de.deep-shallow.dist/bpecodes trans_ende-dist_12-1_0.2
-cp wmt16.en-de.deep-shallow.dist/bpecodes trans_ende-dist_6-1_0.2
-
-
-# another set wmt19-6-6-de-en
-gdown 'https://drive.google.com/uc?id=1j6z9fYdlUyOYsh7KJoumRlr1yHczxR5T'
-gdown 'https://drive.google.com/uc?id=1yT7ZjqfvUYOBXvMjeY8uGRHQFWoSo8Q5'
-gdown 'https://drive.google.com/uc?id=15gAzHeRUCs-QV8vHeTReMPEh1j8excNE'
-tar -xvzf wmt19.de-en.tar.gz
-tar -xvzf wmt19_deen_base_dr0.1_1.tar.gz
-tar -xvzf wmt19_deen_big_dr0.1_2.tar.gz
-cp wmt19.de-en/data-bin/dict.*.txt wmt19_deen_base_dr0.1_1
-cp wmt19.de-en/data-bin/dict.*.txt wmt19_deen_big_dr0.1_2
-
-cd -
-
-
-# run conversions and uploads
-
-# wmt16-en-de set
-
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-dist-12-1
-
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_6-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-dist-6-1
-
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-12-1
-
-
-# wmt19-de-en set
-
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_base_dr0.1_1/checkpoint_last3_avg.pt --pytorch_dump_folder_path data/wmt19-de-en-6-6-base
-
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19_deen_big_dr0.1_2/checkpoint_last3_avg.pt --pytorch_dump_folder_path data/wmt19-de-en-6-6-big
-
-
-
-
-# upload
-cd data
-transformers-cli upload -y wmt16-en-de-dist-12-1
-transformers-cli upload -y wmt16-en-de-dist-6-1
-transformers-cli upload -y wmt16-en-de-12-1
-transformers-cli upload -y wmt19-de-en-6-6-base
-transformers-cli upload -y wmt19-de-en-6-6-big
-cd -
-
-
-
-# if updating just small files and not the large models, here is a script to generate the right commands:
-perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for ("wmt16-en-de-dist-12-1", "wmt16-en-de-dist-6-1", "wmt16-en-de-12-1", "wmt19-de-en-6-6-base", "wmt19-de-en-6-6-big")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
-# add/remove files as needed
-
-# XXX: move into model card
-
-git clone https://github.com/huggingface/transformers
-cd transformers
-export PAIR=en-de
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=64
-export NUM_BEAMS=5
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt16-en-de-dist-12-1
-echo $PAIR $MODEL_PATH
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
-
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt16-en-de-dist-6-1
-echo $PAIR $MODEL_PATH
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
-
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt16-en-de-12-1
-echo $PAIR $MODEL_PATH
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
-
-checkpoint_top5_average.pt:
-
-num_beams=5
-
-chkpt file| top5_average | best    |
-----------|--------------|---------|
-dist-12-1 | 29.9134      | 30.2591 |
-dist-6-1  | 29.9837      | 29.3349 |
-12-1      | 26.4008      | 24.1803 |
-
-checkpoint_best.pt
-
-
-# wmt19-de-en set
-
-export PAIR=de-en
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=64
-export NUM_BEAMS=5
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt19-de-en-6-6-base
-echo $PAIR $MODEL_PATH
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
-
-MODEL_PATH=/code/huggingface/transformers-fair-wmt/data/wmt19-de-en-6-6-big
-echo $PAIR $MODEL_PATH
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py $MODEL_PATH $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
-
-
-
-
-```
-
-
-"""
+# Note: if you intend to run this script make sure you look under scripts/fsmt/
+# to locate the appropriate script to do the work correctly. There is a set of scripts to:
+# - download and prepare data and run the conversion script
+# - perform eval to get the best hparam into the config
+# - generate model_cards - useful if you have multiple models from the same paper
 
 import argparse
 import json
@@ -256,6 +63,7 @@ best_score_hparams = {
     "wmt19-de-en-6-6-big": {"length_penalty": 0.6},
 }
 
+# this remaps the different models to their organization names
 org_names = {}
 for m in ["wmt19-ru-en", "wmt19-en-ru", "wmt19-en-de", "wmt19-de-en"]:
     org_names[m] = "facebook"
@@ -279,125 +87,6 @@ def rewrite_dict_keys(d):
         del d2[f"{k}</w>"]
         d2[k] = d[k]  # restore
     return d2
-
-
-def write_model_card(model_card_dir, src_lang, tgt_lang):
-
-    texts = {
-        "en": "Machine learning is great, isn't it?",
-        "ru": "Машинное обучение - это здорово, не так ли?",
-        "de": "Maschinelles Lernen ist großartig, oder?",
-    }
-
-    # BLUE scores as follows:
-    # "pair": [fairseq, transformers]
-    scores = {
-        "ru-en": ["[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)", "39.20"],
-        "en-ru": ["[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)", "33.47"],
-        "en-de": ["[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)", "42.83"],
-        "de-en": ["[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)", "41.35"],
-    }
-    pair = f"{src_lang}-{tgt_lang}"
-
-    readme = f"""
----
-
-<!-- This file has been auto-generated by src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py - DO NOT EDIT or your changes will be lost -->
-
-language: {src_lang}, {tgt_lang}
-thumbnail:
-tags:
-- translation
-- wmt19
-license: Apache 2.0
-datasets:
-- http://www.statmt.org/wmt19/ ([test-set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561))
-metrics:
-- http://www.statmt.org/wmt19/metrics-task.html
----
-
-# FSMT
-
-## Model description
-
-This is a ported version of [fairseq wmt19 transformer](https://github.com/pytorch/fairseq/blob/master/examples/wmt19/README.md) for {src_lang}-{tgt_lang}.
-
-For more details, please see, [Facebook FAIR's WMT19 News Translation Task Submission](https://arxiv.org/abs/1907.06616).
-
-The abbreviation FSMT stands for FairSeqMachineTranslation
-
-All four models are available:
-
-* [wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru)
-* [wmt19-ru-en](https://huggingface.co/facebook/wmt19-ru-en)
-* [wmt19-en-de](https://huggingface.co/facebook/wmt19-en-de)
-* [wmt19-de-en](https://huggingface.co/facebook/wmt19-de-en)
-
-## Intended uses & limitations
-
-#### How to use
-
-```python
-from transformers.tokenization_fsmt import FSMTTokenizer
-from transformers.modeling_fsmt import FSMTForConditionalGeneration
-mname = "facebook/wmt19-{src_lang}-{tgt_lang}"
-tokenizer = FSMTTokenizer.from_pretrained(mname)
-model = FSMTForConditionalGeneration.from_pretrained(mname)
-
-input = "{texts[src_lang]}
-input_ids = tokenizer.encode(input, return_tensors="pt")
-outputs = model.generate(input_ids)
-decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-print(decoded) # {texts[tgt_lang]}
-
-```
-
-#### Limitations and bias
-
-- The original (and this ported model) doesn't seem to handle well inputs with repeated sub-phrases, [content gets truncated](https://discuss.huggingface.co/t/issues-with-translating-inputs-containing-repeated-phrases/981)
-
-## Training data
-
-Pretrained weights were left identical to the original model released by fairseq. For more details, please, see the [paper](https://arxiv.org/abs/1907.06616).
-
-## Eval results
-
-pair   | fairseq | transformers
--------|---------|----------
-{pair}  | {scores[pair][0]} | {scores[pair][1]}
-
-The score is slightly below the score reported by `fairseq`, since `transformers`` currently doesn't support:
-- model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
-- re-ranking
-
-The score was calculated using this code:
-
-```bash
-git clone https://github.com/huggingface/transformers
-cd transformers
-export PAIR={pair}
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=8
-export NUM_BEAMS=15
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
-```
-note: fairseq reports using a beam of 50, so you should get a slightly higher score if re-run with `--num_beams 50`.
-
-
-## TODO
-
-- port model ensemble (fairseq uses 4 model checkpoints)
-
-"""
-    os.makedirs(model_card_dir, exist_ok=True)
-    path = os.path.join(model_card_dir, "README.md")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(readme)
 
 
 def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder_path):
@@ -555,18 +244,13 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print(f"Generating {pytorch_weights_dump_path}")
     torch.save(model_state_dict, pytorch_weights_dump_path)
 
-    # model card
-    org_name = org_names[model_dir] if model_dir in org_names else "stas"
-    model_card_dir = os.path.join(proj_root, "model_cards", org_name, model_dir)
-    print(f"Generating {model_card_dir}")
-    write_model_card(model_card_dir, src_lang, tgt_lang)
-
     print("Conversion is done!")
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
     print(f"transformers-cli upload {model_dir}")
     print(
-        "Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to use the non-cached version"
+        "Note: CDN caches files for up to 24h, so either use a local model path "
+        "or use `from_pretrained(mname, use_cdn=False)` to use the non-cached version."
     )
 
 
