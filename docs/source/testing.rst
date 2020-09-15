@@ -472,7 +472,7 @@ Creating a URL for a whole test session log:
 Writing tests
 -------------
 
-`transformers` tests are based on ``unittest``, but run by ``pytest``, so most of the time features from both systems can be used.
+🤗 transformers tests are based on ``unittest``, but run by ``pytest``, so most of the time features from both systems can be used.
 
 You can read `here <https://docs.pytest.org/en/stable/unittest.html>`__ which features are supported, but the important thing to remember is that most ``pytest`` fixtures don't work. Neither parametrization, but we use the module ``parameterized`` that works in a similar way.
 
