@@ -15,6 +15,7 @@
 
 
 import copy
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -576,20 +577,24 @@ class RagModelIntegrationTests(unittest.TestCase):
         input_ids = input_ids.to(torch_device)
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
-        rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator(
-            "facebook/dpr-question_encoder-single-nq-base",
-            "facebook/bart-large-cnn",
-            retriever=rag_retriever,
-            config=rag_config,
-        )
-
-        with torch.no_grad():
-            output = rag_sequence(
-                input_ids,
-                labels=decoder_input_ids,
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator(
+                "facebook/dpr-question_encoder-single-nq-base",
+                "facebook/bart-large-cnn",
+                retriever=rag_retriever,
+                config=rag_config,
             )
+            # check that the from pretrained methods work
+            rag_sequence.save_pretrained(tmp_dirname)
+            rag_sequence.from_pretrained(tmp_dirname, retriever=rag_retriever)
 
-        loss_pretrained = output.loss
+            with torch.no_grad():
+                output = rag_sequence(
+                    input_ids,
+                    labels=decoder_input_ids,
+                )
+
+            loss_pretrained = output.loss
 
         question_encoder = AutoModel.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
         generator = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
@@ -628,20 +633,24 @@ class RagModelIntegrationTests(unittest.TestCase):
         input_ids = input_ids.to(torch_device)
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
-        rag_token = RagTokenForGeneration.from_pretrained_question_encoder_generator(
-            "facebook/dpr-question_encoder-single-nq-base",
-            "facebook/bart-large-cnn",
-            retriever=rag_retriever,
-            config=rag_config,
-        )
-
-        with torch.no_grad():
-            output = rag_token(
-                input_ids,
-                labels=decoder_input_ids,
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            rag_token = RagTokenForGeneration.from_pretrained_question_encoder_generator(
+                "facebook/dpr-question_encoder-single-nq-base",
+                "facebook/bart-large-cnn",
+                retriever=rag_retriever,
+                config=rag_config,
             )
+            # check that the from pretrained methods work
+            rag_token.save_pretrained(tmp_dirname)
+            rag_token.from_pretrained(tmp_dirname, retriever=rag_retriever)
 
-        loss_pretrained = output.loss
+            with torch.no_grad():
+                output = rag_token(
+                    input_ids,
+                    labels=decoder_input_ids,
+                )
+
+            loss_pretrained = output.loss
 
         question_encoder = AutoModel.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
         generator = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
