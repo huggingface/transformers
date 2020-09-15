@@ -18,9 +18,9 @@ How transformers are tested
    
 2. There are 3 jobs run by `github actions <https://github.com/huggingface/transformers/actions>`__:
 
-   * `torch hub integration <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__:  checks whether torch hub integration works. Julien is in charge if that breaks. It doesn’t break very often.
+   * `torch hub integration <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__:  checks whether torch hub integration works.
 
-   * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__: runs fast tests on GPU every PR.
+   * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__: runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards, notebooks, etc.)
      
    * `self-hosted runner <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs slow tests on ``tests`` and ``examples``:
 
