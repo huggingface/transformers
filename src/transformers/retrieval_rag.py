@@ -25,18 +25,18 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
+from .configuration_rag import RagConfig
+from .file_utils import cached_path
 from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
-from .configuration_rag import RagConfig
 from .utils import logging
-from .file_utils import cached_path
 
 
 logger = logging.get_logger(__name__)
 
 
 LEGACY_INDEX_PATH = None  # TODO: add url to hf_bert_base.hnswSQ8_correct_phi_128.c_index
-LEGACY_PASSAGES_PATH = None   # TODO: add url to psgs_w100.tsv.pkl
+LEGACY_PASSAGES_PATH = None  # TODO: add url to psgs_w100.tsv.pkl
 
 
 class Index(object):
@@ -186,16 +186,20 @@ class HFIndex(Index):
         self.dataset_split = dataset_split
         self.index_name = index_name
         self.index_path = index_path
-        self.index = None
         self._index_initialize = False
         self.use_dummy_dataset = use_dummy_dataset
+
+        logger.info("Loading passages from {}".format(self.dataset))
+        self.index = load_dataset(
+            self.dataset, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
+        )
 
     def is_initialized(self):
         return self._index_initialize
 
     def init_index(self):
         if self.index_path is not None:
-            self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset)
+            logger.info("Loading index from {}".format(self.index_path))
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
             logger.info("Loading index from {}".format(self.dataset + " with index name " + self.index_name))
@@ -205,7 +209,7 @@ class HFIndex(Index):
                 with_index=True,
                 split=self.dataset_split,
                 index_name=self.index_name,
-                dummy=self.use_dummy_dataset
+                dummy=self.use_dummy_dataset,
             )
         self._index_initialize = True
 
@@ -233,9 +237,15 @@ class RagRetriever(object):
     def __init__(self, config, generator_tokenizer=None, question_encoder_tokenizer=None):
         super().__init__()
         self.retriever = (
-            LegacyIndex(config.retrieval_vector_size, config.index_path or LEGACY_INDEX_PATH, config.passages_path or LEGACY_PASSAGES_PATH)
-            if config.index_name == "legacy" else
-            HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path, config.use_dummy_dataset)
+            LegacyIndex(
+                config.retrieval_vector_size,
+                config.index_path or LEGACY_INDEX_PATH,
+                config.passages_path or LEGACY_PASSAGES_PATH,
+            )
+            if config.index_name == "legacy"
+            else HFIndex(
+                config.dataset, config.dataset_split, config.index_name, config.index_path, config.use_dummy_dataset
+            )
         )
         # TODO(quentin) use RagTokenizer once the API is defined
         self.generator_tokenizer = generator_tokenizer

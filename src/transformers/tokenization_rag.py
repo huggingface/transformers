@@ -19,6 +19,7 @@ from .tokenization_auto import AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -88,7 +89,9 @@ class RagTokenizer:
     def from_pretrained(cls, pretrained_model_name_or_path, config):
         question_encoder_tokenizer_path = os.path.join(pretrained_model_name_or_path, "question_encoder_tokenizer")
         generator_tokenizer_path = os.path.join(pretrained_model_name_or_path, "generator_tokenizer")
-        question_encoder_tokenizer = AutoTokenizer.from_pretrained(question_encoder_tokenizer_path, config=config.question_encoder)
+        question_encoder_tokenizer = AutoTokenizer.from_pretrained(
+            question_encoder_tokenizer_path, config=config.question_encoder
+        )
         generator_tokenizer = AutoTokenizer.from_pretrained(generator_tokenizer_path, config=config.generator)
         return cls(question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer)
 
