@@ -4,7 +4,7 @@ import datasets
 import numpy as np
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_non_multigpu, require_torch
+from transformers.testing_utils import get_tests_dir, require_torch
 
 
 if is_torch_available():
@@ -94,25 +94,24 @@ if is_torch_available():
 
 @require_torch
 class TrainerIntegrationTest(unittest.TestCase):
-    def check_trained_model(self, model, alternate_seed=False):
-        # Checks a training seeded with learning_rate = 0.1
-        if alternate_seed:
-            # With args.seed = 314
-            self.assertTrue(torch.abs(model.a - 1.0171) < 1e-4)
-            self.assertTrue(torch.abs(model.b - 1.2494) < 1e-4)
-        else:
-            # With default args.seed
-            self.assertTrue(torch.abs(model.a - 0.6975) < 1e-4)
-            self.assertTrue(torch.abs(model.b - 1.2415) < 1e-4)
-
     def setUp(self):
-        # Get the default values (in case they change):
         args = TrainingArguments(".")
         self.n_epochs = args.num_train_epochs
-        self.batch_size = args.per_device_train_batch_size
+        self.batch_size = args.train_batch_size
+        trainer = get_regression_trainer(learning_rate=0.1)
+        trainer.train()
+        self.default_trained_model = (trainer.model.a, trainer.model.b)
 
-    @require_non_multigpu
-    @unittest.skip("Change in seed by external dependency causing this test to fail.")
+        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
+        trainer.train()
+        self.alternate_trained_model = (trainer.model.a, trainer.model.b)
+
+    def check_trained_model(self, model, alternate_seed=False):
+        # Checks a training seeded with learning_rate = 0.1
+        (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
+        self.assertTrue(torch.allclose(model.a, a))
+        self.assertTrue(torch.allclose(model.b, b))
+
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
         trainer = get_regression_trainer(learning_rate=0.1)
@@ -124,7 +123,6 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
-    @require_non_multigpu
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
         trainer = get_regression_trainer(learning_rate=0.1)
@@ -141,19 +139,19 @@ class TrainerIntegrationTest(unittest.TestCase):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
-    @require_non_multigpu
     def test_train_and_eval_dataloaders(self):
+        n_gpu = max(1, torch.cuda.device_count())
         trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16)
-        self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
+        self.assertEqual(trainer.get_train_dataloader().batch_size, 16 * n_gpu)
         trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16)
-        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16)
+        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16 * n_gpu)
 
         # Check drop_last works
         trainer = get_regression_trainer(
             train_len=66, eval_len=74, learning_rate=0.1, per_device_train_batch_size=16, per_device_eval_batch_size=32
         )
-        self.assertEqual(len(trainer.get_train_dataloader()), 66 // 16 + 1)
-        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // 32 + 1)
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
 
         trainer = get_regression_trainer(
             train_len=66,
@@ -163,12 +161,12 @@ class TrainerIntegrationTest(unittest.TestCase):
             per_device_eval_batch_size=32,
             dataloader_drop_last=True,
         )
-        self.assertEqual(len(trainer.get_train_dataloader()), 66 // 16)
-        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // 32)
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
 
-        # Check passing a new dataset fpr evaluation wors
+        # Check passing a new dataset for evaluation wors
         new_eval_dataset = RegressionDataset(length=128)
-        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // 32)
+        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
     def test_evaluate(self):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
@@ -204,8 +202,6 @@ class TrainerIntegrationTest(unittest.TestCase):
         x = trainer.eval_dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
-    @require_non_multigpu
-    @unittest.skip("Change in seed by external dependency causing this test to fail.")
     def test_trainer_with_datasets(self):
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
@@ -234,8 +230,6 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model)
 
-    @require_non_multigpu
-    @unittest.skip("Change in seed by external dependency causing this test to fail.")
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
@@ -245,12 +239,11 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
         trainer.train()
 
-        self.assertTrue(torch.abs(trainer.model.a - 1.8950) < 1e-4)
-        self.assertTrue(torch.abs(trainer.model.b - 2.5656) < 1e-4)
+        (a, b) = self.default_trained_model
+        self.assertFalse(torch.allclose(trainer.model.a, a))
+        self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
-    @require_non_multigpu
-    @unittest.skip("Change in seed by external dependency causing this test to fail.")
     def test_model_init(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression", learning_rate=0.1)
