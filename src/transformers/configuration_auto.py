@@ -140,6 +140,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("encoder-decoder", "Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
+        ("prophetnet", "ProphetNet"),
     ]
 )
 
