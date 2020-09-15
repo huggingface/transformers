@@ -24,12 +24,7 @@ from .file_utils import add_start_docstrings_to_callable
 
 logger = logging.getLogger(__name__)
 
-FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-ru-en/config.json",
-    "facebook/wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-ru/config.json",
-    "facebook/wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-de-en/config.json",
-    "facebook/wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-de/config.json",
-}
+FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 FSMT_CONFIG_ARGS_DOC = r"""

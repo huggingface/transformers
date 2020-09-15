@@ -37,48 +37,9 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "src_vocab_file": {
-        "facebook/wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-ru-en/vocab-src.json",
-        "facebook/wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-ru/vocab-src.json",
-        "facebook/wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-de-en/vocab-src.json",
-        "facebook/wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-de/vocab-src.json",
-    },
-    "tgt_vocab_file": {
-        "facebook/wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-ru-en/vocab-tgt.json",
-        "facebook/wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-ru/vocab-tgt.json",
-        "facebook/wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-de-en/vocab-tgt.json",
-        "facebook/wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-de/vocab-tgt.json",
-    },
-    "merges_file": {
-        "facebook/wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-ru-en/merges.txt",
-        "facebook/wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-ru/merges.txt",
-        "facebook/wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-de-en/merges.txt",
-        "facebook/wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-de/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/wmt19-ru-en": 1024,
-    "facebook/wmt19-en-ru": 1024,
-    "facebook/wmt19-de-en": 1024,
-    "facebook/wmt19-en-de": 1024,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/wmt19-ru-en": {
-        "langs": ["ru", "en"],
-    },
-    "facebook/wmt19-en-ru": {
-        "langs": ["en", "ru"],
-    },
-    "facebook/wmt19-de-en": {
-        "langs": ["de", "en"],
-    },
-    "facebook/wmt19-en-de": {
-        "langs": ["en", "de"],
-    },
-}
+PRETRAINED_VOCAB_FILES_MAP = {}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
+PRETRAINED_INIT_CONFIGURATION = {}
 
 
 def get_pairs(word):
