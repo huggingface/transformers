@@ -527,7 +527,7 @@ Here is an example of its usage:
 
 This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
-In this and all the following scenarios the temp dir will be auto-removed at the end of test, unless `after=False` is passed to the helper function.
+In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless `after=False` is passed to the helper function.
 
 * Create a temp dir of my choice and delete it at the end - useful for debug when you want to monitor a specific directory:
 
