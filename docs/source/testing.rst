@@ -536,7 +536,7 @@ In this and all the following scenarios the temp dir will be auto-removed at the
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
 
-* Create a temp dir of my choice and do not delete it at the end - useful for when you want to look at the temp results:
+* Create a temporary directory of my choice and do not delete it at the end---useful for when you want to look at the temp results:
 
 .. code-block:: python
 
