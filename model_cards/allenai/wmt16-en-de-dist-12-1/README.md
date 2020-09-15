@@ -64,7 +64,7 @@ print(decoded) # Maschinelles Lernen ist großartig, nicht wahr?
 
 ## Training data
 
-Pretrained weights were left identical to the original model released by fairseq. For more details, please, see the [paper](https://arxiv.org/abs/1907.06616).
+Pretrained weights were left identical to the original model released by allenai. For more details, please, see the [paper](https://arxiv.org/abs/2006.10369).
 
 ## Eval results
 
