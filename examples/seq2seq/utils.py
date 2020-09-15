@@ -18,12 +18,10 @@ from torch.utils.data import Dataset, Sampler
 
 from transformers import BartTokenizer
 from transformers import logging as hf_logging
+from transformers.file_utils import cached_property
 
 
 logger = hf_logging.get_logger(__name__)
-
-from transformers import BartTokenizer
-from transformers.file_utils import cached_property
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):

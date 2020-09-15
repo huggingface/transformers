@@ -13,26 +13,6 @@ from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers import logging as hf_logging
 
-
-try:
-    from .utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
-except ImportError:
-    from utils import Seq2SeqDataset, parse_numeric_cl_kwargs, save_json, use_task_specific_params
-
-
-handler = logging.StreamHandler()
-formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
-handler.setFormatter(formatter)
-
-logger = hf_logging.get_logger()
-
-logger.handlers.clear()
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-
 try:
     from .utils import (
         Seq2SeqDataset,
@@ -57,6 +37,17 @@ except ImportError:
         use_task_specific_params,
         write_txt_file,
     )
+
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+handler.setFormatter(formatter)
+
+logger = hf_logging.get_logger()
+
+logger.handlers.clear()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
