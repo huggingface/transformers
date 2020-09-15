@@ -26,7 +26,7 @@ import torch.distributed as dist
 from datasets import load_dataset
 
 from .configuration_rag import RagConfig
-from .file_utils import cached_path
+from .file_utils import cached_path, is_remote_url
 from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .utils import logging
@@ -35,8 +35,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-LEGACY_INDEX_PATH = None  # TODO: add url to hf_bert_base.hnswSQ8_correct_phi_128.c_index
-LEGACY_PASSAGES_PATH = None  # TODO: add url to psgs_w100.tsv.pkl
+LEGACY_INDEX_PATH = None  # TODO: add url
 
 
 class Index(object):
@@ -96,29 +95,59 @@ class LegacyIndex(Index):
         vector_size (:obj:`int`):
             The dimension of indexed vectors.
         index_path (:obj:`str`):
-            The path to the serialized faiss index on disk.
-        passages_path: (:obj:`str`):
-            A path to text passages on disk, compatible with the faiss index.
+            Can be either
+                - A string with the `identifier name` of a pretrained index compatible with
+                  :class:`~transformers.retrieval_rag.LegacyIndex` to load from cache or download,
+                  e.g. ``facebook/rag-index``.
+                - A path to a `directory` containing index files compatible with
+                  :class:`~transformers.retrieval_rag.LegacyIndex`
     """
+    LEGACY_INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
+    LEGACY_PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
-    def __init__(self, vector_size, index_path, passages_path):
+    def __init__(self, vector_size, index_path):
         self.index_id_to_db_id = []
-        logger.info("Loading passages from {}".format(passages_path))
-        passages_path_file_name = cached_path(passages_path)
-        with open(passages_path_file_name, "rb") as passages_file:
-            self.passages = pickle.load(passages_file)
+        self.passages = self._load_passages()
         self.index_path = index_path
         self.vector_size = vector_size
         self.index = None
         self._index_initialize = False
 
-    def _deserialize_from(self, index_path: str):
-        logger.info("Loading index from {}".format(index_path))
-        index_file_name = cached_path(index_path + ".index.dpr")
-        index_id_to_db_id_file_name = cached_path(index_path + ".index_meta.dpr")
-        self.index = faiss.read_index(index_file_name)
-        with open(index_id_to_db_id_file_name, "rb") as reader:
-            self.index_id_to_db_id = pickle.load(reader)
+    def _resolve_path(self, index_path, filename):
+        assert os.path.isdir(index_path) or is_remote_url(index_path), "Please specify a valid ``index_path``."
+        archive_file = os.path.join(index_path, filename)
+        try:
+            # Load from URL or cache if already cached
+            resolved_archive_file = cached_path(archive_file)
+            if resolved_archive_file is None:
+                raise EnvironmentError
+        except EnvironmentError:
+            msg = (
+                f"Can't load '{archive_file}'. Make sure that:\n\n"
+                f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}"
+                f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
+            )
+            raise EnvironmentError(msg)
+        if resolved_archive_file == archive_file:
+            logger.info("loading file {}".format(archive_file))
+        else:
+            logger.info("loading file {} from cache at {}".format(archive_file, resolved_archive_file))
+        return resolved_archive_file
+
+    def _load_passages(self):
+        logger.info("Loading passages from {}".format(self.index_path))
+        passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
+        with open(passages_path, "rb") as passages_file:
+            passages = pickle.load(passages_file)
+        return passages
+
+    def _deserialize_index(self):
+        logger.info("Loading index from {}".format(self.index_path))
+        resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
+        self.index = faiss.read_index(resolved_index_path)
+        resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
+        with open(resolved_meta_path, "rb") as metadata_file:
+            self.index_id_to_db_id = pickle.load(metadata_file)
         assert (
             len(self.index_id_to_db_id) == self.index.ntotal
         ), "Deserialized index_id_to_db_id should match faiss index size"
@@ -131,7 +160,7 @@ class LegacyIndex(Index):
         index.hnsw.efSearch = 128
         index.hnsw.efConstruction = 200
         self.index = index
-        self._deserialize_from(self.index_path)
+        self._deserialize_index()
         self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids):
@@ -240,7 +269,6 @@ class RagRetriever(object):
             LegacyIndex(
                 config.retrieval_vector_size,
                 config.index_path or LEGACY_INDEX_PATH,
-                config.passages_path or LEGACY_PASSAGES_PATH,
             )
             if config.index_name == "legacy"
             else HFIndex(
