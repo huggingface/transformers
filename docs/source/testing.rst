@@ -525,7 +525,7 @@ Here is an example of its usage:
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
 
-This code creates a unique temp dir, and sets `tmp_dir` to its location.
+This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
 In this and all the following scenarios the temp dir will be auto-removed at the end of test, unless `after=False` is passed to the helper function.
 
