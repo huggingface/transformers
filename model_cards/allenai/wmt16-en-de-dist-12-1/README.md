@@ -25,7 +25,7 @@ For more details, please see, [Deep Encoder, Shallow Decoder: Reevaluating the S
 
 All 3 models are available:
 
-* [wmt16-en-de-dist-12-1](https://huggingface.co/allenai/[wmt16-en-de-dist-12-1)
+* [wmt16-en-de-dist-12-1](https://huggingface.co/allenai/wmt16-en-de-dist-12-1)
 * [wmt16-en-de-dist-6-1](https://huggingface.co/allenai/wmt16-en-de-dist-6-1)
 * [wmt16-en-de-12-1](https://huggingface.co/allenai/wmt16-en-de-12-1)
 
