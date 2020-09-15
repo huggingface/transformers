@@ -1,8 +1,8 @@
 import argparse
 import logging
-from json import JSONDecodeError
 import shutil
 import time
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -31,6 +31,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 try:
     from .utils import (
