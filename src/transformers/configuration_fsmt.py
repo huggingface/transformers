@@ -88,6 +88,15 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Whether this is an encoder/decoder model.
         tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
+        num_beams (:obj:`int`, `optional`, defaults to 5)
+            Number of beams for beam search that will be used by default in the :obj:`generate` method
+            of the model. 1 means no beam search.
+        length_penalty (:obj:`float`, `optional`, defaults to 1)
+            Exponential penalty to the length that will be used by default in the :obj:`generate` method
+            of the model.
+        early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`)
+            Flag that will be used by default in the :obj:`generate` method of the model. Whether to stop
+            the beam search when at least ``num_beams`` sentences are finished per batch or not.
 """
 
 
@@ -120,7 +129,6 @@ class FSMTConfig(PretrainedConfig):
         activation_function="relu",
         d_model=1024,
         max_length=200,
-        num_beams=8,
         max_position_embeddings=1024,
         encoder_ffn_dim=4096,
         encoder_layers=12,
@@ -141,6 +149,9 @@ class FSMTConfig(PretrainedConfig):
         is_encoder_decoder=True,
         scale_embedding=True,
         tie_word_embeddings=False,
+        num_beams=5,
+        length_penalty=1.0,
+        early_stopping=False,
         **common_kwargs
     ):
         r"""
@@ -170,7 +181,7 @@ class FSMTConfig(PretrainedConfig):
         self.tgt_vocab_size = tgt_vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.max_length = max_length
-        self.num_beams = num_beams
+
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
@@ -182,6 +193,10 @@ class FSMTConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
+
+        self.num_beams = num_beams
+        self.length_penalty = length_penalty
+        self.early_stopping = early_stopping
 
         self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
 

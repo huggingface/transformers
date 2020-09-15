@@ -142,6 +142,11 @@ transformers-cli upload -y wmt19-de-en-6-6-big
 cd -
 
 
+
+# if updating just small files and not the large models, here is a script to generate the right commands:
+perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for ("wmt16-en-de-dist-12-1", "wmt16-en-de-dist-6-1", "wmt16-en-de-12-1", "wmt19-de-en-6-6-base", "wmt19-de-en-6-6-big")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
+# add/remove files as needed
+
 # XXX: move into model card
 
 git clone https://github.com/huggingface/transformers
@@ -233,6 +238,26 @@ ORG_NAME = "stas"  # XXX: will become facebook
 
 json_indent = 2
 
+# based on the results of a search on a range of `num_beams`, `length_penalty` and `early_stopping`
+# values against wmt19 test data to obtain the best BLEU scores, we will use the following defaults:
+#
+# * `num_beams`: 5 (higher scores better, but requires more memory/is slower, can be adjusted by users)
+# * `early_stopping`: `False` consistently scored better
+# * `length_penalty` varied, so will assign the best one depending on the model
+best_score_hparams = {
+    # fairseq:
+    "wmt19-ru-en": {"length_penalty": 1.1},
+    "wmt19-en-ru": {"length_penalty": 1.15},
+    "wmt19-en-de": {"length_penalty": 1.0},
+    "wmt19-de-en": {"length_penalty": 1.1},
+    # allen-nlp:
+    "wmt16-en-de-dist-12-1": {"length_penalty": 0.6},
+    "wmt16-en-de-dist-6-1": {"length_penalty": 0.6},
+    "wmt16-en-de-12-1": {"length_penalty": 0.8},
+    "wmt19-de-en-6-6-base": {"length_penalty": 0.6},
+    "wmt19-de-en-6-6-big": {"length_penalty": 0.6},
+}
+
 
 def rewrite_dict_keys(d):
     # (1) remove word breaking symbol, (2) add word ending symbol where the word is not broken up,
@@ -257,10 +282,10 @@ def write_model_card(model_card_dir, src_lang, tgt_lang):
     # BLUE scores as follows:
     # "pair": [fairseq, transformers]
     scores = {
-        "en-ru": ["[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)", "33.29"],
-        "ru-en": ["[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)", "38.93"],
-        "de-en": ["[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)", "41.18"],
-        "en-de": ["[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)", "42.79"],
+        "ru-en": ["[41.3](http://matrix.statmt.org/matrix/output/1907?run_id=6937)", "39.20"],
+        "en-ru": ["[36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724)", "33.47"],
+        "en-de": ["[43.1](http://matrix.statmt.org/matrix/output/1909?run_id=6862)", "42.83"],
+        "de-en": ["[42.3](http://matrix.statmt.org/matrix/output/1902?run_id=6750)", "41.35"],
     }
     pair = f"{src_lang}-{tgt_lang}"
 
@@ -323,7 +348,7 @@ print(decoded) # {texts[tgt_lang]}
 
 ## Training data
 
-Pretrained weights were left identical to the original model released by fairseq. For more details, please, see the [paper](https://arxiv.org/abs/1907.06616)
+Pretrained weights were left identical to the original model released by fairseq. For more details, please, see the [paper](https://arxiv.org/abs/1907.06616).
 
 ## Eval results
 
@@ -331,9 +356,9 @@ pair   | fairseq | transformers
 -------|---------|----------
 {pair}  | {scores[pair][0]} | {scores[pair][1]}
 
-
-`transformers`` currently doesn't support model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
-
+The score is slightly below the score reported by `fairseq`, since `transformers`` currently doesn't support:
+- model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
+- re-ranking
 
 The score was calculated using this code:
 
@@ -344,13 +369,15 @@ export PAIR={pair}
 export DATA_DIR=data/$PAIR
 export SAVE_DIR=data/$PAIR
 export BS=8
-export NUM_BEAMS=50
+export NUM_BEAMS=15
 mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py {ORG_NAME}/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
+note: fairseq reports using a beam of 50, so you should get a slightly higher score if re-run with `--num_beams 50`.
+
 
 ## TODO
 
@@ -465,6 +492,14 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "tie_word_embeddings": args["share_all_embeddings"],
     }
 
+    # good hparam defaults to start with
+    model_conf["num_beams"] = 5
+    model_conf["early_stopping"] = False
+    if model_dir in best_score_hparams and "length_penalty" in best_score_hparams[model_dir]:
+        model_conf["length_penalty"] = best_score_hparams[model_dir]["length_penalty"]
+    else:
+        model_conf["length_penalty"] = 1.0
+
     print(f"Generating {fsmt_model_config_file}")
     with open(fsmt_model_config_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(model_conf, ensure_ascii=False, indent=json_indent))
@@ -519,8 +554,9 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
     print(f"transformers-cli upload {model_dir}")
-    # XXX: this is invalid - waiting on issue to be resolved
-    print("Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to force redownload")
+    print(
+        "Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to use the non-cached version"
+    )
 
 
 if __name__ == "__main__":
