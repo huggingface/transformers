@@ -71,7 +71,6 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(self.src_vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
-        # XXX: ru content
         with open(self.tgt_vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
         with open(self.merges_file, "w") as fp:
