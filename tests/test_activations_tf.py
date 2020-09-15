@@ -10,7 +10,7 @@ if is_tf_available():
 
 
 @require_tf
-class TestActivations(unittest.TestCase):
+class TestTFActivations(unittest.TestCase):
     def test_get_activation(self):
         get_tf_activation("swish")
         get_tf_activation("gelu")
@@ -20,6 +20,6 @@ class TestActivations(unittest.TestCase):
         get_tf_activation("gelu_fast")
         get_tf_activation("mish")
         with self.assertRaises(KeyError):
-            get_activation("bogus")
+            get_tf_activation("bogus")
         with self.assertRaises(KeyError):
-            get_activation(None)
+            get_tf_activation(None)
