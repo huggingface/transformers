@@ -18,8 +18,18 @@
 
 import logging
 
-import nlp
 from conllu import parse_incr
+from datasets import (
+    BuilderConfig,
+    DatasetInfo,
+    Features,
+    GeneratorBasedBuilder,
+    Sequence,
+    Split,
+    SplitGenerator,
+    Value,
+    Version,
+)
 
 
 _CITATION = """\
@@ -48,7 +58,7 @@ _DEV_FILE = "en_ewt-ud-dev.conllu"
 _TEST_FILE = "en_ewt-ud-test.conllu"
 
 
-class UDEnglishEWTConfig(nlp.BuilderConfig):
+class UDEnglishEWTConfig(BuilderConfig):
     """BuilderConfig for UDEnglishEWT."""
 
     def __init__(self, **kwargs):
@@ -60,26 +70,26 @@ class UDEnglishEWTConfig(nlp.BuilderConfig):
         super(UDEnglishEWTConfig, self).__init__(**kwargs)
 
 
-class UDEnglishEWT(nlp.GeneratorBasedBuilder):
+class UDEnglishEWT(GeneratorBasedBuilder):
     """Universal Dependencies - English Dependency Treebank Universal Dependencies English Web Treebank dataset."""
 
     BUILDER_CONFIGS = [
         UDEnglishEWTConfig(
             name="ud_english_ewt",
-            version=nlp.Version("1.0.0"),
+            version=Version("1.0.0"),
             description="Universal Dependencies - English Dependency Treebank Universal Dependencies English Web Treebank ",
         ),
     ]
 
     def _info(self):
         """See https://universaldependencies.org/format.html for CoNLL-U Format details"""
-        return nlp.DatasetInfo(
+        return DatasetInfo(
             description=_DESCRIPTION,
-            features=nlp.Features(
+            features=Features(
                 {
-                    "id": nlp.Value("string"),
-                    "form": nlp.Sequence(nlp.Value("string")),
-                    "upos": nlp.Sequence(nlp.Value("string")),
+                    "id": Value("string"),
+                    "form": Sequence(Value("string")),
+                    "upos": Sequence(Value("string")),
                 }
             ),
             supervised_keys=None,
@@ -97,9 +107,9 @@ class UDEnglishEWT(nlp.GeneratorBasedBuilder):
         downloaded_files = dl_manager.download_and_extract(urls_to_download)
 
         return [
-            nlp.SplitGenerator(name=nlp.Split.TRAIN, gen_kwargs={"filepath": downloaded_files["train"]}),
-            nlp.SplitGenerator(name=nlp.Split.VALIDATION, gen_kwargs={"filepath": downloaded_files["dev"]}),
-            nlp.SplitGenerator(name=nlp.Split.TEST, gen_kwargs={"filepath": downloaded_files["test"]}),
+            SplitGenerator(name=Split.TRAIN, gen_kwargs={"filepath": downloaded_files["train"]}),
+            SplitGenerator(name=Split.VALIDATION, gen_kwargs={"filepath": downloaded_files["dev"]}),
+            SplitGenerator(name=Split.TEST, gen_kwargs={"filepath": downloaded_files["test"]}),
         ]
 
     def _generate_examples(self, filepath):

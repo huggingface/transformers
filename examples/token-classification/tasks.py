@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-import nlp
+from datasets import Dataset, Split, load_dataset
 
 from utils_ner import TokenClassificationTask
 
@@ -13,8 +13,8 @@ class NER(TokenClassificationTask):
     def __init__(self):
         super().__init__(source_column="tokens", target_column="labels")
 
-    def get_dataset(self, split: nlp.Split) -> nlp.Dataset:
-        return nlp.load_dataset("germeval_14", split=split)
+    def get_dataset(self, split: Split) -> Dataset:
+        return load_dataset("germeval_14", split=split)
 
     def get_labels(self, path: Optional[str] = None) -> List[str]:
         if path:
@@ -57,8 +57,8 @@ class Chunk(TokenClassificationTask):
     def __init__(self):
         super().__init__(source_column="word", target_column="chunk")
 
-    def get_dataset(self, split: nlp.Split) -> nlp.Dataset:
-        return nlp.load_dataset("./conll2003.py", split=split)
+    def get_dataset(self, split: Split) -> Dataset:
+        return load_dataset("./conll2003.py", split=split)
 
     def get_labels(self, path: Optional[str] = None) -> List[str]:
         if path:
@@ -97,8 +97,8 @@ class POS(TokenClassificationTask):
     def __init__(self):
         super().__init__(source_column="form", target_column="upos")
 
-    def get_dataset(self, split: nlp.Split) -> nlp.Dataset:
-        return nlp.load_dataset("./ud_english_ewt.py", split=split)
+    def get_dataset(self, split: Split) -> Dataset:
+        return load_dataset("./ud_english_ewt.py", split=split)
 
     def get_labels(self, path: Optional[str] = None) -> List[str]:
         if path:

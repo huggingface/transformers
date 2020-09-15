@@ -22,7 +22,7 @@ from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from nlp import Split, load_metric
+from datasets import Split, load_metric
 
 from transformers import (
     AutoConfig,

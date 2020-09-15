@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, TextIO
 
-import nlp
+from datasets import Dataset, load_dataset, Split
 
 from filelock import FileLock
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
@@ -56,7 +56,7 @@ class TokenClassificationTask(ABC):
         return self.source_column
 
     @abstractmethod
-    def get_dataset(self, split: nlp.Split) -> nlp.Dataset:
+    def get_dataset(self, split: Split) -> Dataset:
         raise NotImplementedError
 
     @abstractmethod
@@ -65,7 +65,7 @@ class TokenClassificationTask(ABC):
 
     def write_predictions_to_file(self, writer: TextIO, preds_list: List):
         example_id = 0
-        dataset = self.get_dataset(split=nlp.Split.TEST)
+        dataset = self.get_dataset(split=Split.TEST)
         for entry in dataset:
             s_p = preds_list[example_id]
             out = ""
@@ -79,7 +79,7 @@ class TokenClassificationTask(ABC):
         self,
         tokenizer: PreTrainedTokenizer,
         max_seq_length: int,
-        split: nlp.Split,
+        split: Split,
         pad_token_label_id=-100,
         sep_token_extra=False,
         cls_token_segment_id=0,
@@ -101,7 +101,7 @@ class TokenClassificationTask(ABC):
         pad_token_segment_id = tokenizer.pad_token_type_id
 
         features = []
-        dataset: nlp.Dataset = self.get_dataset(split)
+        dataset: Dataset = self.get_dataset(split)
         for (ex_index, example) in enumerate(dataset):
             if ex_index % 10_000 == 0:
                 logger.info("Writing example %d of %d", ex_index, len(dataset))
@@ -228,7 +228,7 @@ if is_torch_available():
             model_type,
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
-            split: nlp.Split = nlp.Split.TRAIN,
+            split: Split = Split.TRAIN,
         ):
             # Load data features from cache or dataset file
             cached_features_file = os.path.join(
@@ -292,7 +292,7 @@ if is_tf_available():
             model_type: str,
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
-            split: nlp.Split = nlp.Split.TRAIN,
+            split: Split = Split.TRAIN,
         ):
 
             self.features = token_classification_task.convert_examples_to_features(

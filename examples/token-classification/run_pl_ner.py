@@ -5,10 +5,9 @@ import os
 from argparse import Namespace
 from importlib import import_module
 
-import nlp
 import numpy as np
 import torch
-from nlp import load_metric
+from datasets import NamedSplit, Split, load_metric
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -74,7 +73,7 @@ class NERTransformer(BaseTransformer):
                     pad_token_label_id=self.pad_token_label_id,
                     cls_token_at_end=bool(self.config.model_type in ["xlnet"]),
                     cls_token_segment_id=2 if self.config.model_type in ["xlnet"] else 0,
-                    split=nlp.Split.VALIDATION if mode == "dev" else nlp.NamedSplit(mode),
+                    split=Split.VALIDATION if mode == "dev" else NamedSplit(mode),
                 )
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
