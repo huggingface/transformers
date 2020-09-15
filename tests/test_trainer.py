@@ -61,22 +61,24 @@ if is_torch_available():
             return iter(self.parse_file())
 
     class RegressionModel(torch.nn.Module):
-        def __init__(self, a=0, b=0):
+        def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
             self.a = torch.nn.Parameter(torch.tensor(a).float())
             self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.double_output = double_output
+            self.config = None
 
         def forward(self, input_x=None, labels=None):
             y = input_x * self.a + self.b
             if labels is None:
-                return (y,)
+                return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
-            return (loss, y)
+            return (loss, y, y) if self.double_output else (loss, y)
 
-    def get_regression_trainer(a=0, b=0, train_len=64, eval_len=64, **kwargs):
+    def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, **kwargs):
         train_dataset = RegressionDataset(length=train_len)
         eval_dataset = RegressionDataset(length=eval_len)
-        model = RegressionModel(a, b)
+        model = RegressionModel(a, b, double_output)
         compute_metrics = kwargs.pop("compute_metrics", None)
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
@@ -201,6 +203,14 @@ class TrainerIntegrationTest(unittest.TestCase):
         preds = trainer.predict(trainer.eval_dataset).predictions
         x = trainer.eval_dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+        # With more than one output of the model
+        trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True)
+        preds = trainer.predict(trainer.eval_dataset).predictions
+        x = trainer.eval_dataset.x
+        self.assertTrue(len(preds), 2)
+        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
 
     def test_trainer_with_datasets(self):
         np.random.seed(42)
