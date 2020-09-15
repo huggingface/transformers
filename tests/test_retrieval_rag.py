@@ -1,25 +1,24 @@
-from unittest import TestCase
-from unittest.mock import patch
+import json
 import os
+import pickle
 import shutil
 import tempfile
+from unittest import TestCase
+from unittest.mock import patch
 
-import pickle
-import json
-import numpy as np
 import faiss
-
-from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
-from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from transformers.tokenization_bart import BartTokenizer
-from transformers.configuration_dpr import DPRConfig
-from transformers.configuration_bart import BartConfig
-from transformers.retrieval_rag import RagRetriever
-from transformers.configuration_rag import RagConfig
+import numpy as np
 from datasets import Dataset
 
+from transformers.configuration_bart import BartConfig
+from transformers.configuration_dpr import DPRConfig
+from transformers.configuration_rag import RagConfig
+from transformers.retrieval_rag import RagRetriever
 from transformers.testing_utils import require_torch
+from transformers.tokenization_bart import BartTokenizer
+from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
 @require_torch

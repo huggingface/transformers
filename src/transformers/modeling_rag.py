@@ -246,7 +246,12 @@ class RagPreTrainedModel(PreTrainedModel):
             )
 
         # instantiate config with corresponding kwargs
-        config = RagConfig.from_question_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+        config = kwargs.get("config", None)
+        if config is None:
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
+
         return cls(question_encoder=question_encoder, generator=generator, config=config, retriever=retriever)
 
 
@@ -555,6 +560,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         num_beams=1,
         attention_mask=None,
         **kwargs
+        # TODO (Patrick): set those values to `None` and set the config values accordingly
     ):
         """
         Implements RAG sequence "thorough" decoding.

@@ -33,6 +33,8 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
 
     from transformers import (
         AutoConfig,
+        AutoModel,
+        AutoModelForSeq2SeqLM,
         BartConfig,
         BartForConditionalGeneration,
         BartTokenizer,
@@ -552,3 +554,107 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
         EXPECTED_OUTPUT_TEXT = """. The song peaked at"""
         self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)
+
+    @slow
+    def test_rag_sequence_from_pretrained(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="pt").input_ids
+
+        input_ids = input_ids.to(torch_device)
+        decoder_input_ids = decoder_input_ids.to(torch_device)
+
+        rag_sequence = RagSequenceForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base",
+            "facebook/bart-large-cnn",
+            retriever=rag_retriever,
+            config=rag_config,
+        )
+
+        with torch.no_grad():
+            output = rag_sequence(
+                input_ids,
+                labels=decoder_input_ids,
+            )
+
+        loss_pretrained = output.loss
+
+        question_encoder = AutoModel.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        generator = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
+        rag_sequence = RagSequenceForGeneration(
+            config=rag_config, question_encoder=question_encoder, generator=generator, retriever=rag_retriever
+        )
+
+        with torch.no_grad():
+            output = rag_sequence(
+                input_ids,
+                labels=decoder_input_ids,
+            )
+
+        loss_init = output.loss
+
+        self.assertAlmostEqual(loss_pretrained.item(), loss_init.item(), places=4)
+
+    @slow
+    def test_rag_token_from_pretrained(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="pt").input_ids
+
+        input_ids = input_ids.to(torch_device)
+        decoder_input_ids = decoder_input_ids.to(torch_device)
+
+        rag_token = RagTokenForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base",
+            "facebook/bart-large-cnn",
+            retriever=rag_retriever,
+            config=rag_config,
+        )
+
+        with torch.no_grad():
+            output = rag_token(
+                input_ids,
+                labels=decoder_input_ids,
+            )
+
+        loss_pretrained = output.loss
+
+        question_encoder = AutoModel.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        generator = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
+        rag_token = RagTokenForGeneration(
+            config=rag_config, question_encoder=question_encoder, generator=generator, retriever=rag_retriever
+        )
+
+        with torch.no_grad():
+            output = rag_token(
+                input_ids,
+                labels=decoder_input_ids,
+            )
+
+        loss_init = output.loss
+
+        self.assertAlmostEqual(loss_pretrained.item(), loss_init.item(), places=4)
