@@ -778,7 +778,7 @@ instead:
     print(cs.err)
 
 If you need to capture both streams at once, use the parent
-``CaptureStd`` class:
+:obj:`CaptureStd` class:
 
 .. code-block:: python
 
