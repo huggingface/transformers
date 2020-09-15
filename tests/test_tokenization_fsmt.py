@@ -61,6 +61,8 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.langs = ["en", "ru"]
         config = {
             "langs": self.langs,
+            "src_vocab_size": 10,
+            "tgt_vocab_size": 20,
         }
 
         self.src_vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["src_vocab_file"])
@@ -136,3 +138,11 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # and decode backward, using the reversed languages model
             decoded_text = tokenizer_dec.decode(input_ids, skip_special_tokens=True)
             self.assertEqual(decoded_text, src_text)
+
+    @unittest.skip("FSMTConfig.__init__  requires non-optional args")
+    def test_torch_encode_plus_sent_to_model(self):
+        pass
+
+    @unittest.skip("FSMTConfig.__init__  requires non-optional args")
+    def test_np_encode_plus_sent_to_model(self):
+        pass

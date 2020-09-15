@@ -34,57 +34,59 @@ FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 FSMT_CONFIG_ARGS_DOC = r"""
     Args:
-        src_vocab_size (:obj:`int`, optional, defaults to None):
+        langs (:obj:`List[str]`):
+            source language, target_language (e.g. ['en', 'ru'])
+        src_vocab_size (:obj:`int`):
             defines the different tokens that can be represented by `inputs_ids` passed to the forward
             method in the encoder.
-        tgt_vocab_size (:obj:`int`, optional, defaults to None):
+        tgt_vocab_size (:obj:`int`):
             defines the different tokens that can be represented by `inputs_ids` passed to the forward
             method in the decoder.
-        d_model (:obj:`int`, optional, defaults to 1024):
+        d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        encoder_layers (:obj:`int`, optional, defaults to 12):
+        encoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of encoder layers, 16 for pegasus, 6 for bart-base and marian
-        decoder_layers (:obj:`int`, optional, defaults to 12):
+        decoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of decoder layers, 16 for pegasus, 6 for bart-base and marian
-        encoder_attention_heads (:obj:`int`, optional, defaults to 16):
+        encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (:obj:`int`, optional, defaults to 16):
+        decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
-        encoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
-        activation_function (:obj:`str` or :obj:`function`, optional, defaults to "relu"):
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to "relu"):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-        dropout (:obj:`float`, optional, defaults to 0.1):
+        dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (:obj:`float`, optional, defaults to 0.0):
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        activation_dropout (:obj:`float`, optional, defaults to 0.0):
+        activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (:obj:`int`, optional, defaults to 1024):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        init_std (:obj:`float`, optional, defaults to 0.02):
+        init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale embeddings by diving by sqrt(d_model).
-        bos_token_id (:obj:`int`, optional, defaults to 0)
+        bos_token_id (:obj:`int`, `optional`, defaults to 0)
             Beginning of stream token id.
-        pad_token_id (:obj:`int`, optional, defaults to 1)
+        pad_token_id (:obj:`int`, `optional`, defaults to 1)
             Padding token id.
-        eos_token_id (:obj:`int`, optional, defaults to 2)
+        eos_token_id (:obj:`int`, `optional`, defaults to 2)
             End of stream token id.
         decoder_start_token_id (:obj:`int`, `optional`):
             This model starts decoding with `eos_token_id`
-        encoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
+        encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        decoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
+        decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        is_encoder_decoder (:obj:`bool`, optional, defaults to :obj:`True`):
+        is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether this is an encoder/decoder model.
-        tie_word_embeddings (:obj:`bool`, optional, defaults to :obj:`False`):
+        tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
 """
 
@@ -112,9 +114,9 @@ class FSMTConfig(PretrainedConfig):
     # update the defaults from config file
     def __init__(
         self,
-        langs=None,
-        src_vocab_size=None,
-        tgt_vocab_size=None,
+        langs,
+        src_vocab_size,
+        tgt_vocab_size,
         activation_function="relu",
         d_model=1024,
         max_length=200,
