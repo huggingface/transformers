@@ -109,7 +109,7 @@ class RagConfig(PretrainedConfig):
         retrieval_batch_size=8,
         dataset="wiki_dpr",
         dataset_split="train",
-        index_name="embeddings",
+        index_name="compressed",
         index_path=None,
         passages_path=None,
         use_dummy_dataset=False,
