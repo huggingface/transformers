@@ -6,8 +6,6 @@ from transformers.testing_utils import require_tf
 
 
 if is_tf_available():
-    import tensorflow as tf
-
     from transformers.activations_tf import get_activation
 
 
