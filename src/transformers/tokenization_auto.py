@@ -26,6 +26,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    DPRConfig,
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
@@ -57,6 +58,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_dpr import DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
@@ -110,6 +112,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
+        (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
     ]
 )
 
