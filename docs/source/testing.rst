@@ -767,7 +767,7 @@ Here is a full test example:
         print(msg + final)
     assert cs.out == final+"\n", f"captured: {cs.out}, expecting {final}"
 
-If you'd like to capture ``stderr`` use the ``CaptureStderr`` class
+If you'd like to capture ``stderr`` use the :obj:`CaptureStderr` class
 instead:
 
 .. code-block:: python
