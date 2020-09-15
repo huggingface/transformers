@@ -248,7 +248,7 @@ best_score_hparams = {
     "wmt19-en-ru": {"length_penalty": 1.15},
     "wmt19-en-de": {"length_penalty": 1.0},
     "wmt19-de-en": {"length_penalty": 1.1},
-    # allen-nlp:
+    # allenai:
     "wmt16-en-de-dist-12-1": {"length_penalty": 0.6},
     "wmt16-en-de-dist-6-1": {"length_penalty": 0.6},
     "wmt16-en-de-12-1": {"length_penalty": 0.8},
@@ -266,7 +266,7 @@ for m in [
     "wmt19-de-en-6-6-base",
     "wmt19-de-en-6-6-big",
 ]:
-    org_names[m] = "allen_nlp"
+    org_names[m] = "allenai"
 
 
 def rewrite_dict_keys(d):
