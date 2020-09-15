@@ -66,12 +66,12 @@ except (ImportError, AssertionError):
 
 
 try:
-    import nlp  # noqa: F401
+    import datasets  # noqa: F401
 
-    _nlp_available = True
+    _datasets_available = True
 
 except ImportError:
-    _nlp_available = False
+    _datasets_available = False
 
 try:
     from torch.hub import _get_torch_home
@@ -133,12 +133,18 @@ CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 
-MULTIPLE_CHOICE_DUMMY_INPUTS = [[[0], [1]], [[0], [1]]]
+MULTIPLE_CHOICE_DUMMY_INPUTS = [
+    [[0, 1, 0, 1], [1, 0, 0, 1]]
+] * 2  # Needs to have 0s and 1s only since XLM uses it for langs too.
 DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
+PRESET_MIRROR_DICT = {
+    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
+    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
+}
 
 
 def is_torch_available():
@@ -153,8 +159,8 @@ def is_torch_tpu_available():
     return _torch_tpu_available
 
 
-def is_nlp_available():
-    return _nlp_available
+def is_datasets_available():
+    return _datasets_available
 
 
 def is_psutil_available():
@@ -530,7 +536,7 @@ def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, o
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
         elif "LMHead" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
-        elif "Model" in model_class:
+        elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
@@ -568,7 +574,7 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
+def hf_bucket_url(model_id: str, filename: str, use_cdn=True, mirror=None) -> str:
     """
     Resolve a model identifier, and a file name, to a HF-hosted url
     on either S3 or Cloudfront (a Content Delivery Network, or CDN).
@@ -584,7 +590,13 @@ def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
     are not shared between the two because the cached file's name contains
     a hash of the url.
     """
-    endpoint = CLOUDFRONT_DISTRIB_PREFIX if use_cdn else S3_BUCKET_PREFIX
+    endpoint = (
+        PRESET_MIRROR_DICT.get(mirror, mirror)
+        if mirror
+        else CLOUDFRONT_DISTRIB_PREFIX
+        if use_cdn
+        else S3_BUCKET_PREFIX
+    )
     legacy_format = "/" not in model_id
     if legacy_format:
         return f"{endpoint}/{model_id}-{filename}"
@@ -986,6 +998,8 @@ class ModelOutput(OrderedDict):
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
                         self[element[0]] = element[1]
+            elif first_field is not None:
+                self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
                 v = getattr(self, field.name)
@@ -1010,6 +1024,18 @@ class ModelOutput(OrderedDict):
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
+
+    def __setattr__(self, name, value):
+        if name in self.keys() and value is not None:
+            # Don't call self.__setitem__ to avoid recursion errors
+            super().__setitem__(name, value)
+        super().__setattr__(name, value)
+
+    def __setitem__(self, key, value):
+        # Will raise a KeyException if needed
+        super().__setitem__(key, value)
+        # Don't call self.__setattr__ to avoid recursion errors
+        super().__setattr__(key, value)
 
     def to_tuple(self) -> Tuple[Any]:
         """

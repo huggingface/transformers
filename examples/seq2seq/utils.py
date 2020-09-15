@@ -1,21 +1,24 @@
 import itertools
 import json
 import linecache
+import math
 import os
 import pickle
 from logging import getLogger
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List
+from typing import Callable, Dict, Iterable, List, Union
 
 import git
 import numpy as np
 import torch
+import torch.distributed as dist
 from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 
 from transformers import BartTokenizer
+from transformers.file_utils import cached_property
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
@@ -96,7 +99,8 @@ class AbstractSeq2SeqDataset(Dataset):
         self.max_target_length = max_target_length
         assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
         self.tokenizer = tokenizer
-        self.prefix = prefix
+        self.prefix = prefix if prefix is not None else ""
+
         if n_obs is not None:
             self.src_lens = self.src_lens[:n_obs]
         self.pad_token_id = self.tokenizer.pad_token_id
@@ -111,8 +115,11 @@ class AbstractSeq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    def make_sortish_sampler(self, batch_size):
-        return SortishSampler(self.src_lens, batch_size)
+    def make_sortish_sampler(self, batch_size, distributed=False, **kwargs):
+        if distributed:
+            return DistributedSortishSampler(self, batch_size, **kwargs)
+        else:
+            return SortishSampler(self.src_lens, batch_size)
 
     def __getitem__(self, item):
         raise NotImplementedError("You must implement this")
@@ -165,14 +172,11 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
         tgt_line = linecache.getline(str(self.tgt_file), index).rstrip("\n")
         assert source_line, f"empty source line for index {index}"
         assert tgt_line, f"empty tgt line for index {index}"
-        return {
-            "tgt_texts": tgt_line,
-            "src_texts": source_line,
-        }
+        return {"tgt_texts": tgt_line, "src_texts": source_line, "id": index - 1}
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         """Call prepare_seq2seq_batch."""
-        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
+        batch_encoding: Dict[str, torch.Tensor] = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],
@@ -181,8 +185,9 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
             max_target_length=self.max_target_length,
             return_tensors="pt",
             add_prefix_space=self.add_prefix_space,
-        )
-        return batch_encoding.data
+        ).data
+        batch_encoding["ids"] = torch.tensor([x["id"] for x in batch])
+        return batch_encoding
 
 
 class SortishSampler(Sampler):
@@ -191,24 +196,82 @@ class SortishSampler(Sampler):
     def __init__(self, data, batch_size):
         self.data, self.bs = data, batch_size
 
-    def key(self, i):
-        return self.data[i]
-
     def __len__(self) -> int:
         return len(self.data)
 
     def __iter__(self):
-        idxs = np.random.permutation(len(self.data))
-        sz = self.bs * 50
-        ck_idx = [idxs[i : i + sz] for i in range(0, len(idxs), sz)]
-        sort_idx = np.concatenate([sorted(s, key=self.key, reverse=True) for s in ck_idx])
-        sz = self.bs
-        ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
-        max_ck = np.argmax([self.key(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
-        ck_idx[0], ck_idx[max_ck] = ck_idx[max_ck], ck_idx[0]  # then make sure it goes first.
-        sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
-        sort_idx = np.concatenate((ck_idx[0], sort_idx))
-        return iter(sort_idx)
+        return iter(sortish_sampler_indices(self.data, self.bs))
+
+
+def sortish_sampler_indices(data: List, bs: int) -> np.array:
+    "Go through the text data by order of src length with a bit of randomness. From fastai repo."
+
+    def key_fn(i):
+        return data[i]
+
+    idxs = np.random.permutation(len(data))
+    sz = bs * 50
+    ck_idx = [idxs[i : i + sz] for i in range(0, len(idxs), sz)]
+    sort_idx = np.concatenate([sorted(s, key=key_fn, reverse=True) for s in ck_idx])
+    sz = bs
+    ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
+    max_ck = np.argmax([key_fn(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
+    ck_idx[0], ck_idx[max_ck] = ck_idx[max_ck], ck_idx[0]  # then make sure it goes first.
+    sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
+    sort_idx = np.concatenate((ck_idx[0], sort_idx))
+    return sort_idx
+
+
+class DistributedSortishSampler(Sampler):
+    """Copied from torch DistributedSampler"""
+
+    def __init__(self, dataset, batch_size, num_replicas=None, rank=None, add_extra_examples=True):
+        if num_replicas is None:
+            if not dist.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            num_replicas = dist.get_world_size()
+        if rank is None:
+            if not dist.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            rank = dist.get_rank()
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.epoch = 0
+        if add_extra_examples:
+            self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+            self.total_size = self.num_samples * self.num_replicas
+        else:
+            self.total_size = len(dataset)
+            self.num_samples = len(self.available_indices)
+        self.batch_size = batch_size
+        self.add_extra_examples = add_extra_examples
+
+    def __iter__(self) -> Iterable:
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+
+        sortish_data = [self.dataset.src_lens[i] for i in self.available_indices]
+        sortish_indices = sortish_sampler_indices(sortish_data, self.batch_size)
+        indices = [self.available_indices[i] for i in sortish_indices]
+        assert len(indices) == self.num_samples
+        return iter(indices)
+
+    @cached_property
+    def available_indices(self) -> np.array:
+        indices = list(range(len(self.dataset)))
+        # add extra samples to make it evenly divisible
+        indices += indices[: (self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+        # subsample
+        available_indices = indices[self.rank : self.total_size : self.num_replicas]
+        return available_indices
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
 
 logger = getLogger(__name__)
@@ -309,3 +372,30 @@ def assert_not_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     npars = len(model_grads)
     assert any(model_grads), f"none of {npars} weights require grad"
+
+
+# CLI Parsing utils
+
+
+def parse_numeric_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, float]]:
+    """Parse an argv list of unspecified command line args to a dict. Assumes all values are numeric."""
+    result = {}
+    assert len(unparsed_args) % 2 == 0, f"got odd number of unparsed args: {unparsed_args}"
+    num_pairs = len(unparsed_args) // 2
+    for pair_num in range(num_pairs):
+        i = 2 * pair_num
+        assert unparsed_args[i].startswith("--")
+        try:
+            value = int(unparsed_args[i + 1])
+        except ValueError:
+            value = float(unparsed_args[i + 1])  # this can raise another informative ValueError
+
+        result[unparsed_args[i][2:]] = value
+    return result
+
+
+def write_txt_file(ordered_tgt, path):
+    f = Path(path).open("w")
+    for ln in ordered_tgt:
+        f.write(ln + "\n")
+        f.flush()

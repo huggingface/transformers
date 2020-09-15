@@ -80,10 +80,7 @@ class ExamplesTests(TestCasePlus):
             --warmup_steps=2
             --seed=42
             --max_seq_length=128
-            """
-        output_dir = "./tests/fixtures/tests_samples/temp_dir_{}".format(hash(testargs))
-        testargs += "--output_dir " + output_dir
-        testargs = testargs.split()
+            """.split()
 
         if is_cuda_and_apex_available():
             testargs.append("--fp16")
@@ -149,17 +146,14 @@ class ExamplesTests(TestCasePlus):
             --do_train
             --do_eval
             --num_train_epochs=1
-            """
-        output_dir = "./tests/fixtures/tests_samples/temp_dir_{}".format(hash(testargs))
-        testargs += "--output_dir " + output_dir
-        testargs = testargs.split()
+            """.split()
 
         if torch_device != "cuda":
             testargs.append("--no_cuda")
 
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
-            self.assertLess(result["perplexity"], 35)
+            self.assertLess(result["perplexity"], 42)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)

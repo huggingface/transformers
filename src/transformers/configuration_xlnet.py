@@ -65,12 +65,12 @@ class XLNetConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         dropout (:obj:`float`, optional, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        mem_len (:obj:`int` or :obj:`None`, optional, defaults to :obj:`None`):
+        mem_len (:obj:`int` or :obj:`None`, optional):
             The number of tokens to cache. The key/value pairs that have already been pre-computed
             in a previous forward pass won't be re-computed. See the
             `quickstart <https://huggingface.co/transformers/quickstart.html#using-the-past>`__
             for more information.
-        reuse_len (:obj:`int` or :obj:`None`, optional, defaults to :obj:`None`):
+        reuse_len (:obj:`int` or :obj:`None`, optional):
             The number of tokens in the current batch to be cached and reused in the future.
         bi_data (:obj:`boolean`, optional, defaults to :obj:`False`):
             Whether to use bidirectional input pipeline. Usually set to `True` during
@@ -94,7 +94,7 @@ class XLNetConfig(PretrainedConfig):
             Argument used when doing sequence summary. Used in for the multiple choice head in
             :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
             Add a projection after the vector extraction
-        summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+        summary_activation (:obj:`string` or :obj:`None`, optional):
             Argument used when doing sequence summary. Used in for the multiple choice head in
             :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
             'tanh' => add a tanh activation to the output, Other => no activation.
