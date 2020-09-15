@@ -121,7 +121,6 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     data_root = dirname(pytorch_dump_folder_path)
     model_dir = basename(pytorch_dump_folder_path)
-    proj_root = dirname(dirname(dirname(os.path.realpath(__file__))))
 
     # dicts
     src_dict_file = os.path.join(fsmt_folder_path, f"dict.{src_lang}.txt")
