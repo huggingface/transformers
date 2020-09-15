@@ -31,8 +31,6 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_xlm_roberta.py",
     "test_modeling_pegasus.py",
     "test_modeling_mbart.py",
-    "test_modeling_tf_bertweet.py",
-    "test_modeling_tf_phobert.py",
 ]
 
 # Update this list for models that are not documented with a comment explaining the reason it should not be.
