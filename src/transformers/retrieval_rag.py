@@ -29,9 +29,14 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .configuration_rag import RagConfig
 from .utils import logging
+from .file_utils import cached_path
 
 
 logger = logging.get_logger(__name__)
+
+
+LEGACY_INDEX_PATH = None  # TODO: add url to hf_bert_base.hnswSQ8_correct_phi_128.c_index
+LEGACY_PASSAGES_PATH = None   # TODO: add url to psgs_w100.tsv.pkl
 
 
 class Index(object):
@@ -98,7 +103,9 @@ class LegacyIndex(Index):
 
     def __init__(self, vector_size, index_path, passages_path):
         self.index_id_to_db_id = []
-        with open(passages_path, "rb") as passages_file:
+        logger.info("Loading passages from {}".format(passages_path))
+        passages_path_file_name = cached_path(passages_path)
+        with open(passages_path_file_name, "rb") as passages_file:
             self.passages = pickle.load(passages_file)
         self.index_path = index_path
         self.vector_size = vector_size
@@ -107,8 +114,10 @@ class LegacyIndex(Index):
 
     def _deserialize_from(self, index_path: str):
         logger.info("Loading index from {}".format(index_path))
-        self.index = faiss.read_index(index_path + ".index.dpr")
-        with open(index_path + ".index_meta.dpr", "rb") as reader:
+        index_file_name = cached_path(index_path + ".index.dpr")
+        index_id_to_db_id_file_name = cached_path(index_path + ".index_meta.dpr")
+        self.index = faiss.read_index(index_file_name)
+        with open(index_id_to_db_id_file_name, "rb") as reader:
             self.index_id_to_db_id = pickle.load(reader)
         assert (
             len(self.index_id_to_db_id) == self.index.ntotal
@@ -189,6 +198,7 @@ class HFIndex(Index):
             self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset)
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
+            logger.info("Loading index from {}".format(self.dataset + " with index name " + self.index_name))
             self.index = load_dataset(
                 self.dataset,
                 with_embeddings=True,
@@ -223,7 +233,7 @@ class RagRetriever(object):
     def __init__(self, config, generator_tokenizer=None, question_encoder_tokenizer=None):
         super().__init__()
         self.retriever = (
-            LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
+            LegacyIndex(config.retrieval_vector_size, config.index_path or LEGACY_INDEX_PATH, config.passages_path or LEGACY_PASSAGES_PATH)
             if config.index_name == "legacy" else
             HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path, config.use_dummy_dataset)
         )
