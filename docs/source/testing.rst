@@ -50,7 +50,7 @@ For nuances of configuring pytest's repo-wide behavior see
 
 Here are some most useful ways of running tests.
 
-Run all
+Run all:
 
 .. code-block:: console
 
@@ -864,4 +864,3 @@ To start a debugger at the point of the warning, do this:
 .. code-block:: bash
 
     pytest tests/test_logging.py -W error::UserWarning --pdb
-
