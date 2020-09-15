@@ -883,10 +883,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.model.generator.get_input_embeddings()
+        return self.rag.generator.get_input_embeddings()
 
     def get_output_embeddings(self):
-        return self.model.generator.get_output_embeddings()
+        return self.rag.generator.get_output_embeddings()
 
     # TODO(Patrick) see how to get rid of RAGEncoder
     #    def get_encoder(self):
