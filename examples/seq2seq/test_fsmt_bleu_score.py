@@ -57,7 +57,7 @@ class ModelEvalTester(unittest.TestCase):
     def test_bleu_scores(self, pair, min_bleu_score):
         # note: this test is not testing the best performance since it only evals a small batch
         # but it should be enough to detect a regression in the output quality
-        mname = f"stas/wmt19-{pair}"
+        mname = f"facebook/wmt19-{pair}"
         tokenizer = self.get_tokenizer(mname)
         model = self.get_model(mname)
 

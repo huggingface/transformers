@@ -25,10 +25,10 @@ from .file_utils import add_start_docstrings_to_callable
 logger = logging.getLogger(__name__)
 
 FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stas/wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/wmt19-ru-en/config.json",
-    "stas/wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/wmt19-en-ru/config.json",
-    "stas/wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/wmt19-de-en/config.json",
-    "stas/wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/stas/wmt19-en-de/config.json",
+    "facebook/wmt19-ru-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-ru-en/config.json",
+    "facebook/wmt19-en-ru": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-ru/config.json",
+    "facebook/wmt19-de-en": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-de-en/config.json",
+    "facebook/wmt19-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/wmt19-en-de/config.json",
 }
 
 
@@ -161,7 +161,7 @@ class FSMTConfig(PretrainedConfig):
 
             >>> from transformers import FSMTConfig, FSMTModel
 
-            >>> config = FSMTConfig.from_pretrained('stas/wmt19-en-ru')
+            >>> config = FSMTConfig.from_pretrained('facebook/wmt19-en-ru')
             >>> model = FSMTModel(config)
 
         """

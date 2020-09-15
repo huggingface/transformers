@@ -80,11 +80,11 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def tokenizer_ru_en(self):
-        return FSMTTokenizer.from_pretrained("stas/wmt19-ru-en")
+        return FSMTTokenizer.from_pretrained("facebook/wmt19-ru-en")
 
     @cached_property
     def tokenizer_en_ru(self):
-        return FSMTTokenizer.from_pretrained("stas/wmt19-en-ru")
+        return FSMTTokenizer.from_pretrained("facebook/wmt19-en-ru")
 
     def test_full_tokenizer(self):
         """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """

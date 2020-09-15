@@ -27,10 +27,10 @@ The abbreviation FSMT stands for FairSeqMachineTranslation
 
 All four models are available:
 
-* [wmt19-en-ru](https://huggingface.co/stas/wmt19-en-ru)
-* [wmt19-ru-en](https://huggingface.co/stas/wmt19-ru-en)
-* [wmt19-en-de](https://huggingface.co/stas/wmt19-en-de)
-* [wmt19-de-en](https://huggingface.co/stas/wmt19-de-en)
+* [wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru)
+* [wmt19-ru-en](https://huggingface.co/facebook/wmt19-ru-en)
+* [wmt19-en-de](https://huggingface.co/facebook/wmt19-en-de)
+* [wmt19-de-en](https://huggingface.co/facebook/wmt19-de-en)
 
 ## Intended uses & limitations
 
@@ -39,7 +39,7 @@ All four models are available:
 ```python
 from transformers.tokenization_fsmt import FSMTTokenizer
 from transformers.modeling_fsmt import FSMTForConditionalGeneration
-mname = "stas/wmt19-en-de"
+mname = "facebook/wmt19-en-de"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 
@@ -83,7 +83,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 note: fairseq reports using a beam of 50, so you should get a slightly higher score if re-run with `--num_beams 50`.
 

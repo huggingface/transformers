@@ -234,8 +234,6 @@ from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 
 logging.basicConfig(level=logging.INFO)
 
-ORG_NAME = "stas"  # XXX: will become facebook
-
 json_indent = 2
 
 # based on the results of a search on a range of `num_beams`, `length_penalty` and `early_stopping`
@@ -257,6 +255,18 @@ best_score_hparams = {
     "wmt19-de-en-6-6-base": {"length_penalty": 0.6},
     "wmt19-de-en-6-6-big": {"length_penalty": 0.6},
 }
+
+org_names = {}
+for m in ["wmt19-ru-en", "wmt19-en-ru", "wmt19-en-de", "wmt19-de-en"]:
+    org_names[m] = "facebook"
+for m in [
+    "wmt16-en-de-dist-12-1",
+    "wmt16-en-de-dist-6-1",
+    "wmt16-en-de-12-1",
+    "wmt19-de-en-6-6-base",
+    "wmt19-de-en-6-6-big",
+]:
+    org_names[m] = "allen_nlp"
 
 
 def rewrite_dict_keys(d):
@@ -318,10 +328,10 @@ The abbreviation FSMT stands for FairSeqMachineTranslation
 
 All four models are available:
 
-* [wmt19-en-ru](https://huggingface.co/{ORG_NAME}/wmt19-en-ru)
-* [wmt19-ru-en](https://huggingface.co/{ORG_NAME}/wmt19-ru-en)
-* [wmt19-en-de](https://huggingface.co/{ORG_NAME}/wmt19-en-de)
-* [wmt19-de-en](https://huggingface.co/{ORG_NAME}/wmt19-de-en)
+* [wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru)
+* [wmt19-ru-en](https://huggingface.co/facebook/wmt19-ru-en)
+* [wmt19-en-de](https://huggingface.co/facebook/wmt19-en-de)
+* [wmt19-de-en](https://huggingface.co/facebook/wmt19-de-en)
 
 ## Intended uses & limitations
 
@@ -330,7 +340,7 @@ All four models are available:
 ```python
 from transformers.tokenization_fsmt import FSMTTokenizer
 from transformers.modeling_fsmt import FSMTForConditionalGeneration
-mname = "{ORG_NAME}/wmt19-{src_lang}-{tgt_lang}"
+mname = "facebook/wmt19-{src_lang}-{tgt_lang}"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 
@@ -374,7 +384,7 @@ mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py {ORG_NAME}/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 note: fairseq reports using a beam of 50, so you should get a slightly higher score if re-run with `--num_beams 50`.
 
@@ -546,8 +556,9 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     torch.save(model_state_dict, pytorch_weights_dump_path)
 
     # model card
-    model_card_dir = os.path.join(proj_root, "model_cards", ORG_NAME, model_dir)
-    print(f"Generating model_card {src_lang}-{tgt_lang}")
+    org_name = org_names[model_dir] if model_dir in org_names else "stas"
+    model_card_dir = os.path.join(proj_root, "model_cards", org_name, model_dir)
+    print(f"Generating {model_card_dir}")
     write_model_card(model_card_dir, src_lang, tgt_lang)
 
     print("Conversion is done!")
