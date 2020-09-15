@@ -50,6 +50,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         decoded = self.tokenizer.batch_decode(translated_tokens_fp16, skip_special_tokens=True)
         bad_fp16_result = ["unk_7unk_7unk_7unk_7unk_7unk_7unk_7", "unk_7unk_7unk_7unk_7unk_7unk_7unk_7"]
         self.assertListEqual(decoded, bad_fp16_result)
+
     def test_forward_overflow(self):
         assert self.tokenizer.model_max_length == 512
         inputs = self.tokenizer.prepare_seq2seq_batch(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
