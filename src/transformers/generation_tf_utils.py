@@ -96,7 +96,7 @@ class TFGenerationMixin:
                 Whether to stop the beam search when at least ``num_beams`` sentences are finished per batch or not.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
-            temperature (:obj:`float`, `optional`, defaults tp 1.0):
+            temperature (:obj:`float`, `optional`, defaults to 1.0):
                 The value used to module the next token probabilities.
             top_k (:obj:`int`, `optional`, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
