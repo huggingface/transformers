@@ -13,10 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RAG."""
+import os
 
-
+from .tokenization_auto import AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
+from .utils import logging
 
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -64,3 +67,31 @@ class RagDefaultTokenizerFast(BartTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = RAG_PRETRAINED_VOCAB_FILES_MAP
+
+
+class RagTokenizer:
+    def __init__(self, question_encoder_tokenizer, generator_tokenizer):
+        self.question_encoder_tokenizer = question_encoder_tokenizer
+        self.generator_tokenizer = generator_tokenizer
+
+    def save_pretrained(self, save_directory):
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory)
+        question_encoder_tokenizer_path = os.path.join(save_directory, "question_encoder_tokenizer")
+        generator_tokenizer_path = os.path.join(save_directory, "generator_tokenizer")
+        self.question_encoder_tokenizer.save_pretrained(question_encoder_tokenizer_path)
+        self.generator_tokenizer.save_pretrained(generator_tokenizer_path)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path):
+        question_encoder_tokenizer_path = os.path.join(pretrained_model_name_or_path, "question_encoder_tokenizer")
+        generator_tokenizer_path = os.path.join(pretrained_model_name_or_path, "generator_tokenizer")
+        question_encoder_tokenizer = AutoTokenizer.from_pretrained(question_encoder_tokenizer_path)
+        generator_tokenizer = AutoTokenizer.from_pretrained(generator_tokenizer_path)
+        return cls(question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer)
+
+    def __call__(self, *args, **kwargs):
+        # TODO
+        pass

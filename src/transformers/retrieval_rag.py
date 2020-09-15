@@ -25,8 +25,9 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
-from .tokenization_auto import AutoTokenizer
+from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .configuration_rag import RagConfig
 from .utils import logging
 
 
@@ -229,6 +230,7 @@ class RagRetriever(object):
             if config.retriever_type == "hf_retriever"
             else LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
         )
+        # TODO(quentin) use RagTokenizer once the API is defined
         self.generator_tokenizer = generator_tokenizer
         self.question_encoder_tokenizer = question_encoder_tokenizer
 
@@ -242,9 +244,22 @@ class RagRetriever(object):
         self.config = config
 
     @classmethod
-    def from_pretrained(cls):
-        # TODO
-        pass
+    def from_pretrained(cls, retriever_name_or_path):
+        config = RagConfig.from_pretrained(retriever_name_or_path)
+        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path)
+        question_encoder_tokenizer = rag_tokenizer.question_encoder_tokenizer
+        generator_tokenizer = rag_tokenizer.generator_tokenizer
+        return cls(
+            config, generator_tokenizer=generator_tokenizer, question_encoder_tokenizer=question_encoder_tokenizer
+        )
+
+    def save_pretrained(self, save_directory):
+        self.config.save_pretrained(save_directory)
+        rag_tokenizer = RagTokenizer(
+            question_encoder_tokenizer=self.question_encoder_tokenizer,
+            generator_tokenizer=self.generator_tokenizer,
+        )
+        rag_tokenizer.save_pretrained(save_directory)
 
     def init_retrieval(self, distributed_port):
         """

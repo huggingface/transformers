@@ -114,10 +114,6 @@ class RagConfig(PretrainedConfig):
         index_path=None,
         passages_path=None,
         dummy=False,
-        pretrained_question_encoder_tokenizer_name_or_path="facebook/dpr-question_encoder-single-nq-base",
-        pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
-        pretrained_generator_tokenizer_name_or_path="facebook/bart-large",
-        pretrained_generator_name_or_path="facebook/bart-large",
         **kwargs
     ):
         super().__init__(**kwargs)
