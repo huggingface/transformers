@@ -78,18 +78,18 @@ class RagTokenizer:
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
-        os.makedirs(save_directory)
+        os.makedirs(save_directory, exist_ok=True)
         question_encoder_tokenizer_path = os.path.join(save_directory, "question_encoder_tokenizer")
         generator_tokenizer_path = os.path.join(save_directory, "generator_tokenizer")
         self.question_encoder_tokenizer.save_pretrained(question_encoder_tokenizer_path)
         self.generator_tokenizer.save_pretrained(generator_tokenizer_path)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path):
+    def from_pretrained(cls, pretrained_model_name_or_path, config):
         question_encoder_tokenizer_path = os.path.join(pretrained_model_name_or_path, "question_encoder_tokenizer")
         generator_tokenizer_path = os.path.join(pretrained_model_name_or_path, "generator_tokenizer")
-        question_encoder_tokenizer = AutoTokenizer.from_pretrained(question_encoder_tokenizer_path)
-        generator_tokenizer = AutoTokenizer.from_pretrained(generator_tokenizer_path)
+        question_encoder_tokenizer = AutoTokenizer.from_pretrained(question_encoder_tokenizer_path, config=config.question_encoder)
+        generator_tokenizer = AutoTokenizer.from_pretrained(generator_tokenizer_path, config=config.generator)
         return cls(question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer)
 
     def __call__(self, *args, **kwargs):
