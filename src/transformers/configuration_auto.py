@@ -129,7 +129,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("longformer", "Longformer"),
         ("roberta", "RoBERTa"),
         ("flaubert", "FlauBERT"),
-        ("fsmt", "FSMT"),
+        ("fsmt", "FairSeq Machine-Translation"),
         ("bert", "BERT"),
         ("openai-gpt", "OpenAI GPT"),
         ("gpt2", "OpenAI GPT-2"),
