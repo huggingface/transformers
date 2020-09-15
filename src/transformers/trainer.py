@@ -774,11 +774,6 @@ class Trainer:
 
                         self.log(logs)
 
-                        # added AzureML logging
-                        for key, value in logs.items():
-                            print(key, value)
-                            run.log(key, value, description=key)
-
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
@@ -986,7 +981,12 @@ class Trainer:
             iterator.write(output)
         else:
             print(output)
-
+        
+        # added AzureML logging
+        for key, value in logs.items():
+            print(key, value)
+            run.log(key, value, description=key)
+            
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
