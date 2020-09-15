@@ -617,7 +617,7 @@ or the ``xfail`` way:
     @pytest.mark.xfail
     def test_feature_x():
 
--  Based on some internal check inside the test:
+Here is how to skip a test based on some internal check inside the test:
 
 .. code-block:: python
 
@@ -640,7 +640,7 @@ or the ``xfail`` way:
     def test_feature_x():
         pytest.xfail("expected to fail until bug XYZ is fixed")
 
-Skip all tests in a module if some import is missing:
+Here is how to skip all tests in a module if some import is missing:
 
 .. code-block:: python
 
