@@ -43,16 +43,18 @@ class Seq2SeqTrainer(Trainer):
         labels = inputs.pop("labels")
         outputs = model(**inputs, use_cache=False)
         logits = outputs[0]
+        return self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
 
+    def _compute_loss(self, logits, labels, ignore_index):
         if self.args.label_smoothing == 0:
             # Same behavior as modeling_bart.py
-            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=model.config.pad_token_id)
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
             assert logits.shape[-1] == self.model.config.vocab_size
             loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
             loss, nll_loss = label_smoothed_nll_loss(
-                lprobs, labels, self.args.label_smoothing, ignore_index=model.config.pad_token_id
+                lprobs, labels, self.args.label_smoothing, ignore_index=ignore_index
             )
         return loss
 
@@ -88,7 +90,7 @@ class Seq2SeqTrainer(Trainer):
         )
 
         with torch.no_grad():
-            if self.args.predict_with_generate and not prediction_loss_only:
+            if self.args.predict_with_generate and not self.args.prediction_loss_only:
                 generated_tokens = model.generate(
                     inputs["input_ids"],
                     attention_mask=inputs["attention_mask"],
@@ -101,21 +103,21 @@ class Seq2SeqTrainer(Trainer):
                     generated_tokens, max_length, model.config.pad_token_id
                 )
 
+            labels_out = inputs.get("labels")
             outputs = model(**inputs)
-            loss = outputs[0]
+            logits = outputs[1]
+            loss = self._compute_loss(logits, labels_out, model.config.pad_token_id)
             loss = loss.mean().item()
-            if prediction_loss_only:
+            if self.args.prediction_loss_only:
                 logits = None
             else:
-                logits = generated_tokens if self.args.predict_with_generate else outputs[1]
+                logits = generated_tokens if self.args.predict_with_generate else logits
 
-        if prediction_loss_only:
+        if self.args.prediction_loss_only:
             return (loss, None, None)
 
-        labels_out = inputs.get("labels")
-        if labels_out is not None:
-            labels_out = labels_out.detach()
-            labels = self._pad_tensors_to_max_len(labels_out, max_length, model.config.pad_token_id)
+        labels_out = labels_out.detach()
+        labels = self._pad_tensors_to_max_len(labels_out, max_length, model.config.pad_token_id)
         return (loss, logits.detach(), labels)
 
     def _pad_tensors_to_max_len(self, tensor, max_length, pad_token_id):
