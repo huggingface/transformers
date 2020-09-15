@@ -47,10 +47,10 @@ class ModelEvalTester(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ["en-ru", 28.21],
-            ["ru-en", 23.49],
-            ["en-de", 22.11],
-            ["de-en", 29.31],
+            ["en-ru", 26.0],
+            ["ru-en", 22.0],
+            ["en-de", 22.0],
+            ["de-en", 29.0],
         ]
     )
     @slow
