@@ -133,8 +133,8 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 
 ## Why shouldn't I use transformers?
 
-- This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored on purpose, so that a researcher can quickly iterate on each of those without having to learn new abstractions.
-- The training API is not intended to work on any model but is optimized to work with the models provided by the library. For generic marchine learning loops, you should use another library.
+- This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving in additional abstractions/files.
+- The training API is not intended to work on any model but is optimized to work with the models provided by the library. For generic machine learning loops, you should use another library.
 - While we strive to present as many use cases as possible, the scripts in our [examples folder](https://github.com/huggingface/transformers/tree/master/examples) are just that: examples. It is expected that they won't work out-of-the box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs.
 
 ## Installation
