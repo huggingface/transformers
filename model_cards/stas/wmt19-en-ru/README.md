@@ -57,7 +57,7 @@ print(decoded) # Машинное обучение - это здорово, не
 
 ## Training data
 
-Pretrained weights were left identical to the original model released by fairseq. For more details, please, see the [paper](https://arxiv.org/abs/1907.06616)
+Pretrained weights were left identical to the original model released by fairseq. For more details, please, see the [paper](https://arxiv.org/abs/1907.06616).
 
 ## Eval results
 
@@ -65,9 +65,9 @@ pair   | fairseq | transformers
 -------|---------|----------
 en-ru  | [36.4](http://matrix.statmt.org/matrix/output/1914?run_id=6724) | 33.47
 
-
-`transformers`` currently doesn't support model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
-
+The score is slightly below the score reported by `fairseq`, since `transformers`` currently doesn't support:
+- model ensemble, therefore the best performing checkpoint was ported (``model4.pt``).
+- re-ranking
 
 The score was calculated using this code:
 
@@ -78,13 +78,15 @@ export PAIR=en-ru
 export DATA_DIR=data/$PAIR
 export SAVE_DIR=data/$PAIR
 export BS=8
-export NUM_BEAMS=50
+export NUM_BEAMS=15
 mkdir -p $DATA_DIR
 sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py stas/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
+note: fairseq reports using a beam of 50, so you should get a slightly higher score if re-run with `--num_beams 50`.
+
 
 ## TODO
 
