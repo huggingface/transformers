@@ -717,7 +717,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
     from .configuration_rag import RagConfig
     from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
     from .retrieval_rag import RagRetriever
-    from .tokenization_rag import RagDefaultTokenizer
+    from .tokenization_rag import RagTokenizer
 
 
 if not is_tf_available() and not is_torch_available():

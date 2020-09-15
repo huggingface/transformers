@@ -102,6 +102,7 @@ class LegacyIndex(Index):
                 - A path to a `directory` containing index files compatible with
                   :class:`~transformers.retrieval_rag.LegacyIndex`
     """
+
     LEGACY_INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
     LEGACY_PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
@@ -289,8 +290,8 @@ class RagRetriever(object):
         self.config = config
 
     @classmethod
-    def from_pretrained(cls, retriever_name_or_path):
-        config = RagConfig.from_pretrained(retriever_name_or_path)
+    def from_pretrained(cls, retriever_name_or_path, **kwargs):
+        config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder_tokenizer
         generator_tokenizer = rag_tokenizer.generator_tokenizer

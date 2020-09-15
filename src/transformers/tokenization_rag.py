@@ -15,59 +15,12 @@
 """Tokenization classes for RAG."""
 import os
 
+from .configuration_rag import RagConfig
 from .tokenization_auto import AutoTokenizer
-from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
-}
-
-
-RAG_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/rag-sequence-nq": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
-        "facebook/rag-token-nq": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
-    },
-    "merges_file": {
-        "facebook/rag-sequence-nq": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt",
-        "facebook/rag-token-nq": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt",
-    },
-}
-
-
-class RagDefaultTokenizer(BartTokenizer):
-    r"""
-    Constructs a  RagDefaultTokenizer.
-
-    :class:`~transformers.RagDefaultTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = RAG_PRETRAINED_VOCAB_FILES_MAP
-
-
-class RagDefaultTokenizerFast(BartTokenizerFast):
-    r"""
-    Constructs a  RagDefaultTokenizerFast.
-
-    :class:`~transformers.RagDefaultTokenizerFast` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = RAG_PRETRAINED_VOCAB_FILES_MAP
 
 
 class RagTokenizer:
@@ -86,7 +39,12 @@ class RagTokenizer:
         self.generator_tokenizer.save_pretrained(generator_tokenizer_path)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, config):
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        config = kwargs.pop("config", None)
+
+        if config is None:
+            config = RagConfig.from_pretrained(pretrained_model_name_or_path)
+
         question_encoder_tokenizer_path = os.path.join(pretrained_model_name_or_path, "question_encoder_tokenizer")
         generator_tokenizer_path = os.path.join(pretrained_model_name_or_path, "generator_tokenizer")
         question_encoder_tokenizer = AutoTokenizer.from_pretrained(
