@@ -401,12 +401,11 @@ class RagModelIntegrationTests(unittest.TestCase):
             doc_sep=" // ",
             n_docs=5,
             max_combined_length=300,
-            retriever_type="hf_retriever",
             dataset="wiki_dpr",
             dataset_split="train",
             index_name="exact",
             index_path=None,
-            dummy=True,
+            use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
         )

@@ -107,13 +107,12 @@ class RagConfig(PretrainedConfig):
         max_combined_length=300,
         retrieval_vector_size=768,
         retrieval_batch_size=8,
-        retriever_type="hf_retriever",
         dataset="wiki_dpr",
         dataset_split="train",
         index_name="embeddings",
         index_path=None,
         passages_path=None,
-        dummy=False,
+        use_dummy_dataset=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -143,8 +142,6 @@ class RagConfig(PretrainedConfig):
         self.n_docs = n_docs
         self.max_combined_length = max_combined_length
 
-        self.retriever_type = retriever_type
-
         self.dataset = dataset
         self.dataset_split = dataset_split
         self.index_name = index_name
@@ -153,7 +150,7 @@ class RagConfig(PretrainedConfig):
         self.retrieval_batch_size = retrieval_batch_size
         self.passages_path = passages_path
         self.index_path = index_path
-        self.dummy = dummy
+        self.use_dummy_dataset = use_dummy_dataset
 
     @classmethod
     def from_question_encoder_generator_configs(

@@ -170,23 +170,23 @@ class HFIndex(Index):
         dataset_split,
         index_name,
         index_path,
-        dummy,
+        use_dummy_dataset,
     ):
         super().__init__()
         self.dataset = dataset
         self.dataset_split = dataset_split
         self.index_name = index_name
         self.index_path = index_path
-        self.dummy = dummy
         self.index = None
         self._index_initialize = False
+        self.use_dummy_dataset = use_dummy_dataset
 
     def is_initialized(self):
         return self._index_initialize
 
     def init_index(self):
         if self.index_path is not None:
-            self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.dummy)
+            self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset)
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
             self.index = load_dataset(
@@ -195,7 +195,7 @@ class HFIndex(Index):
                 with_index=True,
                 split=self.dataset_split,
                 index_name=self.index_name,
-                dummy=self.dummy,
+                dummy=self.use_dummy_dataset
             )
         self._index_initialize = True
 
@@ -222,14 +222,10 @@ class RagRetriever(object):
 
     def __init__(self, config, generator_tokenizer=None, question_encoder_tokenizer=None):
         super().__init__()
-        assert (
-            config.retriever_type == "hf_retriever" or config.retriever_type == "legacy_retriever"
-        ), "invalid retirever type"
-
         self.retriever = (
-            HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path, config.dummy)
-            if config.retriever_type == "hf_retriever"
-            else LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
+            LegacyIndex(config.retrieval_vector_size, config.index_path, config.passages_path)
+            if config.index_name == "legacy" else
+            HFIndex(config.dataset, config.dataset_split, config.index_name, config.index_path, config.use_dummy_dataset)
         )
         # TODO(quentin) use RagTokenizer once the API is defined
         self.generator_tokenizer = generator_tokenizer
