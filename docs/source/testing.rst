@@ -440,7 +440,7 @@ To send test results to JUnit format output:
 Color control
 ~~~~~~~~~~~~~
 
-To have no color (e.g. yellow on white bg is not readable):
+To have no color (e.g., yellow on white background is not readable):
 
 .. code-block:: bash
 
