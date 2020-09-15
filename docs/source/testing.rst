@@ -514,7 +514,7 @@ Using unique temporary files and directories are essential for parallel test run
 
 However, when debugging tests, you need to be able to see what goes into the temp file or directory and you want to know it's exact path and not having it randomized on every test re-run.
 
-A helper class ``transformers.test_utils.TestCasePlus`` is best used for such purposes. It's a sub-class of ``unittest.TestCase``, so we can easily inherit from it in the test modules.
+A helper class :obj:`transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of :obj:`unittest.TestCase`, so we can easily inherit from it in the test modules.
 
 Here is an example of its usage:
 
