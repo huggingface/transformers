@@ -741,7 +741,7 @@ An important potential issue with capturing stdout is that it may
 contain ``\r`` characters that in normal ``print`` reset everything that
 has been printed so far. There is no problem with ``pytest``, but with
 ``pytest -s`` these characters get included in the buffer, so to be able
-to have the test run w/ and w/o ``-s``, you have to make an extra
+to have the test run with and without ``-s``, you have to make an extra
 cleanup to the captured output, using
 ``re.sub(r'~.*\r', '', buf, 0, re.M)``.
 
