@@ -543,7 +543,7 @@ In this and all the following scenarios the temp dir will be auto-removed at the
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
 
- * Create a temp dir of my choice and ensure to delete it right away - useful for when you disabled deletion in the previous test run and want to make sure the that tmp dir is empty before the new test is run:
+* Create a temporary directory of my choice and ensure to delete it right away---useful for when you disabled deletion in the previous test run and want to make sure the that temporary directory is empty before the new test is run:
 
 .. code-block:: python
 
