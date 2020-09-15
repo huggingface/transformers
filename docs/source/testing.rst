@@ -792,7 +792,7 @@ If you need to capture both streams at once, use the parent
 Capturing logger stream
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-If you need to validate the output of a logger, you can use ``CaptureLogger``:
+If you need to validate the output of a logger, you can use :obj:`CaptureLogger`:
 
 .. code-block:: python
 
