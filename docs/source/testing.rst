@@ -310,7 +310,7 @@ adding that exact seed, e.g.:
    Using --random-order-seed=573663
 
 It will only reproduce the exact order if you use the exact same list of
-tests (or no list at all (==all)). Once you start to manually narrowing
+tests (or no list at all). Once you start to manually narrowing
 down the list you can no longer rely on the seed, but have to list them
 manually in the exact order they failed and tell pytest to not randomize
 them instead using ``--random-order-bucket=none``, e.g.:
@@ -529,7 +529,7 @@ This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its l
 
 In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless `after=False` is passed to the helper function.
 
-* Create a temp dir of my choice and delete it at the end - useful for debug when you want to monitor a specific directory:
+* Create a temporary directory of my choice and delete it at the end - useful for debugging when you want to monitor a specific directory:
 
 .. code-block:: python
 
@@ -551,10 +551,10 @@ In this and all the following scenarios the temporary directory will be auto-rem
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
 
 .. note::
-   In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will get nuked. i.e. please always pass paths that start with `./`
+   In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are allowed if an explicit obj:`tmp_dir` is used, so that by mistake no ``/tmp`` or similar important part of the filesystem will get nuked. i.e. please always pass paths that start with ``./``.
 
 .. note::
-   Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
+   Each test can register multiple temporary directories and they all will get auto-removed, unless requested otherwise.
 
 
 Skipping tests
@@ -584,9 +584,10 @@ doesn't run the test, and ``xfail`` does. So if the code that's buggy
 causes some bad state that will affect other tests, do not use
 ``xfail``.
 
-Implementation:
+Implementation
+^^^^^^^^^^^^^^
 
--  The whole test unconditionally:
+- Here is how to skip whole test unconditionally:
 
 .. code-block:: python
 
