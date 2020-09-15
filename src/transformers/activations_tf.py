@@ -1,5 +1,7 @@
-import tensorflow as tf
 import math
+
+import tensorflow as tf
+
 
 def gelu(x):
     """Gaussian Error Linear Unit.
@@ -30,17 +32,20 @@ def gelu_new(x):
 
     return x * cdf
 
+
 def mish(x):
     x = tf.convert_to_tensor(x)
 
     return x * tf.tanh(tf.math.softplus(x))
 
+
 def gelu_fast(x):
     x = tf.convert_to_tensor(x)
     coeff1 = tf.cast(7978845608, x.dtype)
     coeff2 = tf.cast(0.044715, x.dtype)
-    
+
     return 0.5 * x * (1.0 + tf.tanh(x * coeff2 * (1.0 + coeff1 * x * x)))
+
 
 ACT2FN = {
     "gelu": tf.keras.layers.Activation(gelu),
@@ -49,8 +54,9 @@ ACT2FN = {
     "gelu_new": tf.keras.layers.Activation(gelu_new),
     "mish": tf.keras.layers.Activation(mish),
     "tanh": tf.keras.activations.tanh,
-    "gelu_fast": tf.keras.layers.Activation(gelu_fast)
+    "gelu_fast": tf.keras.layers.Activation(gelu_fast),
 }
+
 
 def get_tf_activation(activation_string):
     if activation_string in ACT2FN:

@@ -21,11 +21,11 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
 from transformers import BatchEncoding
 
+from .activations_tf import get_tf_activation
 from .configuration_lxmert import LxmertConfig
 from .file_utils import (
     ModelOutput,
@@ -35,7 +35,6 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
-from .activations_tf import get_tf_activation
 
 
 logger = logging.getLogger(__name__)
@@ -1047,7 +1046,7 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="logit_fc_._0",
         )
-        self.activation = tf.keras.layers.Activation(gelu)
+        self.activation = get_tf_activation("gelu")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="logit_fc_._2")
         self.dense_1 = tf.keras.layers.Dense(
             num_labels,

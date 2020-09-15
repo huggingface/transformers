@@ -19,9 +19,9 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_gpt2 import GPT2Config
 from .file_utils import (
     ModelOutput,
@@ -43,7 +43,6 @@ from .modeling_tf_utils import (
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
-from .activations_tf import get_tf_activation
 
 
 logger = logging.get_logger(__name__)

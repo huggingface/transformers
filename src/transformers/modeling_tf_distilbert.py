@@ -18,9 +18,9 @@
 
 import math
 
-import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -50,7 +50,6 @@ from .modeling_tf_utils import (
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
-from .activations_tf import get_tf_activation
 
 
 logger = logging.get_logger(__name__)

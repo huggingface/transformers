@@ -5,6 +5,7 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
+from .activations_tf import get_tf_activation
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -35,7 +36,6 @@ from .modeling_tf_utils import (
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
-from .activations_tf import get_tf_activation
 
 
 logger = logging.get_logger(__name__)
