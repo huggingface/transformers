@@ -14,10 +14,10 @@
 # limitations under the License.
 """Tokenization classes for RAG."""
 import os
-import logging
 
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
+from .utils import logging
 
 logger = logging.get_logger(__name__)
 

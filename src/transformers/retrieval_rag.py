@@ -25,10 +25,9 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
-from .tokenization_auto import AutoTokenizer
 from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
-from .configuration_auto import AutoConfig
+from .configuration_rag import RagConfig
 from .utils import logging
 
 
@@ -246,34 +245,21 @@ class RagRetriever(object):
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path):
-        config = AutoConfig.from_pretrained(retriever_name_or_path)
-        if (
-            config.pretrained_question_encoder_tokenizer_name_or_path is None
-            and config.pretrained_generator_tokenizer_name_or_path is None
-        ):
-            rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path)
-            question_encoder_tokenizer = rag_tokenizer.question_encoder_tokenizer
-            generator_tokenizer = rag_tokenizer.generator_tokenizer
-        else:
-            question_encoder_tokenizer = AutoTokenizer.from_pretrained(
-                config.pretrained_question_encoder_tokenizer_name_or_path
-            )
-            generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
+        config = RagConfig.from_pretrained(retriever_name_or_path)
+        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path)
+        question_encoder_tokenizer = rag_tokenizer.question_encoder_tokenizer
+        generator_tokenizer = rag_tokenizer.generator_tokenizer
         return cls(
             config, generator_tokenizer=generator_tokenizer, question_encoder_tokenizer=question_encoder_tokenizer
         )
 
     def save_pretrained(self, save_directory):
         self.config.save_pretrained(save_directory)
-        if (
-            self.config.pretrained_question_encoder_tokenizer_name_or_path is None
-            and self.config.pretrained_generator_tokenizer_name_or_path is None
-        ):
-            rag_tokenizer = RagTokenizer(
-                question_encoder_tokenizer=self.question_encoder_tokenizer,
-                generator_tokenizer=self.generator_tokenizer,
-            )
-            rag_tokenizer.save_pretrained(save_directory)
+        rag_tokenizer = RagTokenizer(
+            question_encoder_tokenizer=self.question_encoder_tokenizer,
+            generator_tokenizer=self.generator_tokenizer,
+        )
+        rag_tokenizer.save_pretrained(save_directory)
 
     def init_retrieval(self, distributed_port):
         """
