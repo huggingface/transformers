@@ -178,7 +178,7 @@ class HFIndex(Index):
         self.index_name = index_name
         self.index_path = index_path
         self.dummy = dummy
-        self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.dummy)
+        self.index = None
         self._index_initialize = False
 
     def is_initialized(self):
@@ -186,6 +186,7 @@ class HFIndex(Index):
 
     def init_index(self):
         if self.index_path is not None:
+            self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split, dummy=self.dummy)
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
             self.index = load_dataset(
@@ -246,7 +247,7 @@ class RagRetriever(object):
     @classmethod
     def from_pretrained(cls, retriever_name_or_path):
         config = RagConfig.from_pretrained(retriever_name_or_path)
-        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path)
+        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder_tokenizer
         generator_tokenizer = rag_tokenizer.generator_tokenizer
         return cls(
