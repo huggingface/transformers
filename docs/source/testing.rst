@@ -343,7 +343,9 @@ plugin that improves the look-n-feel, adds a progressbar, and show tests
 that fail and the assert instantly. It gets activated automatically upon
 installation.
 
-``pip install pytest-sugar``
+.. code-block:: bash
+                
+   pip install pytest-sugar
 
 To run tests without it, run:
 
@@ -391,6 +393,14 @@ On a GPU-enabled setup, to test in CPU-only mode add ``CUDA_VISIBLE_DEVICES=""``
                 
     CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
 
+or if you have multiple gpus, you can tell which one to use in this test session, e.g. to use only the second gpu if you have gpus ``0`` and ``1``, you can run:
+
+.. code-block:: bash
+                
+    CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
+
+This is handy when you want to run different tasks on different GPUs.
+    
 And we have these decorators that require the condition described by the marker.
 
 ```
@@ -494,13 +504,13 @@ Often, there is a need to run the same test multiple times, but with different a
     def test_floor(self, name, input, expected):
         assert_equal(math.floor(input), expected)
 
-Now this test will be run three times, and you could run just the `negative` and `integer` sets of params with:
+Now this test will be run three times, and you could run just the ``negative`` and ``integer`` sets of params with:
 
 .. code-block:: bash
 
    pytest -k "negative and integer" tests/test_mytest.py
 
-or all but `negative` sub-tests, with:
+or all but ``negative`` sub-tests, with:
 
 
 .. code-block:: bash
@@ -527,7 +537,7 @@ Here is an example of its usage:
 
 This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
-In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless `after=False` is passed to the helper function.
+In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless ``after=False`` is passed to the helper function.
 
 * Create a temporary directory of my choice and delete it at the end - useful for debugging when you want to monitor a specific directory:
 
@@ -720,7 +730,7 @@ exception, so try/except has to be used in such a case:
             error = str(e)
             assert msg in error, f"{msg} is in the exception:\n{error}"
 
-Another approach to capturing stdout, is via ``contextlib.redirect_stdout``:
+Another approach to capturing stdout is via ``contextlib.redirect_stdout``:
 
 .. code-block:: python
 
@@ -743,11 +753,10 @@ contain ``\r`` characters that in normal ``print`` reset everything that
 has been printed so far. There is no problem with ``pytest``, but with
 ``pytest -s`` these characters get included in the buffer, so to be able
 to have the test run with and without ``-s``, you have to make an extra
-cleanup to the captured output, using
-``re.sub(r'~.*\r', '', buf, 0, re.M)``.
+cleanup to the captured output, using ``re.sub(r'~.*\r', '', buf, 0, re.M)``.
 
 But, then we have a helper context manager wrapper to automatically take
-care of it all, regardless of whether it has some ``\r``\ s in it or
+care of it all, regardless of whether it has some ``\r``'s in it or
 not, so it's a simple:
 
 .. code-block:: python
@@ -829,7 +838,6 @@ In some situations you may want to remove randomness for your tests. To
 get identical reproducable results set, you will need to fix the seed:
 
 .. code-block:: python
-
 
     seed = 42
 
