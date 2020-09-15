@@ -19,13 +19,10 @@ from typing import List, Optional, Tuple
 
 import torch
 
-from .configuration_dpr import DPRConfig
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
-from .modeling_dpr import DPRQuestionEncoder
 from .modeling_outputs import ModelOutput
-from .modeling_t5 import T5ForConditionalGeneration
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
 from .utils import logging
