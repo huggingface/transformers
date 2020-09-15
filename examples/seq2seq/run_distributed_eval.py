@@ -53,6 +53,7 @@ def eval_data_dir(
     num_beams: int = 4,
     task="summarization",
     local_rank=None,
+    layernorm_eps=None,
     **generate_kwargs,
 ) -> Dict:
     """Run evaluation on part of the data for one gpu and save to {save_dir}/rank_{rank}_output.json"""
@@ -63,7 +64,12 @@ def eval_data_dir(
     save_dir = Path(save_dir)
     save_path = save_dir.joinpath(f"rank_{local_rank}_output.json")
     torch.cuda.set_device(local_rank)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
+    if layernorm_eps is None:
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
+    else:
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name, layernorm_eps=layernorm_eps).cuda()
+        assert model.config.layernorm_eps == layernorm_eps
+
     if fp16:
         model = model.half()
 
@@ -121,9 +127,8 @@ def run_generate():
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
-    parser.add_argument(
-        "--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch"
-    )
+    parser.add_argument("--local_rank", type=int, default=-1, required=False, help="should be passed by distributed.launch")
+    parser.add_argument("--layernorm_eps", type=float, default=None, required=False, help="should be passed by distributed.launch")
 
     parser.add_argument(
         "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
@@ -161,6 +166,7 @@ def run_generate():
         local_rank=args.local_rank,
         n_obs=args.n_obs,
         max_source_length=args.max_source_length,
+        layernorm_eps=args.layernorm_eps,
         **generate_kwargs,
     )
 
