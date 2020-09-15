@@ -66,6 +66,7 @@ if is_torch_available():
             self.a = torch.nn.Parameter(torch.tensor(a).float())
             self.b = torch.nn.Parameter(torch.tensor(b).float())
             self.double_output = double_output
+            self.config = None
 
         def forward(self, input_x=None, labels=None):
             y = input_x * self.a + self.b
