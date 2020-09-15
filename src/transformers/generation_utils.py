@@ -389,25 +389,39 @@ class GenerationMixin:
                     and self.config.decoder.bos_token_id is not None
                 ):
                     decoder_start_token_id = self.config.decoder.bos_token_id
+                elif (
+                    hasattr(self.config, "generator")
+                    and hasattr(self.config.generator, "decoder_start_token_id")
+                    and self.config.decoder.decoder_start_token_id is not None
+                ):
+                    decoder_start_token_id = self.config.generator.decoder_start_token_id
                 else:
                     raise ValueError(
                         "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
                     )
 
-            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+            encoder_outputs = model_kwargs.get("encoder_outputs", None)
 
-            # get encoder and store encoder outputs
-            encoder = self.get_encoder()
-            if "retriever" in model_kwargs:
-                encoder_outputs: ModelOutput = encoder(
-                    input_ids,
-                    retriever=model_kwargs["retriever"],
-                    attention_mask=attention_mask,
-                    return_dict=True,
-                )
-            else:
+            if encoder_outputs is None:
+                assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+                assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+
+                # get encoder and store encoder outputs
+                encoder = self.get_encoder()
                 encoder_outputs: ModelOutput = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
+
+            assert isinstance(
+                encoder_outputs, ModelOutput
+            ), f"`encoder_outputs` should be of type `ModelOutput`, but is of type `{type(encoder_outputs)}`."
+
+        #            if "retriever" in model_kwargs:
+        #                encoder_outputs: ModelOutput = encoder(
+        #                    input_ids,
+        #                    retriever=model_kwargs["retriever"],
+        #                    attention_mask=attention_mask,
+        #                    return_dict=True,
+        #                )
+        #            else:
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:

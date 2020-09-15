@@ -85,6 +85,12 @@ RAG_CONFIG_DOC = r"""
             The id of the `end-of-stream` token.
         decoder_start_token_id** (:obj:`int`, `optional`):
             If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
+        marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, `logits`, returned as part of :class:`~transformers.file_utils.Seq2SeqLMOutputWithDocs` are marginalized, yielding
+            the shape of :obj:`(batch_size, sequence_length, hidden_size)`. Otherwise we return raw, non-marginalized logits of shape
+            :obj:`(batch_size * n_docs, sequence_length, hidden_size)`. ``marginalize`` is set to :obj:`True` during generation. The parameter is
+            ignored if ``return_loss`` is set to :obj:`True`.
+
 """
 
 
@@ -113,6 +119,10 @@ class RagConfig(PretrainedConfig):
         index_path=None,
         passages_path=None,
         use_dummy_dataset=False,
+        reduce_loss=False,
+        label_smoothing=0.0,
+        exclude_bos_score=False,
+        do_marginalize=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -129,6 +139,10 @@ class RagConfig(PretrainedConfig):
         self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
         self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
 
+        self.reduce_loss = reduce_loss
+        self.label_smoothing = label_smoothing
+        self.exclude_bos_score = exclude_bos_score
+        self.do_marginalize = do_marginalize
         self.vocab_size = vocab_size
         self.is_encoder_decoder = is_encoder_decoder
         self.prefix = prefix

@@ -46,7 +46,7 @@ class BaseModelOutputWithDocs(ModelOutput):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        attention_mask (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -58,7 +58,7 @@ class BaseModelOutputWithDocs(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attention_mask: Optional[Tuple[torch.LongTensor]] = None
     doc_scores: Optional[torch.FloatTensor] = None
 
 
@@ -311,14 +311,9 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
             ``past_key_values``).
-        generator_kwargs (remaining dictionary of keyword arguments, `optional`):
-            Additional keyword arguments will be passed to the generator forward pass.
 """
 
 RAG_LOSS_INPUTS_DOCSTRING = r"""
-        return_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, computes the loss which is returned as part of the :class:`~transformers.file_utils.Seq2SeqLMOutputWithDocs`.
-            Otherwise, loss defaults to :obj:`None`.
         reduce (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Only relevant if ``return_loss`` is set to :obj:`True`. If :obj:`True`, the NLL loss is reduced using the ``torch.Tensor.sum`` operation.
         label_smoothing (:obj:`float`, `optional`, defaults to ``0.0``):
@@ -375,19 +370,19 @@ class RagModel(RagPreTrainedModel):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
+        decoder_attention_mask=None,
         past_key_values=None,
         context_input_ids=None,  # NEW
+        context_attention_mask=None,  # NEW
         retrieved_doc_embeds=None,  # NEW
         use_cache=None,
-        return_doc_scores=False,
         return_dict=True,  # TODO(Patrick) should be `False` by default => change later for API
-        **kwargs
     ):
         r"""
         Returns:
         """
 
-        # TODO(Patrick) kwargs should be split into generator and question_encoder => TODO later
+        # TODO(Patrick) kwargs could be added and split should be split into generator and question_encoder => TODO later
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
             question_hidden_states = self.question_encoder(input_ids)[0]
@@ -406,6 +401,15 @@ class RagModel(RagPreTrainedModel):
                 context_input_ids = context_input_ids.to(input_ids)
                 context_attention_mask = context_attention_mask.to(input_ids)
 
+            # compute doc_scores
+            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
+                1
+            )
+
+        else:
+            doc_scores = encoder_outputs.doc_scores
+            context_input_ids = None
+
         # Decoder input without context documents
         if decoder_input_ids is not None:
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.config.n_docs, dim=0)
@@ -415,18 +419,11 @@ class RagModel(RagPreTrainedModel):
             attention_mask=context_attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             return_dict=return_dict,
-            **kwargs,
         )
-
-        # compute `doc_scores` here or maybe just in `ForTokenGeneration` and `ForSequenceGeneration`
-        doc_scores = None
-        if return_doc_scores:
-            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
-                1
-            )
 
         return Seq2SeqLMOutputWithDocs(
             loss=None,
@@ -477,19 +474,16 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         context_input_ids=None,  # NEW
         retrieved_doc_embeds=None,  # NEW
         use_cache=None,
+        exclude_bos_score=None,
         labels=None,
-        reduce=False,
-        label_smoothing=0.0,
-        score=False,
-        **generator_kwargs
+        return_dict=None,
     ):
         r"""
-            score (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                A flag passed as an argument to `:func:`~transformers.RagSequenceForGeneration.get_nll``. If :obj:`True`,
-                we exclude the BOS token's score while scoring the sequence.
 
         Returns:
         """
+        exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
+
         if labels is not None:
             if decoder_input_ids is None:
                 decoder_input_ids = labels
@@ -504,8 +498,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             retrieved_doc_embeds=retrieved_doc_embeds,  # NEW
             past_key_values=past_key_values,
             use_cache=use_cache,
-            return_doc_scores=True,
-            **generator_kwargs,
         )
 
         if labels is not None:
@@ -513,9 +505,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 outputs.logits,
                 outputs.doc_scores,
                 decoder_input_ids,
-                reduce=reduce,
-                epsilon=label_smoothing,
-                score=score,
+                reduce_loss=self.config.reduce_loss,
+                epsilon=self.config.label_smoothing,
+                exclude_bos_score=self.config.exclude_bos_score,
             )
             return Seq2SeqLMOutputWithDocs(
                 loss=loss,
@@ -558,7 +550,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self,
         input_ids,
         context_input_ids=None,  # NEW
-        doc_vectors=None,  # NEW
         dedup=True,
         num_return_sequences=1,
         num_beams=1,
@@ -632,20 +623,21 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
-            outputs = self(new_input_ids, decoder_input_ids=output_sequences, return_loss=True, score=True)
+            outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
             top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
 
-            if logging.get_verbosity() == logging.DEBUG:
-                output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
-                logger.debug("Hypos with scores:")
-                for score, hypo in zip(outputs.loss, output_strings):
-                    logger.debug("\t{} {}".format(score, hypo))
+            # TODO(PVP) delete if not needed anymore
+            #            if logging.get_verbosity() == logging.DEBUG:
+            #                output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
+            #                logger.debug("Hypos with scores:")
+            #                for score, hypo in zip(outputs.loss, output_strings):
+            #                    logger.debug("\t{} {}".format(score, hypo))
 
             hypos.append(output_sequences[top_cand_inds])
 
         return self._cat_and_pad(hypos, pad_token_id=self.config.generator.pad_token_id)
 
-    def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0, score=False):
+    def get_nll(self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False):
         # shift tokens left
         target = torch.cat(
             [target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1
@@ -682,7 +674,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         ll, smooth_obj = _mask_pads(ll, smooth_obj)
 
         # sum over tokens, exclude bos while scoring
-        ll = ll[:, :, 1:].sum(2) if score and use_bos else ll.sum(2)
+        ll = ll[:, :, 1:].sum(2) if exclude_bos_score and use_bos else ll.sum(2)
         smooth_obj = smooth_obj.sum(2)
         ll = ll.logsumexp(1)  # logsumexp over docs
         smooth_obj = smooth_obj.logsumexp(1)
@@ -690,7 +682,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         nll_loss = -ll
         smooth_loss = -smooth_obj
 
-        if reduce:
+        if reduce_loss:
             nll_loss = nll_loss.sum()
             smooth_loss = smooth_loss.sum()
 
@@ -741,7 +733,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
     ):
         last_hidden_state = encoder_outputs["last_hidden_state"]
         doc_scores = encoder_outputs["doc_scores"]
-        attention_mask = encoder_outputs["attentions"]
+        attention_mask = encoder_outputs["attention_mask"]
 
         beam_size = decoder_input_ids.shape[0] // doc_scores.shape[0]
         doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
@@ -750,18 +742,18 @@ class RagTokenForGeneration(RagPreTrainedModel):
         encoder_outputs = BaseModelOutputWithDocs(
             last_hidden_state=_stack_ctxt(last_hidden_state),
             hidden_states=encoder_outputs.hidden_states,
-            attentions=attention_mask,
+            attention_mask=attention_mask,
             doc_scores=doc_scores,
         )
 
         return {
             "input_ids": None,
             "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
+            "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "past_key_values": past,
             "use_cache": use_cache,
-            "marginalize": True,
+            "do_marginalize": True,
         }
 
     @property
@@ -818,23 +810,17 @@ class RagTokenForGeneration(RagPreTrainedModel):
         decoder_input_ids=None,
         past_key_values=None,
         context_input_ids=None,  # NEW
+        context_attention_mask=None,  # NEW
         retrieved_doc_embeds=None,  # NEW
         use_cache=None,
+        do_marginalize=None,
         labels=None,
-        reduce=False,
-        label_smoothing=0.0,
-        marginalize=False,
-        **generator_kwargs
+        return_dict=None,
     ):
         r"""
-            marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                If :obj:`True`, `logits`, returned as part of :class:`~transformers.file_utils.Seq2SeqLMOutputWithDocs` are marginalized, yielding
-                the shape of :obj:`(batch_size, sequence_length, hidden_size)`. Otherwise we return raw, non-marginalized logits of shape
-                :obj:`(batch_size * n_docs, sequence_length, hidden_size)`. ``marginalize`` is set to :obj:`True` during generation. The parameter is
-                ignored if ``return_loss`` is set to :obj:`True`.
-
         Returns:
         """
+        do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize
 
         if labels is not None:
             if decoder_input_ids is None:
@@ -847,17 +833,20 @@ class RagTokenForGeneration(RagPreTrainedModel):
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
             context_input_ids=context_input_ids,  # NEW
+            context_attention_mask=context_attention_mask,  # NEW
             retrieved_doc_embeds=retrieved_doc_embeds,  # NEW
             past_key_values=past_key_values,
             use_cache=use_cache,
-            return_doc_scores=True,
-            **generator_kwargs,
         )
 
         if labels is not None:
             assert decoder_input_ids is not None
             loss = self.get_nll(
-                outputs.logits, outputs.doc_scores, decoder_input_ids, reduce=reduce, epsilon=label_smoothing
+                outputs.logits,
+                outputs.doc_scores,
+                labels,
+                reduce_loss=self.config.reduce_loss,
+                epsilon=self.config.label_smoothing,
             )
             return Seq2SeqLMOutputWithDocs(
                 loss=loss,
@@ -871,7 +860,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 doc_scores=outputs.doc_scores,
             )
 
-        logits = self.marginalize(outputs.logits, outputs.doc_scores) if marginalize else outputs.logits
+        logits = outputs.logits
+
+        if do_marginalize:
+            logits = self.marginalize(logits, outputs.doc_scores)
 
         return Seq2SeqLMOutputWithDocs(
             loss=None,
@@ -884,6 +876,51 @@ class RagTokenForGeneration(RagPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
             doc_scores=outputs.doc_scores,
         )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        context_input_ids=None,
+        context_attention_mask=None,
+        retrieved_doc_embeds=None,
+        **kwargs
+    ):
+
+        if self.retriever is not None and context_input_ids is None:
+            # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
+            question_hidden_states = self.question_encoder(input_ids)[0]
+            context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
+                input_ids,
+                question_hidden_states.cpu().detach().to(torch.float32),
+                prefix=self.generator.config.prefix,
+                n_docs=self.config.n_docs,
+            )
+
+            # set to correct device
+            retrieved_doc_embeds = retrieved_doc_embeds.to(question_hidden_states)
+            context_input_ids = context_input_ids.to(input_ids)
+            context_attention_mask = context_attention_mask.to(input_ids)
+
+        encoder = self.rag.generator.get_encoder()
+        encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask, return_dict=True)
+
+        # compute doc_scores
+        doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1)
+
+        # needed to satisfy assertion that encoder_outputs.last_hidden_state.shape[0] == batch_size in generation_utils
+        unstacked_x = _unstack_ctxt(encoder_outputs.last_hidden_state, self.rag.config.n_docs)
+
+        encoder_outputs = BaseModelOutputWithDocs(
+            last_hidden_state=unstacked_x,
+            hidden_states=encoder_outputs.hidden_states,
+            attention_mask=context_attention_mask,
+            doc_scores=doc_scores,
+        )
+
+        kwargs["encoder_outputs"] = encoder_outputs
+        kwargs["bos_token_id"] = self.generator.config.decoder_start_token_id
+        return super().generate(**kwargs)
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()
@@ -904,7 +941,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         shifted_input_ids[:, 0] = start_token_id
         return shifted_input_ids
 
-    def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0):
+    def get_nll(self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0):
         # shift tokens left
         target = torch.cat(
             [target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1
@@ -931,7 +968,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         nll_loss = -ll
         smooth_loss = -smooth_obj
 
-        if reduce:
+        if reduce_loss:
             nll_loss = nll_loss.sum()
             smooth_loss = smooth_loss.sum()
 

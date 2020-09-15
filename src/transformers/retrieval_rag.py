@@ -264,7 +264,7 @@ class RagRetriever(object):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
     """
 
-    def __init__(self, config, generator_tokenizer=None, question_encoder_tokenizer=None):
+    def __init__(self, config, question_encoder_tokenizer=None, generator_tokenizer=None):
         super().__init__()
         self.retriever = (
             LegacyIndex(
@@ -296,7 +296,7 @@ class RagRetriever(object):
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
         return cls(
-            config, generator_tokenizer=generator_tokenizer, question_encoder_tokenizer=question_encoder_tokenizer
+            config, question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer
         )
 
     def save_pretrained(self, save_directory):
