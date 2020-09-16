@@ -179,7 +179,7 @@ def run_generate():
         metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 2)
         # TODO(@stas00): add whatever metadata to metrics
         metrics_save_path = save_dir.joinpath(f"{args.type_path}_{metric_name}.json")
-        save_json(metrics, metrics_save_path)
+        save_json(metrics, metrics_save_path, indent=None)
         print(metrics)
         write_txt_file(preds, save_dir.joinpath(f"{args.type_path}_generations.txt"))
         if args.debug:
