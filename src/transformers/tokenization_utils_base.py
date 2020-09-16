@@ -2477,7 +2477,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             logger.warning(
                 "Token indices sequence length is longer than the specified maximum sequence length "
                 "for this model ({} > {}). Running this sequence through the model will result in "
-                "indexing errors".format(len(ids), self.model_max_length)
+                "indexing errors".format(len(encoded_inputs["input_ids"]), self.model_max_length)
             )
 
         # Padding

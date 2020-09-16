@@ -20,9 +20,9 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_xlnet import XLNetConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -59,26 +59,6 @@ TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlnet-large-cased",
     # See all XLNet models at https://huggingface.co/models?filter=xlnet
 ]
-
-
-def gelu(x):
-    """Implementation of the gelu activation function.
-    XLNet is using OpenAI GPT's gelu
-    Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
-
-
-def swish(x):
-    return x * tf.sigmoid(x)
-
-
-ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-}
 
 
 class TFXLNetRelativeAttention(tf.keras.layers.Layer):
@@ -356,7 +336,7 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         if isinstance(config.ff_activation, str):
-            self.activation_function = ACT2FN[config.ff_activation]
+            self.activation_function = get_tf_activation(config.ff_activation)
         else:
             self.activation_function = config.ff_activation
 

@@ -18,9 +18,9 @@
 
 import math
 
-import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -66,31 +66,6 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilbert-base-uncased-finetuned-sst-2-english",
     # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
 ]
-
-
-# UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    Original Implementation of the gelu activation function in Google Bert repo when initially created.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.math.sqrt(2.0), dtype=x.dtype)))
-    return x * cdf
-
-
-def gelu_new(x):
-    """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    Args:
-        x: float Tensor to perform activation.
-    Returns:
-        `x` with the GELU activation applied.
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
 
 
 class TFEmbeddings(tf.keras.layers.Layer):
@@ -298,9 +273,7 @@ class TFFFN(tf.keras.layers.Layer):
         assert config.activation in ["relu", "gelu"], "activation ({}) must be in ['relu', 'gelu']".format(
             config.activation
         )
-        self.activation = (
-            tf.keras.layers.Activation(gelu) if config.activation == "gelu" else tf.keras.activations.relu
-        )
+        self.activation = get_tf_activation(config.activation)
 
     def call(self, input, training=False):
         x = self.lin1(input)
@@ -651,7 +624,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_transform = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="vocab_transform"
         )
-        self.act = tf.keras.layers.Activation(gelu)
+        self.act = get_tf_activation("gelu")
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
