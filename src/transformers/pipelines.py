@@ -1411,32 +1411,32 @@ class TokenClassificationPipeline(Pipeline):
 
             entities = []
             # Filter to labels not in `self.ignore_labels`
+            # Filter special_tokens
             filtered_labels_idx = [
                 (idx, label_idx)
                 for idx, label_idx in enumerate(labels_idx)
-                if self.model.config.id2label[label_idx] not in self.ignore_labels
+                if (self.model.config.id2label[label_idx] not in self.ignore_labels) and not special_tokens_mask[idx]
             ]
 
             for idx, label_idx in filtered_labels_idx:
 
-                if not special_tokens_mask[idx]:
-                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                        if offset_mapping is not None:
-                            start_ind, end_ind = offset_mapping[idx]
-                            word = sentence[start_ind:end_ind]
-                        else:
-                            raise Exception("Use a fast tokenizer or provide offset_mapping parameter")
+                if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                    if offset_mapping is not None:
+                        start_ind, end_ind = offset_mapping[idx]
+                        word = sentence[start_ind:end_ind]
                     else:
-                        word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
+                        raise Exception("Use a fast tokenizer or provide offset_mapping parameter")
+                else:
+                    word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
 
-                    entity = {
-                        "word": word,
-                        "score": score[idx][label_idx].item(),
-                        "entity": self.model.config.id2label[label_idx],
-                        "index": idx,
-                    }
+                entity = {
+                    "word": word,
+                    "score": score[idx][label_idx].item(),
+                    "entity": self.model.config.id2label[label_idx],
+                    "index": idx,
+                }
 
-                    entities += [entity]
+                entities += [entity]
 
             # Append grouped entities
             if self.grouped_entities:
@@ -1516,7 +1516,7 @@ class TokenClassificationPipeline(Pipeline):
             # Shouldn't merge if both entities are B-type
             if (
                 (
-                    (entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1])
+                    entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
                     and entity["entity"].split("-")[0] != "B"
                 )
                 and entity["index"] == entity_group_disagg[-1]["index"] + 1
@@ -1524,9 +1524,8 @@ class TokenClassificationPipeline(Pipeline):
                 # Modify subword type to be previous_type
                 if is_subword:
                     entity["entity"] = entity_group_disagg[-1]["entity"].split("-")[-1]
-                    entity["score"] = np.nan  # and use np.nanmean
-                    # How to handle scores? 0?
-                    # How to handle index?
+                    entity["score"] = np.nan  # set ignored scores to nan and use np.nanmean
+
                 entity_group_disagg += [entity]
                 # Group the entities at the last entity
                 if is_last_idx:

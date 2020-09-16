@@ -738,13 +738,13 @@ class NerPipelineTests(unittest.TestCase):
         ]
         expected_grouped_ner_results = [
             [
-                {"entity_group": "B-PER", "score": 0.9710702640669686, "word": "Consuelo Araújo Noguera"},
-                {"entity_group": "B-PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
-                {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc"},
+                {"entity_group": "PER", "score": 0.999369223912557, "word": "Consuelo Araújo Noguera"},
+                {"entity_group": "PER", "score": 0.9997771680355072, "word": "Andrés Pastrana"},
+                {"entity_group": "ORG", "score": 0.9989739060401917, "word": "Farc"},
             ],
             [
-                {"entity_group": "I-PER", "score": 0.9962901175022125, "word": "Enzo"},
-                {"entity_group": "I-ORG", "score": 0.9986497163772583, "word": "UN"},
+                {"entity_group": "PER", "score": 0.9968166351318359, "word": "Enzo"},
+                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN"},
             ],
         ]
 
