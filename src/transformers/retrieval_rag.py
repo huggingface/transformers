@@ -559,7 +559,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         # single GPU training
         if not dist.is_initialized():
             doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
-            return retrieved_doc_embeds, self.index.get_doc_dicts(doc_ids)
+            return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
         # distributed training
         world_size = dist.get_world_size(group=self.process_group)

@@ -186,13 +186,14 @@ class RagRetrieverTest(TestCase):
         hidden_states = np.array(
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
-        retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)
         self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
         self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
         self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
+        self.assertListEqual(list(doc_ids), [1, 0])
 
     def test_pytorch_distributed_retriever_retrieve(self):
         n_docs = 1
@@ -200,13 +201,14 @@ class RagRetrieverTest(TestCase):
         hidden_states = np.array(
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
-        retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)
         self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
         self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
         self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
+        self.assertListEqual(list(doc_ids), [1, 0])
 
     def test_legacy_index_retriever_retrieve(self):
         n_docs = 1
@@ -214,13 +216,14 @@ class RagRetrieverTest(TestCase):
         hidden_states = np.array(
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
-        retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)
         self.assertEqual(sorted(doc_dicts[0]), ["text", "title"])
         self.assertEqual(len(doc_dicts[0]["text"]), n_docs)
         self.assertEqual(doc_dicts[0]["text"][0], "bar")  # max inner product is reached with second doc
         self.assertEqual(doc_dicts[1]["text"][0], "foo")  # max inner product is reached with first doc
+        self.assertListEqual(list(doc_ids), [1, 0])
 
     def test_hf_index_retriever_call(self):
         import torch
@@ -249,10 +252,11 @@ class RagRetrieverTest(TestCase):
             n_docs=n_docs,
             return_tensors="pt",
         )
-        context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+        context_input_ids, context_attention_mask, retrieved_doc_embeds, doc_ids = (
             out["context_input_ids"],
             out["context_attention_mask"],
             out["retrieved_doc_embeds"],
+            out["doc_ids"],
         )
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertIsInstance(context_input_ids, torch.Tensor)
