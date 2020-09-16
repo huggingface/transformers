@@ -370,10 +370,11 @@ class RagModel(RagPreTrainedModel):
                     n_docs=self.config.n_docs,
                     return_tensors="pt",
                 )
-                context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+                context_input_ids, context_attention_mask, retrieved_doc_embeds, retrieved_doc_ids = (
                     retriever_outputs["context_input_ids"],
                     retriever_outputs["context_attention_mask"],
                     retriever_outputs["retrieved_doc_embeds"],
+                    retriever_outputs["doc_ids"],
                 )
 
                 # set to correct device
@@ -442,7 +443,7 @@ class RagModel(RagPreTrainedModel):
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
             retrieved_doc_embeds=retrieved_doc_embeds,
-            retrieved_doc_ids=None,  # wait for retriever to return this
+            retrieved_doc_ids=retrieved_doc_ids,
             question_enc_pool_output=question_enc_pool_output,
             question_enc_hidden_states=question_enc_hidden_states,
             question_enc_attentions=question_enc_attentions,

@@ -55,6 +55,6 @@ class RagTokenizer:
         return self.question_encoder(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
-        return self.generator.batch_decode(self, *args, **kwargs)
+        return self.generator.batch_decode(*args, **kwargs)
 
     # TODO(Patrick) add prepare_seq2seq_batch function

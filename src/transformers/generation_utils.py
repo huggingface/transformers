@@ -359,14 +359,23 @@ class GenerationMixin:
             pad_token_id = eos_token_id
 
         # vocab size
+        # TODO(PVP) - refactor this
         if hasattr(self.config, "vocab_size"):
             vocab_size = self.config.vocab_size
         elif (
             self.config.is_encoder_decoder
             and hasattr(self.config, "decoder")
             and hasattr(self.config.decoder, "vocab_size")
+            and self.config.decoder.vocab_size is not None
         ):
             vocab_size = self.config.decoder.vocab_size
+        elif (
+            self.config.is_encoder_decoder
+            and hasattr(self.config, "generator")
+            and hasattr(self.config.generator, "vocab_size")
+            and self.config.generator.vocab_size is not None
+        ):
+            vocab_size = self.config.generator.vocab_size
         else:
             raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size needs to be defined")
 
@@ -409,19 +418,17 @@ class GenerationMixin:
                 # get encoder and store encoder outputs
                 encoder = self.get_encoder()
                 encoder_outputs: ModelOutput = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
+            else:
+                # set batch_size correctly to inserted encoder_outputs
+                batch_size = encoder_outputs.last_hidden_state.shape[0]
+
+            assert (
+                batch_size == encoder_outputs.last_hidden_state.shape[0]
+            ), f"expected encoder_outputs.last_hidden_state to have 1st dimension bs={batch_size}, got {encoder_outputs.last_hidden_state.shape[0]} "
 
             assert isinstance(
                 encoder_outputs, ModelOutput
             ), f"`encoder_outputs` should be of type `ModelOutput`, but is of type `{type(encoder_outputs)}`."
-
-        #            if "retriever" in model_kwargs:
-        #                encoder_outputs: ModelOutput = encoder(
-        #                    input_ids,
-        #                    retriever=model_kwargs["retriever"],
-        #                    attention_mask=attention_mask,
-        #                    return_dict=True,
-        #                )
-        #            else:
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -447,10 +454,6 @@ class GenerationMixin:
                 device=next(self.parameters()).device,
             )
             cur_len = 1
-
-            assert (
-                batch_size == encoder_outputs.last_hidden_state.shape[0]
-            ), f"expected encoder_outputs.last_hidden_state to have 1st dimension bs={batch_size}, got {encoder_outputs.last_hidden_state.shape[0]} "
 
             # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
             expanded_batch_idxs = (

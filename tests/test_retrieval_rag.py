@@ -252,7 +252,7 @@ class RagRetrieverTest(TestCase):
             n_docs=n_docs,
             return_tensors="pt",
         )
-        context_input_ids, context_attention_mask, retrieved_doc_embeds, doc_ids = (   # noqa: F841
+        context_input_ids, context_attention_mask, retrieved_doc_embeds, doc_ids = (  # noqa: F841
             out["context_input_ids"],
             out["context_attention_mask"],
             out["retrieved_doc_embeds"],
