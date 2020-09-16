@@ -22,12 +22,7 @@
 <p>State-of-the-art Natural Language Processing for PyTorch and TensorFlow 2.0
 </h3>
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures for Natural Language Processing (NLP)—that is to say pretrained models which can perform tasks on texts such as classification, question answering, summarization, translation in another language, etc.— with over thousands of pretrained models in 100+ languages. Its aim is to make NLP easier to use for everyone:
-
-- Deep learning researchers
-- Hands-on practitioners
-- AI/ML/NLP teachers and educators
-- Data Scientists
+🤗 Transformers provides thousands of pretrained models to perform tasks on texts such as classification, information extraction, question answering, summarization, translation, text generation, etc in 100+ languages. Its aim is to make cutting-edge NLP easier to use for everyone. 
 
 🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture can be used as a standalone and modified to enable quick research experiments. 
 
