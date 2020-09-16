@@ -342,9 +342,8 @@ from ray import tune
 class TuneReportCallback(Callback):
 
     def on_validation_end(self, trainer, pl_module):
-        tune.report(
-            loss=trainer.callback_metrics["avg_val_loss"].item(),
-            mean_accuracy=trainer.callback_metrics["avg_val_accuracy"].item())
+        metric = pl_module.val_metric
+        tune.report(**{"loss": "val_avg_loss", metric: f"val_avg_{metric}"})
 
 class TranslationModule(SummarizationModule):
     mode = "translation"
@@ -395,8 +394,7 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = False
 
     lower_is_better = args.val_metric == "loss"
-    callback = TuneReportCallback({"loss": "val_avg_loss", model.val_metric: f"val_avg_{model.val_metric}"},
-                                  on="validation_end")
+    callback = TuneReportCallback()
 
     trainer: pl.Trainer = generic_train(
         model,
