@@ -21,7 +21,7 @@
 
 import argparse
 import json
-import logging
+from .utils import logging
 import os
 import re
 from collections import OrderedDict
@@ -39,7 +39,7 @@ from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 
 
-logging.basicConfig(level=logging.INFO)
+logging.set_verbosity_info()
 
 json_indent = 2
 

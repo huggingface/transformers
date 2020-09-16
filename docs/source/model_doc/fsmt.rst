@@ -7,7 +7,7 @@ file a `Github Issue <https://github.com/huggingface/transformers/issues/new?ass
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-FSMT (FairSeq MachineTranslation) models were introduce in "Facebook FAIR's WMT19 News Translation Task Submission" <this paper <https://arxiv.org/abs/1907.06616>__ by Nathan Ng, Kyra Yee, Alexei Baevski, Myle Ott, Michael Auli, Sergey Edunov.
+FSMT (FairSeq MachineTranslation) models were introduced in "Facebook FAIR's WMT19 News Translation Task Submission" <this paper <https://arxiv.org/abs/1907.06616>__ by Nathan Ng, Kyra Yee, Alexei Baevski, Myle Ott, Michael Auli, Sergey Edunov.
 
 The abstract of the paper is the following:
 
