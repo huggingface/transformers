@@ -67,7 +67,7 @@ def tune_helsinki_(args, num_samples=4, num_epochs=3):
 # Make default args
 import argparse
 
-args = argparse.Namespace({
+args = argparse.Namespace(**{
     'logger': True,
     'checkpoint_callback': True,
     'early_stop_callback': False,
