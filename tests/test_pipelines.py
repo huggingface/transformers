@@ -736,6 +736,7 @@ class NerPipelineTests(unittest.TestCase):
                 {"entity": "I-ORG", "index": 7, "score": 0.9986497163772583, "word": "UN"},
             ],
         ]
+
         expected_grouped_ner_results = [
             [
                 {"entity_group": "PER", "score": 0.999369223912557, "word": "Consuelo Araújo Noguera"},
@@ -770,9 +771,10 @@ class NerPipelineTests(unittest.TestCase):
         for result in multi_result:
             for key in output_keys:
                 self.assertIn(key, result)
-
-        for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
-            self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+                
+        if nlp.grouped_entities:
+            for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
+                self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
 
     @require_torch
     def test_torch_ner(self):

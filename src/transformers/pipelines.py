@@ -1329,7 +1329,7 @@ class TokenClassificationPipeline(Pipeline):
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        ignore_subwords: bool = False,
+        ignore_subwords: bool = True,
     ):
         super().__init__(
             model=model,
