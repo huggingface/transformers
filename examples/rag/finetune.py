@@ -22,7 +22,7 @@ from transformers import (
     AutoTokenizer,
     BartForConditionalGeneration,
     RagConfig,
-    RagRetriever,
+    RagPyTorchDistributedRetriever,
     RagSequenceForGeneration,
     RagTokenForGeneration,
     T5ForConditionalGeneration,
@@ -111,7 +111,9 @@ class GenerativeQAModule(BaseTransformer):
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
 
-        self.retriever = RagRetriever(self.model.config) if self.is_rag_model else None
+        self.retriever = (
+            RagPyTorchDistributedRetriever(self.model.config) if self.is_rag_model else None
+        )  # TODO add tokenizers
 
         save_git_info(self.hparams.output_dir)
         self.output_dir = Path(self.hparams.output_dir)

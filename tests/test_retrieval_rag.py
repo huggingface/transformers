@@ -13,14 +13,16 @@ from datasets import Dataset
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
-from transformers.retrieval_rag import RagRetriever
-from transformers.testing_utils import require_torch
+from transformers.retrieval_rag import RagRetriever, RagPyTorchDistributedRetriever
+from transformers.testing_utils import require_torch, require_datasets, require_faiss
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
+@require_faiss
+@require_datasets
 @require_torch
 class RagRetrieverTest(TestCase):
     def setUp(self):
@@ -118,7 +120,32 @@ class RagRetrieverTest(TestCase):
                 question_encoder_tokenizer=self.get_dpr_tokenizer(),
                 generator_tokenizer=self.get_bart_tokenizer(),
             )
-            retriever.init_retrieval(0)
+        return retriever
+
+    def get_dummy_pytorch_distributed_retriever(self, init_retrieval, port=12345) -> RagRetriever:
+        dataset = Dataset.from_dict(
+            {
+                "id": ["0", "1"],
+                "text": ["foo", "bar"],
+                "title": ["Foo", "Bar"],
+                "embeddings": [np.ones(self.retrieval_vector_size), 2 * np.ones(self.retrieval_vector_size)],
+            }
+        )
+        dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
+        config = RagConfig(
+            retrieval_vector_size=self.retrieval_vector_size,
+            question_encoder=DPRConfig().to_dict(),
+            generator=BartConfig().to_dict(),
+        )
+        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
+            mock_load_dataset.return_value = dataset
+            retriever = RagPyTorchDistributedRetriever(
+                config,
+                question_encoder_tokenizer=self.get_dpr_tokenizer(),
+                generator_tokenizer=self.get_bart_tokenizer(),
+            )
+            if init_retrieval:
+                retriever.init_retrieval(port)
         return retriever
 
     def get_dummy_legacy_index_retriever(self) -> RagRetriever:
@@ -151,16 +178,15 @@ class RagRetrieverTest(TestCase):
         retriever = RagRetriever(
             config, question_encoder_tokenizer=self.get_dpr_tokenizer(), generator_tokenizer=self.get_bart_tokenizer()
         )
-        retriever.init_retrieval(0)
         return retriever
 
     def test_hf_index_retriever_retrieve(self):
-        import torch
-
         n_docs = 1
         retriever = self.get_dummy_hf_index_retriever()
-        hidden_states = [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)]
-        retrieved_doc_embeds, doc_dicts = retriever.retrieve(torch.Tensor(hidden_states), n_docs=n_docs)
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+        retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)
         self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
@@ -168,29 +194,65 @@ class RagRetrieverTest(TestCase):
         self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
 
-    def test_hf_index_retriever_call(self):
-        import torch
-
+    def test_pytorch_distributed_retriever_retrieve(self):
         n_docs = 1
-        retriever = self.get_dummy_hf_index_retriever()
-        question_input_ids = [[5, 7], [10, 11]]
-        hidden_states = [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)]
-        context_input_ids, context_attention_mask, retrieved_doc_embeds = retriever(
-            question_input_ids, torch.Tensor(hidden_states), prefix=retriever.config.generator.prefix, n_docs=n_docs
-        )
+        retriever = self.get_dummy_pytorch_distributed_retriever(init_retrieval=True)
+        hidden_states = np.array([np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32)
+        retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
-        # TODO(quentin) test retrieved_doc_embeds and context_attention_mask
+        self.assertEqual(len(doc_dicts), 2)
+        self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
+        self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
+        self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+        self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
 
     def test_legacy_index_retriever_retrieve(self):
-        import torch
-
         n_docs = 1
         retriever = self.get_dummy_legacy_index_retriever()
-        hidden_states = [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)]
-        retrieved_doc_embeds, doc_dicts = retriever.retrieve(torch.Tensor(hidden_states), n_docs=n_docs)
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+        retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)
         self.assertEqual(sorted(doc_dicts[0]), ["text", "title"])
         self.assertEqual(len(doc_dicts[0]["text"]), n_docs)
         self.assertEqual(doc_dicts[0]["text"][0], "bar")  # max inner product is reached with second doc
         self.assertEqual(doc_dicts[1]["text"][0], "foo")  # max inner product is reached with first doc
+
+    def test_hf_index_retriever_call(self):
+        import torch
+
+        n_docs = 1
+        retriever = self.get_dummy_hf_index_retriever()
+        question_input_ids = [[5, 7], [10, 11]]
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+        out = retriever(question_input_ids, hidden_states, prefix=retriever.config.generator.prefix, n_docs=n_docs)
+        context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+            out["context_input_ids"],
+            out["context_attention_mask"],
+            out["retrieved_doc_embeds"],
+        )
+        self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
+        self.assertIsInstance(context_input_ids, list)
+        self.assertIsInstance(context_attention_mask, list)
+        self.assertIsInstance(retrieved_doc_embeds, np.ndarray)
+
+        out = retriever(
+            question_input_ids,
+            hidden_states,
+            prefix=retriever.config.generator.prefix,
+            n_docs=n_docs,
+            return_tensors="pt",
+        )
+        context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+            out["context_input_ids"],
+            out["context_attention_mask"],
+            out["retrieved_doc_embeds"],
+        )
+        self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
+        self.assertIsInstance(context_input_ids, torch.Tensor)
+        self.assertIsInstance(context_attention_mask, torch.Tensor)
+        self.assertIsInstance(retrieved_doc_embeds, torch.Tensor)
