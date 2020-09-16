@@ -4,7 +4,7 @@ import time
 from json import JSONDecodeError
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import torch
 from torch.utils.data import DataLoader
