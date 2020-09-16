@@ -368,9 +368,9 @@ class RagModel(RagPreTrainedModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         past_key_values=None,
-        context_input_ids=None,  # NEW
-        context_attention_mask=None,  # NEW
-        retrieved_doc_embeds=None,  # NEW
+        context_input_ids=None,
+        context_attention_mask=None,
+        retrieved_doc_embeds=None,
         use_cache=None,
         return_dict=True,  # TODO(Patrick) should be `False` by default => change later for API
     ):
@@ -378,7 +378,6 @@ class RagModel(RagPreTrainedModel):
         Returns:
         """
 
-        # TODO(Patrick) kwargs could be added and split should be split into generator and question_encoder => TODO later
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
             question_hidden_states = self.question_encoder(input_ids)[0]
@@ -386,7 +385,6 @@ class RagModel(RagPreTrainedModel):
             if self.retriever is not None and (
                 context_input_ids is None or context_attention_mask is None or retrieved_doc_embeds is None
             ):
-                # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
                 context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
                     input_ids,
                     question_hidden_states.cpu().detach().to(torch.float32),
@@ -448,17 +446,22 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        retriever: Optional = None,  # or maybe just use a `set_retriever(...)` method
+        retriever: Optional = None,
         **kwargs,
     ):
         assert config is not None or (
             question_encoder is not None and generator is not None
         ), "Either a configuration or an encoder and a generator has to be provided."
+
         if config is None:
             config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
         super().__init__(config)
 
+        # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
+
+    def set_retriever(self, retriever: RagRetriever):
+        self.rag.retriever = retriever
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
@@ -469,8 +472,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         past_key_values=None,
-        context_input_ids=None,  # NEW
-        retrieved_doc_embeds=None,  # NEW
+        context_input_ids=None,
+        context_attention_mask=None,
+        retrieved_doc_embeds=None,
         use_cache=None,
         exclude_bos_score=None,
         labels=None,
@@ -492,8 +496,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
-            context_input_ids=context_input_ids,  # NEW
-            retrieved_doc_embeds=retrieved_doc_embeds,  # NEW
+            context_input_ids=context_input_ids,
+            context_attention_mask=context_attention_mask,
+            retrieved_doc_embeds=retrieved_doc_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
@@ -588,7 +593,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         # TODO(patrick) - clean up generate here
         if self.retriever is not None and context_input_ids is None:
-            # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
             question_hidden_states = self.question_encoder(input_ids)[0]
             context_input_ids, _, _ = self.retriever(
                 input_ids,
@@ -621,13 +625,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
             top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
 
-            # TODO(PVP) delete if not needed anymore
-            #            if logging.get_verbosity() == logging.DEBUG:
-            #                output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
-            #                logger.debug("Hypos with scores:")
-            #                for score, hypo in zip(outputs.loss, output_strings):
-            #                    logger.debug("\t{} {}".format(score, hypo))
-
+            # add hypothesis
             hypos.append(output_sequences[top_cand_inds])
 
         return self._cat_and_pad(hypos, pad_token_id=self.config.generator.pad_token_id)
@@ -709,16 +707,23 @@ class RagTokenForGeneration(RagPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        retriever: Optional = None,  # or maybe just use a `set_retriever(...)` method
+        retriever: Optional = None,
         **kwargs,
     ):
         assert config is not None or (
             question_encoder is not None and generator is not None
         ), "Either a configuration or an encoder and a generator has to be provided."
+
         if config is None:
             config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+
         super().__init__(config)
+
+        # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
+
+    def set_retriever(self, retriever: RagRetriever):
+        self.rag.retriever = retriever
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         return self.model.generator.adjust_logits_during_generation(logits, cur_len, max_length)
@@ -806,9 +811,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         past_key_values=None,
-        context_input_ids=None,  # NEW
-        context_attention_mask=None,  # NEW
-        retrieved_doc_embeds=None,  # NEW
+        context_input_ids=None,
+        context_attention_mask=None,
+        retrieved_doc_embeds=None,
         use_cache=None,
         do_marginalize=None,
         labels=None,
@@ -829,9 +834,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
-            context_input_ids=context_input_ids,  # NEW
-            context_attention_mask=context_attention_mask,  # NEW
-            retrieved_doc_embeds=retrieved_doc_embeds,  # NEW
+            context_input_ids=context_input_ids,
+            context_attention_mask=context_attention_mask,
+            retrieved_doc_embeds=retrieved_doc_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
@@ -885,7 +890,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
     ):
 
         if self.retriever is not None and context_input_ids is None:
-            # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
             question_hidden_states = self.question_encoder(input_ids)[0]
             context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
                 input_ids,
