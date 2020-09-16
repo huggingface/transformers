@@ -33,7 +33,7 @@ def ray_main(args, config):
     ft_main(args)
 
 
-def tune_helsinki_(args, num_samples=24, num_epochs=1):
+def tune_helsinki_(args, num_samples=8, num_epochs=1):
     args.num_train_epochs = 1
     args.n_train = 10000
     search_space = {
