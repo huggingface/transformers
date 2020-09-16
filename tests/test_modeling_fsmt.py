@@ -207,6 +207,10 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
+    @unittest.skip("can't be implemented for FSMT due to dual vocab.")
+    def test_resize_tokens_embeddings(self):
+        pass
+
     @unittest.skip("Passing inputs_embeds not implemented for FSMT.")
     def test_inputs_embeds(self):
         pass
@@ -330,33 +334,6 @@ class FSMTHeadTests(unittest.TestCase):
         ).to(input_ids.device)
         self.assertEqual(decoder_attn_mask.size(), decoder_input_ids.size())
         self.assertTrue(torch.eq(expected_causal_mask, causal_mask).all())
-
-    def test_resize_tokens_embeddings_more(self):
-        config, input_ids, _ = self._get_config_and_data()
-
-        def _get_embs(m):
-            return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
-
-        model = FSMTForConditionalGeneration(config).eval().to(torch_device)
-
-        # not equal in FSMT
-        # input, output = _get_embs(model)
-        # self.assertTrue(torch.eq(input, output).all(), msg=f"\n{input}\n{output}")
-
-        new_src_vocab_size = 45
-        model.resize_token_embeddings(new_src_vocab_size)
-        input_new, output_new = _get_embs(model)
-        self.assertEqual(
-            input_new.shape,
-            (new_src_vocab_size, config.d_model),
-            msg=f"input {input_new.shape}, {(new_src_vocab_size, config.d_model)}",
-        )
-        self.assertEqual(
-            output_new.shape,
-            (new_src_vocab_size, config.d_model),
-            msg=f"output {input_new.shape}, {(new_src_vocab_size, config.d_model)}",
-        )
-        self.assertTrue(torch.eq(input_new, output_new).all(), msg=f"{input_new}, {output_new}")
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
