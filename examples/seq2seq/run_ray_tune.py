@@ -35,7 +35,7 @@ def ray_main(args, config):
     ft_main(args)
 
 
-def tune_helsinki_(args, num_samples=4, num_epochs=3):
+def tune_helsinki_(args, num_samples=1, num_epochs=3):
 
     search_space = {
         "learning_rate": tune.sample_from(lambda spec: 10**(-10 * np.random.rand())),
