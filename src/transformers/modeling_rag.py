@@ -763,7 +763,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         self.rag.retriever = retriever
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        return self.model.generator.adjust_logits_during_generation(logits, cur_len, max_length)
+        return self.rag.generator.adjust_logits_during_generation(logits, cur_len, max_length)
 
     def prepare_inputs_for_generation(
         self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs

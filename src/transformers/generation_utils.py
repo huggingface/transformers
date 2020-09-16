@@ -360,7 +360,7 @@ class GenerationMixin:
 
         # vocab size
         # TODO(PVP) - refactor this
-        if hasattr(self.config, "vocab_size"):
+        if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:
             vocab_size = self.config.vocab_size
         elif (
             self.config.is_encoder_decoder
@@ -431,7 +431,7 @@ class GenerationMixin:
             ), f"`encoder_outputs` should be of type `ModelOutput`, but is of type `{type(encoder_outputs)}`."
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
-        if num_return_sequences > 1 or num_beams > 1:
+        if (num_return_sequences > 1 or num_beams > 1) and encoder_outputs is None:
             input_ids_len = input_ids.shape[-1]
             input_ids = input_ids.unsqueeze(1).expand(batch_size, effective_batch_mult * num_beams, input_ids_len)
             attention_mask = attention_mask.unsqueeze(1).expand(
