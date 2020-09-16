@@ -55,11 +55,13 @@ def run_search():
     col_widths = {col: len(str(col)) for col in col_names}
     results = []
     for r in matrix:
+        result = {k: v for k, v in (x.replace("--", "").split() for x in r)}
         args_exp = " ".join(r).split()
         sys.argv = args_normal + args_exp
-        scores, hparams = run_generate(verbose=False)
-        result = hparams
+        scores = run_generate(verbose=False)
+
         result["bleu"] = f"{scores['bleu']:0.2f}"
+
         results.append(result)
 
         # find widest entries
@@ -67,6 +69,8 @@ def run_search():
             l = len(str(v))
             if l > col_widths[k]:
                 col_widths[k] = l
+
+    # XXX: scores["info"] if available should be printed separately
 
     results_sorted = sorted(results, key=lambda x: x["bleu"], reverse=True)
     print(" | ".join([f"{col:{col_widths[col]}}" for col in col_names]))

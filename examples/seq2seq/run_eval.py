@@ -141,7 +141,7 @@ def run_generate(verbose=True):
     )
 
     if args.reference_path is None:
-        return
+        return {}
 
     # Compute scores
     score_fn = calculate_bleu if "translation" in args.task else calculate_rouge
@@ -150,26 +150,19 @@ def run_generate(verbose=True):
     scores: dict = score_fn(output_lns, reference_lns)
     scores.update(runtime_metrics)
 
-    dump_args = {}
     if args.dump_args:
-        dump_args = parsed_args
+        scores.update(parsed_args)
     if args.info:
-        dump_args["info"] = args.info
+        scores["info"] = args.info
 
     if verbose:
-        outputs = [scores]
-        if dump_args:
-            outputs.append(dump_args)
-        print(*outputs)
+        print(*scores)
 
     if args.score_path is not None:
         path = args.score_path
         json.dump(scores, open(path, "w"))
-        if dump_args:
-            path = path.replace(".json", ".args.json")
-            json.dump(dump_args, open(path, "w"))
 
-    return scores, parsed_args
+    return scores
 
 
 if __name__ == "__main__":
