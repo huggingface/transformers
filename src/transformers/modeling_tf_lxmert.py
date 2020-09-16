@@ -23,7 +23,7 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
-from transformers import BatchEncoding
+from .tokenization_utils_base import BatchEncoding
 
 from .activations_tf import get_tf_activation
 from .configuration_lxmert import LxmertConfig

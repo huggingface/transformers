@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from transformers import ElectraConfig
+from .configuration_electra import ElectraConfig
 
 from .activations_tf import get_tf_activation
 from .file_utils import (
