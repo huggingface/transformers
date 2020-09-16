@@ -32,6 +32,15 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, 
 import warnings
 from .modeling_bart import  LayerNorm, invert_mask
 
+from .modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+    Seq2SeqQuestionAnsweringModelOutput,
+    Seq2SeqSequenceClassifierOutput,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -407,8 +416,7 @@ class ProphetNetEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
-    def forward(self, input_ids, attention_mask=None, output_attentions=False, return_dict=True):
-        assert return_dict, 'function not implement'
+    def forward(self, input_ids, attention_mask=None, output_attentions=False, return_dict=False):
         # remove bos to be consistent with fairseq version
         input_ids = input_ids[:, 1:]
         if attention_mask is not None:
@@ -439,8 +447,9 @@ class ProphetNetEncoder(nn.Module):
         # T x B x C -> B x T x C
         encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
         x = x.transpose(0, 1)
-        results = (x, encoder_states, all_attentions)
-        return results
+        if not return_dict:
+            return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
 def softmax(x, dim, onnx_trace=False):
@@ -1019,9 +1028,10 @@ class ProphetNetDecoder(nn.Module):
             input_ids,
             encoder_hidden_states,
             encoder_padding_mask,
-            decoder_cached_states=None,
+            past_key_values=None,
             use_cache=False,
             output_attentions=False,
+            return_dict=False,
             **unused,
     ):
         """
@@ -1091,7 +1101,7 @@ class ProphetNetDecoder(nn.Module):
         for idx, decoder_layer in enumerate(self.layers):
             if self.output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
+            layer_state = past_key_values[idx] if past_key_values is not None else None
             hidden_states, layer_self_attn, layer_past = decoder_layer(
                 hidden_states,
                 encoder_hidden_states,
@@ -1111,10 +1121,14 @@ class ProphetNetDecoder(nn.Module):
         hidden_states_list = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
         if use_cache:
-            next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
+            next_cache = next_decoder_cache
         else:
             next_cache = None
-        return hidden_states_list, next_cache, all_hidden_states, list(all_self_attns)
+        if not return_dict:
+            return hidden_states_list, next_cache, all_hidden_states, list(all_self_attns)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states_list, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+        )
 
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a input_ids with -inf."""
@@ -1157,35 +1171,50 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             attention_mask=None,
             decoder_input_ids=None,
             encoder_outputs: Optional[Tuple] = None,
-            decoder_cached_states=None,
+            past_key_values=None,
             use_cache=False,
             output_attentions=None,
+            return_dict=False,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
 
         assert decoder_input_ids is not None
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                return_dict=return_dict
             )
-        assert isinstance(encoder_outputs, tuple)
+        if return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
             encoder_outputs[0],
             attention_mask,
-            decoder_cached_states=decoder_cached_states,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            return_dict=return_dict
         )
 
-        # Attention and hidden_states will be [] or None if they aren't needed
-        decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
-        assert isinstance(decoder_outputs[0], tuple) # last layer hidden state of main stream and predicting streams
-        encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
-        return decoder_outputs + encoder_outputs
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
 
 def _reorder_buffer(attn_cache, new_order):
@@ -1223,10 +1252,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
-        decoder_cached_states=None,
+        past_key_values=None,
         labels=None,
         use_cache=False,
         output_attentions=None,
+        return_dict=False,
         **unused,
     ):
 
@@ -1235,11 +1265,19 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
-            decoder_cached_states=decoder_cached_states,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            return_dict=return_dict
         )
-        predicting_streams = outputs[0][1:]
+        if not return_dict:
+            predicting_streams = outputs[0][1:]
+        else:
+            predicting_streams = outputs.last_hidden_state[1:]
+            # print('outputs')
+            # print(outputs)
+            # print('outputs.decoder_hidden_states')
+            # print(outputs.last_hidden_state)
         predicting_streams_logits = [self.output_layer(x) for x in predicting_streams]
         #lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
 
@@ -1269,22 +1307,44 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
                 eps_i = self.config.eps / lprobs.size(-1)
                 loss = (1. - self.config.eps) * loss + eps_i * smooth_loss
-            outputs_loss = (loss,) + outputs
-            return outputs_loss
+            if not return_dict:
+                return (loss,) + outputs
+            else:
+                return Seq2SeqLMOutput(
+                    loss=loss,
+                    logits=predicting_streams_logits[0],
+                    past_key_values=outputs.past_key_values,
+                    decoder_hidden_states=outputs.decoder_hidden_states,
+                    decoder_attentions=outputs.decoder_attentions,
+                    encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                    encoder_hidden_states=outputs.encoder_hidden_states,
+                    encoder_attentions=outputs.encoder_attentions,
+                )
         else:
             # inference
-            outputs_logits = (predicting_streams_logits[0],) + outputs[1:]  # Add cache, hidden states and attention if they are here
-            return outputs_logits
+            if not return_dict:
+                outputs_logits = (predicting_streams_logits[0],) + outputs[1:]  # Add cache, hidden states and attention if they are here
+                return outputs_logits
+            else:
+                return Seq2SeqLMOutput(
+                    loss=None,
+                    logits=predicting_streams_logits[0],
+                    past_key_values=outputs.past_key_values,
+                    decoder_hidden_states=outputs.decoder_hidden_states,
+                    decoder_attentions=outputs.decoder_attentions,
+                    encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                    encoder_hidden_states=outputs.encoder_hidden_states,
+                    encoder_attentions=outputs.encoder_attentions,
+                )
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
+    def prepare_inputs_for_generation(
+        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+    ):
         # first step, decoder_cached_states are empty
-        encoder_outputs, decoder_cached_states = past
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "decoder_cached_states": decoder_cached_states,
+            "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "use_cache": use_cache,
@@ -1311,20 +1371,14 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        ((enc_out, enc_mask), decoder_cached_states) = past
         reordered_past = []
-        for layer_past in decoder_cached_states:
+        for layer_past in past:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             reordered_past.append(layer_past_new)
-
-        new_enc_out = enc_out if enc_out is None else enc_out.index_select(0, beam_idx)
-        new_enc_mask = enc_mask if enc_mask is None else enc_mask.index_select(0, beam_idx)
-
-        past = ((new_enc_out, new_enc_mask), reordered_past)
-        return past
+        return reordered_past
 
     def get_encoder(self):
         return self.model.encoder
