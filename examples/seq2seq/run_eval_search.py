@@ -11,6 +11,7 @@ from run_eval import datetime_now, run_generate
 # To add a new task, simply list the score names that `run_eval.run_generate()` returns
 task_score_names = {
     "translation": ["bleu"],
+    "translation_en_to_de": ["bleu"],
     "summarization": ["rouge1", "rouge2", "rougeL"],
 }
 
@@ -109,10 +110,12 @@ def run_search():
         print(" | ".join([f"{row[col]:{col_widths[col]}}" for col in col_names]))
 
     best = results_sorted[0]
-    del best["bleu"]
+    for score in task_score_names[args.task]:
+        del best[score]
     best_args = [f"--{k} {v}" for k, v in best.items()]
     dyn_args = ["--bs", str(args.bs)]
-    print(f"\nInfo: {args.info}")
+    if args.info:
+        print(f"\nInfo: {args.info}")
     print("\nBest score args:")
     print(" ".join(args_main + best_args + dyn_args))
 
