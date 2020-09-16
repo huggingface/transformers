@@ -80,7 +80,9 @@ def eval_data_dir(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = ds.make_sortish_sampler(bs, distributed=True, add_extra_examples=False, shuffle=False)
+    # I set shuffle=True for a more accurate progress bar.
+    # If all the longest samples are first, the prog bar estimate is too high at the beginning.
+    sampler = ds.make_sortish_sampler(bs, distributed=True, add_extra_examples=False, shuffle=True)
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
     results = []
     for batch in tqdm(data_loader):
