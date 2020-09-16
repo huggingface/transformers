@@ -34,58 +34,46 @@ _CONFIG_FOR_DOC = "RagConfig"
 
 
 @dataclass
-class Seq2SeqLMOutputWithDocs(ModelOutput):
-    """
-    Outputs for sequence-to-sequence language models with retrieval in the loop.
-
-    Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Languaged modeling loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)` if the ``logits are marginalized or :obj:`(batch_size * config.n_docs, sequence_length, config.vocab_size)` if they aren't):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
-
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
-        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-            Scores of retrieved documents.
-    """
+class RetrievAugLMMarginOutput(ModelOutput):
+    """"""
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
+    doc_scores: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    doc_scores: Optional[torch.FloatTensor] = None
+    context_input_ids: Optional[torch.LongTensor] = None
+    context_attention_mask: Optional[torch.LongTensor] = None
+    retrieved_doc_embeds: Optional[torch.FloatTensor] = None
+    retrieved_doc_ids: Optional[torch.LongTensor] = None
+    question_enc_pool_output: Optional[torch.FloatTensor] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class RetrievAugLMOutput(ModelOutput):
+    """"""
+
+    logits: torch.FloatTensor = None
+    doc_scores: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    context_input_ids: Optional[torch.LongTensor] = None
+    context_attention_mask: Optional[torch.LongTensor] = None
+    retrieved_doc_embeds: Optional[torch.FloatTensor] = None
+    retrieved_doc_ids: Optional[torch.LongTensor] = None
+    question_enc_pool_output: Optional[torch.FloatTensor] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class RagPreTrainedModel(PreTrainedModel):
@@ -333,7 +321,7 @@ class RagModel(RagPreTrainedModel):
         self.generator = generator
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -346,42 +334,56 @@ class RagModel(RagPreTrainedModel):
         context_input_ids=None,
         context_attention_mask=None,
         use_cache=None,
-        return_dict=True,  # TODO(Patrick) should be `False` by default => change later for API
+        output_attentions=None,
+        output_hidden_states=None,
+        output_retrieved=None,
     ):
         r"""
         Returns:
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_retrieved = output_retrieved if output_retrieved is not None else self.config.output_retrieved
 
+        # whether retriever has to be used
+        has_to_retrieve = (
+            self.retriever is not None
+            and (context_input_ids is None or context_attention_mask is None or doc_scores is None)
+            and encoder_outputs is None
+        )
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
 
-            if self.retriever is not None and (
-                context_input_ids is None or context_attention_mask is None or doc_scores is None
-            ):
-                question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
+            if has_to_retrieve:
+                question_enc_outputs = self.question_encoder(
+                    input_ids, attention_mask=attention_mask, return_dict=True
+                )
+                question_enc_pool_output = question_enc_outputs.pooler_output
 
-                out = self.retriever(
+                retriever_outputs = self.retriever(
                     input_ids,
-                    question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                    question_enc_pool_output.cpu().detach().to(torch.float32).numpy(),
                     prefix=self.generator.config.prefix,
                     n_docs=self.config.n_docs,
                     return_tensors="pt",
                 )
                 context_input_ids, context_attention_mask, retrieved_doc_embeds = (
-                    out["context_input_ids"],
-                    out["context_attention_mask"],
-                    out["retrieved_doc_embeds"],
+                    retriever_outputs["context_input_ids"],
+                    retriever_outputs["context_attention_mask"],
+                    retriever_outputs["retrieved_doc_embeds"],
                 )
 
                 # set to correct device
-                retrieved_doc_embeds = retrieved_doc_embeds.to(question_hidden_states)
+                retrieved_doc_embeds = retrieved_doc_embeds.to(question_enc_pool_output)
                 context_input_ids = context_input_ids.to(input_ids)
                 context_attention_mask = context_attention_mask.to(input_ids)
 
                 # compute doc_scores
                 doc_scores = torch.bmm(
-                    question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
+                    question_enc_pool_output.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
                 ).squeeze(1)
             else:
                 assert (
@@ -405,7 +407,7 @@ class RagModel(RagPreTrainedModel):
         if decoder_attention_mask is not None:
             decoder_attention_mask = decoder_attention_mask.repeat_interleave(self.config.n_docs, dim=0)
 
-        outputs = self.generator(
+        gen_outputs = self.generator(
             input_ids=context_input_ids,
             attention_mask=context_attention_mask,
             encoder_outputs=encoder_outputs,
@@ -413,19 +415,42 @@ class RagModel(RagPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        return Seq2SeqLMOutputWithDocs(
-            loss=None,
-            logits=outputs.logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
+        if not has_to_retrieve:
+            question_enc_pool_output = None
+            question_enc_hidden_states = None
+            question_enc_attentions = None
+            retrieved_doc_embeds = None
+            retrieved_doc_ids = None
+        else:
+            question_enc_hidden_states = question_enc_outputs.hidden_states
+            question_enc_attentions = question_enc_outputs.attentions
+
+        if not has_to_retrieve or not output_retrieved:
+            # don't output retrieved docs
+            context_input_ids = (None,)
+            context_attention_mask = None
+            retrieved_doc_embeds = None
+            retrieved_doc_ids = None
+
+        return RetrievAugLMOutput(
+            logits=gen_outputs.logits,
             doc_scores=doc_scores,
+            past_key_values=gen_outputs.past_key_values,
+            context_input_ids=context_input_ids,
+            context_attention_mask=context_attention_mask,
+            retrieved_doc_embeds=retrieved_doc_embeds,
+            retrieved_doc_ids=None,  # wait for retriever to return this
+            question_enc_pool_output=question_enc_pool_output,
+            question_enc_hidden_states=question_enc_hidden_states,
+            question_enc_attentions=question_enc_attentions,
+            generator_enc_last_hidden_state=gen_outputs.encoder_last_hidden_state,
+            generator_enc_hidden_states=gen_outputs.encoder_hidden_states,
+            generator_enc_attentions=gen_outputs.encoder_attentions,
+            generator_dec_hidden_states=gen_outputs.decoder_hidden_states,
+            generator_dec_attentions=gen_outputs.decoder_attentions,
         )
 
 
@@ -459,7 +484,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self.rag.retriever = retriever
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -472,9 +497,12 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         context_attention_mask=None,
         doc_scores=None,
         use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        output_retrieved=None,
         exclude_bos_score=None,
         labels=None,
-        return_dict=None,
+        **kwargs  # needs kwargs for generation
     ):
         r"""
 
@@ -498,8 +526,12 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             doc_scores=doc_scores,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_retrieved=output_retrieved,
         )
 
+        loss = None
         if labels is not None:
             loss = self.get_nll(
                 outputs.logits,
@@ -509,28 +541,24 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 epsilon=self.config.label_smoothing,
                 exclude_bos_score=self.config.exclude_bos_score,
             )
-            return Seq2SeqLMOutputWithDocs(
-                loss=loss,
-                logits=outputs.logits,
-                past_key_values=outputs.past_key_values,
-                decoder_hidden_states=outputs.decoder_hidden_states,
-                decoder_attentions=outputs.decoder_attentions,
-                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-                encoder_hidden_states=outputs.encoder_hidden_states,
-                encoder_attentions=outputs.encoder_attentions,
-                doc_scores=outputs.doc_scores,
-            )
 
-        return Seq2SeqLMOutputWithDocs(
-            loss=None,
+        return RetrievAugLMMarginOutput(
+            loss=loss,
             logits=outputs.logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
             doc_scores=outputs.doc_scores,
+            past_key_values=outputs.past_key_values,
+            context_input_ids=outputs.context_input_ids,
+            context_attention_mask=outputs.context_attention_mask,
+            retrieved_doc_embeds=outputs.retrieved_doc_embeds,
+            retrieved_doc_ids=outputs.retrieved_doc_ids,
+            question_enc_pool_output=outputs.question_enc_pool_output,
+            question_enc_hidden_states=outputs.question_enc_hidden_states,
+            question_enc_attentions=outputs.question_enc_attentions,
+            generator_enc_last_hidden_state=outputs.generator_enc_last_hidden_state,
+            generator_enc_hidden_states=outputs.generator_enc_hidden_states,
+            generator_enc_attentions=outputs.generator_enc_attentions,
+            generator_dec_hidden_states=outputs.generator_dec_hidden_states,
+            generator_dec_attentions=outputs.generator_dec_attentions,
         )
 
     @property
@@ -549,14 +577,21 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     def generate(
         self,
         input_ids,
-        context_input_ids=None,  # NEW
-        dedup=True,
-        num_return_sequences=1,
-        num_beams=1,
-        attention_mask=None,
+        context_input_ids=None,
+        deduplicate=None,  # defaults to True
+        num_doc_return_sequences=None,  # defaults to 1
+        num_doc_beams=None,  # defaults to 1
+        generator_attention_mask=None,
         **kwargs
         # TODO (Patrick): set those values to `None` and set the config values accordingly
     ):
+
+        deduplicate = deduplicate if deduplicate is not None else self.config.deduplicate
+        num_doc_return_sequences = (
+            num_doc_return_sequences if num_doc_return_sequences is not None else self.config.num_doc_return_sequences
+        )
+        num_doc_beams = num_doc_beams if num_doc_beams is not None else self.config.num_doc_beams
+
         """
         Implements RAG sequence "thorough" decoding.
 
@@ -566,8 +601,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
             retriever (:class:`~transformers.RagRetriever`):
                 A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
-            dedup (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Controls whether we want to deduplicate the generations from different context documents for a given input.
+            deduplicate (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Controls whether we want to deduplicatelicate the generations from different context documents for a given input.
                 Has to be set to :obj:`False` if used while training with distributed backend.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this is not the value
@@ -602,7 +637,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             # set to correct device
             context_input_ids = context_input_ids.to(input_ids)
 
-        rag_num_return_sequences = num_return_sequences
         hypos = []
 
         for index in range(len(input_ids)):
@@ -612,16 +646,20 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             ]  # (n_docs, max_len)
 
             output_sequences = self.generator.generate(
-                generator_input_ids, num_return_sequences=num_beams, num_beams=num_beams, attention_mask=None, **kwargs
+                generator_input_ids,
+                num_return_sequences=num_doc_beams,
+                num_beams=num_doc_beams,
+                attention_mask=None,
+                **kwargs,
             )  # n_docs * n_beam, tgt_len
-            if dedup:
-                # dedup, max_output_len
+            if deduplicate:
+                # deduplicate, max_output_len
                 output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
             outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
-            top_cand_inds = (-outputs["loss"]).topk(rag_num_return_sequences)[1]
+            top_cand_inds = (-outputs["loss"]).topk(num_doc_return_sequences)[1]
 
             # add hypothesis
             hypos.append(output_sequences[top_cand_inds])
@@ -799,7 +837,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         return torch.logsumexp(log_prob_sum, dim=1)
 
     @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING, RAG_LOSS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -812,9 +850,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
         context_attention_mask=None,
         doc_scores=None,
         use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        output_retrieved=None,
         do_marginalize=None,
         labels=None,
-        return_dict=None,
+        **kwargs  # needs kwargs for generation
     ):
         r"""
         Returns:
@@ -837,8 +878,13 @@ class RagTokenForGeneration(RagPreTrainedModel):
             doc_scores=doc_scores,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_retrieved=output_retrieved,
         )
 
+        loss = None
+        logits = outputs.logits
         if labels is not None:
             assert decoder_input_ids is not None
             loss = self.get_nll(
@@ -848,33 +894,27 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 reduce_loss=self.config.reduce_loss,
                 epsilon=self.config.label_smoothing,
             )
-            return Seq2SeqLMOutputWithDocs(
-                loss=loss,
-                logits=outputs.logits,
-                past_key_values=outputs.past_key_values,
-                decoder_hidden_states=outputs.decoder_hidden_states,
-                decoder_attentions=outputs.decoder_attentions,
-                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-                encoder_hidden_states=outputs.encoder_hidden_states,
-                encoder_attentions=outputs.encoder_attentions,
-                doc_scores=outputs.doc_scores,
-            )
-
-        logits = outputs.logits
 
         if do_marginalize:
             logits = self.marginalize(logits, outputs.doc_scores)
 
-        return Seq2SeqLMOutputWithDocs(
-            loss=None,
+        return RetrievAugLMMarginOutput(
+            loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
             doc_scores=outputs.doc_scores,
+            past_key_values=outputs.past_key_values,
+            context_input_ids=outputs.context_input_ids,
+            context_attention_mask=outputs.context_attention_mask,
+            retrieved_doc_embeds=outputs.retrieved_doc_embeds,
+            retrieved_doc_ids=outputs.retrieved_doc_ids,
+            question_enc_pool_output=outputs.question_enc_pool_output,
+            question_enc_hidden_states=outputs.question_enc_hidden_states,
+            question_enc_attentions=outputs.question_enc_attentions,
+            generator_enc_last_hidden_state=outputs.generator_enc_last_hidden_state,
+            generator_enc_hidden_states=outputs.generator_enc_hidden_states,
+            generator_enc_attentions=outputs.generator_enc_attentions,
+            generator_dec_hidden_states=outputs.generator_dec_hidden_states,
+            generator_dec_attentions=outputs.generator_dec_attentions,
         )
 
     @torch.no_grad()

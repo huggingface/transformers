@@ -121,8 +121,12 @@ class RagConfig(PretrainedConfig):
         use_dummy_dataset=False,
         reduce_loss=False,
         label_smoothing=0.0,
+        deduplicate=True,  # defaults to True
+        num_doc_return_sequences=1,  # defaults to 1
+        num_doc_beams=1,  # defaults to 1
         exclude_bos_score=False,
         do_marginalize=False,
+        output_retrieved=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -165,6 +169,12 @@ class RagConfig(PretrainedConfig):
         self.passages_path = passages_path
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+
+        self.output_retrieved = output_retrieved
+
+        self.deduplicate = deduplicate
+        self.num_doc_return_sequences = num_doc_return_sequences
+        self.num_doc_beams = num_doc_beams
 
     @classmethod
     def from_question_encoder_generator_configs(

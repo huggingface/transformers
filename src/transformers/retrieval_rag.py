@@ -17,6 +17,7 @@
 import os
 import pickle
 import time
+from typing import Iterable, List, Optional, Tuple
 
 import faiss
 import numpy as np
@@ -25,14 +26,12 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
-from typing import Iterable, List, Tuple, Optional
-
 from .configuration_rag import RagConfig
 from .file_utils import cached_path, is_remote_url
 from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
-from .utils import logging
 from .tokenization_utils_base import BatchEncoding
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)

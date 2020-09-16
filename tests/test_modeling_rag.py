@@ -30,6 +30,7 @@ from transformers.file_utils import (
     is_psutil_available,
     is_torch_available,
 )
+from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
@@ -149,7 +150,6 @@ class RagModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
-            return_dict=True,
         )
 
         # DPR params
@@ -180,7 +180,6 @@ class RagModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
     def prepare_inputs(self):
@@ -291,7 +290,6 @@ class RagTestMixin:
                 question_encoder_tokenizer=self.dpr_tokenizer,
                 generator_tokenizer=self.bart_tokenizer,
             )
-            retriever.init_retrieval(0)
         return retriever
 
     def check_model_with_retriever(
@@ -315,16 +313,16 @@ class RagTestMixin:
 
             # logits
             self.assertEqual(
-                outputs[0].shape,
+                outputs.logits.shape,
                 (self.n_docs * decoder_input_ids.shape[0], decoder_input_ids.shape[1], config.generator.vocab_size),
             )
             # generator encoder last hidden states
             self.assertEqual(
-                outputs[1].shape,
+                outputs.generator_enc_last_hidden_state.shape,
                 (self.n_docs * decoder_input_ids.shape[0], self.max_combined_length, config.generator.hidden_size),
             )
             # doc scores
-            self.assertEqual(outputs[2].shape, (input_ids.shape[0], self.n_docs))
+            self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
 
     def check_model_without_retriever(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
@@ -341,11 +339,23 @@ class RagTestMixin:
 
             question_hidden_states = model.question_encoder(input_ids, attention_mask=attention_mask)[0]
 
-            context_input_ids, context_attention_mask, retrieved_doc_embeds = retriever(
+            out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32),
+                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
                 prefix=config.generator.prefix,
+                return_tensors="pt",
             )
+
+            context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+                out["context_input_ids"],
+                out["context_attention_mask"],
+                out["retrieved_doc_embeds"],
+            )
+
+            # cast
+            retrieved_doc_embeds = retrieved_doc_embeds.to(question_hidden_states)
+            context_input_ids = context_input_ids.to(input_ids)
+            context_attention_mask = context_attention_mask.to(input_ids)
 
             # compute doc_scores
             doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
@@ -362,40 +372,58 @@ class RagTestMixin:
 
             # logits
             self.assertEqual(
-                outputs[0].shape,
+                outputs.logits.shape,
                 (self.n_docs * decoder_input_ids.shape[0], decoder_input_ids.shape[1], config.generator.vocab_size),
             )
             # generator encoder last hidden states
             self.assertEqual(
-                outputs[1].shape,
+                outputs.generator_enc_last_hidden_state.shape,
                 (self.n_docs * decoder_input_ids.shape[0], self.max_combined_length, config.generator.hidden_size),
             )
             # doc scores
-            self.assertEqual(outputs[2].shape, (input_ids.shape[0], self.n_docs))
+            self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
 
-    #        def check_model_with_encoder_outputs(
-    #            self,
-    #            config,
-    #            input_ids,
-    #            attention_mask,
-    #            decoder_config,
-    #            decoder_input_ids,
-    #            decoder_attention_mask,
-    #            **kwargs
-    #        ):
-    #        self.assertIsNotNone(config.question_encoder)
-    #        self.assertIsNotNone(config.generator)
-    #
-    #        for model_class in self.all_model_classes:
-    #            model = model_class(config).to(torch_device)
-    #            model.eval()
-    #
-    #            self.assertTrue(model.config.is_encoder_decoder)
-    #
-    #            outputs = model(encoder_outputs, decoder_input_ids, decoder_attention_mask)
-    #
-    #            self.assertEqual(outputs[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
-    #            self.assertEqual(outputs[1].shape, (input_ids.shape + (config.hidden_size,)))
+    def check_model_with_encoder_outputs(
+        self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
+    ):
+        self.assertIsNotNone(config.question_encoder)
+        self.assertIsNotNone(config.generator)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config, retriever=self.get_retriever(config)).to(torch_device)
+            model.eval()
+
+            self.assertTrue(model.config.is_encoder_decoder)
+
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            encoder_outputs = BaseModelOutput(outputs.generator_enc_last_hidden_state)
+
+            # run only generator
+            outputs = model(
+                encoder_outputs=encoder_outputs,
+                doc_scores=outputs.doc_scores,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            # logits
+            self.assertEqual(
+                outputs.logits.shape,
+                (self.n_docs * decoder_input_ids.shape[0], decoder_input_ids.shape[1], config.generator.vocab_size),
+            )
+            # generator encoder last hidden states
+            self.assertEqual(
+                outputs.generator_enc_last_hidden_state.shape,
+                (self.n_docs * decoder_input_ids.shape[0], self.max_combined_length, config.generator.hidden_size),
+            )
+            # doc scores
+            self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
 
     def test_model_with_retriever(self):
         inputs_dict = self.config_and_inputs
@@ -404,6 +432,10 @@ class RagTestMixin:
     def test_model_without_retriever(self):
         inputs_dict = self.config_and_inputs
         self.check_model_without_retriever(**inputs_dict)
+
+    def test_model_with_encoder_outputs(self):
+        inputs_dict = self.config_and_inputs
+        self.check_model_with_encoder_outputs(**inputs_dict)
 
 
 @require_torch
@@ -436,128 +468,6 @@ class RagDPRBartTest(RagTestMixin, unittest.TestCase):
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
         }
-
-
-# def mock_contextualize(*args, **kwargs):
-#    input_ids = torch.tensor([[0, 31414, 232, 328, 2]] * 3 * 13)
-#    attention_mask = torch.tensor([[1, 1, 1, 1, 1]] * 3 * 13)
-#    doc_scores = torch.tensor([[0.111, 0.222, 0.333]] * 13)
-#    return input_ids, attention_mask, doc_scores
-
-
-# @patch("transformers.RagModel.contextualize", mock_contextualize)
-# def test_forward_pass(self):
-#    input_ids, attention_mask = self.model_tester.prepare_inputs()
-#    decoder_input_ids = torch.tensor([[0, 31414, 232, 328, 2]] * self.model_tester.batch_size)
-#    tgt_len = decoder_input_ids.shape[1]
-#    for model_class in self.all_model_classes:
-#        model = model_class(
-#            config=self.model_tester.rag_config,
-#            question_encoder=DPRQuestionEncoder(self.model_tester.dpr_config),
-#            generator=BartForConditionalGeneration(self.model_tester.bart_config),
-#        )
-#        model.to(torch_device)
-#        model.eval()
-#
-# use cache
-#        result = model(
-#            input_ids,
-#            retriever=None,
-#            decoder_input_ids=decoder_input_ids,
-#            attention_mask=attention_mask,
-#            marginalize=False,
-#            use_cache=True,
-#        )
-#        self.assertEqual(
-#            result.logits.shape,
-#            (self.model_tester.rag_config.n_docs * self.model_tester.batch_size, 1, self.model_tester.vocab_size),
-#        )
-#        self.assertEqual(
-#            result.doc_scores.shape, (self.model_tester.batch_size, self.model_tester.rag_config.n_docs)
-#        )
-#        self.assertIsNone(result.loss)
-#
-# no cache
-#        result = model(
-#            input_ids,
-#            retriever=None,
-#            decoder_input_ids=decoder_input_ids,
-#            attention_mask=attention_mask,
-#            marginalize=False,
-#            use_cache=False,
-#        )
-#        self.assertEqual(
-#            result.logits.shape,
-#            (
-#                self.model_tester.rag_config.n_docs * self.model_tester.batch_size,
-#                tgt_len,
-#                self.model_tester.vocab_size,
-#            ),
-#        )
-#        self.assertEqual(
-#            result.doc_scores.shape, (self.model_tester.batch_size, self.model_tester.rag_config.n_docs)
-#        )
-#        self.assertIsNone(result.loss)
-#
-# marginalization in RagTokenForGeneration + no cache
-#        if isinstance(model_class, RagTokenForGeneration):
-#            result = model(
-#                input_ids,
-#                decoder_input_ids=decoder_input_ids,
-#                attention_mask=attention_mask,
-#                marginalize=True,
-#                use_cache=False,
-#            )
-#            self.assertEqual(
-#                result.logits.shape, (self.model_tester.batch_size, tgt_len, self.model_tester.vocab_size)
-#            )
-#            self.assertEqual(
-#                result.doc_scores.shape, (self.model_tester.batch_size, self.model_tester.rag_config.n_docs)
-#            )
-#            self.assertIsNone(result.loss)
-#
-# return_loss, no reduce
-#        result = model(
-#            input_ids,
-#            retriever=None,
-#            decoder_input_ids=decoder_input_ids,
-#            attention_mask=attention_mask,
-#            return_loss=True,
-#        )
-#        self.assertEqual(
-#            result.logits.shape,
-#            (
-#                self.model_tester.rag_config.n_docs * self.model_tester.batch_size,
-#                tgt_len,
-#                self.model_tester.vocab_size,
-#            ),
-#        )
-#        self.assertEqual(
-#            result.doc_scores.shape, (self.model_tester.batch_size, self.model_tester.rag_config.n_docs)
-#        )
-#        self.assertEqual(result.loss.shape, (self.model_tester.batch_size,))
-#
-# return_loss, reduce
-#        result = model(
-#            input_ids,
-#            retriever=None,
-#            decoder_input_ids=decoder_input_ids,
-#            attention_mask=attention_mask,
-#            return_loss=True,
-#            reduce=True,
-#        )
-#        self.assertEqual(
-#            result.logits.shape,
-#            (
-#                self.model_tester.rag_config.n_docs * self.model_tester.batch_size,
-#                tgt_len,
-#                self.model_tester.vocab_size,
-#            ),
-#        )
-#        self.assertEqual(
-#            result.doc_scores.shape, (self.model_tester.batch_size, self.model_tester.rag_config.n_docs)
-#        )
-#        self.assertEqual(result.loss.shape, torch.Size([]))
 
 
 @require_torch

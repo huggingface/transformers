@@ -10,7 +10,7 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 
-from .file_utils import _tf_available, _torch_available, _torch_tpu_available, _datasets_available, _faiss_available
+from .file_utils import _datasets_available, _faiss_available, _tf_available, _torch_available, _torch_tpu_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
