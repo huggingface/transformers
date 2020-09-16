@@ -227,6 +227,20 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --fp16 \
     --bs 32
 ```
+### Multi-GPU Evalulation
+here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
+because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
+`{type_path}.source` and `{type_path}.target`. Run `python run_distributed_eval.py --help` for all clargs.
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8  run_distributed_eval.py \
+    --model_name sshleifer/distilbart-large-xsum-12-3  \
+    --save_dir xsum_generations \
+    --data_dir xsum \
+    --fp16  # you can pass generate kwargs like num_beams here, just like run_eval.py
+```
+
+Contributions that implement this command for other distributed hardware setups are welcome!
 
 #### run_eval tips and tricks
 

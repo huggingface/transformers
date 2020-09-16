@@ -156,7 +156,7 @@ def run_generate(verbose=True):
         scores["info"] = args.info
 
     if verbose:
-        print(*scores)
+        print(scores)
 
     if args.score_path is not None:
         path = args.score_path
