@@ -24,7 +24,7 @@ from typing import Dict, List, Optional
 
 import sacremoses as sm
 
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 
