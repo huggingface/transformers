@@ -234,7 +234,7 @@ When using `run_eval.py`, the following features can be useful:
 
 * if you running the script multiple times and want to make it easier to track what arguments produced that output, use `--dump-args`. Along with the results it will also dump any custom params that were passed to the script. For example if you used: `--num_beams 8 --early_stopping true`, the output will be:
    ```
-   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1} {'num_beams': 8, 'early_stopping': True}
+   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True}
    ```
 
    `--info` is an additional argument available for the same purpose of tracking the conditions of the experiment. It's useful to pass things that weren't in the argument list, e.g. a language pair `--info "lang:en-ru"`. But also if you pass `--info` without a value it will fallback to the current date/time string, e.g. `2020-09-13 18:44:43`.
@@ -242,13 +242,13 @@ When using `run_eval.py`, the following features can be useful:
    If using `--dump-args --info`, the output will be:
    
    ```
-   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1} {'num_beams': 8, 'early_stopping': True, 'info': '2020-09-13 18:44:43'}
+   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': '2020-09-13 18:44:43'}
    ```
 
    If using `--dump-args --info "pair:en-ru chkpt=best`, the output will be:
    
    ```
-   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1} {'num_beams': 8, 'early_stopping': True, 'info': 'pair=en-ru chkpt=best'}
+   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': 'pair=en-ru chkpt=best'}
    ```
       
 
@@ -286,6 +286,9 @@ bleu  | num_beams | length_penalty | early_stopping
 Best score args:
 stas/wmt19-en-ru data/en-ru/val.source data/en-ru/test_translations.txt --reference_path data/en-ru/val.target --score_path data/en-ru/test_bleu.json --bs 8 --task translation --num_beams 5 --length_penalty 1.1 --early_stopping True
 ```
+
+If you pass `--info "some experiment-specific info"` it will get printed before the results table - this is useful for scripting and multiple runs, so one can tell the different sets of results from each other.
+
 
 ### DistilBART
 ![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
