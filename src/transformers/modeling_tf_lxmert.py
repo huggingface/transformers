@@ -21,11 +21,11 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
 from transformers import BatchEncoding
 
+from .activations_tf import get_tf_activation
 from .configuration_lxmert import LxmertConfig
 from .file_utils import (
     ModelOutput,
@@ -46,42 +46,6 @@ _TOKENIZER_FOR_DOC = "LxmertTokenizer"
 TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "unc-nlp/lxmert-base-uncased",
 ]
-
-
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    Original Implementation of the gelu activation function in Google Bert repo when initially created.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
-    return x * cdf
-
-
-def gelu_new(x):
-    """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    Args:
-        x: float Tensor to perform activation.
-    Returns:
-        `x` with the GELU activation applied.
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
-
-
-def swish(x):
-    return x * tf.sigmoid(x)
-
-
-ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-    "gelu_new": tf.keras.layers.Activation(gelu_new),
-}
 
 
 @dataclass
@@ -404,7 +368,7 @@ class TFLxmertIntermediate(tf.keras.layers.Layer):
             name="dense",
         )
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
 
@@ -1012,7 +976,7 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
             name="dense",
         )
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
+            self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -1082,7 +1046,7 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="logit_fc_._0",
         )
-        self.activation = tf.keras.layers.Activation(gelu)
+        self.activation = get_tf_activation("gelu")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="logit_fc_._2")
         self.dense_1 = tf.keras.layers.Dense(
             num_labels,

@@ -115,11 +115,11 @@ class AbstractSeq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    def make_sortish_sampler(self, batch_size, distributed=False, **kwargs):
+    def make_sortish_sampler(self, batch_size, distributed=False, shuffle=True, **kwargs):
         if distributed:
-            return DistributedSortishSampler(self, batch_size, **kwargs)
+            return DistributedSortishSampler(self, batch_size, shuffle=shuffle, **kwargs)
         else:
-            return SortishSampler(self.src_lens, batch_size)
+            return SortishSampler(self.src_lens, batch_size, shuffle=shuffle)
 
     def __getitem__(self, item):
         raise NotImplementedError("You must implement this")
@@ -193,18 +193,20 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
 class SortishSampler(Sampler):
     "Go through the text data by order of src length with a bit of randomness. From fastai repo."
 
-    def __init__(self, data, batch_size):
-        self.data, self.bs = data, batch_size
+    def __init__(self, data, batch_size, shuffle=True):
+        self.data, self.bs, self.shuffle = data, batch_size, shuffle
 
     def __len__(self) -> int:
         return len(self.data)
 
     def __iter__(self):
-        return iter(sortish_sampler_indices(self.data, self.bs))
+        return iter(sortish_sampler_indices(self.data, self.bs, shuffle=self.shuffle))
 
 
-def sortish_sampler_indices(data: List, bs: int) -> np.array:
+def sortish_sampler_indices(data: List, bs: int, shuffle=True) -> np.array:
     "Go through the text data by order of src length with a bit of randomness. From fastai repo."
+    if not shuffle:
+        return np.argsort(np.array(data) * -1)
 
     def key_fn(i):
         return data[i]
@@ -225,7 +227,7 @@ def sortish_sampler_indices(data: List, bs: int) -> np.array:
 class DistributedSortishSampler(Sampler):
     """Copied from torch DistributedSampler"""
 
-    def __init__(self, dataset, batch_size, num_replicas=None, rank=None, add_extra_examples=True):
+    def __init__(self, dataset, batch_size, num_replicas=None, rank=None, add_extra_examples=True, shuffle=True):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -246,13 +248,14 @@ class DistributedSortishSampler(Sampler):
             self.num_samples = len(self.available_indices)
         self.batch_size = batch_size
         self.add_extra_examples = add_extra_examples
+        self.shuffle = shuffle
 
     def __iter__(self) -> Iterable:
         g = torch.Generator()
         g.manual_seed(self.epoch)
 
         sortish_data = [self.dataset.src_lens[i] for i in self.available_indices]
-        sortish_indices = sortish_sampler_indices(sortish_data, self.batch_size)
+        sortish_indices = sortish_sampler_indices(sortish_data, self.batch_size, shuffle=self.shuffle)
         indices = [self.available_indices[i] for i in sortish_indices]
         assert len(indices) == self.num_samples
         return iter(indices)
@@ -309,9 +312,9 @@ def save_git_info(folder_path: str) -> None:
     save_json(repo_infos, os.path.join(folder_path, "git_log.json"))
 
 
-def save_json(content, path):
+def save_json(content, path, indent=4, **json_dump_kwargs):
     with open(path, "w") as f:
-        json.dump(content, f, indent=4)
+        json.dump(content, f, indent=indent, **json_dump_kwargs)
 
 
 def load_json(path):
@@ -377,18 +380,26 @@ def assert_not_all_frozen(model):
 # CLI Parsing utils
 
 
-def parse_numeric_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, float]]:
-    """Parse an argv list of unspecified command line args to a dict. Assumes all values are numeric."""
+def parse_numeric_n_bool_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, float, bool]]:
+    """
+    Parse an argv list of unspecified command line args to a dict.
+    Assumes all values are either numeric or boolean in the form of true/false.
+    """
     result = {}
     assert len(unparsed_args) % 2 == 0, f"got odd number of unparsed args: {unparsed_args}"
     num_pairs = len(unparsed_args) // 2
     for pair_num in range(num_pairs):
         i = 2 * pair_num
         assert unparsed_args[i].startswith("--")
-        try:
-            value = int(unparsed_args[i + 1])
-        except ValueError:
-            value = float(unparsed_args[i + 1])  # this can raise another informative ValueError
+        if unparsed_args[i + 1].lower() == "true":
+            value = True
+        elif unparsed_args[i + 1].lower() == "false":
+            value = False
+        else:
+            try:
+                value = int(unparsed_args[i + 1])
+            except ValueError:
+                value = float(unparsed_args[i + 1])  # this can raise another informative ValueError
 
         result[unparsed_args[i][2:]] = value
     return result

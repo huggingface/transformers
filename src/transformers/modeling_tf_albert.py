@@ -21,6 +21,7 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_albert import AlbertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -30,7 +31,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
+from .modeling_tf_bert import TFBertSelfAttention
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -354,7 +355,7 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         )
 
         if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
+            self.activation = get_tf_activation(config.hidden_act)
         else:
             self.activation = config.hidden_act
 
@@ -494,7 +495,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
             config.embedding_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
+            self.activation = get_tf_activation(config.hidden_act)
         else:
             self.activation = config.hidden_act
 
