@@ -387,6 +387,9 @@ class GenerationMixin:
             effective_batch_size = batch_size
             effective_batch_mult = 1
 
+        # retrieve encoder_outputs if necessary
+        encoder_outputs = model_kwargs.get("encoder_outputs", None)
+
         if self.config.is_encoder_decoder:
             if decoder_start_token_id is None:
                 # see if BOS token can be used for decoder_start_token_id
@@ -408,8 +411,6 @@ class GenerationMixin:
                     raise ValueError(
                         "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
                     )
-
-            encoder_outputs = model_kwargs.get("encoder_outputs", None)
 
             if encoder_outputs is None:
                 assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
