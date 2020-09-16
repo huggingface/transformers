@@ -30,9 +30,9 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = ["D@@", "HE@@", "C", "confirms", "HTTPURL", "via", "@USER", ":cry@@", ":"]
+        vocab = ["I", "am", "VinAI"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "in g</w>", "e d</w>", "i s</w>", "o n</w>", "o u</w>", ""]
+        merges = ["#version: 0.2", ""]
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
@@ -47,18 +47,18 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return BertweetTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "DHEC confirms HTTPURL via @USER :cry:"
-        output_text = "DHEC confirms HTTPURL via @USER :cry:"
+        input_text = "I am VinAI"
+        output_text = "<unk> <unk> <unk> <unk> <unk> <unk> <unk> <unk>"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = BertweetTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "DHEC confirms HTTPURL via @USER :cry:"
-        bpe_tokens = "<s> D@@ HE@@ C confirms HTTPURL via @USER :cry@@ : </s>".split()
+        text = "I am VinAI"
+        bpe_tokens = "I a@@ m V@@ i@@ n@@ A@@ I".split()
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
 
-        input_bpe_tokens = [0, 429, 6814, 499, 12952, 10, 156, 5, 3, 22, 2, 3]
+        input_bpe_tokens = [3, 3, 3, 3, 3, 3, 3, 3, 3]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)

@@ -16,7 +16,9 @@
 """ Tokenization classes for PhoBERT """
 
 
+import os
 import re
+from shutil import copyfile
 from typing import List, Optional
 
 from .tokenization_utils import PreTrainedTokenizer
@@ -136,6 +138,9 @@ class PhobertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
+
+        self.vocab_file = vocab_file
+        self.merges_file = merges_file
 
         self.encoder = {}
         self.encoder[self.bos_token] = 0
@@ -309,6 +314,29 @@ class PhobertTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
+
+    def save_vocabulary(self, save_directory):
+        """
+        Save the vocabulary and special tokens file to a directory.
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        if os.path.abspath(self.merges_file) != os.path.abspath(out_merge_file):
+            copyfile(self.merges_file, out_merge_file)
+
+        return out_vocab_file, out_merge_file
 
     # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))
