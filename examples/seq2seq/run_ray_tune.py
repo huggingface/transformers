@@ -160,6 +160,7 @@ args = argparse.Namespace(**{
     'tgt_lang': '',
     'early_stopping_patience': -1,
     'val_metric': None,
+    'save_top_k': 1,
 })
 
 tune_helsinki_(args)
