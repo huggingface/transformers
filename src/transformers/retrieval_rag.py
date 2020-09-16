@@ -208,9 +208,9 @@ class HFIndex(Index):
 
     def __init__(
         self,
-        dataset_name: str ,
-        dataset_split: str ,
-        index_name: str ,
+        dataset_name: str,
+        dataset_split: str,
+        index_name: str,
         index_path: Optional[str] = None,
         use_dummy_dataset=False,
     ):
