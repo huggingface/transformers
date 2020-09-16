@@ -23,7 +23,8 @@ def get_ray_slug(cfg):
 
     return os.path.expanduser(test)
 
-
+from ray.tune.logger import DEFAULT_LOGGERS
+from ray.tune.integration.wandb import WandbLogger
 def ray_main(args, config):
 
     for k,v in config.items():
@@ -40,6 +41,7 @@ def tune_helsinki_(args, num_samples=8, num_epochs=1):
         "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
         "gradient_accumulation_steps": tune.choice([1, 8, 32, 128, 256]),
         "dropout": tune.choice([0, 0.1, 0.2, 0.4]),
+
     }
     scheduler = ASHAScheduler(
         metric="val_avg_bleu",
@@ -52,17 +54,20 @@ def tune_helsinki_(args, num_samples=8, num_epochs=1):
         parameter_columns=list(search_space.keys()),
         metric_columns=["val_avg_loss", "val_avg_bleu", "global_step"]
     )
+    config = search_space.copy()
+    config["wandb"] = {"project": "RAY"}
     tune.run(
         partial(
             ray_main,
             args,
         ),
         resources_per_trial={"gpu": args.gpus},
-        config=search_space,
+        config=config,
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="tune_helsinki_asha"
+        name="tune_helsinki_asha",
+        loggers=DEFAULT_LOGGERS+ (WandbLogger,),
     )
 
 
