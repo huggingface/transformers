@@ -75,6 +75,7 @@ args = argparse.Namespace(**{
     'gradient_clip_val': 0,
     'eval_beams': 2,
     'process_position': 0,
+    "eval_max_gen_length": 128,
     'num_nodes': 1,
     'num_processes': 1,
     'gpus': 1,
