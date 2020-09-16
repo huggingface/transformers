@@ -377,6 +377,7 @@ class RagModel(RagPreTrainedModel):
         r"""
         Returns:
         """
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
@@ -409,6 +410,9 @@ class RagModel(RagPreTrainedModel):
         # Decoder input without context documents
         if decoder_input_ids is not None:
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.config.n_docs, dim=0)
+
+        if decoder_attention_mask is not None:
+            decoder_attention_mask = decoder_attention_mask.repeat_interleave(self.config.n_docs, dim=0)
 
         outputs = self.generator(
             input_ids=context_input_ids,
@@ -471,6 +475,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
+        decoder_attention_mask=None,
         past_key_values=None,
         context_input_ids=None,
         context_attention_mask=None,
@@ -496,6 +501,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
             retrieved_doc_embeds=retrieved_doc_embeds,
@@ -810,6 +816,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
+        decoder_attention_mask=None,
         past_key_values=None,
         context_input_ids=None,
         context_attention_mask=None,
@@ -834,6 +841,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
             retrieved_doc_embeds=retrieved_doc_embeds,
