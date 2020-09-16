@@ -25,7 +25,7 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Optional
 
 from .configuration_rag import RagConfig
 from .file_utils import cached_path, is_remote_url
@@ -208,23 +208,23 @@ class HFIndex(Index):
 
     def __init__(
         self,
-        dataset,
-        dataset_split,
-        index_name,
-        index_path,
-        use_dummy_dataset,
+        dataset_name: str ,
+        dataset_split: str ,
+        index_name: str ,
+        index_path: Optional[str] = None,
+        use_dummy_dataset=False,
     ):
         super().__init__()
-        self.dataset = dataset
+        self.dataset_name = dataset_name
         self.dataset_split = dataset_split
         self.index_name = index_name
         self.index_path = index_path
-        self._index_initialize = False
         self.use_dummy_dataset = use_dummy_dataset
+        self._index_initialize = False
 
-        logger.info("Loading passages from {}".format(self.dataset))
-        self.index = load_dataset(
-            self.dataset, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
+        logger.info("Loading passages from {}".format(self.dataset_name))
+        self.dataset = load_dataset(
+            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
         )
 
     def is_initialized(self):
@@ -235,9 +235,9 @@ class HFIndex(Index):
             logger.info("Loading index from {}".format(self.index_path))
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
-            logger.info("Loading index from {}".format(self.dataset + " with index name " + self.index_name))
-            self.index = load_dataset(
-                self.dataset,
+            logger.info("Loading index from {}".format(self.dataset_name + " with index name " + self.index_name))
+            self.dataset = load_dataset(
+                self.dataset_name,
                 with_embeddings=True,
                 with_index=True,
                 split=self.dataset_split,
@@ -247,10 +247,10 @@ class HFIndex(Index):
         self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
-        return [self.index[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
+        return [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
     def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
-        _, docs = self.index.get_nearest_examples_batch("embeddings", question_hidden_states, n_docs)
+        _, docs = self.dataset.get_nearest_examples_batch("embeddings", question_hidden_states, n_docs)
         ids = [[int(i) for i in doc["id"]] for doc in docs]
         vectors = [doc["embeddings"] for doc in docs]
         return np.array(ids), np.array(vectors)  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
@@ -271,7 +271,7 @@ class RagRetriever(object):
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer):
         super().__init__()
-        self.retriever = (
+        self.index = (
             LegacyIndex(
                 config.retrieval_vector_size,
                 config.index_path or LEGACY_INDEX_PATH,
@@ -315,12 +315,11 @@ class RagRetriever(object):
 
     def init_retrieval(self):
         """
-        Retrirever initalization function, needs to be called from the training process. The function sets some common parameters
-        and environment variables. On top of that, (only) the main process in the process group loads the index into memory.
+        Retriever initalization function. It loads the index into memory.
         """
 
         logger.info("initializing retrieval")
-        self.retriever.init_index()
+        self.index.init_index()
 
     def postprocess_docs(self, docs, input_strings, prefix, n_docs, return_tensors=None):
         r"""
@@ -387,7 +386,7 @@ class RagRetriever(object):
         vectors_batched = []
         for question_hidden_states in question_hidden_states_batched:
             start_time = time.time()
-            ids, vectors = self.retriever.get_top_docs(question_hidden_states, n_docs)
+            ids, vectors = self.index.get_top_docs(question_hidden_states, n_docs)
             logger.debug(
                 "index search time: {} sec, batch size {}".format(
                     time.time() - start_time, question_hidden_states.shape
@@ -417,7 +416,7 @@ class RagRetriever(object):
         """
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
-        return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
+        return retrieved_doc_embeds, self.index.get_doc_dicts(doc_ids)
 
     def __call__(
         self,
@@ -493,9 +492,8 @@ class RagPyTorchDistributedRetriever(RagRetriever):
 
     def init_retrieval(self, distributed_port: int):
         """
-        Retrirever initalization function, needs to be called from the training process. The function sets some common parameters
+        Retriever initalization function, needs to be called from the training process. The function sets some common parameters
         and environment variables. On top of that, (only) the main process in the process group loads the index into memory.
-
 
         Args:
             distributed_port (:obj:`int`):
@@ -519,7 +517,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         # initialize retriever only on the main worker
         if not dist.is_initialized() or self._is_main():
             logger.info("dist not initialized / main")
-            self.retriever.init_index()
+            self.index.init_index()
 
         # all processes wait untill the retriever is initialized by the main process
         if dist.is_initialized():
@@ -560,7 +558,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         # single GPU training
         if not dist.is_initialized():
             doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
-            return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
+            return retrieved_doc_embeds, self.index.get_doc_dicts(doc_ids)
 
         # distributed training
         world_size = dist.get_world_size(group=self.process_group)
@@ -584,4 +582,4 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         doc_ids = self._scattered(scatter_ids, [n_queries, n_docs], target_type=torch.int64)
         retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, n_docs, question_hidden_states.shape[1]])
 
-        return retrieved_doc_embeds.numpy(), self.retriever.get_doc_dicts(doc_ids)
+        return retrieved_doc_embeds.numpy(), self.index.get_doc_dicts(doc_ids)
