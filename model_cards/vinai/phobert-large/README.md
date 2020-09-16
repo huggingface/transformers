@@ -5,13 +5,12 @@ Pre-trained PhoBERT models are the state-of-the-art language models for Vietname
  - Two PhoBERT versions of "base" and "large" are the first public large-scale monolingual language models pre-trained for Vietnamese. PhoBERT pre-training approach is based on [RoBERTa](https://github.com/pytorch/fairseq/blob/master/examples/roberta/README.md)  which optimizes the [BERT](https://github.com/google-research/bert) pre-training procedure for more robust performance.
  - PhoBERT outperforms previous monolingual and multilingual approaches, obtaining new state-of-the-art performances on four downstream Vietnamese NLP tasks of Part-of-speech tagging, Dependency parsing, Named-entity recognition and Natural language inference.
 
-The general architecture and experimental results of PhoBERT can be found in our [paper](https://arxiv.org/abs/2003.00744):
+The general architecture and experimental results of PhoBERT can be found in our EMNLP-2020 Findings [paper](https://arxiv.org/abs/2003.00744):
 
     @article{phobert,
     title     = {{PhoBERT: Pre-trained language models for Vietnamese}},
     author    = {Dat Quoc Nguyen and Anh Tuan Nguyen},
-    journal   = {arXiv preprint},
-    volume    = {arXiv:2003.00744},
+    journal   = {Findings of EMNLP},
     year      = {2020}
     }
 
@@ -36,15 +35,11 @@ Model | #params | Arch.	 | Pre-training data
 
 ```python
 import torch
-from transformers import PhobertModel, PhobertTokenizer
+from transformers import AutoModel, AutoTokenizer #, PhobertTokenizer
 
-phobert = PhobertModel.from_pretrained("vinai/phobert-large")
-tokenizer = PhobertTokenizer.from_pretrained("vinai/phobert-large")
-
-# PhoBERT can be also loaded in the `Auto` mode
-# from transformers import AutoModel, AutoTokenizer
-# phobert = AutoModel.from_pretrained("vinai/phobert-large")
-# tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-large")
+phobert = AutoModel.from_pretrained("vinai/phobert-large")
+tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-large")
+#tokenizer = PhobertTokenizer.from_pretrained("vinai/phobert-base")
 
 # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
 line = "Tôi là sinh_viên trường đại_học Công_nghệ ."

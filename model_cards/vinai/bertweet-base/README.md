@@ -4,13 +4,12 @@
  - The corpus used to pre-train BERTweet consists of 850M English Tweets (16B word tokens ~ 80GB), containing 845M Tweets streamed from 01/2012 to 08/2019 and 5M Tweets related the **COVID-19** pandemic. 
  - BERTweet does better than its competitors RoBERTa-base and [XLM-R-base](https://arxiv.org/abs/1911.02116) and outperforms previous state-of-the-art models on three downstream Tweet NLP tasks of Part-of-speech tagging, Named entity recognition and text classification.
 
-The general architecture and experimental results of BERTweet can be found in our [paper](https://arxiv.org/abs/2005.10200):
+The general architecture and experimental results of BERTweet can be found in our EMNLP-2020 demo [paper](https://arxiv.org/abs/2005.10200):
 
-    @article{BERTweet,
+    @inproceedings{bertweet,
     title     = {{BERTweet: A pre-trained language model for English Tweets}},
-    author    = {Dat Quoc Nguyen, Thanh Vu and Anh Tuan Nguyen},
-    journal   = {arXiv preprint},
-    volume    = {arXiv:2005.10200},
+    author    = {Dat Quoc Nguyen and Thanh Vu and Anh Tuan Nguyen},
+    booktitle = {Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations},
     year      = {2020}
     }
 
@@ -21,7 +20,7 @@ For further information or requests, please go to [BERTweet's homepage](https://
 ## <a name="install2"></a> Installation 
 
  - Python version >= 3.6
- - PyTorch](http://pytorch.org/) version >= 1.4.0
+ - [PyTorch](http://pytorch.org/) version >= 1.4.0
  - `pip3 install transformers emoji`
 
 ## <a name="models2"></a> Pre-trained model 
@@ -36,15 +35,11 @@ Model | #params | Arch. | Pre-training data
 
 ```python
 import torch
-from transformers import BertweetModel, BertweetTokenizer
+from transformers import AutoModel, AutoTokenizer #, BertweetTokenizer
 
-bertweet = BertweetModel.from_pretrained("vinai/bertweet-base")
-tokenizer = BertweetTokenizer.from_pretrained("vinai/bertweet-base")
-
-# BERTweet can be also loaded in the "Auto" mode
-# from transformers import AutoModel, AutoTokenizer
-# bertweet = AutoModel.from_pretrained("vinai/bertweet-base")
-# tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
+bertweet = AutoModel.from_pretrained("vinai/bertweet-base")
+tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
+#tokenizer = BertweetTokenizer.from_pretrained("vinai/bertweet-base")
 
 # INPUT TWEET IS ALREADY NORMALIZED!
 line = "SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:"
