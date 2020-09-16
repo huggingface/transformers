@@ -117,20 +117,9 @@ class Seq2SeqLMOutputWithDocs(ModelOutput):
     doc_scores: Optional[torch.FloatTensor] = None
 
 
-# Reshape from [batch_size, n_docs, dims] to [batch_size * n_docs, dims]
-def _stack_ctxt(tensor):
-    return tensor.view(-1, *tensor.shape[2:])
-
-
-# Reshape from [batch_size * n_docs, dims] to [batch_size, n_docs, dims]
-def _unstack_ctxt(tensor, n_docs):
-    return tensor.view(-1, n_docs, *tensor.shape[1:])
-
-
 class RagPreTrainedModel(PreTrainedModel):
     r"""
-    RAG models encapsulate two trainable components - a question encoder and a generator, but as such they don't have any trainable parameters.
-    We specialize `:func:`~transformers.PreTrainedModel.from_pretrained`` and `:func:`~transformers.PreTrainedModel.save_pretrained`` to reflect this.
+    RAG models encapsulate three components: a question encoder, a dataset retriever and a generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
     """
     config_class = RagConfig
     base_model_prefix = "rag"
@@ -171,6 +160,8 @@ class RagPreTrainedModel(PreTrainedModel):
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
+            retriever: (`optional`, ``RagRetriever``) An instance of a ``RagRetriever`` to use as a retriever.
+
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``).
                 - To update the question_encoder configuration, use the prefix `question_encoder_` for each configuration parameter
@@ -180,13 +171,13 @@ class RagPreTrainedModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import EncoderDecoderModel
-            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-            >>> model = EncoderDecoderModel.from_question_encoder_generator_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> from transformers import RagModel
+            >>> # initialize a RAG from two pretrained models.
+            >>> model = RagModel.from_question_encoder_generator_pretrained('facebook/dpr-question_encoder-single-nq-base', 't5-small')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./bert2bert")
+            >>> model.save_pretrained("./rag")
             >>> # load fine-tuned model
-            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
+            >>> model = RagModel.from_pretrained("./rag")
 
         """
 
@@ -392,7 +383,9 @@ class RagModel(RagPreTrainedModel):
         if encoder_outputs is None:
             question_hidden_states = self.question_encoder(input_ids)[0]
 
-            if self.retriever is not None and context_input_ids is None:
+            if self.retriever is not None and (
+                context_input_ids is None or context_attention_mask is None or retrieved_doc_embeds is None
+            ):
                 # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
                 context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
                     input_ids,
@@ -593,12 +586,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         """
 
-        def _get_unique_rows(_input_ids):
-            return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
-
-        #        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, self.retriever, print_docs=print_docs)
         # TODO(patrick) - clean up generate here
-
         if self.retriever is not None and context_input_ids is None:
             # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
             question_hidden_states = self.question_encoder(input_ids)[0]
@@ -625,7 +613,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 generator_input_ids, num_return_sequences=num_beams, num_beams=num_beams, attention_mask=None, **kwargs
             )  # n_docs * n_beam, tgt_len
             if dedup:
-                output_sequences = _get_unique_rows(output_sequences)  # dedup, max_output_len
+                # dedup, max_output_len
+                output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
@@ -744,9 +733,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         beam_size = decoder_input_ids.shape[0] // doc_scores.shape[0]
         doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
         attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
+        last_hidden_state = last_hidden_state.view(-1, *last_hidden_state.shape[2:])
 
         encoder_outputs = BaseModelOutputWithDocs(
-            last_hidden_state=_stack_ctxt(last_hidden_state),
+            last_hidden_state=last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attention_mask=attention_mask,
             doc_scores=doc_scores,
@@ -778,10 +768,11 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def _reorder_cache(past, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
 
-        def _reorder_stacked(t):
-            n_docs = t.shape[0] // beam_idx.shape[0]
-            t = _unstack_ctxt(t, n_docs).index_select(0, beam_idx)
-            return _stack_ctxt(t)
+        def _reorder_stacked(hidden_states):
+            n_docs = hidden_states.shape[0] // beam_idx.shape[0]
+            hidden_states = hidden_states.view(-1, n_docs, *hidden_states.shape[1:])
+            hidden_states = hidden_states.index_select(0, beam_idx)
+            return hidden_states.view(-1, *hidden_states.shape[2:])
 
         def _reorder_buffer(attn_cache):
             for k, input_buffer_k in attn_cache.items():
@@ -915,10 +906,11 @@ class RagTokenForGeneration(RagPreTrainedModel):
         doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1)
 
         # needed to satisfy assertion that encoder_outputs.last_hidden_state.shape[0] == batch_size in generation_utils
-        unstacked_x = _unstack_ctxt(encoder_outputs.last_hidden_state, self.rag.config.n_docs)
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = last_hidden_state.view(-1, self.rag.config.n_docs, *last_hidden_state.shape[1:])
 
         encoder_outputs = BaseModelOutputWithDocs(
-            last_hidden_state=unstacked_x,
+            last_hidden_state=last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attention_mask=context_attention_mask,
             doc_scores=doc_scores,
@@ -933,10 +925,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.rag.generator.get_output_embeddings()
-
-    # TODO(Patrick) see how to get rid of RAGEncoder
-    #    def get_encoder(self):
-    #        return RAGEncoder(self.model)
 
     def shift_tokens_right(self, input_ids, start_token_id=None):
         """Shift input ids one token to the right, and pad with start_token_id"""

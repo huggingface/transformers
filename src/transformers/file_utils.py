@@ -69,6 +69,7 @@ try:
     import datasets  # noqa: F401
 
     _datasets_available = True
+    logger.info(f"Succesfully imported datasets version {datasets.__version__}")
 
 except ImportError:
     _datasets_available = False
@@ -124,6 +125,7 @@ try:
     import faiss  # noqa: F401
 
     _faiss_available = True
+    logger.info(f"Succesfully imported faiss version {faiss.__version__}")
 except ImportError:
     _faiss_available = False
 
