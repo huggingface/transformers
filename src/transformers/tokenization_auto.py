@@ -54,6 +54,7 @@ from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
+from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -68,6 +69,7 @@ from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_pegasus import PegasusTokenizer
+from .tokenization_phobert import PhobertTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -84,6 +86,8 @@ logger = logging.get_logger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (RobertaConfig, (BertweetTokenizer, None)),
+        (RobertaConfig, (PhobertTokenizer, None)),
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
