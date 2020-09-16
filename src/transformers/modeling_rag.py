@@ -22,7 +22,7 @@ import torch
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
-from .modeling_outputs import ModelOutput
+from .modeling_outputs import BaseModelOutput, ModelOutput
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
 from .utils import logging
@@ -31,35 +31,6 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RagConfig"
-
-
-@dataclass
-class BaseModelOutputWithDocs(ModelOutput):
-    """
-    Base class for model's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attention_mask (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-            Scores of retrieved documents.
-    """
-
-    last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attention_mask: Optional[Tuple[torch.LongTensor]] = None
-    doc_scores: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -351,9 +322,12 @@ class RagModel(RagPreTrainedModel):
 
             generator = AutoModelForSeq2SeqLM.from_config(config.generator)
 
-        if retriever is not None:
-            assert isinstance(retriever, RagRetriever)
-            self.retriever = retriever  # or do all of this via a set method
+        self.retriever = retriever
+        if self.retriever is not None:
+            assert isinstance(
+                retriever, RagRetriever
+            ), f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            self.retriever = retriever
 
         self.question_encoder = question_encoder
         self.generator = generator
@@ -362,15 +336,15 @@ class RagModel(RagPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         past_key_values=None,
+        doc_scores=None,
         context_input_ids=None,
         context_attention_mask=None,
-        retrieved_doc_embeds=None,
         use_cache=None,
         return_dict=True,  # TODO(Patrick) should be `False` by default => change later for API
     ):
@@ -381,11 +355,12 @@ class RagModel(RagPreTrainedModel):
 
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
-            question_hidden_states = self.question_encoder(input_ids)[0]
 
             if self.retriever is not None and (
-                context_input_ids is None or context_attention_mask is None or retrieved_doc_embeds is None
+                context_input_ids is None or context_attention_mask is None or doc_scores is None
             ):
+                question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
+
                 context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
                     input_ids,
                     question_hidden_states.cpu().detach().to(torch.float32),
@@ -398,14 +373,24 @@ class RagModel(RagPreTrainedModel):
                 context_input_ids = context_input_ids.to(input_ids)
                 context_attention_mask = context_attention_mask.to(input_ids)
 
-            # compute doc_scores
-            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
-                1
-            )
+                # compute doc_scores
+                doc_scores = torch.bmm(
+                    question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)
+                ).squeeze(1)
+            else:
+                assert (
+                    context_input_ids is not None
+                ), "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert (
+                    context_attention_mask is not None
+                ), "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert (
+                    doc_scores is not None
+                ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
 
-        else:
-            doc_scores = encoder_outputs.doc_scores
-            context_input_ids = None
+        assert (
+            doc_scores is not None
+        ), f"Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -471,7 +456,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
@@ -479,7 +464,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         past_key_values=None,
         context_input_ids=None,
         context_attention_mask=None,
-        retrieved_doc_embeds=None,
+        doc_scores=None,
         use_cache=None,
         exclude_bos_score=None,
         labels=None,
@@ -504,7 +489,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
-            retrieved_doc_embeds=retrieved_doc_embeds,
+            doc_scores=doc_scores,
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
@@ -738,24 +723,22 @@ class RagTokenForGeneration(RagPreTrainedModel):
         self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
     ):
         last_hidden_state = encoder_outputs["last_hidden_state"]
-        doc_scores = encoder_outputs["doc_scores"]
-        attention_mask = encoder_outputs["attention_mask"]
+        doc_scores = kwargs["doc_scores"]
 
         beam_size = decoder_input_ids.shape[0] // doc_scores.shape[0]
         doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
         attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
         last_hidden_state = last_hidden_state.view(-1, *last_hidden_state.shape[2:])
 
-        encoder_outputs = BaseModelOutputWithDocs(
+        encoder_outputs = BaseModelOutput(
             last_hidden_state=last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attention_mask=attention_mask,
-            doc_scores=doc_scores,
         )
 
         return {
             "input_ids": None,
             "encoder_outputs": encoder_outputs,
+            "doc_scores": doc_scores,
             "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "past_key_values": past,
@@ -812,7 +795,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutputWithDocs, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
@@ -820,7 +803,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         past_key_values=None,
         context_input_ids=None,
         context_attention_mask=None,
-        retrieved_doc_embeds=None,
+        doc_scores=None,
         use_cache=None,
         do_marginalize=None,
         labels=None,
@@ -844,7 +827,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
-            retrieved_doc_embeds=retrieved_doc_embeds,
+            doc_scores=doc_scores,
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
@@ -921,16 +904,16 @@ class RagTokenForGeneration(RagPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = last_hidden_state.view(-1, self.rag.config.n_docs, *last_hidden_state.shape[1:])
 
-        encoder_outputs = BaseModelOutputWithDocs(
+        encoder_outputs = BaseModelOutput(
             last_hidden_state=last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attention_mask=context_attention_mask,
-            doc_scores=doc_scores,
+            #            attention_mask=context_attention_mask,
+            #            doc_scores=doc_scores,
         )
 
         kwargs["encoder_outputs"] = encoder_outputs
         kwargs["bos_token_id"] = self.generator.config.decoder_start_token_id
-        return super().generate(**kwargs)
+        return super().generate(**kwargs, attention_mask=context_attention_mask, doc_scores=doc_scores)
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()

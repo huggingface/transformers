@@ -326,42 +326,63 @@ class RagTestMixin:
             # doc scores
             self.assertEqual(outputs[2].shape, (input_ids.shape[0], self.n_docs))
 
-    #    def check_model_without_retriever(
-    #        self,
-    #        config,
-    #        input_ids,
-    #        attention_mask,
-    #        encoder_hidden_states,
-    #        decoder_config,
-    #        decoder_input_ids,
-    #        decoder_attention_mask,
-    #        **kwargs
-    #    ):
-    #        self.assertIsNotNone(config.question_encoder)
-    #        self.assertIsNotNone(config.generator)
-    #
-    #        for model_class in self.all_model_classes:
-    #            model = model_class(config).to(torch_device)
-    #            model.eval()
-    #
-    #            self.assertTrue(model.config.is_encoder_decoder)
-    #
-    #            outputs = model(context_input_ids, context_attention_mask, retrieved_doc_embeds, decoder_input_ids, decoder_attention_mask)
-    #
-    #            self.assertEqual(outputs[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
-    #            self.assertEqual(outputs[1].shape, (input_ids.shape + (config.hidden_size,)))
+    def check_model_without_retriever(
+        self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
+    ):
+        self.assertIsNotNone(config.question_encoder)
+        self.assertIsNotNone(config.generator)
 
-    #    def check_model_with_encoder_outputs(
-    #        self,
-    #        config,
-    #        input_ids,
-    #        attention_mask,
-    #        encoder_hidden_states,
-    #        decoder_config,
-    #        decoder_input_ids,
-    #        decoder_attention_mask,
-    #        **kwargs
-    #    ):
+        retriever = self.get_retriever(config)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            self.assertTrue(model.config.is_encoder_decoder)
+
+            question_hidden_states = model.question_encoder(input_ids, attention_mask=attention_mask)[0]
+
+            context_input_ids, context_attention_mask, retrieved_doc_embeds = retriever(
+                input_ids,
+                question_hidden_states.cpu().detach().to(torch.float32),
+                prefix=config.generator.prefix,
+            )
+
+            # compute doc_scores
+            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
+                1
+            )
+
+            outputs = model(
+                context_input_ids=context_input_ids,
+                context_attention_mask=context_attention_mask,
+                doc_scores=doc_scores,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            # logits
+            self.assertEqual(
+                outputs[0].shape,
+                (self.n_docs * decoder_input_ids.shape[0], decoder_input_ids.shape[1], config.generator.vocab_size),
+            )
+            # generator encoder last hidden states
+            self.assertEqual(
+                outputs[1].shape,
+                (self.n_docs * decoder_input_ids.shape[0], self.max_combined_length, config.generator.hidden_size),
+            )
+            # doc scores
+            self.assertEqual(outputs[2].shape, (input_ids.shape[0], self.n_docs))
+
+    #        def check_model_with_encoder_outputs(
+    #            self,
+    #            config,
+    #            input_ids,
+    #            attention_mask,
+    #            decoder_config,
+    #            decoder_input_ids,
+    #            decoder_attention_mask,
+    #            **kwargs
+    #        ):
     #        self.assertIsNotNone(config.question_encoder)
     #        self.assertIsNotNone(config.generator)
     #
@@ -377,14 +398,19 @@ class RagTestMixin:
     #            self.assertEqual(outputs[1].shape, (input_ids.shape + (config.hidden_size,)))
 
     def test_model_with_retriever(self):
-        inputs_dict = self.prepare_config_and_inputs()
+        inputs_dict = self.config_and_inputs
         self.check_model_with_retriever(**inputs_dict)
+
+    def test_model_without_retriever(self):
+        inputs_dict = self.config_and_inputs
+        self.check_model_without_retriever(**inputs_dict)
 
 
 @require_torch
 @require_retrieval
 class RagDPRBartTest(RagTestMixin, unittest.TestCase):
-    def prepare_config_and_inputs(self):
+    @cached_property
+    def config_and_inputs(self):
         question_encoder_tester = DPRModelTester(self)
         dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
         generator_tester = BartModelTester(self)
@@ -712,6 +738,35 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
         EXPECTED_OUTPUT_TEXT = """. The song peaked at"""
         self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)
+
+
+@require_torch
+@require_retrieval
+class RagModelSaveLoadTests(unittest.TestCase):
+    def get_rag_config(self):
+        question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        generator_config = AutoConfig.from_pretrained("facebook/bart-large-cnn")
+        return RagConfig.from_question_encoder_generator_configs(
+            question_encoder_config,
+            generator_config,
+            bos_token_id=0,
+            decoder_start_token_id=2,
+            eos_token_id=2,
+            is_encoder_decoder=True,
+            pad_token_id=1,
+            vocab_size=50264,
+            title_sep=" / ",
+            doc_sep=" // ",
+            n_docs=5,
+            max_combined_length=300,
+            dataset="wiki_dpr",
+            dataset_split="train",
+            index_name="exact",
+            index_path=None,
+            use_dummy_dataset=True,
+            retrieval_vector_size=768,
+            retrieval_batch_size=8,
+        )
 
     @slow
     def test_rag_sequence_from_pretrained(self):
