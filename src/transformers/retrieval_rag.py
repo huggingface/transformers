@@ -38,7 +38,7 @@ from .tokenization_utils_base import BatchEncoding
 logger = logging.get_logger(__name__)
 
 
-LEGACY_INDEX_PATH = None  # TODO: add url
+LEGACY_INDEX_PATH = "https://storage.googleapis.com/huggingface-nlp/datasets/wiki_dpr/"
 
 
 class Index(object):
