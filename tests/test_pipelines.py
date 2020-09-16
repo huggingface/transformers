@@ -749,6 +749,19 @@ class NerPipelineTests(unittest.TestCase):
             ],
         ]
 
+        expected_grouped_ner_results_w_subword = [
+            [
+                {"entity_group": "PER", "score": 0.9994944930076599, "word": "Cons"},
+                {"entity_group": "PER", "score": 0.9663328925768534, "word": "##uelo Araújo Noguera"},
+                {"entity_group": "PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
+                {"entity_group": "ORG", "score": 0.8589080572128296, "word": "Farc"},
+            ],
+            [
+                {"entity_group": "PER", "score": 0.9962901175022125, "word": "Enzo"},
+                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN"},
+            ],
+        ]
+
         self.assertIsNotNone(nlp)
 
         mono_result = nlp(VALID_INPUTS[0])
@@ -771,10 +784,16 @@ class NerPipelineTests(unittest.TestCase):
         for result in multi_result:
             for key in output_keys:
                 self.assertIn(key, result)
-                
+
         if nlp.grouped_entities:
-            for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
-                self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+            if nlp.ignore_subwords:
+                for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
+                    self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+            else:
+                for ungrouped_input, grouped_result in zip(
+                    ungrouped_ner_inputs, expected_grouped_ner_results_w_subword
+                ):
+                    self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
 
     @require_torch
     def test_torch_ner(self):
@@ -789,6 +808,11 @@ class NerPipelineTests(unittest.TestCase):
         for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(
                 task="ner", model=model_name, tokenizer=model_name, grouped_entities=True, ignore_subwords=True
+            )
+            self._test_ner_pipeline(nlp, mandatory_keys)
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(
+                task="ner", model=model_name, tokenizer=model_name, grouped_entities=True, ignore_subwords=False
             )
             self._test_ner_pipeline(nlp, mandatory_keys)
 
@@ -810,6 +834,16 @@ class NerPipelineTests(unittest.TestCase):
                 framework="tf",
                 grouped_entities=True,
                 ignore_subwords=True,
+            )
+            self._test_ner_pipeline(nlp, mandatory_keys)
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(
+                task="ner",
+                model=model_name,
+                tokenizer=model_name,
+                framework="tf",
+                grouped_entities=True,
+                ignore_subwords=False,
             )
             self._test_ner_pipeline(nlp, mandatory_keys)
 
