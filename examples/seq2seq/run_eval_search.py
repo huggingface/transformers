@@ -1,8 +1,18 @@
 import argparse
 import itertools
+import operator
 import sys
+from collections import OrderedDict
 
-from run_eval import run_generate
+from run_eval import datetime_now, run_generate
+
+
+# A table of supported tasks and the list of scores in the order of importance to be sorted by.
+# To add a new task, simply list the score names that `run_eval.run_generate()` returns
+task_score_names = {
+    "translation": ["bleu"],
+    "summarization": ["rouge1", "rouge2", "rougeL"],
+}
 
 
 def parse_search_arg(search):
@@ -39,29 +49,49 @@ def run_search():
     """
     prog = sys.argv[0]
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        usage="\n\nImportant: this script accepts all arguments `run_eval.py` accepts and then a few extra, therefore refer to `run_eval.py -h` for the complete list."
+    )
     parser.add_argument(
         "--search",
         type=str,
         required=False,
         help='param space to search, e.g. "num_beams=5:10 length_penalty=0.8:1.0:1.2"',
     )
-
+    parser.add_argument(
+        "--bs", type=int, default=8, required=False, help="initial batch size (may get reduced if it's too big)"
+    )
+    parser.add_argument(
+        "--task", type=str, help="used for task_specific_params + metrics", choices=task_score_names.keys()
+    )
+    parser.add_argument(
+        "--info",
+        nargs="?",
+        type=str,
+        const=datetime_now(),
+        help="add custom notes to be printed before the results table. If no value is passed, the current datetime string will be used.",
+    )
     args, args_main = parser.parse_known_args()
+    # we share some of the args
+    args_main.extend(["--task", args.task])
     args_normal = [prog] + args_main
 
     matrix, col_names = parse_search_arg(args.search)
-    col_names.insert(0, "bleu")
+    col_names[0:0] = task_score_names[args.task]  # score cols first
     col_widths = {col: len(str(col)) for col in col_names}
     results = []
     for r in matrix:
-        result = {k: v for k, v in (x.replace("--", "").split() for x in r)}
+        hparams = {k: v for k, v in (x.replace("--", "").split() for x in r)}
         args_exp = " ".join(r).split()
+        args_exp.extend(["--bs", str(args.bs)])  # in case we need to reduce its size due to CUDA OOM
         sys.argv = args_normal + args_exp
+
         scores = run_generate(verbose=False)
-
-        result["bleu"] = f"{scores['bleu']:0.2f}"
-
+        # make sure scores are first in the table
+        result = OrderedDict()
+        for score in task_score_names[args.task]:
+            result[score] = scores[score]
+        result.update(hparams)
         results.append(result)
 
         # find widest entries
@@ -72,7 +102,7 @@ def run_search():
 
     # XXX: scores["info"] if available should be printed separately
 
-    results_sorted = sorted(results, key=lambda x: x["bleu"], reverse=True)
+    results_sorted = sorted(results, key=operator.itemgetter(*task_score_names[args.task]), reverse=True)
     print(" | ".join([f"{col:{col_widths[col]}}" for col in col_names]))
     print(" | ".join([f"{'-'*col_widths[col]}" for col in col_names]))
     for row in results_sorted:
@@ -81,8 +111,10 @@ def run_search():
     best = results_sorted[0]
     del best["bleu"]
     best_args = [f"--{k} {v}" for k, v in best.items()]
+    dyn_args = ["--bs", str(args.bs)]
+    print(f"\nInfo: {args.info}")
     print("\nBest score args:")
-    print(" ".join(args_main + best_args))
+    print(" ".join(args_main + best_args + dyn_args))
 
     return results_sorted
 
