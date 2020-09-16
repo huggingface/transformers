@@ -128,10 +128,10 @@ class TrainingArguments:
             forward method.
 
             (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
-        label_names (:obj:`List[str]`, `optional)`:
+        label_names (:obj:`List[str]`, `optional`):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
-            Will eventually default to :obj:`["labels"]` except if your model is one of the
+            Will eventually default to :obj:`["labels"]` except if the model used is one of the
             :obj:`XxxForQuestionAnswering` in which case it will default to
             :obj:`["start_positions", "end_positions"]`.
     """
