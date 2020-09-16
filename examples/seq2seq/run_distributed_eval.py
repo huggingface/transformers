@@ -22,7 +22,8 @@ try:
         calculate_rouge,
         lmap,
         load_json,
-        parse_numeric_cl_kwargs,
+        parse_numeric_n_bool_cl_kwargs,
+
         save_json,
         use_task_specific_params,
         write_txt_file,
@@ -34,7 +35,7 @@ except ImportError:
         calculate_rouge,
         lmap,
         load_json,
-        parse_numeric_cl_kwargs,
+        parse_numeric_n_bool_cl_kwargs,
         save_json,
         use_task_specific_params,
         write_txt_file,
@@ -139,7 +140,7 @@ def run_generate():
     parser.add_argument("--debug", action="store_true")
     start_time = time.time()
     args, rest = parser.parse_known_args()
-    generate_kwargs = parse_numeric_cl_kwargs(rest)
+    generate_kwargs = parse_numeric_n_bool_cl_kwargs(rest)
     if generate_kwargs and args.local_rank <= 0:
         print(f"parsed the following generate kwargs: {generate_kwargs}")
     json_save_dir = Path(args.save_dir + "_tmp")
