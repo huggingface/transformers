@@ -29,13 +29,12 @@ def ray_main(args, config):
     for k,v in config.items():
         #assert hasattr(args, k), k
         setattr(args, k, v)
-    args.n_train = 64
     args.output_dir = get_ray_slug(config)
     args.num_train_epochs = 3
     ft_main(args)
 
 
-def tune_helsinki_(args, num_samples=1, num_epochs=3):
+def tune_helsinki_(args, num_samples=24, num_epochs=3):
 
     search_space = {
         "learning_rate": tune.sample_from(lambda spec: 10**(-10 * np.random.rand())),
@@ -56,7 +55,7 @@ def tune_helsinki_(args, num_samples=1, num_epochs=3):
             ray_main,
             args,
             ),
-        resources_per_trial={"cpu": 0, "gpu": 1},
+        resources_per_trial={"gpu": args.gpus},
         config=search_space,
         num_samples=num_samples,
         scheduler=scheduler,
@@ -80,7 +79,8 @@ args = argparse.Namespace(**{
     'num_processes': 1,
     'gpus': 1,
     'auto_select_gpus': False,
-    'tpu_cores': 0,
+    'adafactor': False,
+    #'tpu_cores': 0,
     'log_gpu_memory': None,
     'progress_bar_refresh_rate': 1,
     'overfit_batches': 0.0,
@@ -95,7 +95,7 @@ args = argparse.Namespace(**{
     'limit_train_batches': 1.0,
     'limit_val_batches': 1.0,
     'limit_test_batches': 1.0,
-    'val_check_interval': 0.25,
+    'val_check_interval': 1.0,
     'log_save_interval': 100,
     'row_log_interval': 50,
     'distributed_backend': None,
@@ -134,8 +134,8 @@ args = argparse.Namespace(**{
     'adam_epsilon': 1e-08,
     'warmup_steps': 500,
     'num_workers': 4,
-    'train_batch_size': 32,
-    'eval_batch_size': 32,
+    'train_batch_size': 64,
+    'eval_batch_size': 64,
     'output_dir': 'tmp',
     'fp16': True,
     'fp16_opt_level': 'O1',
@@ -152,7 +152,7 @@ args = argparse.Namespace(**{
     'sortish_sampler': True,
     'logger_name': 'wandb',
     'n_train': -1,
-    'n_val': 500,
+    'n_val': -1,
     'n_test': -1,
     'task': 'translation',
     'label_smoothing': 0.1,
