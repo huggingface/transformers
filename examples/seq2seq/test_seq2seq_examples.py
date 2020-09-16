@@ -325,8 +325,9 @@ def test_run_eval_slow(model):
     run_eval_tester(model)
 
 
+# testing with 2 models to validate: 1. translation (t5) 2. summarization (mbart)
 @slow
-@pytest.mark.parametrize("model", [pytest.param(T5_TINY)])
+@pytest.mark.parametrize("model", [pytest.param(T5_TINY), pytest.param(MBART_TINY)]])
 def test_run_eval_search(model):
     input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
     output_file_name = input_file_name.parent / "utest_output.txt"
