@@ -1,3 +1,7 @@
+---
+language: "fr"
+---
+
 # BelGPT-2
 
 **BelGPT-2** (*Belgian GPT-2* 🇧🇪) is a "small" GPT-2 model pre-trained on a very large and heterogeneous French corpus (around 60Gb). Please check [antoiloui/gpt2-french](https://github.com/antoiloui/gpt2-french) for more information about the pre-trained model, the data, the code to use the model and the code to pre-train it.
