@@ -50,7 +50,6 @@ def eval_data_dir(
     type_path="val",
     n_obs=None,
     fp16=False,
-    num_beams: int = 4,
     task="summarization",
     local_rank=None,
     **generate_kwargs,
@@ -88,7 +87,6 @@ def eval_data_dir(
         summaries = model.generate(
             input_ids=batch["input_ids"].to(model.device),
             attention_mask=batch["attention_mask"].to(model.device),
-            num_beams=num_beams,
             **generate_kwargs,
         )
         preds = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
