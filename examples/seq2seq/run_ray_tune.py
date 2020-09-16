@@ -159,7 +159,7 @@ DEFAULTS = {
     'freeze_embeds': True,
     'sortish_sampler': True,
     'logger_name': 'wandb',
-    'n_train': -1,
+    'n_train': 10000,
     'n_val': 500,
     'n_test': -1,
     'task': 'translation',
