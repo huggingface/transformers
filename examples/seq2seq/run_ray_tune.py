@@ -36,7 +36,7 @@ def ray_main(args, config):
 
 def tune_helsinki_(args, num_samples=8, num_epochs=1):
     args.num_train_epochs = 1
-    args.n_train = 10000
+    # args.n_train = 10000
     search_space = {
         "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
         "gradient_accumulation_steps": tune.choice([1, 8, 32, 128, 256]),
