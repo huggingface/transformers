@@ -10,7 +10,7 @@ datasets:
 - Indo4B
 ---
 
-# IndoBERT Base Model (phase1 - uncased)
+# IndoBERT-Lite Large Model (phase1 - uncased)
 
 [IndoBERT](https://arxiv.org/abs/2009.05387) is a state-of-the-art language model for Indonesian based on the BERT model. The pretrained model is trained using a masked language modeling (MLM) objective and next sentence prediction (NSP) objective. 
 
