@@ -19,6 +19,7 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_funnel import FunnelConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -28,7 +29,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import ACT2FN
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
@@ -578,7 +578,7 @@ class TFFunnelPositionwiseFFN(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
         self.linear_1 = tf.keras.layers.Dense(config.d_inner, kernel_initializer=initializer, name="linear_1")
-        self.activation_function = ACT2FN[config.hidden_act]
+        self.activation_function = get_tf_activation(config.hidden_act)
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.linear_2 = tf.keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_2")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
@@ -966,7 +966,7 @@ class TFFunnelDiscriminatorPredictions(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
         self.dense = tf.keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="dense")
-        self.activation_function = ACT2FN[config.hidden_act]
+        self.activation_function = get_tf_activation(config.hidden_act)
         self.dense_prediction = tf.keras.layers.Dense(1, kernel_initializer=initializer, name="dense_prediction")
 
     def call(self, discriminator_hidden_states):

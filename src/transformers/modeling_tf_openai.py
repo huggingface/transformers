@@ -19,9 +19,9 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import (
     ModelOutput,
@@ -54,30 +54,6 @@ TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai-gpt",
     # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
 ]
-
-
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    Args:
-        x: float Tensor to perform activation.
-    Returns:
-        `x` with the GELU activation applied.
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
-
-
-def swish(x):
-    return x * tf.math.sigmoid(x)
-
-
-ACT_FNS = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-}
 
 
 class TFAttention(tf.keras.layers.Layer):
@@ -179,7 +155,7 @@ class TFMLP(tf.keras.layers.Layer):
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
-        self.act = gelu
+        self.act = get_tf_activation("gelu")
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
 
     def call(self, x, training=False):
