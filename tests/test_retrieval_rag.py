@@ -197,7 +197,9 @@ class RagRetrieverTest(TestCase):
     def test_pytorch_distributed_retriever_retrieve(self):
         n_docs = 1
         retriever = self.get_dummy_pytorch_distributed_retriever(init_retrieval=True)
-        hidden_states = np.array([np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32)
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
         retrieved_doc_embeds, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
         self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)

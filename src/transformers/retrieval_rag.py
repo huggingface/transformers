@@ -406,12 +406,14 @@ class RagRetriever(object):
         Ouput:
             retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
                 The retrieval embeddings of the retrieved docs per query.
+            doc_ids (:obj:`np.ndarray` of shape :obj:`batch_size, n_docs`)
+                The ids of the documents in the index
             doc_dicts (:obj:`List[dict]`):
                 The retrieved_doc_embeds examples per query.
         """
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
-        return retrieved_doc_embeds, self.index.get_doc_dicts(doc_ids)
+        return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
     def __call__(
         self,
@@ -442,10 +444,11 @@ class RagRetriever(object):
 
               `What are attention masks? <../glossary.html#attention-mask>`__
             - **retrieved_doc_embeds** -- List of embeddings of the retrieved documents
+            - **doc_ids** -- List of ids of the retrieved documents
         """
 
         n_docs = n_docs if n_docs is not None else self.n_docs
-        retrieved_doc_embeds, docs = self.retrieve(question_hidden_states, n_docs)
+        retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
 
         input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
         context_input_ids, context_attention_mask = self.postprocess_docs(
@@ -457,6 +460,7 @@ class RagRetriever(object):
                 "context_input_ids": context_input_ids,
                 "context_attention_mask": context_attention_mask,
                 "retrieved_doc_embeds": retrieved_doc_embeds,
+                "doc_ids": doc_ids,
             },
             tensor_type=return_tensors,
         )
@@ -546,6 +550,8 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         Ouput:
             retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
                 The retrieval embeddings of the retrieved docs per query.
+            doc_ids (:obj:`np.ndarray` of shape :obj:`batch_size, n_docs`)
+                The ids of the documents in the index
             doc_dicts (:obj:`List[dict]`):
                 The retrieved_doc_embeds examples per query.
         """
@@ -577,4 +583,4 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         doc_ids = self._scattered(scatter_ids, [n_queries, n_docs], target_type=torch.int64)
         retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, n_docs, question_hidden_states.shape[1]])
 
-        return retrieved_doc_embeds.numpy(), self.index.get_doc_dicts(doc_ids)
+        return retrieved_doc_embeds.numpy(), doc_ids.numpy(), self.index.get_doc_dicts(doc_ids)
