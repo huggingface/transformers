@@ -1,11 +1,11 @@
 import dataclasses
 import json
-import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from .utils import logging
 
 
 if is_torch_available():
@@ -15,7 +15,7 @@ if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def default_logdir() -> str:
@@ -52,12 +52,20 @@ class TrainingArguments:
             Whether to run predictions on the test set or not.
         evaluate_during_training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run evaluation during training at each logging step or not.
+        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
+            When performing evaluation and predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for evaluation.
         gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
+
+            .. warning::
+
+                When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
+                logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
+                examples.
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
@@ -67,7 +75,8 @@ class TrainingArguments:
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
-            Total number of training epochs to perform.
+            Total number of training epochs to perform (if not an integer, will perform the decimal part percents of
+            the last epoch before stopping training).
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
@@ -109,6 +118,16 @@ class TrainingArguments:
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
+        disable_tqdm (:obj:`bool`, `optional`):
+            Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
+            to warn or lower (default), :obj:`False` otherwise.
+        remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
+            forward method.
+
+            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
     """
 
     output_dir: str = field(
@@ -128,7 +147,12 @@ class TrainingArguments:
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
-        default=False, metadata={"help": "Run evaluation during training at each logging step."},
+        default=False,
+        metadata={"help": "Run evaluation during training at each logging step."},
+    )
+    prediction_loss_only: bool = field(
+        default=False,
+        metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(
@@ -160,6 +184,8 @@ class TrainingArguments:
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for Adam optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for Adam optimizer"})
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
@@ -218,6 +244,21 @@ class TrainingArguments:
     past_index: int = field(
         default=-1,
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
+    )
+
+    run_name: Optional[str] = field(
+        default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+    )
+    disable_tqdm: Optional[bool] = field(
+        default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
+    )
+
+    def __post_init__(self):
+        if self.disable_tqdm is None:
+            self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
+
+    remove_unused_columns: Optional[bool] = field(
+        default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
 
     @property
@@ -308,7 +349,10 @@ class TrainingArguments:
         Sanitized serialization to use with TensorBoard’s hparams
         """
         d = dataclasses.asdict(self)
+        d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
+
         valid_types = [bool, int, float, str]
         if is_torch_available():
             valid_types.append(torch.Tensor)
+
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}

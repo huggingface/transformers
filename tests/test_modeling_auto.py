@@ -23,42 +23,42 @@ from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDE
 if is_torch_available():
     from transformers import (
         AutoConfig,
-        BertConfig,
-        GPT2Config,
-        T5Config,
         AutoModel,
-        BertModel,
-        AutoModelForPreTraining,
-        BertForPreTraining,
         AutoModelForCausalLM,
-        GPT2LMHeadModel,
-        AutoModelWithLMHead,
         AutoModelForMaskedLM,
-        BertForMaskedLM,
-        RobertaForMaskedLM,
-        AutoModelForSeq2SeqLM,
-        T5ForConditionalGeneration,
-        AutoModelForSequenceClassification,
-        BertForSequenceClassification,
+        AutoModelForPreTraining,
         AutoModelForQuestionAnswering,
-        BertForQuestionAnswering,
+        AutoModelForSeq2SeqLM,
+        AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
+        AutoModelWithLMHead,
+        BertConfig,
+        BertForMaskedLM,
+        BertForPreTraining,
+        BertForQuestionAnswering,
+        BertForSequenceClassification,
         BertForTokenClassification,
+        BertModel,
+        GPT2Config,
+        GPT2LMHeadModel,
+        RobertaForMaskedLM,
+        T5Config,
+        T5ForConditionalGeneration,
+    )
+    from transformers.modeling_auto import (
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_PRETRAINING_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_MAPPING,
+        MODEL_WITH_LM_HEAD_MAPPING,
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_auto import (
-        MODEL_MAPPING,
-        MODEL_FOR_PRETRAINING_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        MODEL_WITH_LM_HEAD_MAPPING,
-        MODEL_FOR_CAUSAL_LM_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    )
 
 
 @require_torch
@@ -88,9 +88,11 @@ class AutoModelTest(unittest.TestCase):
             model, loading_info = AutoModelForPreTraining.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForPreTraining)
+            # Only one value should not be initialized and in the missing keys.
+            missing_keys = loading_info.pop("missing_keys")
+            self.assertListEqual(["cls.predictions.decoder.bias"], missing_keys)
             for key, value in loading_info.items():
-                # Only one value should not be initialized and in the missing keys.
-                self.assertEqual(len(value), 1 if key == "missing_keys" else 0)
+                self.assertEqual(len(value), 0)
 
     @slow
     def test_lmhead_model_from_pretrained(self):

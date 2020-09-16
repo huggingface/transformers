@@ -136,6 +136,13 @@ Then log in using the same credentials as on huggingface.co. To upload your mode
 
 This will upload the folder containing the weights, tokenizer and configuration we prepared in the previous section.
 
+By default you will be prompted to confirm that you want these files to be uploaded. If you are uploading multiple models and need to script that process, you can add `-y` to bypass the prompt. For example:
+
+::
+
+    transformers-cli upload -y path/to/awesome-name-you-picked/
+
+
 If you want to upload a single file (a new version of your model, or the other framework checkpoint you want to add),
 just type:
 

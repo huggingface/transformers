@@ -49,6 +49,13 @@ CamembertModel
     :members:
 
 
+CamembertForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.CamembertForCausalLM
+    :members:
+
+
 CamembertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -102,6 +109,13 @@ TFCamembertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFCamembertForSequenceClassification
+    :members:
+
+
+TFCamembertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCamembertForMultipleChoice
     :members:
 
 

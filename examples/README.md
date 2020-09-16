@@ -1,7 +1,7 @@
 # Examples
 
 Version 2.9 of 🤗 Transformers introduces a new [`Trainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) class for PyTorch, and its equivalent [`TFTrainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer_tf.py) for TF 2.
-Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.1+.
+Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.2+.
 
 Here is the list of all our examples:
 - **grouped by task** (all official examples work for multiple models)
@@ -81,7 +81,13 @@ Feedback and more use cases and benchmarks involving TPUs are welcome, please sh
 
 ## Logging & Experiment tracking
 
-You can easily log and monitor your runs code. [TensorBoard](https://www.tensorflow.org/tensorboard) and [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface) are currently supported.
+You can easily log and monitor your runs code. The following are currently supported:
+
+* [TensorBoard](https://www.tensorflow.org/tensorboard)
+* [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface)
+* [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
+
+### Weights & Biases
 
 To use Weights & Biases, install the wandb package with:
 
@@ -104,6 +110,18 @@ wandb.login()
 
 Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
 
-For advanced configuration and examples, refer to the [W&B documentation](https://docs.wandb.com/library/integrations/huggingface).
+When using 🤗 Transformers with PyTorch Lightning, runs can be tracked through `WandbLogger`. Refer to related [documentation & examples](https://docs.wandb.com/library/integrations/lightning).
 
-When using 🤗 Transformers with PyTorch Lightning, runs can be tracked through `WandbLogger`. Refer to related [documentation & examples](https://docs.wandb.com/library/frameworks/pytorch/lightning).
+### Comet.ml
+
+To use `comet_ml`, install the Python package with:
+
+```bash
+pip install comet_ml
+```
+
+or if in a Conda environment:
+
+```bash
+conda install -c comet_ml -c anaconda -c conda-forge comet_ml
+```

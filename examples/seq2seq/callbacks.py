@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 class Seq2SeqLoggingCallback(pl.Callback):
+    def on_batch_end(self, trainer, pl_module):
+        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        pl_module.logger.log_metrics(lrs)
+
     @rank_zero_only
     def _write_logs(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
@@ -71,26 +75,33 @@ class Seq2SeqLoggingCallback(pl.Callback):
         return self._write_logs(trainer, pl_module, "test")
 
 
-def get_checkpoint_callback(output_dir, metric):
+def get_checkpoint_callback(output_dir, metric, save_top_k=1, lower_is_better=False):
     """Saves the best model by validation ROUGE2 score."""
     if metric == "rouge2":
         exp = "{val_avg_rouge2:.4f}-{step_count}"
     elif metric == "bleu":
         exp = "{val_avg_bleu:.4f}-{step_count}"
+    elif metric == "loss":
+        exp = "{val_avg_loss:.4f}-{step_count}"
     else:
         raise NotImplementedError(
-            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function."
+            f"seq2seq callbacks only support rouge2, bleu and loss, got {metric}, You can make your own by adding to this function."
         )
 
     checkpoint_callback = ModelCheckpoint(
         filepath=os.path.join(output_dir, exp),
         monitor=f"val_{metric}",
-        mode="max",
-        save_top_k=1,
+        mode="min" if "loss" in metric else "max",
+        save_top_k=save_top_k,
         period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
     return checkpoint_callback
 
 
 def get_early_stopping_callback(metric, patience):
-    return EarlyStopping(monitor=f"val_{metric}", mode="max", patience=patience, verbose=True,)
+    return EarlyStopping(
+        monitor=f"val_{metric}",  # does this need avg?
+        mode="min" if "loss" in metric else "max",
+        patience=patience,
+        verbose=True,
+    )

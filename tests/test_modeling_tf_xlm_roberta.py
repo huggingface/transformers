@@ -20,8 +20,9 @@ from transformers.testing_utils import require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
+
     from transformers import TFXLMRobertaModel
 
 
@@ -36,7 +37,7 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
             "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int32),
         }
 
-        output = model(features)[0]
+        output = model(features)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
