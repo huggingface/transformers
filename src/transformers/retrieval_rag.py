@@ -98,12 +98,8 @@ class LegacyIndex(Index):
         vector_size (:obj:`int`):
             The dimension of indexed vectors.
         index_path (:obj:`str`):
-            Can be either
-                - A string with the `identifier name` of a pretrained index compatible with
-                  :class:`~transformers.retrieval_rag.LegacyIndex` to load from cache or download,
-                  e.g. ``facebook/rag-index``.
-                - A path to a `directory` containing index files compatible with
-                  :class:`~transformers.retrieval_rag.LegacyIndex`
+            A path to a `directory` containing index files compatible with
+            :class:`~transformers.retrieval_rag.LegacyIndex`
     """
 
     INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
@@ -281,7 +277,6 @@ class RagRetriever(object):
                 config.dataset, config.dataset_split, config.index_name, config.index_path, config.use_dummy_dataset
             )
         )
-        # TODO(quentin) use RagTokenizer once the API is defined
         self.generator_tokenizer = generator_tokenizer
         self.question_encoder_tokenizer = question_encoder_tokenizer
 
@@ -403,7 +398,7 @@ class RagRetriever(object):
         Retrieves documents for specified ``question_hidden_states``.
 
         Args:
-            question_hidden_states (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`:
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
@@ -549,10 +544,10 @@ class RagPyTorchDistributedRetriever(RagRetriever):
                 The number of docs retrieved per query.
 
         Ouput:
-            total_scores (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`
-                The retrieval scores of the retrieved docs per query.
-            total_examples (:obj:`List[dict]`):
-                The retrieved examples per query.
+            retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
+                The retrieval embeddings of the retrieved docs per query.
+            doc_dicts (:obj:`List[dict]`):
+                The retrieved_doc_embeds examples per query.
         """
 
         # single GPU training
