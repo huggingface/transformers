@@ -92,7 +92,7 @@ def run_search():
         sys.argv = args_normal + args_exp
 
         # XXX: need to trap CUDA OOM and lower args.bs if that happens and retry
-        
+
         scores = run_generate(verbose=False)
         # make sure scores are first in the table
         result = OrderedDict()
