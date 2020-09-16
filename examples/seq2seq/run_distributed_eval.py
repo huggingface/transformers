@@ -140,7 +140,7 @@ def run_generate():
     start_time = time.time()
     args, rest = parser.parse_known_args()
     generate_kwargs = parse_numeric_cl_kwargs(rest)
-    if generate_kwargs:
+    if generate_kwargs and args.local_rank <= 0:
         print(f"parsed the following generate kwargs: {generate_kwargs}")
     json_save_dir = Path(args.save_dir + "_tmp")
     Path(json_save_dir).mkdir(exist_ok=True)  # this handles locking.
