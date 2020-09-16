@@ -91,6 +91,8 @@ def run_search():
         args_exp.extend(["--bs", str(args.bs)])  # in case we need to reduce its size due to CUDA OOM
         sys.argv = args_normal + args_exp
 
+        # XXX: need to trap CUDA OOM and lower args.bs if that happens and retry
+        
         scores = run_generate(verbose=False)
         # make sure scores are first in the table
         result = OrderedDict()
@@ -104,8 +106,6 @@ def run_search():
             l = len(str(v))
             if l > col_widths[k]:
                 col_widths[k] = l
-
-    # XXX: scores["info"] if available should be printed separately
 
     results_sorted = sorted(results, key=operator.itemgetter(*task_score_names[args.task]), reverse=True)
     print(" | ".join([f"{col:{col_widths[col]}}" for col in col_names]))
