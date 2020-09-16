@@ -493,18 +493,22 @@ Parametrization
 Often, there is a need to run the same test multiple times, but with different arguments. It could be done from within the test, but then there is no way of running that test for just one set of arguments.
 
 .. code-block:: python
-
+                
+    # test_this1.py
+    import unittest
     from parameterized import parameterized
     class TestMathUnitTest(unittest.TestCase):
-    @parameterized.expand([
-        ("negative", -1.5, -2.0),
-        ("integer", 1, 1.0),
-        ("large fraction", 1.6, 1),
-    ])
-    def test_floor(self, name, input, expected):
-        assert_equal(math.floor(input), expected)
+        @parameterized.expand([
+            ("negative", -1.5, -2.0),
+            ("integer", 1, 1.0),
+            ("large fraction", 1.6, 1),
+        ])
+        def test_floor(self, name, input, expected):
+            assert_equal(math.floor(input), expected)
 
-Now this test will be run three times, and you could run just the ``negative`` and ``integer`` sets of params with:
+Now, by default this test will be run 3 times, each time with the last 3 arguments of ``test_floor`` being assigned the corresponding arguments in the parameter list.
+
+and you could run just the ``negative`` and ``integer`` sets of params with:
 
 .. code-block:: bash
 
@@ -512,10 +516,74 @@ Now this test will be run three times, and you could run just the ``negative`` a
 
 or all but ``negative`` sub-tests, with:
 
-
 .. code-block:: bash
 
    pytest -k "not negative" tests/test_mytest.py
+
+Besides using the ``-k`` filter that was just mentioned, you can find out the exact name of each sub-test and run any or all of them using their exact names. 
+        
+.. code-block:: bash
+                
+    pytest test_this1.py --collect-only -q
+
+and it will list:
+                
+.. code-block:: bash
+
+    test_this1.py::TestMathUnitTest::test_floor_0_negative
+    test_this1.py::TestMathUnitTest::test_floor_1_integer
+    test_this1.py::TestMathUnitTest::test_floor_2_large_fraction
+
+So now you can run just 2 specific sub-tests:
+
+.. code-block:: bash
+
+    pytest test_this1.py::TestMathUnitTest::test_floor_0_negative  test_this1.py::TestMathUnitTest::test_floor_1_integer
+   
+The module `parameterized <https://pypi.org/project/parameterized/>`__ which is already in the developer dependencies of ``transformers`` works for both: ``unittests`` and ``pytest`` tests.
+
+If, however, the test is not a ``unittest``, you may use ``pytest.mark.parametrize`` (or you may see it being used in some existing tests, mostly under ``examples``).
+
+Here is the same example, this time using ``pytest``'s ``parametrize`` marker:
+
+.. code-block:: python
+
+    # test_this2.py
+    import pytest
+    @pytest.mark.parametrize(
+        "name, input, expected",
+        [
+            ("negative", -1.5, -2.0),
+            ("integer", 1, 1.0),
+            ("large fraction", 1.6, 1),
+        ],
+    )
+    def test_floor(name, input, expected):
+        assert_equal(math.floor(input), expected)
+
+Same as with ``parameterized``, with ``pytest.mark.parametrize`` you can have a fine control over which sub-tests are run, if the ``-k`` filter doesn't do the job. Except, this parametrization function creates a slightly different set of names for the sub-tests. Here is what they look like:
+        
+.. code-block:: bash
+                
+    pytest test_this2.py --collect-only -q
+
+and it will list:
+                
+.. code-block:: bash
+
+    test_this2.py::test_floor[integer-1-1.0]
+    test_this2.py::test_floor[negative--1.5--2.0]
+    test_this2.py::test_floor[large fraction-1.6-1]       
+
+So now you can run just the specific test:
+
+.. code-block:: bash
+
+    pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[integer-1-1.0]
+
+as in the previous example.
+
+    
 
 Temporary files and directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
