@@ -64,6 +64,7 @@ def tune_helsinki_(args, num_samples=8, num_epochs=1):
         resources_per_trial={"gpu": args.gpus},
         config=config,
         num_samples=num_samples,
+        server_port=8888,
         scheduler=scheduler,
         progress_reporter=reporter,
         name="tune_helsinki_asha",
