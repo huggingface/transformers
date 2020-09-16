@@ -106,7 +106,7 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, retriever, questions):
     )
     retriever_input_embs = rag_model.model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
 
-    _, all_docs = retriever.retrieve(retriever_input_embs, rag_model.config.n_docs)
+    _, all_docs = retriever.retrieve(retriever_input_embs.numpy(), rag_model.config.n_docs)
 
     provenance_strings = []
     for docs in all_docs:
@@ -286,7 +286,7 @@ def main(args):
 
         model = model_class.from_pretrained(checkpoint, **model_kwargs)
         model.to(args.device)
-        retriever = RagRetriever(model.config)
+        retriever = RagRetriever(model.config)  # TODO: add tokenizers
         tokenizer = (
             retriever.generator_tokenizer
             if args.model_type != "bart" and args.eval_mode == "e2e"
@@ -294,8 +294,6 @@ def main(args):
             if args.model_type != "bart" and args.eval_mode == "retrieval"
             else BartTokenizer.from_pretrained("facebook/bart-large")
         )
-        if args.model_type != "bart":
-            retriever.init_retrieval(distributed_port=12345)
 
         with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
             questions = []

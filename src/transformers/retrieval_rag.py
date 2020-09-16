@@ -25,11 +25,14 @@ import torch
 import torch.distributed as dist
 from datasets import load_dataset
 
+from typing import Iterable, List, Tuple
+
 from .configuration_rag import RagConfig
 from .file_utils import cached_path, is_remote_url
 from .tokenization_rag import RagTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .utils import logging
+from .tokenization_utils_base import BatchEncoding
 
 
 logger = logging.get_logger(__name__)
@@ -46,29 +49,29 @@ class Index(object):
     def __init__(self, *args, **kwargs):
         pass
 
-    def get_doc_dicts(self, doc_ids):
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
         """
         Returns a list of dictionaries, containing titles and text of the retrieved documents.
 
         Args:
-            doc_ids (:obj:`torch.Tensor` of shape :obj:`(batch_size, n_docs)`):
+            doc_ids (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`):
                 A tensor of document indices.
         """
         pass
 
-    def get_top_docs(self, question_hidden_states, n_docs):
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
         """
         For each query in the batch, retrieves ``n_docs`` documents.
 
         Args:
-            question_hidden_states (:obj:`np.array` of shape :obj:`(batch_size, vector_size):
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size):
                 An array of query vectors.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
 
         Returns:
-            :obj:`torch.Tensor` of shape :obj:`(batch_size, n_docs)`: A tensor of indices of retrieved documents.
-            :obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`: A tensor of vector representations of retrieved documents.
+            :obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`: A tensor of indices of retrieved documents.
+            :obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`: A tensor of vector representations of retrieved documents.
         """
         raise NotImplementedError
 
@@ -178,13 +181,13 @@ class LegacyIndex(Index):
             doc_dicts.append(doc_dict)
         return doc_dicts
 
-    def get_top_docs(self, question_hidden_states: np.array, n_docs: int = 5):
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
         aux_dim = np.zeros(len(question_hidden_states), dtype="float32").reshape(-1, 1)
         query_nhsw_vectors = np.hstack((question_hidden_states, aux_dim))
         _, docs_ids = self.index.search(query_nhsw_vectors, n_docs)
         vectors = [[self.index.reconstruct(int(doc_id))[:-1] for doc_id in doc_ids] for doc_ids in docs_ids]
         ids = [[int(self.index_id_to_db_id[doc_id]) for doc_id in doc_ids] for doc_ids in docs_ids]
-        return torch.tensor(ids), torch.tensor(vectors)
+        return np.array(ids), np.array(vectors)
 
 
 class HFIndex(Index):
@@ -243,14 +246,14 @@ class HFIndex(Index):
             )
         self._index_initialize = True
 
-    def get_doc_dicts(self, doc_ids):
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
         return [self.index[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
-    def get_top_docs(self, question_hidden_states, n_docs=5):
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
         _, docs = self.index.get_nearest_examples_batch("embeddings", question_hidden_states, n_docs)
         ids = [[int(i) for i in doc["id"]] for doc in docs]
         vectors = [doc["embeddings"] for doc in docs]
-        return torch.tensor(ids), torch.tensor(vectors)
+        return np.array(ids), np.array(vectors)  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
 
 class RagRetriever(object):
@@ -264,7 +267,9 @@ class RagRetriever(object):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
     """
 
-    def __init__(self, config, question_encoder_tokenizer=None, generator_tokenizer=None):
+    _init_retrieval = True
+
+    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer):
         super().__init__()
         self.retriever = (
             LegacyIndex(
@@ -280,7 +285,6 @@ class RagRetriever(object):
         self.generator_tokenizer = generator_tokenizer
         self.question_encoder_tokenizer = question_encoder_tokenizer
 
-        self.process_group = None
         self.n_docs = config.n_docs
         self.batch_size = config.retrieval_batch_size
 
@@ -288,6 +292,8 @@ class RagRetriever(object):
             self.batch_size *= torch.cuda.device_count()
 
         self.config = config
+        if self._init_retrieval:
+            self.init_retrieval()
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, **kwargs):
@@ -307,85 +313,21 @@ class RagRetriever(object):
         )
         rag_tokenizer.save_pretrained(save_directory)
 
-    def init_retrieval(self, distributed_port):
+    def init_retrieval(self):
         """
         Retrirever initalization function, needs to be called from the training process. The function sets some common parameters
         and environment variables. On top of that, (only) the main process in the process group loads the index into memory.
-
-        If this functin doesn't get called, we assume we're operating in a non-distributed environment and the index gets loaded
-        at first query.
-
-        Args:
-            distributed_port (:obj:`int`):
-                The port on which the main communication of the training run is carried out. We set the port for retrieval-related
-                communication as ``distributed_port + 1``.
         """
 
         logger.info("initializing retrieval")
+        self.retriever.init_index()
 
-        # initializing a separate process group for retrievel as the default
-        # nccl backend doesn't support gather/scatter operations while gloo
-        # is too slow to replace nccl for the core gpu communication
-        if dist.is_initialized():
-            logger.info("dist initialized")
-            # needs to be set manually
-            os.environ["GLOO_SOCKET_IFNAME"] = self._infer_socket_ifname()
-            # avoid clash with the NCCL port
-            os.environ["MASTER_PORT"] = str(distributed_port + 1)
-            self.process_group = dist.new_group(ranks=None, backend="gloo")
-
-        # initialize retriever only on the main worker
-        if not dist.is_initialized() or self._is_main():
-            logger.info("dist not initialized / main")
-            self.retriever.init_index()
-
-        # all processes wait untill the retriever is initialized by the main process
-        if dist.is_initialized():
-            torch.distributed.barrier(group=self.process_group)
-
-    def preprocess_query(self, input_ids, prefix):
-        r"""
-        Preprocesses the ``input_id`` by first converting it to string using the ``generator_tokenizer`` and
-        then tokenizing it using the ``question_encoder_tokenizer``.
-
-        Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Return:
-            :obj:`torch.LongTensor`:
-                Tokenized input.
-            :obj:`str`:
-                Decoded input strings.
-        """
-
-        input_strings = self.generator_tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-
-        # handle prefix for T5
-        if isinstance(self.generator_tokenizer, T5Tokenizer):
-            for i, s in enumerate(input_strings):
-                if not s.startswith(prefix):
-                    logger.warning("T5 prefix mismatch in {}".format(s))
-                if len(input_strings[i]) <= len(prefix):
-                    input_strings[i] = ""
-                else:
-                    input_strings[i] = input_strings[i][len(prefix) :]
-
-        retriever_inputs = self.question_encoder_tokenizer.batch_encode_plus(
-            input_strings,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        )
-
-        return retriever_inputs["input_ids"].to(input_ids.device), input_strings
-
-    def postprocess_docs(self, docs, input_strings, prefix, n_docs):
+    def postprocess_docs(self, docs, input_strings, prefix, n_docs, return_tensors=None):
         r"""
         Postprocessing retrieved ``docs`` and combining them with ``input_strings``.
 
         Args:
-            doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, n_docs)`):
+            doc_scores (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`):
                 Retrieval scores of respective docs - passed for logging.
             docs  (:obj:`dict`):
                 Retrieved documents.
@@ -393,12 +335,10 @@ class RagRetriever(object):
                 Input strings decoded by ``preprocess_query``.
             prefix (:obj:`str`):
                 Prefix added at the beginning of each input, typically used with T5-based models.
-            print_docs  (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                If :obj:`True`, documents retrieved during the forward pass will be printed out. Intended for debugging purposes.
 
         Return:
-            :obj:`tuple(tuple(torch.FloatTensor)`:
-                a tuple consisting od two elements: contextualized ``input_ids`` and a compatible ``attention_mask``.
+            :obj:`tuple(tensors)`:
+                a tuple consisting of two elements: contextualized ``input_ids`` and a compatible ``attention_mask``.
         """
 
         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
@@ -431,19 +371,162 @@ class RagRetriever(object):
         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
             rag_input_strings,
             max_length=self.config.max_combined_length,
-            return_tensors="pt",
+            return_tensors=return_tensors,
             padding="max_length",
             truncation=True,
         )
 
         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
 
+    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> List[Iterable]:
+        return [t[i : i + chunk_size] for i in range(0, len(t), chunk_size)]
+
+    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray]:
+        question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
+        ids_batched = []
+        vectors_batched = []
+        for question_hidden_states in question_hidden_states_batched:
+            start_time = time.time()
+            ids, vectors = self.retriever.get_top_docs(question_hidden_states, n_docs)
+            logger.debug(
+                "index search time: {} sec, batch size {}".format(
+                    time.time() - start_time, question_hidden_states.shape
+                )
+            )
+            ids_batched.extend(ids)
+            vectors_batched.extend(vectors)
+        return np.array(ids_batched), np.array(
+            vectors_batched
+        )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
+
+    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
+        """
+        Retrieves documents for specified ``question_hidden_states``.
+
+        Args:
+            question_hidden_states (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`:
+                A batch of query vectors to retrieve with.
+            n_docs (:obj:`int`):
+                The number of docs retrieved per query.
+
+        Ouput:
+            retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
+                The retrieval embeddings of the retrieved docs per query.
+            doc_dicts (:obj:`List[dict]`):
+                The retrieved_doc_embeds examples per query.
+        """
+
+        doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
+        return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
+
+    def __call__(
+        self,
+        question_input_ids: List[List[int]],
+        question_hidden_states: np.ndarray,
+        prefix: str,
+        n_docs=None,
+        return_tensors=None,
+    ) -> BatchEncoding:
+        """
+        Retrieves documents for specified ``question_hidden_states``.
+
+        Args:
+            question_input_ids: (:obj:`List[List[int]]`) batch of input ids
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`:
+                A batch of query vectors to retrieve with.
+            n_docs (:obj:`int`):
+                The number of docs retrieved per query.
+
+        Output:
+            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+
+            - **context_input_ids** -- List of token ids to be fed to a model.
+
+              `What are input IDs? <../glossary.html#input-ids>`__
+            - **context_attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
+
+              `What are attention masks? <../glossary.html#attention-mask>`__
+            - **retrieved_doc_embeds** -- List of embeddings of the retrieved documents
+        """
+
+        n_docs = n_docs if n_docs is not None else self.n_docs
+        retrieved_doc_embeds, docs = self.retrieve(question_hidden_states, n_docs)
+
+        input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
+        context_input_ids, context_attention_mask = self.postprocess_docs(
+            docs, input_strings, prefix, n_docs, return_tensors=return_tensors
+        )
+
+        return BatchEncoding(
+            {
+                "context_input_ids": context_input_ids,
+                "context_attention_mask": context_attention_mask,
+                "retrieved_doc_embeds": retrieved_doc_embeds,
+            },
+            tensor_type=return_tensors,
+        )
+
+
+class RagPyTorchDistributedRetriever(RagRetriever):
+    """
+    A distributed retriever built on top of the ``torch.distributed`` communication package. During training all workers
+    initalize their own instance of the retriever, however, only the main worker loads the index into memory. The index is stored
+    in cpu memory. The index will also work well in a non-distributed setup.
+
+    Args:
+        config (:class:`~transformers.RagConfig`):
+            The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
+        distributed_port (:obj:`int`):
+            The port on which the main communication of the training run is carried out. We set the port for retrieval-related
+            communication as ``distributed_port + 1``.
+    """
+
+    _init_retrieval = False
+
+    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer):
+        super().__init__(
+            config, question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer
+        )
+
+        self.process_group = None
+
+    def init_retrieval(self, distributed_port: int):
+        """
+        Retrirever initalization function, needs to be called from the training process. The function sets some common parameters
+        and environment variables. On top of that, (only) the main process in the process group loads the index into memory.
+
+
+        Args:
+            distributed_port (:obj:`int`):
+                The port on which the main communication of the training run is carried out. We set the port for retrieval-related
+                communication as ``distributed_port + 1``.
+        """
+
+        logger.info("initializing retrieval")
+
+        # initializing a separate process group for retrievel as the default
+        # nccl backend doesn't support gather/scatter operations while gloo
+        # is too slow to replace nccl for the core gpu communication
+        if dist.is_initialized():
+            logger.info("dist initialized")
+            # needs to be set manually
+            os.environ["GLOO_SOCKET_IFNAME"] = self._infer_socket_ifname()
+            # avoid clash with the NCCL port
+            os.environ["MASTER_PORT"] = str(distributed_port + 1)
+            self.process_group = dist.new_group(ranks=None, backend="gloo")
+
+        # initialize retriever only on the main worker
+        if not dist.is_initialized() or self._is_main():
+            logger.info("dist not initialized / main")
+            self.retriever.init_index()
+
+        # all processes wait untill the retriever is initialized by the main process
+        if dist.is_initialized():
+            torch.distributed.barrier(group=self.process_group)
+
     def _is_main(self):
         return dist.get_rank(group=self.process_group) == 0
-
-    def _chunk_tensor(self, t, chunk_size):
-        n_chunks = t.shape[0] // chunk_size + int(t.shape[0] % chunk_size > 0)
-        return list(torch.chunk(t, n_chunks, dim=0))
 
     def _scattered(self, scatter_list, target_shape, target_type=torch.float32):
         target_tensor = torch.empty(target_shape, dtype=target_type)
@@ -456,45 +539,23 @@ class RagRetriever(object):
         ifname = next((addr for addr in addrs if addr.startswith("e")), None)
         return ifname
 
-    def _main_retrieve(self, question_hidden_states, n_docs):
-        question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
-        ids_batched = []
-        vectors_batched = []
-        for question_hidden_states in question_hidden_states_batched:
-            start_time = time.time()
-            ids, vectors = self.retriever.get_top_docs(question_hidden_states.numpy(), n_docs)
-            logger.debug(
-                "index search time: {} sec, batch size {}".format(
-                    time.time() - start_time, question_hidden_states.shape
-                )
-            )
-            ids_batched.append(ids)
-            vectors_batched.append(vectors)
-        return torch.cat(ids_batched), torch.cat(vectors_batched)
-
-    def retrieve(self, question_hidden_states, n_docs):
+    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
         """
         Retrieves documents for specified ``question_hidden_states``. The main process, which has the access to the index stored in memory, gathers queries
         from all the processes in the main training process group, performs the retrieval and scatters back the results.
 
         Args:
-            question_hidden_states (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`:
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
 
         Ouput:
-            total_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, n_docs)`
+            total_scores (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`
                 The retrieval scores of the retrieved docs per query.
             total_examples (:obj:`List[dict]`):
                 The retrieved examples per query.
         """
-
-        # non-ddp initialization (init_retrieval() is called at ddp initialization, if no ddp, then it's never called,
-        # so it has to be initalized separately.
-        if not dist.is_initialized() and not self.retriever.is_initialized():
-            logger.info("Initializing index at first query")
-            self.retriever.init_index()
 
         # single GPU training
         if not dist.is_initialized():
@@ -508,7 +569,7 @@ class RagRetriever(object):
         gather_list = None
         if self._is_main():
             gather_list = [torch.empty(question_hidden_states.shape, dtype=torch.float32) for _ in range(world_size)]
-        dist.gather(question_hidden_states, dst=0, gather_list=gather_list, group=self.process_group)
+        dist.gather(torch.tensor(question_hidden_states), dst=0, gather_list=gather_list, group=self.process_group)
 
         # scatter logic
         n_queries = question_hidden_states.shape[0]
@@ -516,20 +577,11 @@ class RagRetriever(object):
         scatter_vectors = []
         if self._is_main():
             assert len(gather_list) == world_size
-            ids, vectors = self._main_retrieve(torch.cat(gather_list), n_docs)
+            ids, vectors = self._main_retrieve(torch.cat(gather_list).numpy(), n_docs)
+            ids, vectors = torch.tensor(ids), torch.tensor(vectors)
             scatter_ids = self._chunk_tensor(ids, n_queries)
             scatter_vectors = self._chunk_tensor(vectors, n_queries)
         doc_ids = self._scattered(scatter_ids, [n_queries, n_docs], target_type=torch.int64)
         retrieved_doc_embeds = self._scattered(scatter_vectors, [n_queries, n_docs, question_hidden_states.shape[1]])
 
-        return retrieved_doc_embeds, self.retriever.get_doc_dicts(doc_ids)
-
-    def __call__(self, question_input_ids, question_hidden_states, prefix, n_docs=None):
-        # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
-        n_docs = n_docs if n_docs is not None else self.n_docs
-        retrieved_doc_embeds, docs = self.retrieve(question_hidden_states, n_docs)
-
-        input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
-        context_input_ids, context_attention_mask = self.postprocess_docs(docs, input_strings, prefix, n_docs)
-
-        return context_input_ids, context_attention_mask, retrieved_doc_embeds
+        return retrieved_doc_embeds.numpy(), self.retriever.get_doc_dicts(doc_ids)

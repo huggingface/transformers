@@ -386,12 +386,17 @@ class RagModel(RagPreTrainedModel):
             if self.retriever is not None and (
                 context_input_ids is None or context_attention_mask is None or retrieved_doc_embeds is None
             ):
-                # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
-                context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
+                out = self.retriever(
                     input_ids,
-                    question_hidden_states.cpu().detach().to(torch.float32),
+                    question_hidden_states.cpu().detach().to(torch.float32).numpy(),
                     prefix=self.generator.config.prefix,
                     n_docs=self.config.n_docs,
+                    return_tensors="pt",
+                )
+                context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+                    out["context_input_ids"],
+                    out["context_attention_mask"],
+                    out["retrieved_doc_embeds"],
                 )
 
                 # set to correct device
@@ -588,14 +593,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         # TODO(patrick) - clean up generate here
         if self.retriever is not None and context_input_ids is None:
-            # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
             question_hidden_states = self.question_encoder(input_ids)[0]
-            context_input_ids, _, _ = self.retriever(
+            context_input_ids = self.retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32),
+                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=self.config.n_docs,
-            )
+                return_tensors="pt",
+            )["context_input_ids"]
 
             # set to correct device
             context_input_ids = context_input_ids.to(input_ids)
@@ -885,13 +890,18 @@ class RagTokenForGeneration(RagPreTrainedModel):
     ):
 
         if self.retriever is not None and context_input_ids is None:
-            # TODO(patrick, quention): would be nice to make retriever framework independent => we could pass `return_tensors='pt'" here
             question_hidden_states = self.question_encoder(input_ids)[0]
-            context_input_ids, context_attention_mask, retrieved_doc_embeds = self.retriever(
+            out = self.retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32),
+                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=self.config.n_docs,
+                return_tensors="pt",
+            )
+            context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+                out["context_input_ids"],
+                out["context_attention_mask"],
+                out["retrieved_doc_embeds"],
             )
 
             # set to correct device
