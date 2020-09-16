@@ -337,7 +337,14 @@ class SummarizationModule(BaseTransformer):
             help="-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So val_check_interval will effect it.",
         )
         return parser
+from pytorch_lightning.callbacks import Callback
+from ray import tune
+class TuneReportCallback(Callback):
 
+    def on_validation_end(self, trainer, pl_module):
+        tune.report(
+            loss=trainer.callback_metrics["avg_val_loss"].item(),
+            mean_accuracy=trainer.callback_metrics["avg_val_accuracy"].item())
 
 class TranslationModule(SummarizationModule):
     mode = "translation"
@@ -388,11 +395,8 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = False
 
     lower_is_better = args.val_metric == "loss"
-    from ray.tune.integration.pytorch_lightning import TuneReportCallback
-    callback = TuneReportCallback({
-        "loss": "val_avg_loss",
-        model.val_metric: f"val_avg_{model.val_metric}"
-    }, on="validation_end")
+    callback = TuneReportCallback({"loss": "val_avg_loss", model.val_metric: f"val_avg_{model.val_metric}"},
+                                  on="validation_end")
 
     trainer: pl.Trainer = generic_train(
         model,
