@@ -89,7 +89,7 @@ DEFAULTS = {
     'adafactor': False,
     #'tpu_cores': 0,
     'log_gpu_memory': None,
-    'progress_bar_refresh_rate': 1,
+    'progress_bar_refresh_rate': 0,
     'overfit_batches': 0.0,
     'track_grad_norm': -1,
     'check_val_every_n_epoch': 1,
