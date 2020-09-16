@@ -325,14 +325,14 @@ def load_json(path):
 def get_git_info():
     try:
         repo = git.Repo(search_parent_directories=True)
-        repo_infos = {
+        return {
             "repo_id": str(repo),
             "repo_sha": str(repo.head.object.hexsha),
             "repo_branch": str(repo.active_branch),
         }
     except Exception:
-        return {}
-    return repo_infos
+        return {'repo_sha': 'RAY', 'repo_id': 'RAY', 'repo_branch': 'RAY'}
+
 
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
