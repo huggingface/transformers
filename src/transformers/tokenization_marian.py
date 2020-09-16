@@ -156,9 +156,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
 
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-
         self.current_spm = self.spm_target
         model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         self.current_spm = self.spm_source
