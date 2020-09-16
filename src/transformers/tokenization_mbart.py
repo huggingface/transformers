@@ -15,7 +15,7 @@
 
 from typing import List, Optional
 
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
@@ -156,7 +156,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
