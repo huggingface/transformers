@@ -16,10 +16,10 @@
 
 
 import copy
-from .utils import logging
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
