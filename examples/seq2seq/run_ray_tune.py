@@ -30,43 +30,45 @@ def ray_main(args, config):
         #assert hasattr(args, k), k
         setattr(args, k, v)
     args.output_dir = get_ray_slug(config)
-    args.num_train_epochs = 3
     ft_main(args)
 
 
-def tune_helsinki_(args, num_samples=24, num_epochs=3):
-
+def tune_helsinki_(args, num_samples=24, num_epochs=1):
+    args.num_train_epochs = 1
+    args.n_train = 10000
     search_space = {
-        "learning_rate": tune.sample_from(lambda spec: 10**(-10 * np.random.rand())),
+        "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
         "gradient_accumulation_steps": tune.choice([1, 8, 32, 128, 256]),
         "dropout": tune.choice([0, 0.1, 0.2, 0.4]),
     }
     scheduler = ASHAScheduler(
         metric="val_avg_bleu",
-        mode="min",
+        mode="max",
         max_t=num_epochs,
         grace_period=1,
-        reduction_factor=2)
+        reduction_factor=2
+    )
     reporter = CLIReporter(
         parameter_columns=list(search_space.keys()),
-        metric_columns=["val_avg_loss", "val_avg_bleu", "global_step"])
+        metric_columns=["val_avg_loss", "val_avg_bleu", "global_step"]
+    )
     tune.run(
         partial(
             ray_main,
             args,
-            ),
+        ),
         resources_per_trial={"gpu": args.gpus},
         config=search_space,
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name="tune_helsinki_asha")
+        name="tune_helsinki_asha"
+    )
 
 
 # Make default args
 import argparse
-
-args = argparse.Namespace(**{
+DEFAULTS = {
     'logger': True,
     'checkpoint_callback': True,
     'early_stop_callback': False,
@@ -150,7 +152,7 @@ args = argparse.Namespace(**{
     'freeze_encoder': True,
     'freeze_embeds': True,
     'sortish_sampler': True,
-    'logger_name': 'wandb',
+    'logger_name': None,
     'n_train': -1,
     'n_val': -1,
     'n_test': -1,
@@ -161,6 +163,7 @@ args = argparse.Namespace(**{
     'early_stopping_patience': -1,
     'val_metric': None,
     'save_top_k': 1,
-})
+}
+args = argparse.Namespace(**DEFAULTS)
 
 tune_helsinki_(args)
