@@ -73,6 +73,7 @@ args = argparse.Namespace(**{
     'early_stop_callback': False,
     'default_root_dir': None,
     'gradient_clip_val': 0,
+    'eval_beams': 2,
     'process_position': 0,
     'num_nodes': 1,
     'num_processes': 1,
