@@ -81,7 +81,7 @@ def eval_data_dir(
         n_obs=n_obs,
         prefix=model.config.prefix,
     )
-    sampler = ds.make_sortish_sampler(bs, distributed=True, add_extra_examples=False)
+    sampler = ds.make_sortish_sampler(bs, distributed=True, add_extra_examples=False, shuffle=False)
     data_loader = DataLoader(ds, sampler=sampler, batch_size=bs, collate_fn=ds.collate_fn)
     dec_kwargs = dict(skip_special_tokens=True, clean_up_tokenization_spaces=False)  # tokenizer.decode
     results = []
@@ -169,6 +169,9 @@ def run_generate():
         save_dir.mkdir(exist_ok=True)
         partial_results = gather_results_from_each_node(num_replicas, json_save_dir, args.sync_timeout)
         preds, labels = combine_partial_results(partial_results)
+        tgt_file = Path(args.data_dir).joinpath(args.type_path + ".target")
+        labels = [x.rstrip() for x in open(tgt_file).readlines()][: len(preds)]
+
         # Calculate metrics, save metrics,  and save _generations.txt
         calc_bleu = "translation" in args.task
         score_fn = calculate_bleu if calc_bleu else calculate_rouge
