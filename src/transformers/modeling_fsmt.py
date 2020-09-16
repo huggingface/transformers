@@ -27,7 +27,7 @@
 #
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
-import logging
+from .utils import logging
 import math
 import random
 import warnings
@@ -51,7 +51,7 @@ from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqL
 from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FSMTConfig"
 _TOKENIZER_FOR_DOC = "FSMTTokenizer"
