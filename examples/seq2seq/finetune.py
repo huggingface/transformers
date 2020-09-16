@@ -388,6 +388,12 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = False
 
     lower_is_better = args.val_metric == "loss"
+    from ray.tune.integration.pytorch_lightning import TuneReportCallback
+    callback = TuneReportCallback({
+        "loss": "val_avg_loss",
+        model.val_metric: f"val_avg_{model.val_metric}"
+    }, on="validation_end")
+
     trainer: pl.Trainer = generic_train(
         model,
         args,
@@ -396,6 +402,7 @@ def main(args, model=None) -> SummarizationModule:
             args.output_dir, model.val_metric, args.save_top_k, lower_is_better
         ),
         early_stopping_callback=es_callback,
+        extra_callbacks=[callback],
         logger=logger,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
