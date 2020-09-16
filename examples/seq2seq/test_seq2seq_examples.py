@@ -312,6 +312,7 @@ def test_run_eval(model):
         assert Path(output_file_name).exists()
         os.remove(Path(output_file_name))
 
+
 @slow
 @pytest.mark.parametrize("model", [pytest.param(T5_TINY)])
 def test_run_eval_search(model):
