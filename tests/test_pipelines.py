@@ -1,9 +1,10 @@
 import unittest
 from typing import Iterable, List, Optional
 
-from transformers import pipeline, AutoTokenizer
+from transformers import pipeline
 from transformers.pipelines import SUPPORTED_TASKS, Conversation, DefaultArgumentHandler, Pipeline
 from transformers.testing_utils import require_tf, require_torch, slow, torch_device
+
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
@@ -737,13 +738,13 @@ class NerPipelineTests(unittest.TestCase):
         ]
         expected_grouped_ner_results = [
             [
-                {"entity_group": "PER", "score": 0.9710702640669686, "word": "Consuelo Araújo Noguera"},
-                {"entity_group": "PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
-                {"entity_group": "ORG", "score": 0.8589080572128296, "word": "Farc"},
+                {"entity_group": "B-PER", "score": 0.9710702640669686, "word": "Consuelo Araújo Noguera"},
+                {"entity_group": "B-PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
+                {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc"},
             ],
             [
-                {"entity_group": "PER", "score": 0.9962901175022125, "word": "Enzo"},
-                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN"},
+                {"entity_group": "I-PER", "score": 0.9962901175022125, "word": "Enzo"},
+                {"entity_group": "I-ORG", "score": 0.9986497163772583, "word": "UN"},
             ],
         ]
 
@@ -777,7 +778,6 @@ class NerPipelineTests(unittest.TestCase):
     def test_torch_ner(self):
         mandatory_keys = {"entity", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, is_fast=True)
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
             self._test_ner_pipeline(nlp, mandatory_keys)
 
@@ -785,9 +785,8 @@ class NerPipelineTests(unittest.TestCase):
     def test_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, is_fast=True)
             nlp = pipeline(
-                task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
+                task="ner", model=model_name, tokenizer=model_name, grouped_entities=True, ignore_subwords=True
             )
             self._test_ner_pipeline(nlp, mandatory_keys)
 
@@ -795,7 +794,6 @@ class NerPipelineTests(unittest.TestCase):
     def test_tf_ner(self):
         mandatory_keys = {"entity", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, is_fast=True)
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
             self._test_ner_pipeline(nlp, mandatory_keys)
 
@@ -803,11 +801,10 @@ class NerPipelineTests(unittest.TestCase):
     def test_tf_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, is_fast=True)
             nlp = pipeline(
                 task="ner",
                 model=model_name,
-                tokenizer=tokenizer,
+                tokenizer=model_name,
                 framework="tf",
                 grouped_entities=True,
                 ignore_subwords=True,
