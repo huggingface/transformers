@@ -23,13 +23,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from transformers.file_utils import (
-    cached_property,
-    is_datasets_available,
-    is_faiss_available,
-    is_psutil_available,
-    is_torch_available,
-)
+from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
@@ -44,7 +38,7 @@ from .test_modeling_dpr import DPRModelTester
 TOLERANCE = 1e-4
 
 
-if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available():
+if is_torch_available() and is_datasets_available() and is_faiss_available():
     import torch
     from datasets import Dataset
 
@@ -87,7 +81,7 @@ def require_retrieval(test_case):
     These tests are skipped when respective libraries are not installed.
 
     """
-    if not (is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available()):
+    if not (is_torch_available() and is_datasets_available() and is_faiss_available()):
         test_case = unittest.skip("test requires PyTorch")(test_case)
     return test_case
 
@@ -198,7 +192,7 @@ class RagTestMixin:
 
     all_model_classes = (
         (RagModel, RagTokenForGeneration, RagSequenceForGeneration)
-        if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available()
+        if is_torch_available() and is_datasets_available() and is_faiss_available()
         else ()
     )
 

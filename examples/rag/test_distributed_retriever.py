@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import tempfile
+import unittest
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -13,7 +14,7 @@ import faiss
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
-from transformers.testing_utils import require_datasets, require_faiss, require_torch
+from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
@@ -25,9 +26,20 @@ sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:sk
 from examples.rag.distributed_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
 
 
-@require_faiss
-@require_datasets
-@require_torch
+def require_distributed_retrieval(test_case):
+    """
+    Decorator marking a test that requires a set of dependencies necessary for pefrorm retrieval with
+    :class:`~transformers.RagRetriever`.
+
+    These tests are skipped when respective libraries are not installed.
+
+    """
+    if not (is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available()):
+        test_case = unittest.skip("test requires PyTorch, Datasets, Faiss, psutil")(test_case)
+    return test_case
+
+
+@require_distributed_retrieval
 class RagRetrieverTest(TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
