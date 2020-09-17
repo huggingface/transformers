@@ -343,7 +343,11 @@ class TuneReportCallback(Callback):
 
     def on_validation_end(self, trainer, pl_module):
         metric = pl_module.val_metric
-        tune.report(**{"loss": "val_avg_loss", metric: f"val_avg_{metric}"})
+        # trainer.metrics
+        loss = trainer.callback_metrics['val_avg_loss']
+        metric = trainer.callback_metrics[f'val_avg_{pl_module.val_metric}']
+
+        tune.report(val_avg_loss=loss, val_avg_bleu=metric)
 
 class TranslationModule(SummarizationModule):
     mode = "translation"

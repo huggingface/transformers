@@ -1,4 +1,5 @@
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+import ray
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
@@ -34,28 +35,28 @@ def ray_main(args, config):
     ft_main(args)
 
 
-def tune_helsinki_(args, num_samples=8, num_epochs=1):
-    args.num_train_epochs = 1
+def tune_helsinki_(args, num_samples=100, num_epochs=1):
+    args.num_train_epochs = num_epochs
     # args.n_train = 10000
     search_space = {
         "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
         "gradient_accumulation_steps": tune.choice([1, 8, 32, 128, 256]),
         "dropout": tune.choice([0, 0.1, 0.2, 0.4]),
-
     }
     scheduler = ASHAScheduler(
-        metric="val_avg_bleu",
-        mode="max",
-        max_t=num_epochs,
-        grace_period=1,
-        reduction_factor=2
-    )
+         metric="val_avg_bleu",
+         mode="max",
+         max_t=num_epochs* int(1/args.val_check_interval),  # max number of reports until termination
+         grace_period=1,
+         reduction_factor=4,  # cut 1/4 of trials really quickly, and another 1/4 pretty soon
+     )
     reporter = CLIReporter(
         parameter_columns=list(search_space.keys()),
         metric_columns=["val_avg_loss", "val_avg_bleu", "global_step"]
     )
     config = search_space.copy()
-    config["wandb"] = {"project": "RAY"}
+    config["wandb"] = {"project": "RAY", "group": "gcp_sep16_wmt"}
+    ray.init(log_to_driver=False)
     tune.run(
         partial(
             ray_main,
@@ -64,11 +65,12 @@ def tune_helsinki_(args, num_samples=8, num_epochs=1):
         resources_per_trial={"gpu": args.gpus},
         config=config,
         num_samples=num_samples,
-        server_port=8888,
         scheduler=scheduler,
         progress_reporter=reporter,
         name="tune_helsinki_asha",
         loggers=DEFAULT_LOGGERS+ (WandbLogger,),
+        max_failures=3,
+        # fail_fast=True,
     )
 
 
@@ -96,14 +98,14 @@ DEFAULTS = {
     'check_val_every_n_epoch': 1,
     'fast_dev_run': False,
     'accumulate_grad_batches': 1,
-    'max_epochs': 1000,
+    'max_epochs': 1,
     'min_epochs': 1,
     'max_steps': None,
     'min_steps': None,
     'limit_train_batches': 1.0,
     'limit_val_batches': 1.0,
     'limit_test_batches': 1.0,
-    'val_check_interval': 0.5,
+    'val_check_interval': 0.1,
     'log_save_interval': 100,
     'row_log_interval': 50,
     'distributed_backend': None,
@@ -117,7 +119,7 @@ DEFAULTS = {
     'profiler': None,
     'benchmark': False,
     'deterministic': False,
-    'reload_dataloaders_every_epoch': False,
+    'reload_dataloaders_every_epoch': True,
     'auto_lr_find': False,
     'replace_sampler_ddp': True,
     'terminate_on_nan': False,
@@ -159,7 +161,7 @@ DEFAULTS = {
     'freeze_embeds': True,
     'sortish_sampler': True,
     'logger_name': 'wandb',
-    'n_train': 10000,
+    'n_train': -1,
     'n_val': 500,
     'n_test': -1,
     'task': 'translation',
