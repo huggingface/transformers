@@ -397,17 +397,15 @@ class RagModel(RagPreTrainedModel):
                     doc_scores is not None
                 ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
 
-        all_doc_batch_size = context_input_ids.shape[0] if encoder_outputs is None else encoder_outputs.last_hidden_state.shape[0]
-
         assert (
             doc_scores is not None
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
         # Decoder input without context documents
-        if decoder_input_ids is not None and decoder_input_ids.shape[0] < all_doc_batch_size:
+        if decoder_input_ids is not None:
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.config.n_docs, dim=0)
 
-        if decoder_attention_mask is not None and decoder_input_ids.shape[0] < all_doc_batch_size:
+        if decoder_attention_mask is not None:
             decoder_attention_mask = decoder_attention_mask.repeat_interleave(self.config.n_docs, dim=0)
 
         gen_outputs = self.generator(
@@ -641,6 +639,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = context_input_ids.to(input_ids)
 
         hypos = []
+        kwargs["num_beams"] = num_doc_beams
+        kwargs["num_return_sequences"] = num_doc_return_sequences
+        kwargs["attention_mask"] = None
 
         for index in range(len(input_ids)):
             # first, generate beams from documents:
@@ -650,9 +651,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
             output_sequences = self.generator.generate(
                 generator_input_ids,
-                num_return_sequences=num_doc_beams,
-                num_beams=num_doc_beams,
-                attention_mask=None,
                 **kwargs,
             )  # n_docs * n_beam, tgt_len
             if deduplicate:
@@ -948,18 +946,15 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
         decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id is not None else self.config.generator.decoder_start_token_id
+            decoder_start_token_id
+            if decoder_start_token_id is not None
+            else self.config.generator.decoder_start_token_id
         )
 
-        # not needed
-        do_sample = False
-        temperature = self.config.temperature
-        top_k = self.config.top_k
-        top_p = self.config.top_p
-        repetition_penalty = self.config.repetition_penalty
-
+        # batch_size
         batch_size = input_ids.shape[0]
 
+        # retrieve docs
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids)[0]
             out = self.retriever(
@@ -1000,6 +995,14 @@ class RagTokenForGeneration(RagPreTrainedModel):
         cur_len = 1
         vocab_size = self.config.generator.vocab_size
         kwargs["doc_scores"] = doc_scores
+        kwargs["encoder_outputs"] = encoder_outputs
+
+        # not needed. TODO(PVP): change after generate refactor
+        do_sample = False
+        temperature = self.config.temperature
+        top_k = self.config.top_k
+        top_p = self.config.top_p
+        repetition_penalty = self.config.repetition_penalty
 
         if num_beams > 1:
             return self._generate_beam_search(
