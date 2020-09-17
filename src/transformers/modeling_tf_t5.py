@@ -770,7 +770,11 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
+                if len(layer_outputs) >= 5:
+                    all_attentions = all_attentions + (layer_outputs[2],) + (layer_outputs[4],)
+                else:
+                    all_attentions = all_attentions + (layer_outputs[2],)
+
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
