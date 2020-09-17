@@ -76,18 +76,18 @@ BART_START_DOCSTRING = r"""
 BART_GENERATION_EXAMPLE = r"""
     Summarization example::
 
-        from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
+        >>> from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
 
-        # see ``examples/summarization/bart/run_eval.py`` for a longer example
-        model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+        >>> # see ``examples/summarization/bart/run_eval.py`` for a longer example
+        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
-        ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
 
-        # Generate Summary
-        summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 
 """
 
@@ -1023,21 +1023,21 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         Conditional generation example::
 
-                # Mask filling only works for bart-large
-                from transformers import BartTokenizer, BartForConditionalGeneration
-                tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-                TXT = "My friends are <mask> but they eat too many carbs."
+                >>> # Mask filling only works for bart-large
+                >>> from transformers import BartTokenizer, BartForConditionalGeneration
+                >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+                >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-                model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-                input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-                logits = model(input_ids).logits
+                >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
+                >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+                >>> logits = model(input_ids).logits
 
-                masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-                probs = logits[0, masked_index].softmax(dim=0)
-                values, predictions = probs.topk(5)
+                >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+                >>> probs = logits[0, masked_index].softmax(dim=0)
+                >>> values, predictions = probs.topk(5)
 
-                tokenizer.decode(predictions).split()
-                # ['good', 'great', 'all', 'really', 'very']
+                >>> tokenizer.decode(predictions).split()
+                >>> # ['good', 'great', 'all', 'really', 'very']
         """
         if "lm_labels" in unused:
             warnings.warn(
