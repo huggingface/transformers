@@ -29,6 +29,7 @@ from .configuration_auto import (
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
+    FSMTConfig,
     FunnelConfig,
     GPT2Config,
     LongformerConfig,
@@ -59,6 +60,7 @@ from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
+from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
@@ -109,6 +111,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
     ]
 )
