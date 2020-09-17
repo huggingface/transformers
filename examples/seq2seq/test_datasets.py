@@ -11,9 +11,9 @@ from transformers.modeling_bart import shift_tokens_right
 from transformers.testing_utils import slow
 
 from .pack_dataset import pack_data_dir
-from .save_len_file import save_len_file
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from .utils import DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
+
 
 @slow
 @pytest.mark.parametrize(
@@ -134,8 +134,6 @@ def test_dynamic_batch_size():
 
 def test_sortish_sampler_reduces_padding():
     ds, _, tokenizer = _get_dataset()
-
-
     bs = 2
     sortish_sampler = ds.make_sortish_sampler(bs)
     naive_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2)
