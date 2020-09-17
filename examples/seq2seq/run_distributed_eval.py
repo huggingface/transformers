@@ -15,30 +15,18 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 logger = getLogger(__name__)
 
-try:
-    from .utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        lmap,
-        load_json,
-        parse_numeric_n_bool_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-        write_txt_file,
-    )
-except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        lmap,
-        load_json,
-        parse_numeric_n_bool_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-        write_txt_file,
-    )
+
+from .utils import (
+    Seq2SeqDataset,
+    calculate_bleu,
+    calculate_rouge,
+    lmap,
+    load_json,
+    parse_numeric_n_bool_cl_kwargs,
+    save_json,
+    use_task_specific_params,
+    write_txt_file,
+)
 
 
 def eval_data_dir(

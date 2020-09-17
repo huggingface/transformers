@@ -15,32 +15,20 @@ from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5Config, T5ForC
 from transformers.modeling_bart import shift_tokens_right
 
 
-try:
-    from .finetune import SummarizationModule, TranslationModule
-    from .finetune import main as ft_main
-    from .initialization_utils import copy_layers, init_student
-    from .utils import (
-        any_requires_grad,
-        assert_all_frozen,
-        calculate_bleu,
-        freeze_params,
-        label_smoothed_nll_loss,
-        pickle_load,
-        use_task_specific_params,
-    )
-except ImportError:
-    from finetune import SummarizationModule, TranslationModule
-    from finetune import main as ft_main
-    from initialization_utils import copy_layers, init_student
-    from utils import (
-        any_requires_grad,
-        assert_all_frozen,
-        calculate_bleu,
-        freeze_params,
-        label_smoothed_nll_loss,
-        pickle_load,
-        use_task_specific_params,
-    )
+
+from .finetune import SummarizationModule, TranslationModule
+from .finetune import main as ft_main
+from .initialization_utils import copy_layers, init_student
+from .utils import (
+    any_requires_grad,
+    assert_all_frozen,
+    calculate_bleu,
+    freeze_params,
+    label_smoothed_nll_loss,
+    pickle_load,
+    use_task_specific_params,
+)
+
 
 
 class BartSummarizationDistiller(SummarizationModule):
