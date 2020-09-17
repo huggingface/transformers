@@ -115,7 +115,7 @@ def test_dynamic_batch_size():
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         max_len = 64
-        max_tokens = 320
+        max_tokens = 128
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
@@ -130,23 +130,19 @@ def test_dynamic_batch_size():
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=required_batch_size_multiple)
     batch_sizes = [len(x) for x in batch_sampler]
     assert len(set(batch_sizes)) > 1  # it's not dynamic batch size if every batch is the same length
-    assert sum(batch_sizes) == 1000  # no dropped or added examples
-    data_loader = DataLoader(
-        ds,
-        batch_sampler=batch_sampler,
-        collate_fn=ds.collate_fn,
-        num_workers=2,
-    )
-
+    assert sum(batch_sizes) == len(ds)  # no dropped or added examples
+    data_loader = DataLoader(ds, batch_sampler=batch_sampler, collate_fn=ds.collate_fn, num_workers=2)
     failures = []
+    num_src_per_batch = []
     for batch in data_loader:
         src_shape = batch["input_ids"].shape
         bs = src_shape[0]
         assert bs % required_batch_size_multiple == 0 or bs < required_batch_size_multiple
         num_src_tokens = np.product(batch["input_ids"].shape)
+        num_src_per_batch.append(num_src_tokens)
         if num_src_tokens > (max_tokens * 1.1):
             failures.append(num_src_tokens)
-
+    assert num_src_per_batch[0] == max(num_src_per_batch)
     if failures:
         raise AssertionError(f"too many tokens in {len(failures)} batches")
 
@@ -173,11 +169,11 @@ def _get_dataset(n_obs=1000):
     if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
         max_len = 128
-        max_tokens = max_len * 2 * 64
+        max_tokens = max_len * 2* 64
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
-        max_tokens = 320
-        max_len = 64
+        max_len = 128
+        max_tokens = max_len * 4
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
         tokenizer,

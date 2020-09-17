@@ -105,8 +105,10 @@ class AbstractSeq2SeqDataset(Dataset):
         self.len_file = Path(data_dir).joinpath(type_path + ".len")
         if os.path.exists(self.len_file):
             self.src_lens = pickle_load(self.len_file)
+            self.used_char_len = False
         else:
             self.src_lens = self.get_char_lens(self.src_file)
+            self.used_char_len = True
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
         assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
@@ -141,9 +143,13 @@ class AbstractSeq2SeqDataset(Dataset):
     def make_dynamic_sampler(self, max_tokens_per_batch=1024, **kwargs):
         assert has_fairseq, "Dynamic batch size requires `pip install fairseq`"
         sorted_indices = list(self.make_sortish_sampler(1024, shuffle=False))
+        if self.used_char_len:
+            src_lens = [min(x // 4, self.max_source_length) for x in self.src_lens]
+        else:
+            src_lens = self.src_lens
 
         def num_tokens_in_example(i):
-            return self.src_lens[i]
+            return src_lens[i]
             # num_src_tokens = min(self.src_lens[i] // chars_per_token, self.max_source_length)
             # num_tgt_tokens = min(self.tgt_lens[i] // chars_per_token, self.max_target_length)
             # return num_src_tokens + num_tgt_tokens  # fairseq logic: max(num_src_tokens, num_tgt_tokens)
@@ -156,6 +162,13 @@ class AbstractSeq2SeqDataset(Dataset):
             required_batch_size_multiple=64,
         )
         shuffled_batches = [batch_sampler[i] for i in np.random.permutation(range(len(batch_sampler)))]
+        # move the largest batch to the front to OOM quickly (uses an approximation for padding)
+        approximate_toks_per_batch = [max(self.src_lens[i] for i in batch) * len(batch) for batch in shuffled_batches]
+        largest_batch_idx = np.argmax(approximate_toks_per_batch)
+        shuffled_batches[0], shuffled_batches[largest_batch_idx] = (
+            shuffled_batches[largest_batch_idx],
+            shuffled_batches[0],
+        )
         return shuffled_batches
 
     def __getitem__(self, item):
