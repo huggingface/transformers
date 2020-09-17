@@ -143,9 +143,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         assert isinstance(src_text[0], str)
         desired_max_length = 10
         ids = self.tokenizer.prepare_seq2seq_batch(
-            src_text,
-            return_tensors=None,
-            max_length=desired_max_length,
+            src_text, return_tensors=None, max_length=desired_max_length,
         ).input_ids[0]
         self.assertEqual(ids[-2], 2)
         self.assertEqual(ids[-1], EN_CODE)
@@ -182,9 +180,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
     @require_torch
     def test_enro_tokenizer_prepare_seq2seq_batch(self):
         batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text,
-            tgt_texts=self.tgt_text,
-            max_length=len(self.expected_src_tokens),
+            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens),
         )
         batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
         self.assertIsInstance(batch, BatchEncoding)

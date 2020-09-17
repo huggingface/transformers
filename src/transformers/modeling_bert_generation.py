@@ -489,10 +489,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutput(
-            loss=lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=lm_loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):

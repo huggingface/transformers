@@ -153,8 +153,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
 
 
 @add_start_docstrings(
-    "The bare MMBT Model outputting raw hidden-states without any specific head on top.",
-    MMBT_START_DOCSTRING,
+    "The bare MMBT Model outputting raw hidden-states without any specific head on top.", MMBT_START_DOCSTRING,
 )
 class MMBTModel(nn.Module, ModuleUtilsMixin):
     def __init__(self, config, transformer, encoder):
@@ -378,8 +377,5 @@ class MMBTForClassification(nn.Module):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
