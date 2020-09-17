@@ -92,9 +92,9 @@ class BertEmbedding(nn.Module):
     emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)
 
     @compact
-    def __call__(self, input):
+    def __call__(self, inputs):
         embedding = self.param("weight", self.emb_init, (self.vocab_size, self.hidden_size))
-        return jnp.take(embedding, input, axis=0)
+        return jnp.take(embedding, inputs, axis=0)
 
 
 class BertEmbeddings(nn.Module):
@@ -115,7 +115,7 @@ class BertEmbeddings(nn.Module):
         summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
 
         # Layer Norm
-        layer_norm = BertLayerNorm()(summed_emb)
+        layer_norm = BertLayerNorm(name="layer_norm")(summed_emb)
 
         return layer_norm
 
@@ -129,7 +129,7 @@ class BertAttention(nn.Module):
         self_att = nn.attention.SelfAttention(
             num_heads=self.num_heads, qkv_features=self.head_size, name="self")(hidden_state, attention_mask)
 
-        layer_norm = BertLayerNorm()(self_att + hidden_state)
+        layer_norm = BertLayerNorm(name="layer_norm")(self_att + hidden_state)
         return layer_norm
 
 
@@ -255,7 +255,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
             # Key parts
             key_parts = set(key.split("."))
 
-            # Every dense layer have a "kernel" parameters instead of "weight"
+            # Every dense layer has "kernel" parameters instead of "weight"
             if "dense.weight" in key:
                 del jax_state[key]
                 key = key.replace("weight", "kernel")
@@ -342,12 +342,11 @@ class FlaxBertModel(FlaxPreTrainedModel):
         @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
             return self.model.apply(
-                {"params": self.state},
+                {"param": self.params},
                 jnp.array(input_ids, dtype="i4"),
                 jnp.array(token_type_ids, dtype="i4"),
                 jnp.array(position_ids, dtype="i4"),
-                jnp.array(attention_mask, dtype="i4"),
-                rngs={"param": self.key}
+                jnp.array(attention_mask, dtype="i4")
             )
 
         if token_type_ids is None:
