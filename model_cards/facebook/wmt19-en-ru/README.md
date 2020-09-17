@@ -10,10 +10,9 @@ tags:
 - facebook
 license: Apache 2.0
 datasets:
-- [main source](http://www.statmt.org/wmt19/)
-- [test-set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
+- wmt19
 metrics:
-- http://www.statmt.org/wmt19/metrics-task.html
+- bleu
 ---
 
 # FSMT
@@ -88,6 +87,10 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/w
 ```
 note: fairseq reports using a beam of 50, so you should get a slightly higher score if re-run with `--num_beams 50`.
 
+## Data Sources
+
+- [training, etc.](http://www.statmt.org/wmt19/)
+- [test set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
 
 ## TODO
 
