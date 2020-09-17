@@ -473,7 +473,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         """Prepare model inputs for translation. For best performance, translate one sentence at a time."""
 
         if type(src_texts) is not list:
-            raise ValueError(f"src_texts is expected to be a list")
+            raise ValueError("src_texts is expected to be a list")
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
 
