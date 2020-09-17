@@ -15,13 +15,15 @@ import torch.distributed as dist
 from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
-from torch.utils.data import Dataset, Sampler, BatchSampler
+from torch.utils.data import Dataset, Sampler
 
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
 
+
 try:
     from fairseq.data.data_utils import batch_by_size
+
     has_fairseq = True
 except (ImportError, ModuleNotFoundError):
     has_fairseq = False
@@ -136,12 +138,9 @@ class AbstractSeq2SeqDataset(Dataset):
         else:
             return SortishSampler(self.src_lens, batch_size, shuffle=shuffle)
 
-    def make_dynamic_sampler(self, max_tokens_per_batch=1024, distributed=False, chars_per_token=4, **kwargs):
-        assert has_fairseq, 'Dynamic batch size requires `pip install fairseq`'
-        if distributed:
-            raise NotImplementedError('Distributed Dynamic Batch size does not work')
-            return DistributedDynamicBatchSizeSampler(self, max_tokens_per_batch, required_bs_mult=4)
-        sorted_indices = list(self.make_sortish_sampler(1024))  # a big batch size so that there are 1024 similarly length  entries
+    def make_dynamic_sampler(self, max_tokens_per_batch=1024, **kwargs):
+        assert has_fairseq, "Dynamic batch size requires `pip install fairseq`"
+        sorted_indices = list(self.make_sortish_sampler(1024, shuffle=False))
 
         def num_tokens_in_example(i):
             return self.src_lens[i]
@@ -156,7 +155,8 @@ class AbstractSeq2SeqDataset(Dataset):
             max_tokens=max_tokens_per_batch,
             required_batch_size_multiple=64,
         )
-        return batch_sampler
+        shuffled_batches = [batch_sampler[i] for i in np.random.permutation(range(len(batch_sampler)))]
+        return shuffled_batches
 
     def __getitem__(self, item):
         raise NotImplementedError("You must implement this")
@@ -313,38 +313,6 @@ class DistributedSortishSampler(Sampler):
     def set_epoch(self, epoch):
         self.epoch = epoch
 
-
-class DistributedDynamicBatchSizeSampler(BatchSampler):
-    def __init__(self, dataset, max_tokens_per_batch, required_bs_mult=4, num_replicas=None, rank=None):
-        ss_bs = 2048 if len(dataset) > 2048 else len(dataset) // 2
-        self.ss = DistributedSortishSampler(dataset, ss_bs, num_replicas=num_replicas, rank=rank)
-        self.max_tokens_per_batch = max_tokens_per_batch
-        self.required_bs_mult = required_bs_mult
-        self.num_samples = 10 # placeholder
-
-    def __iter__(self):
-        sorted_available_indices: List[int] = list(self.ss)
-
-        def num_tokens_in_example(i):
-            return self.ss.dataset.src_lens[i]
-
-        batch_sampler: List[List[int]] = batch_by_size(
-            sorted_available_indices,
-            num_tokens_fn=num_tokens_in_example,
-            max_tokens=self.max_tokens_per_batch,
-            required_batch_size_multiple=self.required_bs_mult,
-        )
-        batch_sizes = lmap(len, batch_sampler)
-        self.num_samples = len(batch_sizes)
-        if np.mean(batch_sizes) < 4:
-            raise ValueError("DELETEME")
-        return iter(batch_sampler)
-
-    def __len__(self):
-        return self.num_samples
-
-    def set_epoch(self, epoch):
-        self.epoch = epoch
 
 logger = getLogger(__name__)
 

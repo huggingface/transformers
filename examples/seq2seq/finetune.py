@@ -66,8 +66,11 @@ class SummarizationModule(BaseTransformer):
     default_val_metric = "rouge2"
 
     def __init__(self, hparams, **kwargs):
-        if hparams.gpus > 1 and (hparams.sortish_sampler or hparams.max_tokens_per_batch is not None):
+        if hparams.sortish_sampler and hparams.gpus > 1:
             hparams.replace_sampler_ddp = False
+        elif hparams.max_tokens_per_batch is not None and hparams.gpus > 1:
+            raise NotImplementedError("Dynamic Batch size does not work for multi-gpu training")
+
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)
@@ -274,7 +277,9 @@ class SummarizationModule(BaseTransformer):
             )
 
         elif self.hparams.max_tokens_per_batch is not None and type_path == "train":
-            batch_sampler = dataset.make_dynamic_sampler(self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1)
+            batch_sampler = dataset.make_dynamic_sampler(
+                self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1
+            )
             return DataLoader(
                 dataset,
                 batch_sampler=batch_sampler,

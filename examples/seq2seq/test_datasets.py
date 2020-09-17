@@ -1,19 +1,18 @@
+import os
 import tempfile
-from collections import defaultdict
 from pathlib import Path
 
+import numpy as np
 import pytest
 from torch.utils.data import DataLoader
 
-from durbango import pickle_save
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
-import itertools
 
 from .pack_dataset import pack_data_dir
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
-from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, DistributedSortishSampler
-import os
+from .utils import DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
+
 
 @pytest.mark.parametrize(
     ["tok_name"],
@@ -108,9 +107,6 @@ def test_pack_dataset():
     assert orig_paths == new_paths
 
 
-
-
-
 def test_dynamic_batch_size():
     if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
@@ -130,71 +126,47 @@ def test_dynamic_batch_size():
         max_target_length=max_len,
         n_obs=1000,
     )
-
-    logs = defaultdict(list)
-    mult = 64
-    batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
+    required_batch_size_multiple = 64
+    batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=required_batch_size_multiple)
     batch_sizes = [len(x) for x in batch_sampler]
     assert len(set(batch_sizes)) > 1  # it's not dynamic batch size if every batch is the same length
+    assert sum(batch_sizes) == 1000  # no dropped or added examples
     data_loader = DataLoader(
         ds,
         batch_sampler=batch_sampler,
         collate_fn=ds.collate_fn,
         num_workers=2,
     )
+
     failures = []
-    pad = tokenizer.pad_token_id
     for batch in data_loader:
-        logs["tpb"].append(batch["input_ids"].ne(pad).sum() + batch["labels"].ne(pad).sum())
-        logs["bs"].append(batch["input_ids"].shape[0])
-        logs["src_pad_tok"].append(batch["input_ids"].eq(pad).sum())
-        logs["src_pad_frac"].append(batch["input_ids"].eq(pad).float().mean())
-        shapes = {k: v.shape for k, v in batch.items()}
-        bs = shapes["input_ids"][0]
-        assert bs % mult == 0 or bs < mult
-        num_src_tokens = shapes["input_ids"][0] * shapes["input_ids"][1]
-        num_tgt_tokens = shapes["labels"][0] * shapes["labels"][1]
-        if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
-            failures.append(num_tgt_tokens + num_src_tokens)
+        src_shape = batch["input_ids"].shape
+        bs = src_shape[0]
+        assert bs % required_batch_size_multiple == 0 or bs < required_batch_size_multiple
+        num_src_tokens = np.product(batch["input_ids"].shape)
+        if num_src_tokens > (max_tokens * 1.1):
+            failures.append(num_src_tokens)
 
     if failures:
-        raise AssertionError(f'too many tokens in {len(failures)} batches')
+        raise AssertionError(f"too many tokens in {len(failures)} batches")
 
 
-def test_sortish():
+def test_sortish_sampler_reduces_padding():
     ds, max_tokens, tokenizer = _get_dataset()
-    sampler = ds.make_sortish_sampler(64)
-
-    logs = defaultdict(list)
-    mult = 64
-    data_loader = DataLoader(
-        ds,
-        sampler=sampler,
-        batch_size=64,
-        collate_fn=ds.collate_fn,
-        num_workers=2,
+    bs = 4
+    sortish_sampler = ds.make_sortish_sampler(bs)
+    naive_dataloader = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2)
+    sortish_data_loader = DataLoader(
+        ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2, sampler=sortish_sampler
     )
 
-    failures = []
     pad = tokenizer.pad_token_id
-    for batch in data_loader:
-        logs["tpb"].append(batch["input_ids"].ne(pad).sum() + batch["labels"].ne(pad).sum())
-        logs["bs"].append(batch["input_ids"].shape[0])
-        logs["src_pad_tok"].append(batch["input_ids"].eq(pad).sum())
-        logs["src_pad_frac"].append(batch["input_ids"].eq(pad).float().mean())
-        shapes = {k: v.shape for k, v in batch.items()}
-        bs = shapes["input_ids"][0]
-        assert bs % mult == 0 or bs < mult
-        num_src_tokens = shapes["input_ids"][0] * shapes["input_ids"][1]
-        num_tgt_tokens = shapes["labels"][0] * shapes["labels"][1]
-        if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
-            failures.append(num_tgt_tokens + num_src_tokens)
 
+    def count_pad_tokens(data_loader):
+        return sum([batch["input_ids"].eq(pad).sum().item() for batch in data_loader])
 
-        if failures:
-            raise AssertionError(f'too many tokens in {len(failures)} batches')
-
-    # if failures:raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")
+    assert count_pad_tokens(sortish_data_loader) < count_pad_tokens(naive_dataloader)
+    assert len(sortish_data_loader) == len(naive_dataloader)
 
 
 def _get_dataset(n_obs=1000):
@@ -218,10 +190,8 @@ def _get_dataset(n_obs=1000):
     return ds, max_tokens, tokenizer
 
 
-def test_distributed_stuff():
+def test_distributed_sortish_sampler_splits_indices_between_procs():
     ds, max_tokens, tokenizer = _get_dataset()
-    s1 = DistributedSortishSampler(ds, 256, num_replicas=2, rank=0)
-    s2 = DistributedSortishSampler(ds, 256, num_replicas=2, rank=1)
-    ids1 = set(itertools.chain.from_iterable(s1))
-    ids2 = set(itertools.chain.from_iterable(s2))
+    ids1 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=0))
+    ids2 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=1))
     assert ids1.intersection(ids2) == set()
