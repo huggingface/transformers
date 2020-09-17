@@ -8,13 +8,14 @@ from torch.utils.data import DataLoader
 
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
+from transformers.testing_utils import slow
 
 from .pack_dataset import pack_data_dir
 from .save_len_file import save_len_file
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from .utils import DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
-
+@slow
 @pytest.mark.parametrize(
     ["tok_name"],
     [
@@ -109,27 +110,7 @@ def test_pack_dataset():
 
 
 def test_dynamic_batch_size():
-    if os.getenv("USE_REAL_DATA", False):
-        data_dir = "examples/seq2seq/wmt_en_ro"
-        max_len = 128
-        max_tokens = max_len * 2 * 64
-        assert Path(data_dir).joinpath("train.len").exists()
-
-    else:
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
-        max_len = 64
-        max_tokens = 128
-        save_len_file(MARIAN_TINY, data_dir)
-
-    tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
-    ds = Seq2SeqDataset(
-        tokenizer,
-        data_dir=data_dir,
-        type_path="train",
-        max_source_length=max_len,
-        max_target_length=max_len,
-        n_obs=1000,
-    )
+    ds, max_tokens, tokenizer = _get_dataset(max_len=64)
     required_batch_size_multiple = 64
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=required_batch_size_multiple)
     batch_sizes = [len(x) for x in batch_sampler]
@@ -152,31 +133,29 @@ def test_dynamic_batch_size():
 
 
 def test_sortish_sampler_reduces_padding():
-    ds, max_tokens, tokenizer = _get_dataset()
-    bs = 4
+    ds, _, tokenizer = _get_dataset()
+
+
+    bs = 2
     sortish_sampler = ds.make_sortish_sampler(bs)
-    naive_dataloader = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2)
-    sortish_data_loader = DataLoader(
-        ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2, sampler=sortish_sampler
-    )
+    naive_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2)
+    sortish_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2, sampler=sortish_sampler)
 
     pad = tokenizer.pad_token_id
 
     def count_pad_tokens(data_loader):
         return sum([batch["input_ids"].eq(pad).sum().item() for batch in data_loader])
 
-    assert count_pad_tokens(sortish_data_loader) < count_pad_tokens(naive_dataloader)
-    assert len(sortish_data_loader) == len(naive_dataloader)
+    assert count_pad_tokens(sortish_dl) < count_pad_tokens(naive_dl)
+    assert len(sortish_dl) == len(naive_dl)
 
 
-def _get_dataset(n_obs=1000):
+def _get_dataset(n_obs=1000, max_len=128):
     if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
-        max_len = 128
         max_tokens = max_len * 2 * 64
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
-        max_len = 128
         max_tokens = max_len * 4
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
@@ -192,6 +171,6 @@ def _get_dataset(n_obs=1000):
 
 def test_distributed_sortish_sampler_splits_indices_between_procs():
     ds, max_tokens, tokenizer = _get_dataset()
-    ids1 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=0))
-    ids2 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=1))
+    ids1 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=0, add_extra_examples=False))
+    ids2 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=1, add_extra_examples=False))
     assert ids1.intersection(ids2) == set()
