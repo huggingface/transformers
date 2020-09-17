@@ -54,10 +54,11 @@ def find_code_in_transformers(object_name):
     if line_index >= len(lines):
         raise ValueError(f" {object_name} does not match any function or class in {module}.")
 
-    # We found the beginning of the class / func, now let's find the end (when the indent diminishes)
+    # We found the beginning of the class / func, now let's find the end (when the indent diminishes).
     start_index = line_index
     while line_index < len(lines) and (lines[line_index].startswith(indent) or len(lines[line_index]) <= 1):
         line_index += 1
+    # Clean up empty lines at the end (if any).
     while len(lines[line_index - 1]) <= 1:
         line_index -= 1
 
@@ -71,7 +72,7 @@ _re_replace_pattern = re.compile(r"with\s+(\S+)->(\S+)(?:\s|$)")
 
 def is_copy_consistent(filename, overwrite=False):
     """
-    Check the code commented as a copy in `filename` matches the original.
+    Check if the code commented as a copy in `filename` matches the original.
 
     Return the differences or overwrites the content depending on `overwrite`.
     """
@@ -86,6 +87,7 @@ def is_copy_consistent(filename, overwrite=False):
             line_index += 1
             continue
 
+        # There is some copied code here, let's retrieve the original.
         indent, object_name, replace_pattern = search.groups()
         theoretical_code = find_code_in_transformers(object_name)
         theoretical_indent = re.search(r"^(\s*)\S", theoretical_code).groups()[0]
@@ -93,6 +95,8 @@ def is_copy_consistent(filename, overwrite=False):
         start_index = line_index + 1 if indent == theoretical_indent else line_index + 2
         indent = theoretical_indent
         line_index = start_index
+
+        # Loop to check the observed code, stop when indentation diminishes or if we see a End copy comment.
         should_continue = True
         while line_index < len(lines) and should_continue:
             line_index += 1
@@ -100,17 +104,21 @@ def is_copy_consistent(filename, overwrite=False):
             should_continue = (len(line) <= 1 or line.startswith(indent)) and re.search(
                 f"^{indent}# End copy", line
             ) is None
+        # Clean up empty lines at the end (if any).
         while len(lines[line_index - 1]) <= 1:
             line_index -= 1
 
         observed_code_lines = lines[start_index:line_index]
         observed_code = "".join(observed_code_lines)
 
+        # Before comparing, use the `replace_pattern` on the original code.
         if len(replace_pattern) > 0:
             search_patterns = _re_replace_pattern.search(replace_pattern)
             if search_patterns is not None:
                 obj1, obj2 = search_patterns.groups()
                 theoretical_code = re.sub(obj1, obj2, theoretical_code)
+        
+        # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
             found_diff = True
             if overwrite:
@@ -118,6 +126,7 @@ def is_copy_consistent(filename, overwrite=False):
                 line_index = start_index + 1
 
     if overwrite and found_diff:
+        # Warn the user a file has been modified.
         print(f"Detected changes, rewriting {filename}.")
         with open(filename, "w") as f:
             f.writelines(lines)
