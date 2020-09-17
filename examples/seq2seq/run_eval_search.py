@@ -79,7 +79,7 @@ def run_search():
     args_normal = [prog] + args_main
 
     # to support variations like translation_en_to_de"
-    task = "translation" if "translation" in args.task else args.task
+    task = "translation" if "translation" in args.task else 'summarization'
 
     matrix, col_names = parse_search_arg(args.search)
     col_names[0:0] = task_score_names[task]  # score cols first
