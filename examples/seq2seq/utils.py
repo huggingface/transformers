@@ -24,9 +24,9 @@ from transformers.file_utils import cached_property
 try:
     from fairseq.data.data_utils import batch_by_size
 
-    has_fairseq = True
+    FAIRSEQ_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
-    has_fairseq = False
+    FAIRSEQ_AVAILABLE = False
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
@@ -141,7 +141,7 @@ class AbstractSeq2SeqDataset(Dataset):
             return SortishSampler(self.src_lens, batch_size, shuffle=shuffle)
 
     def make_dynamic_sampler(self, max_tokens_per_batch=1024, **kwargs):
-        assert has_fairseq, "Dynamic batch size requires `pip install fairseq`"
+        assert FAIRSEQ_AVAILABLE, "Dynamic batch size requires `pip install fairseq`"
         assert not self.used_char_len, "You must call  python make_len_file.py before calling make_dynamic_sampler"
         sorted_indices = list(self.make_sortish_sampler(1024, shuffle=False))
 

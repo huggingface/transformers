@@ -11,19 +11,24 @@ from transformers.modeling_bart import shift_tokens_right
 from transformers.testing_utils import slow
 
 from .pack_dataset import pack_data_dir
+from .save_len_file import save_len_file
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
-from .utils import DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
+from .utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
+
+
+BERT_BASE_CASED = "bert-base-cased"
+PEGASUS_XSUM = "google/pegasus-xsum"
 
 
 @slow
 @pytest.mark.parametrize(
-    ["tok_name"],
+    "tok_name",
     [
-        pytest.param(MBART_TINY),
-        pytest.param(MARIAN_TINY),
-        pytest.param(T5_TINY),
-        pytest.param(BART_TINY),
-        pytest.param("google/pegasus-xsum"),
+        MBART_TINY,
+        MARIAN_TINY,
+        T5_TINY,
+        BART_TINY,
+        PEGASUS_XSUM,
     ],
 )
 def test_seq2seq_dataset_truncation(tok_name):
@@ -65,7 +70,7 @@ def test_seq2seq_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [pytest.param(BART_TINY), pytest.param("bert-base-cased")])
+@pytest.mark.parametrize("tok", [BART_TINY, BERT_BASE_CASED])
 def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
@@ -109,7 +114,10 @@ def test_pack_dataset():
     assert orig_paths == new_paths
 
 
+@pytest.mark.skipif(not FAIRSEQ_AVAILABLE, reason="This test requires fairseq")
 def test_dynamic_batch_size():
+    if not FAIRSEQ_AVAILABLE:
+        return
     ds, max_tokens, tokenizer = _get_dataset(max_len=64)
     required_batch_size_multiple = 64
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=required_batch_size_multiple)
@@ -133,18 +141,20 @@ def test_dynamic_batch_size():
 
 
 def test_sortish_sampler_reduces_padding():
-    ds, _, tokenizer = _get_dataset()
+    ds, _, tokenizer = _get_dataset(max_len=512)
     bs = 2
-    sortish_sampler = ds.make_sortish_sampler(bs)
+    sortish_sampler = ds.make_sortish_sampler(bs, shuffle=False)
+
     naive_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2)
     sortish_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2, sampler=sortish_sampler)
 
     pad = tokenizer.pad_token_id
 
-    def count_pad_tokens(data_loader):
-        return sum([batch["input_ids"].eq(pad).sum().item() for batch in data_loader])
+    def count_pad_tokens(data_loader, k="input_ids"):
+        return [batch[k].eq(pad).sum().item() for batch in data_loader]
 
-    assert count_pad_tokens(sortish_dl) < count_pad_tokens(naive_dl)
+    assert sum(count_pad_tokens(sortish_dl, k="labels")) < sum(count_pad_tokens(naive_dl, k="labels"))
+    assert sum(count_pad_tokens(sortish_dl)) < sum(count_pad_tokens(naive_dl))
     assert len(sortish_dl) == len(naive_dl)
 
 
@@ -152,9 +162,13 @@ def _get_dataset(n_obs=1000, max_len=128):
     if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
         max_tokens = max_len * 2 * 64
+        if not Path(data_dir).joinpath("train.len").exists():
+            save_len_file(MARIAN_TINY, data_dir)
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         max_tokens = max_len * 4
+        save_len_file(MARIAN_TINY, data_dir)
+
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
         tokenizer,

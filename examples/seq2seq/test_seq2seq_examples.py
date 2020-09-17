@@ -104,8 +104,7 @@ T5_TINY = "patrickvonplaten/t5-tiny-random"
 BART_TINY = "sshleifer/bart-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
-BERT_BASE_CASED = "bert-base-cased"
-PEGASUS_XSUM = "google/pegasus-xsum"
+
 
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
@@ -528,99 +527,3 @@ def test_finetune_lr_schedulers():
     args = argparse.Namespace(**args_d1)
     model = main(args)
     assert getattr(model.hparams, "lr_scheduler") == supported_param, f"lr_scheduler={supported_param} shouldn't fail"
-<<<<<<< HEAD
-=======
-
-
-def test_pack_dataset():
-    tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
-
-    tmp_dir = Path(make_test_data_dir())
-    orig_examples = tmp_dir.joinpath("train.source").open().readlines()
-    save_dir = Path(tempfile.mkdtemp(prefix="packed_"))
-    pack_data_dir(tokenizer, tmp_dir, 128, save_dir)
-    orig_paths = {x.name for x in tmp_dir.iterdir()}
-    new_paths = {x.name for x in save_dir.iterdir()}
-    packed_examples = save_dir.joinpath("train.source").open().readlines()
-    # orig: [' Sam ate lunch today.\n', 'Sams lunch ingredients.']
-    # desired_packed: [' Sam ate lunch today.\n Sams lunch ingredients.']
-    assert len(packed_examples) < len(orig_examples)
-    assert len(packed_examples) == 1
-    assert len(packed_examples[0]) == sum(len(x) for x in orig_examples)
-    assert orig_paths == new_paths
-
-
-@pytest.mark.parametrize(
-    "tok_name",
-    [
-        MBART_TINY,
-        MARIAN_TINY,
-        T5_TINY,
-        BART_TINY,
-        PEGASUS_XSUM,
-    ],
-)
-def test_seq2seq_dataset_truncation(tok_name):
-    tokenizer = AutoTokenizer.from_pretrained(tok_name)
-    tmp_dir = make_test_data_dir()
-    max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
-    max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
-    max_src_len = 4
-    max_tgt_len = 8
-    assert max_len_target > max_src_len  # Will be truncated
-    assert max_len_source > max_src_len  # Will be truncated
-    src_lang, tgt_lang = "ro_RO", "de_DE"  # ignored for all but mbart, but never causes error.
-    train_dataset = Seq2SeqDataset(
-        tokenizer,
-        data_dir=tmp_dir,
-        type_path="train",
-        max_source_length=max_src_len,
-        max_target_length=max_tgt_len,  # ignored
-        src_lang=src_lang,
-        tgt_lang=tgt_lang,
-    )
-    dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
-    for batch in dataloader:
-        assert isinstance(batch, dict)
-        assert batch["attention_mask"].shape == batch["input_ids"].shape
-        # show that articles were trimmed.
-        assert batch["input_ids"].shape[1] == max_src_len
-        # show that targets are the same len
-        assert batch["labels"].shape[1] == max_tgt_len
-        if tok_name != MBART_TINY:
-            continue
-        # check language codes in correct place
-        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], tokenizer.pad_token_id)
-        assert batch["decoder_input_ids"][0, 0].item() == tokenizer.lang_code_to_id[tgt_lang]
-        assert batch["decoder_input_ids"][0, -1].item() == tokenizer.eos_token_id
-        assert batch["input_ids"][0, -2].item() == tokenizer.eos_token_id
-        assert batch["input_ids"][0, -1].item() == tokenizer.lang_code_to_id[src_lang]
-
-        break  # No need to test every batch
-
-
-@pytest.mark.parametrize("tok", [BART_TINY, BERT_BASE_CASED])
-def test_legacy_dataset_truncation(tok):
-    tokenizer = AutoTokenizer.from_pretrained(tok)
-    tmp_dir = make_test_data_dir()
-    max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
-    max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
-    trunc_target = 4
-    train_dataset = LegacySeq2SeqDataset(
-        tokenizer,
-        data_dir=tmp_dir,
-        type_path="train",
-        max_source_length=20,
-        max_target_length=trunc_target,
-    )
-    dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
-    for batch in dataloader:
-        assert batch["attention_mask"].shape == batch["input_ids"].shape
-        # show that articles were trimmed.
-        assert batch["input_ids"].shape[1] == max_len_source
-        assert 20 >= batch["input_ids"].shape[1]  # trimmed significantly
-        # show that targets were truncated
-        assert batch["labels"].shape[1] == trunc_target  # Truncated
-        assert max_len_target > trunc_target  # Truncated
-        break  # No need to test every batch
->>>>>>> origin/master

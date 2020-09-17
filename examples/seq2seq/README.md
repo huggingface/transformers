@@ -360,6 +360,7 @@ These features are harder to use and not always useful.
 ###  Dynamic Batch Size for MT
 `finetune.py` has a command line arg `--max_tokens_per_batch` that allows batches to be dynamically sized.
 This feature can only be used:
+- with fairseq installed
 - on 1 GPU
 - without sortish sampler
 - after calling `python save_len_file.py $tok $data_dir`

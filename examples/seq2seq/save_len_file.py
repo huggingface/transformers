@@ -11,7 +11,9 @@ except ImportError:
     from utils import Seq2SeqDataset, pickle_save
 
 
-def save_len_file(tokenizer_name, data_dir, max_source_length=1024, max_target_length=1024, **kwargs):
+def save_len_file(
+    tokenizer_name, data_dir, max_source_length=1024, max_target_length=1024, consider_target=False, **kwargs
+):
     """Save max(src_len, tgt_len) for each example to allow dynamic batching."""
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
     train_ds = Seq2SeqDataset(tok, data_dir, max_source_length, max_target_length, type_path="train", **kwargs)
@@ -26,8 +28,11 @@ def save_len_file(tokenizer_name, data_dir, max_source_length=1024, max_target_l
         for batch in dl:
             src_lens = batch["input_ids"].ne(pad).sum(1).tolist()
             tgt_lens = batch["labels"].ne(pad).sum(1).tolist()
-            for src, tgt in zip(src_lens, tgt_lens):
-                max_lens.append(max(src, tgt))
+            if consider_target:
+                for src, tgt in zip(src_lens, tgt_lens):
+                    max_lens.append(max(src, tgt))
+            else:
+                max_lens.extend(src_lens)
         return max_lens
 
     train_lens = get_lens(train_ds)
