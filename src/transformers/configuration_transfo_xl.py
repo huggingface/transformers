@@ -62,10 +62,6 @@ class TransfoXLConfig(PretrainedConfig):
             Apply LayerNorm to the input instead of the output
         n_layer (:obj:`int`, optional, defaults to 18):
             Number of hidden layers in the Transformer encoder.
-        tgt_len (:obj:`int`, optional, defaults to 128):
-            Number of tokens to predict
-        ext_len (:obj:`int`, optional, defaults to 0):
-            Length of the extended context
         mem_len (:obj:`int`, optional, defaults to 1600):
             Length of the retained previous heads
         clamp_len (:obj:`int`, optional, defaults to 1000):
@@ -125,8 +121,6 @@ class TransfoXLConfig(PretrainedConfig):
         div_val=4,
         pre_lnorm=False,
         n_layer=18,
-        tgt_len=128,
-        ext_len=0,
         mem_len=1600,
         clamp_len=1000,
         same_length=True,
@@ -168,8 +162,6 @@ class TransfoXLConfig(PretrainedConfig):
         self.pre_lnorm = pre_lnorm
         self.n_layer = n_layer
         self.n_head = n_head
-        self.tgt_len = tgt_len
-        self.ext_len = ext_len
         self.mem_len = mem_len
         self.same_length = same_length
         self.attn_type = attn_type
@@ -187,7 +179,9 @@ class TransfoXLConfig(PretrainedConfig):
 
     @property
     def max_position_embeddings(self):
-        return self.tgt_len + self.ext_len + self.mem_len
+        # Message copied from Transformer-XL documentation
+        logger.info(f"The model {self.model_type} is one of the few models that has no sequence length limit.")
+        return -1
 
     @property
     def n_token(self):  # Backward compatibility

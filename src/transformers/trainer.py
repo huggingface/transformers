@@ -31,6 +31,7 @@ from .integrations import (
     run_hp_search_optuna,
     run_hp_search_ray,
 )
+from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -45,6 +46,9 @@ from .trainer_utils import (
     default_hp_space,
     distributed_broadcast_scalars,
     distributed_concat,
+    nested_concat,
+    nested_numpify,
+    nested_xla_mesh_reduce,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -293,6 +297,12 @@ class Trainer:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
+        if self.args.label_names is None:
+            self.args.label_names = (
+                ["start_positions, end_positions"]
+                if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
+                else ["labels"]
+            )
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -1307,9 +1317,9 @@ class Trainer:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
-                preds = logits if preds is None else tuple(torch.cat((p, l), dim=0) for p, l in zip(preds, logits))
+                preds = logits if preds is None else nested_concat(preds, logits, dim=0)
             if labels is not None:
-                label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
+                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -1318,25 +1328,23 @@ class Trainer:
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
             if preds is not None:
-                preds = tuple(distributed_concat(p, num_total_examples=self.num_examples(dataloader)) for p in preds)
+                preds = distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
             if label_ids is not None:
                 label_ids = distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
         elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
-                preds = tuple(xm.mesh_reduce(f"eval_preds_{i}", p, torch.cat) for i, p in enumerate(preds))
+                preds = nested_xla_mesh_reduce("eval_preds", preds)
             if label_ids is not None:
-                label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+                label_ids = nested_xla_mesh_reduce("eval_label_ids", label_ids, torch.cat)
             if eval_losses is not None:
                 eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
-            preds = tuple(p.cpu().numpy() for p in preds)
-            if len(preds) == 1:
-                preds = preds[0]
+            preds = nested_numpify(preds)
         if label_ids is not None:
-            label_ids = label_ids.cpu().numpy()
+            label_ids = nested_numpify(label_ids)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -1382,8 +1390,7 @@ class Trainer:
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
-        has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
-
+        has_labels = all(inputs.get(k) is not None for k in self.args.label_names)
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
@@ -1402,10 +1409,18 @@ class Trainer:
         if prediction_loss_only:
             return (loss, None, None)
 
-        labels = inputs.get("labels")
-        if labels is not None:
-            labels = labels.detach()
-        return (loss, tuple(l.detach() for l in logits), labels)
+        logits = tuple(logit.detach() for logit in logits)
+        if len(logits) == 1:
+            logits = logits[0]
+
+        if has_labels:
+            labels = tuple(inputs.get(name).detach() for name in self.args.label_names)
+            if len(labels) == 1:
+                labels = labels[0]
+        else:
+            labels = None
+
+        return (loss, logits, labels)
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
