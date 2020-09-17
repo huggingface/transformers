@@ -86,8 +86,6 @@ logger = logging.get_logger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
-        (RobertaConfig, (BertweetTokenizer, None)),
-        (RobertaConfig, (PhobertTokenizer, None)),
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
@@ -100,6 +98,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
+        (RobertaConfig, (BertweetTokenizer, None)),
+        (RobertaConfig, (PhobertTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
