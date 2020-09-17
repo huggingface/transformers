@@ -1201,25 +1201,25 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         Examples::
 
-            import tensorflow as tf
-            import numpy as np
-            from transformers import XLNetTokenizer, TFXLNetLMHeadModel
+            >>> import tensorflow as tf
+            >>> import numpy as np
+            >>> from transformers import XLNetTokenizer, TFXLNetLMHeadModel
 
-            tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-            model = TFXLNetLMHeadModel.from_pretrained('xlnet-large-cased')
+            >>> tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
+            >>> model = TFXLNetLMHeadModel.from_pretrained('xlnet-large-cased')
 
-            # We show how to setup inputs to predict a next token using a bi-directional context.
-            input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[None, :]  # We will predict the masked token
+            >>> # We show how to setup inputs to predict a next token using a bi-directional context.
+            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[None, :]  # We will predict the masked token
 
-            perm_mask = np.zeros((1, input_ids.shape[1], input_ids.shape[1]))
-            perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
+            >>> perm_mask = np.zeros((1, input_ids.shape[1], input_ids.shape[1]))
+            >>> perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
 
-            target_mapping = np.zeros((1, 1, input_ids.shape[1]))  # Shape [1, 1, seq_length] => let's predict one token
-            target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+            >>> target_mapping = np.zeros((1, 1, input_ids.shape[1]))  # Shape [1, 1, seq_length] => let's predict one token
+            >>> target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
-            outputs = model(input_ids, perm_mask=tf.constant(perm_mask, dtype=tf.float32), target_mapping=tf.constant(target_mapping, dtype=tf.float32))
+            >>> outputs = model(input_ids, perm_mask=tf.constant(perm_mask, dtype=tf.float32), target_mapping=tf.constant(target_mapping, dtype=tf.float32))
 
-            next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
+            >>> next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
 
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict

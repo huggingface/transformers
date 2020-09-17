@@ -448,10 +448,10 @@ class TFAutoModel(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModel
-            # Download configuration from S3 and cache.
-            config = TFAutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModel.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModel
+            >>> # Download configuration from S3 and cache.
+            >>> config = TFAutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModel.from_config(config)
         """
         for config_class, model_class in TF_MODEL_MAPPING.items():
             if isinstance(config, config_class):
@@ -542,10 +542,10 @@ class TFAutoModelForPreTraining(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForPreTraining
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForPreTraining.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForPreTraining
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForPreTraining.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
             if isinstance(config, config_class):
@@ -642,10 +642,10 @@ class TFAutoModelWithLMHead(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelWithLMHead
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelWithLMHead.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelWithLMHead
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelWithLMHead.from_config(config)
         """
         warnings.warn(
             "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
@@ -750,10 +750,10 @@ class TFAutoModelForCausalLM:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForCausalLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('gpt2')
-            model = TFAutoModelForCausalLM.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForCausalLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('gpt2')
+            >>> model = TFAutoModelForCausalLM.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -844,10 +844,10 @@ class TFAutoModelForMaskedLM:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForMaskedLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForMaskedLM.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForMaskedLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForMaskedLM.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -938,10 +938,10 @@ class TFAutoModelForSeq2SeqLM:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('t5')
-            model = TFAutoModelForSeq2SeqLM.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('t5')
+            >>> model = TFAutoModelForSeq2SeqLM.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -1036,10 +1036,10 @@ class TFAutoModelForSequenceClassification(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForSequenceClassification
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForSequenceClassification.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForSequenceClassification
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForSequenceClassification.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
             if isinstance(config, config_class):
@@ -1133,10 +1133,10 @@ class TFAutoModelForQuestionAnswering(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForQuestionAnswering
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForQuestionAnswering.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForQuestionAnswering
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForQuestionAnswering.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
             if isinstance(config, config_class):
@@ -1230,10 +1230,10 @@ class TFAutoModelForTokenClassification:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForTokenClassification
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForTokenClassification.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForTokenClassification
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForTokenClassification.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
             if isinstance(config, config_class):
@@ -1328,10 +1328,10 @@ class TFAutoModelForMultipleChoice:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForMultipleChoice
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForMultipleChoice.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForMultipleChoice
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForMultipleChoice.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
             if isinstance(config, config_class):

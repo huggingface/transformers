@@ -185,16 +185,16 @@ class AutoTokenizer:
 
         Examples::
 
-            from transformers import AutoTokenizer
+            >>> from transformers import AutoTokenizer
 
-            # Download vocabulary from S3 and cache.
-            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+            >>> # Download vocabulary from S3 and cache.
+            >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 
-            # Download vocabulary from S3 (user-uploaded) and cache.
-            tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+            >>> # Download vocabulary from S3 (user-uploaded) and cache.
+            >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
-            # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
-            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
+            >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
+            >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
         config = kwargs.pop("config", None)
