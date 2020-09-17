@@ -502,6 +502,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         output_hidden_states=None,
         output_retrieved=None,
         exclude_bos_score=None,
+        reduce_loss=None,
         labels=None,
         **kwargs  # needs kwargs for generation
     ):
@@ -510,6 +511,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         Returns:
         """
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
+        reduce_loss = reduce_loss if reduce_loss is not None else self.config.reduce_loss
 
         if labels is not None:
             if decoder_input_ids is None:
@@ -538,9 +540,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 outputs.logits,
                 outputs.doc_scores,
                 decoder_input_ids,
-                reduce_loss=self.config.reduce_loss,
+                reduce_loss=reduce_loss,
                 epsilon=self.config.label_smoothing,
-                exclude_bos_score=self.config.exclude_bos_score,
+                exclude_bos_score=exclude_bos_score,
             )
 
         return RetrievAugLMMarginOutput(
@@ -841,6 +843,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         output_hidden_states=None,
         output_retrieved=None,
         do_marginalize=None,
+        reduce_loss=None,
         labels=None,
         **kwargs  # needs kwargs for generation
     ):
@@ -848,6 +851,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         Returns:
         """
         do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize
+        reduce_loss = reduce_loss if reduce_loss is not None else self.config.reduce_loss
 
         if labels is not None:
             if decoder_input_ids is None:
@@ -878,7 +882,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 outputs.logits,
                 outputs.doc_scores,
                 labels,
-                reduce_loss=self.config.reduce_loss,
+                reduce_loss=reduce_loss,
                 epsilon=self.config.label_smoothing,
             )
 

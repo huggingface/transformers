@@ -10,13 +10,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from transformers import (
-    BartForConditionalGeneration,
-    BartTokenizer,
-    RagRetriever,
-    RagSequenceForGeneration,
-    RagTokenForGeneration,
-)
+from transformers import BartForConditionalGeneration, RagRetriever, RagSequenceForGeneration, RagTokenForGeneration
 from transformers import logging as transformers_logging
 
 
@@ -90,7 +84,7 @@ def get_precision_at_k(args, preds_path, gold_data_path):
     logger.info("Precision@{}: {}".format(k, em))
 
 
-def evaluate_batch_retrieval(args, rag_model, tokenizer, retriever, questions):
+def evaluate_batch_retrieval(args, rag_model, questions):
     def strip_title(title):
         if title.startswith('"'):
             title = title[1:]
@@ -98,16 +92,24 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, retriever, questions):
             title = title[:-1]
         return title
 
-    retriever_inputs = tokenizer.batch_encode_plus(
+    retriever_input_ids = rag_model.retriever.question_encoder_tokenizer.batch_encode_plus(
         questions,
         return_tensors="pt",
         padding=True,
         truncation=True,
+    )["input_ids"].to(args.device)
+
+    question_enc_outputs = rag_model.rag.question_encoder(retriever_input_ids, return_dict=True)
+    question_enc_pool_output = question_enc_outputs.pooler_output
+
+    result = rag_model.retriever(
+        retriever_input_ids,
+        question_enc_pool_output.cpu().detach().to(torch.float32).numpy(),
+        prefix=rag_model.rag.generator.config.prefix,
+        n_docs=rag_model.config.n_docs,
+        return_tensors="pt",
     )
-    retriever_input_embs = rag_model.model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
-
-    _, all_docs = retriever.retrieve(retriever_input_embs.numpy(), rag_model.config.n_docs)
-
+    all_docs = rag_model.retriever.index.get_doc_dicts(result.doc_ids)
     provenance_strings = []
     for docs in all_docs:
         provenance = [strip_title(title) for title in docs["title"]]
@@ -115,14 +117,13 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, retriever, questions):
     return provenance_strings
 
 
-def evaluate_batch_e2e(args, rag_model, tokenizer, retriever, questions):
+def evaluate_batch_e2e(args, rag_model, questions):
     with torch.no_grad():
-        input_ids = tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
-            "input_ids"
-        ].to(args.device)
+        input_ids = rag_model.retriever.question_encoder_tokenizer.batch_encode_plus(
+            questions, return_tensors="pt", padding=True, truncation=True
+        )["input_ids"].to(args.device)
         outputs = rag_model.generate(
             input_ids,
-            retriever=retriever,
             num_beams=args.num_beams,
             min_length=args.min_length,
             max_length=args.max_length,
@@ -132,7 +133,7 @@ def evaluate_batch_e2e(args, rag_model, tokenizer, retriever, questions):
             clean_up_tokenization=True,
             print_docs=args.print_docs,
         )
-        answers = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        answers = rag_model.retriever.generator_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         if args.print_predictions:
             for q, a in zip(questions, answers):
@@ -150,9 +151,9 @@ def get_args():
         help="RAG model type: rag_sequence, rag_token or bart, if none specified, the type is inferred from the model_name_or_path",
     )
     parser.add_argument(
-        "--retriever_type",
+        "--index_name",
         default=None,
-        choices=["hf_retriever", "legacy_retriever"],
+        choices=["hf", "legacy"],
         type=str,
         help="RAG model retriever type",
     )
@@ -202,7 +203,7 @@ def get_args():
         "ans - a single line of the gold file contains the expected answer string",
     )
     parser.add_argument(
-        "--predictions_filename",
+        "--predictions_path",
         type=str,
         default="predictions.txt",
         help="Name of the predictions file, to be stored in the checkpoints directry",
@@ -255,8 +256,8 @@ def main(args):
     if args.model_type.startswith("rag"):
         model_class = RagTokenForGeneration if args.model_type == "rag_token" else RagSequenceForGeneration
         model_kwargs["n_docs"] = args.n_docs
-        if args.retriever_type is not None:
-            model_kwargs["retriever_type"] = args.retriever_type
+        if args.index_name is not None:
+            model_kwargs["index_name"] = args.index_name
         if args.index_path is not None:
             model_kwargs["index_path"] = args.index_path
     else:
@@ -274,42 +275,38 @@ def main(args):
     evaluate_batch_fn = evaluate_batch_e2e if args.eval_mode == "e2e" else evaluate_batch_retrieval
 
     for checkpoint in checkpoints:
-        predictions_path = os.path.join(checkpoint, args.predictions_filename)
-        if os.path.exists(predictions_path) and (not args.recalculate):
-            logger.info("Calculating metrics based on an existing predictions file: {}".format(predictions_path))
-            score_fn(args, predictions_path, args.gold_data_path)
+        if os.path.exists(args.predictions_path) and (not args.recalculate):
+            logger.info("Calculating metrics based on an existing predictions file: {}".format(args.predictions_path))
+            score_fn(args, args.predictions_path, args.gold_data_path)
             continue
 
         logger.info("***** Running evaluation for {} *****".format(checkpoint))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        logger.info("  Predictions will be stored under {}".format(predictions_path))
+        logger.info("  Predictions will be stored under {}".format(args.predictions_path))
 
-        model = model_class.from_pretrained(checkpoint, **model_kwargs)
+        if args.model_type.startswith("rag"):
+            retriever = RagRetriever.from_pretrained(checkpoint, **model_kwargs)
+            model = model_class.from_pretrained(checkpoint, retriever=retriever, **model_kwargs)
+            model.retriever.init_retrieval()
+        else:
+            model = model_class.from_pretrained(checkpoint, **model_kwargs)
         model.to(args.device)
-        retriever = RagRetriever(model.config)  # TODO: add tokenizers
-        tokenizer = (
-            retriever.generator_tokenizer
-            if args.model_type != "bart" and args.eval_mode == "e2e"
-            else retriever.question_encoder_tokenizer
-            if args.model_type != "bart" and args.eval_mode == "retrieval"
-            else BartTokenizer.from_pretrained("facebook/bart-large")
-        )
 
-        with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
+        with open(args.evaluation_set, "r") as eval_file, open(args.predictions_path, "w") as preds_file:
             questions = []
             for line in tqdm(eval_file):
                 questions.append(line.strip())
                 if len(questions) == args.eval_batch_size:
-                    answers = evaluate_batch_fn(args, model, tokenizer, retriever, questions)
+                    answers = evaluate_batch_fn(args, model, questions)
                     preds_file.write("\n".join(answers) + "\n")
                     preds_file.flush()
                     questions = []
             if len(questions) > 0:
-                answers = evaluate_batch_fn(args, model, tokenizer, retriever, questions)
+                answers = evaluate_batch_fn(args, model, questions)
                 preds_file.write("\n".join(answers))
                 preds_file.flush()
 
-            score_fn(args, predictions_path, args.gold_data_path)
+            score_fn(args, args.predictions_path, args.gold_data_path)
 
 
 if __name__ == "__main__":

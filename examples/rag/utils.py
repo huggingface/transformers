@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import Dataset
 
 from examples.seq2seq.utils import SortishSampler, trim_batch
-from transformers import BartTokenizer, T5Tokenizer
+from transformers import BartTokenizer, RagTokenizer, T5Tokenizer
 
 
 def encode_line(tokenizer, line, max_length, padding_side, pad_to_max_length=True, return_tensors="pt"):
@@ -51,7 +51,11 @@ class Seq2SeqDataset(Dataset):
         self.prefix = prefix
         if n_obs is not None:
             self.src_lens = self.src_lens[:n_obs]
-        self.pad_token_id = self.tokenizer.pad_token_id
+        self.pad_token_id = (
+            self.tokenizer.question_encoder.pad_token_id
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer.pad_token_id
+        )
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
 
@@ -70,8 +74,8 @@ class Seq2SeqDataset(Dataset):
             source_line += self.tokenizer.eos_token
             tgt_line += self.tokenizer.eos_token
 
-        # Pad source to the left and target to the right
-        source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length, "right")  # "left")
+        # Pad source and target to the right
+        source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length, "right")
         target_inputs = encode_line(self.tokenizer, tgt_line, self.max_target_length, "right")
 
         source_ids = source_inputs["input_ids"].squeeze()

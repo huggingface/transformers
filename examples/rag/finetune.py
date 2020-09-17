@@ -24,6 +24,7 @@ from transformers import (
     RagConfig,
     RagSequenceForGeneration,
     RagTokenForGeneration,
+    RagTokenizer,
     T5ForConditionalGeneration,
     get_linear_schedule_with_warmup,
 )
@@ -89,31 +90,25 @@ class GenerativeQAModule(BaseTransformer):
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
-            generator_config = AutoConfig.from_pretrained(
-                config.pretrained_generator_name_or_path, prefix=config.prefix
-            )
-            hparams, generator_config = set_extra_model_params(extra_model_params, hparams, generator_config)
-            model = self.model_class.from_pretrained(
-                hparams.model_name_or_path, config=config, generator_config=generator_config
-            )
+            retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path)
+            hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
+            if args.prefix is not None:
+                config.generator.prefix = args.prefix
+            config.label_smoothing = hparams.label_smoothing
+            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
         else:
             if args.prefix is not None:
-                setattr(config, "prefix", args.prefix)
+                config.prefix = args.prefix
             hparams, config = set_extra_model_params(extra_model_params, hparams, config)
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
-            generator_config = config
 
         tokenizer = (
-            AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
+            RagTokenizer.from_pretrained(hparams.model_name_or_path)
             if self.is_rag_model
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
-
-        self.retriever = (
-            RagPyTorchDistributedRetriever(self.model.config) if self.is_rag_model else None
-        )  # TODO add tokenizers
 
         save_git_info(self.hparams.output_dir)
         self.output_dir = Path(self.hparams.output_dir)
@@ -126,7 +121,7 @@ class GenerativeQAModule(BaseTransformer):
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            prefix=generator_config.prefix or "",
+            prefix=config.generator.prefix if hasattr(config, "generator") else config.prefix or "",
         )
         n_observations_per_split = {
             "train": self.hparams.n_train,
@@ -152,7 +147,7 @@ class GenerativeQAModule(BaseTransformer):
         os.environ["MASTER_PORT"] = str(self.distributed_port)
         super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
         if self.is_rag_model:
-            self.retriever.init_retrieval(self.distributed_port)
+            self.model.retriever.init_retrieval(self.distributed_port)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -166,6 +161,7 @@ class GenerativeQAModule(BaseTransformer):
     def _step(self, batch: dict) -> Tuple:
         source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
 
+        rag_kwargs = {}
         if isinstance(self.model, T5ForConditionalGeneration):
             decoder_input_ids = self.model._shift_right(target_ids)
             lm_labels = target_ids
@@ -174,7 +170,7 @@ class GenerativeQAModule(BaseTransformer):
             lm_labels = target_ids[:, 1:].clone()
         else:
             assert self.is_rag_model
-            generator = self.model.model.generator
+            generator = self.model.rag.generator
             if isinstance(generator, T5ForConditionalGeneration):
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
@@ -187,37 +183,27 @@ class GenerativeQAModule(BaseTransformer):
                 )
             elif isinstance(generator, BartForConditionalGeneration):
                 decoder_input_ids = target_ids
-            lm_labels = None
+            lm_labels = decoder_input_ids
+            rag_kwargs["reduce_loss"] = True
 
         assert decoder_input_ids is not None
 
-        if lm_labels is not None:
-            outputs = self(
-                source_ids,
-                attention_mask=source_mask,
-                decoder_input_ids=decoder_input_ids,
-                use_cache=False,
-                labels=lm_labels,
-                return_dict=True,
-            )
-        else:  # RAG models
-            outputs = self(
-                source_ids,
-                retriever=self.retriever,
-                attention_mask=source_mask,
-                decoder_input_ids=decoder_input_ids,
-                use_cache=False,
-                return_loss=True,
-                reduce=True,
-                label_smoothing=self.hparams.label_smoothing,
-            )
+        outputs = self(
+            source_ids,
+            attention_mask=source_mask,
+            decoder_input_ids=decoder_input_ids,
+            use_cache=False,
+            labels=lm_labels,
+            return_dict=True,
+            **rag_kwargs,
+        )
 
         loss = outputs["loss"]
         return (loss,)
 
     @property
     def pad(self) -> int:
-        return self.tokenizer.pad_token_id
+        return self.tokenizer.question_encoder.pad_token_id if self.is_rag_model else self.tokenizer.pad_token_id
 
     def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
@@ -265,9 +251,7 @@ class GenerativeQAModule(BaseTransformer):
         start_time = time.time()
         generated_ids = self.model.generate(
             batch["input_ids"],
-            retriever=self.retriever,
-            dedup=False,  # rag specific parameter
-            attention_mask=batch["attention_mask"],
+            do_deduplication=False,  # rag specific parameter
             use_cache=True,
             min_length=1,
             max_length=self.target_lens["val"],
