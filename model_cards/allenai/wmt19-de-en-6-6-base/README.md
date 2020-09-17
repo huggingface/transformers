@@ -11,10 +11,9 @@ tags:
 - allenai
 license: Apache 2.0
 datasets:
-- [main source](http://www.statmt.org/wmt19/)
-- [test-set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
+- wmt19
 metrics:
-- http://www.statmt.org/wmt19/metrics-task.html
+- bleu
 ---
 
 # FSMT
@@ -92,3 +91,7 @@ echo $PAIR
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py allenai/wmt19-de-en-6-6-base $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
+## Data Sources
+
+- [training, etc.](http://www.statmt.org/wmt19/)
+- [test set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
