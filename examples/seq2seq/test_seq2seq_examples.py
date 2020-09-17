@@ -327,7 +327,7 @@ def test_run_eval_slow(model):
 
 # testing with 2 models to validate: 1. translation (t5) 2. summarization (mbart)
 @slow
-@pytest.mark.parametrize("model", [pytest.param(T5_TINY), pytest.param(MBART_TINY)]])
+@pytest.mark.parametrize("model", [pytest.param(T5_TINY), pytest.param(MBART_TINY)])
 def test_run_eval_search(model):
     input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
     output_file_name = input_file_name.parent / "utest_output.txt"
@@ -348,20 +348,17 @@ def test_run_eval_search(model):
     _dump_articles(input_file_name, text["en"])
     _dump_articles(reference_path, text["de"])
     task = "translation_en_to_de" if model == T5_TINY else "summarization"
-    testargs = [
-        "run_eval_search.py",
-        model,
-        str(input_file_name),
-        str(output_file_name),
-        "--score_path",
-        score_path,
-        "--reference_path",
-        reference_path,
-        "--task",
-        task,
-        "--search",
-        "num_beams=1:2 length_penalty=0.9:1.0",
-    ]
+    testargs = f"""
+        run_eval_search.py
+        --model_name {model}
+        --data_dir {str(input_file_name)}
+        --save_dir {str(output_file_name)}
+        --score_path {score_path}
+        --reference_path {reference_path},
+        --task {task}
+        --search num_beams=1:2 length_penalty=0.9:1.0
+        """.split()
+
     with patch.object(sys, "argv", testargs):
         with CaptureStdout() as cs:
             run_search()
