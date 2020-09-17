@@ -5,6 +5,7 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
+from .activations_tf import get_tf_activation
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -13,7 +14,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
+from .modeling_tf_bert import TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
@@ -173,7 +174,7 @@ class TFElectraDiscriminatorPredictions(tf.keras.layers.Layer):
 
     def call(self, discriminator_hidden_states, training=False):
         hidden_states = self.dense(discriminator_hidden_states)
-        hidden_states = ACT2FN[self.config.hidden_act](hidden_states)
+        hidden_states = get_tf_activation(self.config.hidden_act)(hidden_states)
         logits = tf.squeeze(self.dense_prediction(hidden_states))
 
         return logits
@@ -188,7 +189,7 @@ class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
 
     def call(self, generator_hidden_states, training=False):
         hidden_states = self.dense(generator_hidden_states)
-        hidden_states = ACT2FN["gelu"](hidden_states)
+        hidden_states = get_tf_activation("gelu")(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states
@@ -567,7 +568,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         self.electra = TFElectraMainLayer(config, name="electra")
         self.generator_predictions = TFElectraGeneratorPredictions(config, name="generator_predictions")
         if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
+            self.activation = get_tf_activation(config.hidden_act)
         else:
             self.activation = config.hidden_act
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
@@ -658,7 +659,7 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
         x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
-        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = get_tf_activation("gelu")(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
         x = self.dropout(x)
         x = self.out_proj(x)
 
