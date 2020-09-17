@@ -11,7 +11,8 @@ from .modeling_highway_bert import BertPreTrainedModel, DeeBertModel, HighwayExc
 
 
 @add_start_docstrings(
-    "The RoBERTa Model transformer with early exiting (DeeRoBERTa). ", ROBERTA_START_DOCSTRING,
+    "The RoBERTa Model transformer with early exiting (DeeRoBERTa). ",
+    ROBERTA_START_DOCSTRING,
 )
 class DeeRobertaModel(DeeBertModel):
 

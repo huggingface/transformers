@@ -553,7 +553,8 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
 
 @add_start_docstrings(
-    "The bare DPRReader transformer outputting span predictions.", DPR_START_DOCSTRING,
+    "The bare DPRReader transformer outputting span predictions.",
+    DPR_START_DOCSTRING,
 )
 class DPRReader(DPRPretrainedReader):
     def __init__(self, config: DPRConfig):

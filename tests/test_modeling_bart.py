@@ -54,7 +54,8 @@ PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecast
 @require_torch
 class ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -76,7 +77,9 @@ class ModelTester:
         torch.manual_seed(0)
 
     def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+            3,
+        )
         input_ids[:, -1] = 2  # Eos Token
 
         config = BartConfig(
@@ -100,7 +103,9 @@ class ModelTester:
 
 
 def prepare_bart_inputs_dict(
-    config, input_ids, attention_mask=None,
+    config,
+    input_ids,
+    attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -261,7 +266,11 @@ class BartHeadTests(unittest.TestCase):
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        outputs = model(input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,)
+        outputs = model(
+            input_ids=input_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
 
         self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
         self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
@@ -491,7 +500,11 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off electricity to thousands of customers in the state."
         dct = tok.batch_encode_plus(
-            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
+            [PGE_ARTICLE],
+            max_length=1024,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
         ).to(torch_device)
 
         hypotheses_batch = model.generate(
@@ -506,7 +519,10 @@ class BartModelIntegrationTests(unittest.TestCase):
             decoder_start_token_id=model.config.eos_token_id,
         )
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True,)
+        decoded = tok.batch_decode(
+            hypotheses_batch,
+            skip_special_tokens=True,
+        )
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):

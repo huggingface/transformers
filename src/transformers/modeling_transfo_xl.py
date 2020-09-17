@@ -385,7 +385,12 @@ class RelPartialLearnableDecoderLayer(nn.Module):
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
 
         attn_outputs = self.dec_attn(
-            dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask, output_attentions=output_attentions,
+            dec_inp,
+            r,
+            attn_mask=dec_attn_mask,
+            mems=mems,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         ff_output = self.pos_ff(attn_outputs[0])
 
@@ -955,7 +960,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TransfoXLModelOutput(
-            last_hidden_state=core_out, mems=new_mems, hidden_states=hids, attentions=attentions,
+            last_hidden_state=core_out,
+            mems=new_mems,
+            hidden_states=hids,
+            attentions=attentions,
         )
 
 

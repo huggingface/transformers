@@ -572,7 +572,11 @@ class XLMModel(XLMPreTrainedModel):
 
             # self attention
             attn_outputs = self.attentions[i](
-                tensor, attn_mask, cache=cache, head_mask=head_mask[i], output_attentions=output_attentions,
+                tensor,
+                attn_mask,
+                cache=cache,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
             )
             attn = attn_outputs[0]
             if output_attentions:
@@ -1130,7 +1134,10 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

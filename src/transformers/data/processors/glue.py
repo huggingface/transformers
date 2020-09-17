@@ -69,7 +69,10 @@ def glue_convert_examples_to_features(
 if is_tf_available():
 
     def _tf_glue_convert_examples_to_features(
-        examples: tf.data.Dataset, tokenizer: PreTrainedTokenizer, task=str, max_length: Optional[int] = None,
+        examples: tf.data.Dataset,
+        tokenizer: PreTrainedTokenizer,
+        task=str,
+        max_length: Optional[int] = None,
     ) -> tf.data.Dataset:
         """
         Returns:

@@ -36,7 +36,8 @@ if is_tf_available():
 
 class TFOpenAIGPTModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13

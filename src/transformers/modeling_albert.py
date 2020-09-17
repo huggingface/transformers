@@ -302,7 +302,10 @@ class AlbertLayer(nn.Module):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         ffn_output = apply_chunking_to_forward(
-            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output[0],
+            self.ff_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output[0],
         )
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
 
@@ -786,7 +789,8 @@ class AlbertSOPHead(nn.Module):
 
 
 @add_start_docstrings(
-    "Albert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING,
+    "Albert Model with a `language modeling` head on top.",
+    ALBERT_START_DOCSTRING,
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     def __init__(self, config):
@@ -951,7 +955,10 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1032,7 +1039,10 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1214,5 +1224,8 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

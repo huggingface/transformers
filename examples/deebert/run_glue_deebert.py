@@ -358,7 +358,11 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
         )
         features = convert_examples_to_features(
-            examples, tokenizer, label_list=label_list, max_length=args.max_seq_length, output_mode=output_mode,
+            examples,
+            tokenizer,
+            label_list=label_list,
+            max_length=args.max_seq_length,
+            output_mode=output_mode,
         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)

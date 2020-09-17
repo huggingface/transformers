@@ -3,9 +3,8 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from .configuration_electra import ElectraConfig
-
 from .activations_tf import get_tf_activation
+from .configuration_electra import ElectraConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -94,7 +93,13 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(
-        self, input_ids, position_ids=None, token_type_ids=None, inputs_embeds=None, mode="embedding", training=False,
+        self,
+        input_ids,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        mode="embedding",
+        training=False,
     ):
         """Get token embeddings of inputs.
         Args:
@@ -729,7 +734,10 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -853,7 +861,10 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1020,7 +1031,10 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
-            output = (start_logits, end_logits,) + discriminator_hidden_states[1:]
+            output = (
+                start_logits,
+                end_logits,
+            ) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(

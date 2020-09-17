@@ -69,7 +69,8 @@ class XLMRobertaModel(RobertaModel):
 
 
 @add_start_docstrings(
-    "XLM-RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.", XLM_ROBERTA_START_DOCSTRING,
+    "XLM-RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.",
+    XLM_ROBERTA_START_DOCSTRING,
 )
 class XLMRobertaForCausalLM(RobertaForCausalLM):
     """
@@ -81,7 +82,8 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """, XLM_ROBERTA_START_DOCSTRING,
+    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    XLM_ROBERTA_START_DOCSTRING,
 )
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """

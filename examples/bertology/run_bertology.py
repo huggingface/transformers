@@ -395,7 +395,8 @@ def main():
         cache_dir=args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, cache_dir=args.cache_dir,
+        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+        cache_dir=args.cache_dir,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,

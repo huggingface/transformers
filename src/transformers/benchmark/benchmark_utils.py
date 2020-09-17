@@ -499,15 +499,19 @@ def stop_memory_tracing(
 
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
 
-        for ((frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem),) in zip(
-            memory_trace[:-1], memory_trace[1:]
-        ):
+        for (
+            (frame, cpu_mem, gpu_mem),
+            (next_frame, next_cpu_mem, next_gpu_mem),
+        ) in zip(memory_trace[:-1], memory_trace[1:]):
             cpu_mem_inc = next_cpu_mem - cpu_mem
             gpu_mem_inc = next_gpu_mem - gpu_mem
             cpu_gpu_mem_inc = cpu_mem_inc + gpu_mem_inc
             memory_diff_trace.append(
                 MemoryState(
-                    frame=frame, cpu=Memory(cpu_mem_inc), gpu=Memory(gpu_mem_inc), cpu_gpu=Memory(cpu_gpu_mem_inc),
+                    frame=frame,
+                    cpu=Memory(cpu_mem_inc),
+                    gpu=Memory(gpu_mem_inc),
+                    cpu_gpu=Memory(cpu_gpu_mem_inc),
                 )
             )
 
@@ -529,7 +533,10 @@ def stop_memory_tracing(
         )  # order by the total CPU + GPU memory increase
         cumulative_memory = list(
             MemoryState(
-                frame=frame, cpu=Memory(cpu_mem_inc), gpu=Memory(gpu_mem_inc), cpu_gpu=Memory(cpu_gpu_mem_inc),
+                frame=frame,
+                cpu=Memory(cpu_mem_inc),
+                gpu=Memory(gpu_mem_inc),
+                cpu_gpu=Memory(cpu_gpu_mem_inc),
             )
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
@@ -544,7 +551,10 @@ def stop_memory_tracing(
         total_memory = Memory(total_memory)
 
         return MemorySummary(
-            sequential=memory_diff_trace, cumulative=cumulative_memory, current=memory_curr_trace, total=total_memory,
+            sequential=memory_diff_trace,
+            cumulative=cumulative_memory,
+            current=memory_curr_trace,
+            total=total_memory,
         )
 
     return None

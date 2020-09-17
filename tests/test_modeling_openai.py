@@ -37,7 +37,8 @@ if is_torch_available():
 
 class OpenAIGPTModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13

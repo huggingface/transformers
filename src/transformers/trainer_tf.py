@@ -637,7 +637,8 @@ class TFTrainer:
 
                 features = {
                     k: tf.concat(
-                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]], axis=0,
+                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]],
+                        axis=0,
                     )
                     for k, ft in features.items()
                 }

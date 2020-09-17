@@ -73,7 +73,8 @@ RETRIBERT_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """Bert Based model to embed queries or document for document retreival. """, RETRIBERT_START_DOCSTRING,
+    """Bert Based model to embed queries or document for document retreival. """,
+    RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
     def __init__(self, config):
@@ -91,7 +92,11 @@ class RetriBertModel(RetriBertPreTrainedModel):
         self.init_weights()
 
     def embed_sentences_checkpointed(
-        self, input_ids, attention_mask, sent_encoder, checkpoint_batch_size=-1,
+        self,
+        input_ids,
+        attention_mask,
+        sent_encoder,
+        checkpoint_batch_size=-1,
     ):
         # reproduces BERT forward pass with checkpointing
         if checkpoint_batch_size < 0 or input_ids.shape[0] < checkpoint_batch_size:
@@ -108,7 +113,11 @@ class RetriBertModel(RetriBertPreTrainedModel):
 
             # define function for cehckpointing
             def partial_encode(*inputs):
-                encoder_outputs = sent_encoder.encoder(inputs[0], attention_mask=inputs[1], head_mask=head_mask,)
+                encoder_outputs = sent_encoder.encoder(
+                    inputs[0],
+                    attention_mask=inputs[1],
+                    head_mask=head_mask,
+                )
                 sequence_output = encoder_outputs[0]
                 pooled_output = sent_encoder.pooler(sequence_output)
                 return pooled_output
@@ -127,13 +136,24 @@ class RetriBertModel(RetriBertPreTrainedModel):
             return torch.cat(pooled_output_list, dim=0)
 
     def embed_questions(
-        self, input_ids, attention_mask=None, checkpoint_batch_size=-1,
+        self,
+        input_ids,
+        attention_mask=None,
+        checkpoint_batch_size=-1,
     ):
-        q_reps = self.embed_sentences_checkpointed(input_ids, attention_mask, self.bert_query, checkpoint_batch_size,)
+        q_reps = self.embed_sentences_checkpointed(
+            input_ids,
+            attention_mask,
+            self.bert_query,
+            checkpoint_batch_size,
+        )
         return self.project_query(q_reps)
 
     def embed_answers(
-        self, input_ids, attention_mask=None, checkpoint_batch_size=-1,
+        self,
+        input_ids,
+        attention_mask=None,
+        checkpoint_batch_size=-1,
     ):
         a_reps = self.embed_sentences_checkpointed(
             input_ids,

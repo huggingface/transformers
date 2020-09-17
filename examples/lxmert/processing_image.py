@@ -85,7 +85,11 @@ class Preprocess:
         max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
         image_sizes = [im.shape[-2:] for im in images]
         images = [
-            F.pad(im, [0, max_size[-1] - size[1], 0, max_size[-2] - size[0]], value=self.pad_value,)
+            F.pad(
+                im,
+                [0, max_size[-1] - size[1], 0, max_size[-2] - size[0]],
+                value=self.pad_value,
+            )
             for size, im in zip(image_sizes, images)
         ]
 

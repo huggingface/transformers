@@ -76,7 +76,11 @@ class GenerationMixin:
         # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
         if repetition_penalty != 1.0:
             self.enforce_repetition_penalty_(
-                scores, batch_size, num_beams, input_ids, repetition_penalty,
+                scores,
+                batch_size,
+                num_beams,
+                input_ids,
+                repetition_penalty,
             )
 
         # set eos token prob to zero if min_length is not reached
@@ -317,7 +321,10 @@ class GenerationMixin:
                 "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
             )
             input_ids = torch.full(
-                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
+                (batch_size, 1),
+                bos_token_id,
+                dtype=torch.long,
+                device=next(self.parameters()).device,
             )
         else:
             assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
@@ -752,7 +759,8 @@ class GenerationMixin:
                         if is_beam_token_worse_than_top_num_beams:
                             continue
                         generated_hyps[batch_idx].add(
-                            input_ids[effective_beam_id].clone(), beam_token_score.item(),
+                            input_ids[effective_beam_id].clone(),
+                            beam_token_score.item(),
                         )
                     else:
                         # add next predicted token since it is not eos_token
@@ -809,7 +817,8 @@ class GenerationMixin:
                 assert torch.all(
                     next_scores[batch_idx, :num_beams] == beam_scores.view(batch_size, num_beams)[batch_idx]
                 ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
-                    next_scores[:, :num_beams][batch_idx], beam_scores.view(batch_size, num_beams)[batch_idx],
+                    next_scores[:, :num_beams][batch_idx],
+                    beam_scores.view(batch_size, num_beams)[batch_idx],
                 )
 
             # need to add best num_beams hypotheses to generated hyps

@@ -95,7 +95,10 @@ def make_support(question, source="wiki40b", method="dense", n_results=10):
             )
         else:
             support_doc, hit_lst = query_es_index(
-                question, es_client, index_name="english_wiki40b_snippets_100w", n_results=n_results,
+                question,
+                es_client,
+                index_name="english_wiki40b_snippets_100w",
+                n_results=n_results,
             )
     support_list = [
         (res["article_title"], res["section_title"].strip(), res["score"], res["passage_text"]) for res in hit_lst
@@ -154,7 +157,8 @@ header_full = """
     header_html,
 )
 st.sidebar.markdown(
-    header_full, unsafe_allow_html=True,
+    header_full,
+    unsafe_allow_html=True,
 )
 
 # Long Form QA with ELI5 and Wikipedia
@@ -173,9 +177,17 @@ action_list = [
 ]
 demo_options = st.sidebar.checkbox("Demo options")
 if demo_options:
-    action_st = st.sidebar.selectbox("", action_list, index=3,)
+    action_st = st.sidebar.selectbox(
+        "",
+        action_list,
+        index=3,
+    )
     action = action_list.index(action_st)
-    show_type = st.sidebar.selectbox("", ["Show full text of passages", "Show passage section titles"], index=0,)
+    show_type = st.sidebar.selectbox(
+        "",
+        ["Show full text of passages", "Show passage section titles"],
+        index=0,
+    )
     show_passages = show_type == "Show full text of passages"
 else:
     action = 3
@@ -250,7 +262,9 @@ questions_list = [
     "How does New Zealand have so many large bird predators?",
 ]
 question_s = st.selectbox(
-    "What would you like to ask? ---- select <MY QUESTION> to enter a new query", questions_list, index=1,
+    "What would you like to ask? ---- select <MY QUESTION> to enter a new query",
+    questions_list,
+    index=1,
 )
 if question_s == "<MY QUESTION>":
     question = st.text_input("Enter your question here:", "")
