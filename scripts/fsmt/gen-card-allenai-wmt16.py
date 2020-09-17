@@ -35,7 +35,8 @@ tags:
 - allenai
 license: Apache 2.0
 datasets:
-- http://www.statmt.org/wmt16/ ([test-set](http://matrix.statmt.org/test_sets/newstest2016.tgz?1504722372))
+- [main source](http://www.statmt.org/wmt16/)
+- [test-set](http://matrix.statmt.org/test_sets/newstest2016.tgz?1504722372)
 
 metrics:
 - http://www.statmt.org/wmt16/metrics-task.html
