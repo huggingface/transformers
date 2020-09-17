@@ -148,7 +148,7 @@ class AbstractSeq2SeqDataset(Dataset):
         def num_tokens_in_example(i):
             return min(self.src_lens[i], self.max_target_length)
 
-        # num_tokens_fn = lambda i: self.src_lens[i] // 4  # assume each token is ~4 characters (a bit conservative)
+        # call fairseq cython function
         batch_sampler: List[List[int]] = batch_by_size(
             sorted_indices,
             num_tokens_fn=num_tokens_in_example,
