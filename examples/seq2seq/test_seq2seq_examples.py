@@ -292,33 +292,31 @@ def run_eval_tester(model):
     _dump_articles(input_file_name, articles)
     score_path = str(Path(tempfile.mkdtemp()) / "scores.json")
     task = "translation_en_to_de" if model == T5_TINY else "summarization"
-    testargs = [
-        "run_eval.py",
-        model,
-        str(input_file_name),
-        str(output_file_name),
-        "--score_path",
-        score_path,
-        "--task",
-        task,
-        "--num_beams",
-        "2",
-        "--length_penalty",
-        "2.0",
-    ]
+    testargs = f"""
+        run_eval_search.py
+        {model}
+        {input_file_name}
+        {output_file_name}
+        --score_path {score_path}
+        --task {task}
+        --num_beams 2
+        --length_penalty 2.0
+        """.split()
+
     with patch.object(sys, "argv", testargs):
         run_generate()
         assert Path(output_file_name).exists()
         os.remove(Path(output_file_name))
 
 
+
 # test one model to quickly (no-@slow) to catch simple problems and do an
 # extensive testing of functionality with multiple models as @slow
-@pytest.mark.parametrize("model", [pytest.param(T5_TINY)])
-def test_run_eval(model):
+def test_run_eval():
     run_eval_tester(T5_TINY)
 
 
+# any extra models should go into the list here - can be slow
 @slow
 @pytest.mark.parametrize("model", [pytest.param(BART_TINY), pytest.param(MBART_TINY)])
 def test_run_eval_slow(model):
