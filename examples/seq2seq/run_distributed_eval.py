@@ -152,7 +152,7 @@ def run_generate():
         json_save_dir,
         args.model_name,
         type_path=args.type_path,
-        batch_size=args.bs,
+        bs=args.bs,
         fp16=args.fp16,
         task=args.task,
         local_rank=args.local_rank,
