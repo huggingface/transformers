@@ -23,8 +23,9 @@ from torch.nn import CrossEntropyLoss
 
 from .configuration_layoutlm import LayoutLMConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_bert import BertLayerNorm, BertModel, BertOnlyMLMHead, BertPreTrainedModel
+from .modeling_bert import BertEncoder, BertLayerNorm, BertOnlyMLMHead, BertPooler
 from .modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput, TokenClassifierOutput
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,28 @@ class LayoutLMEmbeddings(nn.Module):
         return embeddings
 
 
+class LayoutLMPreTrainedModel(PreTrainedModel):
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = LayoutLMConfig
+    base_model_prefix = "layoutlm"
+    authorized_missing_keys = [r"position_ids"]
+
+    def _init_weights(self, module):
+        """ Initialize the weights """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, BertLayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+
 LAYOUTLM_START_DOCSTRING = r"""    The LayoutLM model was proposed in
     `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
     <https://arxiv.org/abs/1912.13318>`__ by....
@@ -132,6 +155,11 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
+        bbox (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
+            Bounding Boxes of each input sequence tokens.
+            Selected in the range ``[0, config.max_2d_position_embeddings - 1]``.
+
+            `What are bboxes? <../glossary.html#position-ids>`_
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -171,19 +199,35 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
     "The bare LayoutLM Model transformer outputting raw hidden-states without any specific head on top.",
     LAYOUTLM_START_DOCSTRING,
 )
-class LayoutLMModel(BertModel):
+class LayoutLMModel(LayoutLMPreTrainedModel):
 
     config_class = LayoutLMConfig
     pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "bert"
+    base_model_prefix = "layoutlm"
 
     def __init__(self, config):
         super(LayoutLMModel, self).__init__(config)
+        self.config = config
+
         self.embeddings = LayoutLMEmbeddings(config)
+        self.encoder = BertEncoder(config)
+        self.pooler = BertPooler(config)
+
         self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(LAYOUTLM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -302,21 +346,21 @@ class LayoutLMModel(BertModel):
 
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top. """, LAYOUTLM_START_DOCSTRING)
-class LayoutLMForMaskedLM(BertPreTrainedModel):
+class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     config_class = LayoutLMConfig
     pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "bert"
+    base_model_prefix = "layoutlm"
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = LayoutLMModel(config)
+        self.layoutlm = LayoutLMModel(config)
         self.cls = BertOnlyMLMHead(config)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.embeddings.word_embeddings
+        return self.layoutlm.embeddings.word_embeddings
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -347,7 +391,7 @@ class LayoutLMForMaskedLM(BertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.layoutlm(
             input_ids,
             bbox,
             attention_mask=attention_mask,
@@ -390,22 +434,22 @@ class LayoutLMForMaskedLM(BertPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     LAYOUTLM_START_DOCSTRING,
 )
-class LayoutLMForTokenClassification(BertPreTrainedModel):
+class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
     config_class = LayoutLMConfig
     pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "bert"
+    base_model_prefix = "layoutlm"
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.bert = LayoutLMModel(config)
+        self.layoutlm = LayoutLMModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.embeddings.word_embeddings
+        return self.layoutlm.embeddings.word_embeddings
 
     @add_start_docstrings_to_callable(LAYOUTLM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -430,7 +474,7 @@ class LayoutLMForTokenClassification(BertPreTrainedModel):
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.layoutlm(
             input_ids=input_ids,
             bbox=bbox,
             attention_mask=attention_mask,

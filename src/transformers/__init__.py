@@ -164,7 +164,7 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_layoutlm import LayoutLMTokenizer
+from .tokenization_layoutlm import LayoutLMTokenizer, LayoutLMTokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_mbart import MBartTokenizer

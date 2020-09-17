@@ -27,8 +27,6 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     from transformers import LayoutLMConfig, LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
 
-    #
-
 
 class LayoutLMModelTester:
     """You can also import this e.g from .test_modeling_bart import BartModelTester """
