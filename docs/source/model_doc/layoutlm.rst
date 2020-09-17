@@ -15,7 +15,7 @@ The abstract from the paper is the following:
 Tips:
 
 - LayoutLM has an extra input called :obj:`bbox`, which is the bounding boxes of the input tokens.
-- The `bbox` requires the data that on 0-1000 scale, which means you should normalize the bounding box before passing them into model.
+- The :obj:`bbox` requires the data that on 0-1000 scale, which means you should normalize the bounding box before passing them into model.
 
 The original code can be found `here <https://github.com/microsoft/unilm/tree/master/layoutlm>`_.
 
