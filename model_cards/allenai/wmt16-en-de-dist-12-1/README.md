@@ -1,7 +1,8 @@
 
 ---
-
-language: en, de
+language:
+- en
+- de
 thumbnail:
 tags:
 - translation
@@ -21,7 +22,7 @@ metrics:
 
 This is a ported version of fairseq-based [wmt16 transformer](https://github.com/jungokasai/deep-shallow/) for en-de.
 
-For more details, please see, [Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation](https://arxiv.org/abs/2006.10369).
+For more details, please, see [Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation](https://arxiv.org/abs/2006.10369).
 
 All 3 models are available:
 

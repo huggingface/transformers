@@ -1,7 +1,8 @@
 
 ---
-
-language: en, de
+language:
+- en
+- de
 thumbnail:
 tags:
 - translation

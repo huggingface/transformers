@@ -25,8 +25,9 @@ def write_model_card(model_card_dir, src_lang, tgt_lang, model_name):
 
     readme = f"""
 ---
-
-language: {src_lang}, {tgt_lang}
+language:
+- {src_lang}
+- {tgt_lang}
 thumbnail:
 tags:
 - translation
