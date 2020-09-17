@@ -12,10 +12,6 @@ from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-
-logger = getLogger(__name__)
-
-
 from .utils import (
     Seq2SeqDataset,
     calculate_bleu,
@@ -27,6 +23,9 @@ from .utils import (
     use_task_specific_params,
     write_txt_file,
 )
+
+
+logger = getLogger(__name__)
 
 
 def eval_data_dir(
