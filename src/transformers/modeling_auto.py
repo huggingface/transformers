@@ -31,6 +31,7 @@ from .configuration_auto import (
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
+    FSMTConfig,
     FunnelConfig,
     GPT2Config,
     LongformerConfig,
@@ -115,6 +116,7 @@ from .modeling_flaubert import (
     FlaubertModel,
     FlaubertWithLMHeadModel,
 )
+from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
 from .modeling_funnel import (
     FunnelForMaskedLM,
     FunnelForMultipleChoice,
@@ -213,6 +215,7 @@ MODEL_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLModel),
         (XLNetConfig, XLNetModel),
         (FlaubertConfig, FlaubertModel),
+        (FSMTConfig, FSMTModel),
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
@@ -233,6 +236,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
+        (FSMTConfig, FSMTForConditionalGeneration),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForPreTraining),
@@ -322,6 +326,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianMTModel),
         (MBartConfig, MBartForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
+        (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
     ]
 )
@@ -522,10 +527,10 @@ class AutoModel:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModel
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModel.from_config(config)
+            >>> from transformers import AutoConfig, AutoModel
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModel.from_config(config)
         """
         for config_class, model_class in MODEL_MAPPING.items():
             if isinstance(config, config_class):
@@ -616,10 +621,10 @@ class AutoModelForPreTraining:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForPreTraining
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelForPreTraining.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForPreTraining
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForPreTraining.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_PRETRAINING_MAPPING.items():
             if isinstance(config, config_class):
@@ -716,10 +721,10 @@ class AutoModelWithLMHead:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelWithLMHead
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelWithLMHead.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelWithLMHead
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelWithLMHead.from_config(config)
         """
         warnings.warn(
             "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
@@ -822,10 +827,10 @@ class AutoModelForCausalLM:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForCausalLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('gpt2')
-            model = AutoModelForCausalLM.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForCausalLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('gpt2')
+            >>> model = AutoModelForCausalLM.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_CAUSAL_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -916,10 +921,10 @@ class AutoModelForMaskedLM:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForMaskedLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelForMaskedLM.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForMaskedLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForMaskedLM.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -1010,10 +1015,10 @@ class AutoModelForSeq2SeqLM:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForSeq2SeqLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('t5')
-            model = AutoModelForSeq2SeqLM.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForSeq2SeqLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('t5')
+            >>> model = AutoModelForSeq2SeqLM.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -1108,10 +1113,10 @@ class AutoModelForSequenceClassification:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForSequenceClassification
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelForSequenceClassification.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForSequenceClassification
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForSequenceClassification.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
             if isinstance(config, config_class):
@@ -1205,10 +1210,10 @@ class AutoModelForQuestionAnswering:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForQuestionAnswering
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelForQuestionAnswering.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForQuestionAnswering
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForQuestionAnswering.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
             if isinstance(config, config_class):
@@ -1304,10 +1309,10 @@ class AutoModelForTokenClassification:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForTokenClassification
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelForTokenClassification.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForTokenClassification
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForTokenClassification.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
             if isinstance(config, config_class):
@@ -1404,10 +1409,10 @@ class AutoModelForMultipleChoice:
 
         Examples::
 
-            from transformers import AutoConfig, AutoModelForMultipleChoice
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = AutoModelForMultipleChoice.from_config(config)
+            >>> from transformers import AutoConfig, AutoModelForMultipleChoice
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForMultipleChoice.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
             if isinstance(config, config_class):

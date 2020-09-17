@@ -25,8 +25,9 @@ def write_model_card(model_card_dir, src_lang, tgt_lang, model_name):
 
     readme = f"""
 ---
-
-language: {src_lang}, {tgt_lang}
+language:
+- {src_lang}
+- {tgt_lang}
 thumbnail:
 tags:
 - translation
@@ -34,7 +35,8 @@ tags:
 - allenai
 license: Apache 2.0
 datasets:
-- http://www.statmt.org/wmt16/ ([test-set](http://matrix.statmt.org/test_sets/newstest2016.tgz?1504722372))
+- [main source](http://www.statmt.org/wmt16/)
+- [test-set](http://matrix.statmt.org/test_sets/newstest2016.tgz?1504722372)
 
 metrics:
 - http://www.statmt.org/wmt16/metrics-task.html

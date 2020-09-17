@@ -28,6 +28,7 @@ from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
+from .configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
@@ -67,6 +68,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -96,6 +98,7 @@ CONFIG_MAPPING = OrderedDict(
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
         ("flaubert", FlaubertConfig),
+        ("fsmt", FSMTConfig),
         ("bert", BertConfig),
         ("openai-gpt", OpenAIGPTConfig),
         ("gpt2", GPT2Config),
@@ -129,6 +132,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("longformer", "Longformer"),
         ("roberta", "RoBERTa"),
         ("flaubert", "FlauBERT"),
+        ("fsmt", "FairSeq Machine-Translation"),
         ("bert", "BERT"),
         ("openai-gpt", "OpenAI GPT"),
         ("gpt2", "OpenAI GPT-2"),
