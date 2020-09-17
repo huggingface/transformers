@@ -387,10 +387,6 @@ def main(args, model=None) -> SummarizationModule:
         project = os.environ.get("WANDB_PROJECT", dataset)
         logger = WandbLogger(name=model.output_dir.name, project=project)
 
-    elif args.logger_name == "wandb_shared":
-        from pytorch_lightning.loggers import WandbLogger
-
-        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
 
     if args.early_stopping_patience >= 0:
         es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)

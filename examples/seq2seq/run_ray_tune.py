@@ -160,7 +160,7 @@ DEFAULTS = {
     'freeze_encoder': True,
     'freeze_embeds': True,
     'sortish_sampler': True,
-    'logger_name': 'wandb',
+    'logger_name': 'default',
     'n_train': -1,
     'n_val': 500,
     'n_test': -1,
