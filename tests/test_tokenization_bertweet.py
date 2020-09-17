@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import json
 import os
 import unittest
 
@@ -30,15 +29,16 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = ["I", "am", "VinAI"]
+        vocab = ["I", "m", "V@@", "R@@", "r", "e@@"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", ""]
+        merges = ["#version: 0.2", "a m</w>"]
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
+            for token in vocab_tokens:
+                fp.write("{} {}".format(token, vocab_tokens[token]) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
@@ -47,18 +47,18 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return BertweetTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "I am VinAI"
-        output_text = "<unk> <unk> <unk> <unk> <unk> <unk> <unk> <unk>"
+        input_text = "I am VinAI Research"
+        output_text = "I <unk> m V<unk> <unk> <unk> I Re<unk> e<unk> <unk> <unk> <unk>"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = BertweetTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "I am VinAI"
-        bpe_tokens = "I a@@ m V@@ i@@ n@@ A@@ I".split()
+        text = "I am VinAI Research"
+        bpe_tokens = "I a@@ m V@@ i@@ n@@ A@@ I R@@ e@@ s@@ e@@ a@@ r@@ c@@ h".split()
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
 
-        input_bpe_tokens = [3, 3, 3, 3, 3, 3, 3, 3, 3]
+        input_bpe_tokens = [4, 3, 5, 6, 3, 3, 3, 4, 7, 9, 3, 9, 3, 3, 3, 3, 3]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
