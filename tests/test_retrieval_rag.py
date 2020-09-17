@@ -10,15 +10,19 @@ import numpy as np
 from datasets import Dataset
 
 import faiss
+from transformers import is_torch_available
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
-from transformers.retrieval_rag import RagRetriever
 from transformers.testing_utils import require_datasets, require_faiss, require_torch
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
+
+
+if is_torch_available():
+    from transformers.retrieval_rag import RagRetriever
 
 
 @require_faiss
@@ -98,7 +102,7 @@ class RagRetrieverTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def get_dummy_hf_index_retriever(self) -> RagRetriever:
+    def get_dummy_hf_index_retriever(self):
         dataset = Dataset.from_dict(
             {
                 "id": ["0", "1"],
@@ -122,7 +126,7 @@ class RagRetrieverTest(TestCase):
             )
         return retriever
 
-    def get_dummy_legacy_index_retriever(self) -> RagRetriever:
+    def get_dummy_legacy_index_retriever(self):
         dataset = Dataset.from_dict(
             {
                 "id": ["0", "1"],
