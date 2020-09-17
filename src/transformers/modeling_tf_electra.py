@@ -3,9 +3,8 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from .configuration_electra import ElectraConfig
-
 from .activations_tf import get_tf_activation
+from .configuration_electra import ElectraConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
