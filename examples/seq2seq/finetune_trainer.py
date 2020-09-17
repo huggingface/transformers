@@ -409,7 +409,9 @@ def main():
     if training_args.do_predict:
         logging.info("*** Test ***")
 
-        test_metrics = trainer.predict(test_dataset=test_dataset).metrics
+        test_output = trainer.predict(test_dataset=test_dataset)
+        test_metrics = test_output.metrics
+
         output_test_file = os.path.join(training_args.output_dir, "test_results.json")
 
         if trainer.is_world_process_zero():
@@ -419,6 +421,13 @@ def main():
 
             with open(output_test_file, "w") as f:
                 json.dump(test_metrics, f)
+
+            if training_args.predict_with_generate:
+                test_preds = tokenizer.batch_decode(test_output.predictions, skip_special_tokens=True)
+                test_preds = lmap(str.strip, test_preds)
+                output_test_pred_file = os.path.join(training_args.output_dir, "test_predictions.txt")
+                with open(output_test_pred_file, "w") as f:
+                    f.write("\n".join(test_preds))
 
     return eval_results
 
