@@ -464,7 +464,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
     padding_idx = 1
     tolerance = 1e-4
 
-    @unittest.skip("failing on CI - needs review")
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
         emb1 = SinusoidalPositionalEmbedding(embedding_dim=6, padding_idx=self.padding_idx, init_size=6).to(
@@ -476,7 +475,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
                 [9.0930e-01, 1.9999e-02, 2.0000e-04, -4.1615e-01, 9.9980e-01, 1.0000e00],
                 [1.4112e-01, 2.9995e-02, 3.0000e-04, -9.8999e-01, 9.9955e-01, 1.0000e00],
             ]
-        )
+        ).to(torch_device)
         self.assertTrue(
             torch.allclose(emb[0], desired_weights, atol=self.tolerance),
             msg=f"\nexp:\n{desired_weights}\ngot:\n{emb[0]}\n",
