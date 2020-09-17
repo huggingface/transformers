@@ -713,7 +713,7 @@ if is_tf_available():
     from .trainer_tf import TFTrainer
 
 
-if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available():
+if is_torch_available() and is_datasets_available() and is_faiss_available():
     from .configuration_rag import RagConfig
     from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
     from .retrieval_rag import RagRetriever
