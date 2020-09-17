@@ -309,8 +309,8 @@ def run_eval_tester(model):
         os.remove(Path(output_file_name))
 
 
-# test one model to quickly (no-@slow) to catch simple problems and do an
-# extensive testing of functionality with multiple models as @slow
+# test one model to quickly (no-@slow) catch simple problems and do an
+# extensive testing of functionality with multiple models as @slow separately
 def test_run_eval():
     run_eval_tester(T5_TINY)
 
