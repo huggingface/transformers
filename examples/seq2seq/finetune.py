@@ -102,11 +102,6 @@ class SummarizationModule(BaseTransformer):
         }
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
-
-        if self.hparams.sortish_sampler and self.hparams.gpus > 1:
-            raise AssertionError("Sortish Sampler does not work for multigpu")
-        if self.hparams.sortish_sampler and self.hparams.max_tokens_per_batch is not None:
-            raise AssertionError("max tokens per batch and sortish sampler are incompatible.")
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
