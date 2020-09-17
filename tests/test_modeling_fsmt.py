@@ -37,6 +37,7 @@ if is_torch_available():
         invert_mask,
         shift_tokens_right,
     )
+    from transformers.pipelines import TranslationPipeline
 
 
 @require_torch
@@ -358,6 +359,14 @@ def _long_tensor(tok_lst):
 TOLERANCE = 1e-4
 
 
+pairs = [
+    ["en-ru"],
+    ["ru-en"],
+    ["en-de"],
+    ["de-en"],
+]
+
+
 @require_torch
 class FSMTModelIntegrationTests(unittest.TestCase):
     tokenizers_cache = {}
@@ -391,7 +400,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
 
         src_text = "My friend computer will translate this for me"
         input_ids = tokenizer([src_text], return_tensors="pt")["input_ids"]
-        input_ids = _long_tensor(input_ids)
+        input_ids = _long_tensor(input_ids).to(torch_device)
         inputs_dict = prepare_fsmt_inputs_dict(model.config, input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
@@ -401,19 +410,10 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         # may have to adjust if switched to a different checkpoint
         expected_slice = torch.tensor(
             [[-1.5753, -1.5753, 2.8975], [-0.9540, -0.9540, 1.0299], [-3.3131, -3.3131, 0.5219]]
-        )
+        ).to(torch_device)
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @parameterized.expand(
-        [
-            ["en-ru"],
-            ["ru-en"],
-            ["en-de"],
-            ["de-en"],
-        ]
-    )
-    @slow
-    def test_translation(self, pair):
+    def translation_setup(self, pair):
         text = {
             "en": "Machine learning is great, isn't it?",
             "ru": "Машинное обучение - это здорово, не так ли?",
@@ -424,16 +424,31 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         print(f"Testing {src} -> {tgt}")
         mname = f"facebook/wmt19-{pair}"
 
-        src_sentence = text[src]
-        tgt_sentence = text[tgt]
+        src_text = text[src]
+        tgt_text = text[tgt]
 
         tokenizer = self.get_tokenizer(mname)
         model = self.get_model(mname)
+        return tokenizer, model, src_text, tgt_text
 
-        input_ids = tokenizer.encode(src_sentence, return_tensors="pt")
+    @slow
+    @parameterized.expand(pairs)
+    def test_translation_direct(self, pair):
+        tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
+
+        input_ids = tokenizer.encode(src_text, return_tensors="pt").to(torch_device)
         outputs = model.generate(input_ids)
         decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        assert decoded == tgt_sentence, f"\n\ngot: {decoded}\nexp: {tgt_sentence}\n"
+        assert decoded == tgt_text, f"\n\ngot: {decoded}\nexp: {tgt_text}\n"
+
+    @slow
+    @parameterized.expand(pairs)
+    def test_translation_pipeline(self, pair):
+        tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
+        device = 0 if torch_device == "cuda" else -1
+        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=device)
+        output = pipeline([src_text])
+        self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 
 
 @require_torch
