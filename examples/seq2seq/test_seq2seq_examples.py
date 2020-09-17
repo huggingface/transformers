@@ -374,7 +374,7 @@ def test_run_eval_search(model):
 
 
 @pytest.mark.parametrize(
-    ["model"],
+    "model",
     [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY],
 )
 def test_finetune(model):
@@ -548,7 +548,7 @@ def test_pack_dataset():
 
 
 @pytest.mark.parametrize(
-    ["tok_name"],
+    "tok_name",
     [
         MBART_TINY,
         MARIAN_TINY,
@@ -596,7 +596,7 @@ def test_seq2seq_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [BART_TINY, "bert-base-cased"])
+@pytest.mark.parametrize("tok", [BART_TINY, "bert-base-cased"])
 def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
