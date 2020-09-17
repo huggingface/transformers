@@ -359,28 +359,24 @@ class GenerationMixin:
             pad_token_id = eos_token_id
 
         # vocab size
-        # TODO(PVP) - refactor this
-        if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:
+        if hasattr(self.config, "vocab_size"):
             vocab_size = self.config.vocab_size
         elif (
             self.config.is_encoder_decoder
             and hasattr(self.config, "decoder")
             and hasattr(self.config.decoder, "vocab_size")
-            and self.config.decoder.vocab_size is not None
         ):
             vocab_size = self.config.decoder.vocab_size
-        elif (
-            self.config.is_encoder_decoder
-            and hasattr(self.config, "generator")
-            and hasattr(self.config.generator, "vocab_size")
-            and self.config.generator.vocab_size is not None
-        ):
-            vocab_size = self.config.generator.vocab_size
         else:
             raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size needs to be defined")
 
-        # retrieve encoder_outputs if necessary
-        encoder_outputs = model_kwargs.get("encoder_outputs", None)
+        # set effective batch size and effective batch multiplier according to do_sample
+        if do_sample:
+            effective_batch_size = batch_size * num_return_sequences
+            effective_batch_mult = num_return_sequences
+        else:
+            effective_batch_size = batch_size
+            effective_batch_mult = 1
 
         if self.config.is_encoder_decoder:
             if decoder_start_token_id is None:
@@ -393,60 +389,31 @@ class GenerationMixin:
                     and self.config.decoder.bos_token_id is not None
                 ):
                     decoder_start_token_id = self.config.decoder.bos_token_id
-                elif (
-                    hasattr(self.config, "generator")
-                    and hasattr(self.config.generator, "decoder_start_token_id")
-                    and self.config.decoder.decoder_start_token_id is not None
-                ):
-                    decoder_start_token_id = self.config.generator.decoder_start_token_id
                 else:
                     raise ValueError(
                         "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
                     )
 
-            if encoder_outputs is None:
-                assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-                assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
 
-                # get encoder and store encoder outputs
-                encoder = self.get_encoder()
-                encoder_outputs: ModelOutput = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
-            else:
-                # set batch_size correctly to inserted encoder_outputs
-                batch_size = encoder_outputs.last_hidden_state.shape[0]
-
-            assert (
-                batch_size == encoder_outputs.last_hidden_state.shape[0]
-            ), f"expected encoder_outputs.last_hidden_state to have 1st dimension bs={batch_size}, got {encoder_outputs.last_hidden_state.shape[0]} "
-
-            assert isinstance(
-                encoder_outputs, ModelOutput
-            ), f"`encoder_outputs` should be of type `ModelOutput`, but is of type `{type(encoder_outputs)}`."
-
-        # set effective batch size and effective batch multiplier according to do_sample
-        if do_sample:
-            effective_batch_size = batch_size * num_return_sequences
-            effective_batch_mult = num_return_sequences
-        else:
-            effective_batch_size = batch_size
-            effective_batch_mult = 1
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+            encoder_outputs: ModelOutput = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
-            if encoder_outputs is None:
-                input_ids = input_ids.unsqueeze(1).expand(
-                    batch_size, effective_batch_mult * num_beams, input_ids.shape[-1]
-                )
-
-                input_ids = input_ids.contiguous().view(
-                    effective_batch_size * num_beams, input_ids.shape[-1]
-                )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-
+            input_ids_len = input_ids.shape[-1]
+            input_ids = input_ids.unsqueeze(1).expand(batch_size, effective_batch_mult * num_beams, input_ids_len)
             attention_mask = attention_mask.unsqueeze(1).expand(
-                batch_size, effective_batch_mult * num_beams, attention_mask.shape[-1]
+                batch_size, effective_batch_mult * num_beams, input_ids_len
             )
+
+            input_ids = input_ids.contiguous().view(
+                effective_batch_size * num_beams, input_ids_len
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
             attention_mask = attention_mask.contiguous().view(
-                effective_batch_size * num_beams, attention_mask.shape[-1]
+                effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
@@ -458,6 +425,10 @@ class GenerationMixin:
                 device=next(self.parameters()).device,
             )
             cur_len = 1
+
+            assert (
+                batch_size == encoder_outputs.last_hidden_state.shape[0]
+            ), f"expected encoder_outputs.last_hidden_state to have 1st dimension bs={batch_size}, got {encoder_outputs.last_hidden_state.shape[0]} "
 
             # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
             expanded_batch_idxs = (
