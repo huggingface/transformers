@@ -399,7 +399,7 @@ class RagRetriever(object):
         Retrieves documents for specified ``question_hidden_states``.
 
         Args:
-            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`:
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`):
                 A batch of query vectors to retrieve with.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.

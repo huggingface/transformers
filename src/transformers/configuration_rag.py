@@ -41,7 +41,7 @@ RAG_CONFIG_DOC = r"""
             `:func:`~transformers.RagModel.contextualize``.
         n_docs (:obj:`int`, optional, defaults to ``5``):
             Number of retrieved docs.
-        max_combined_length (:int:`bool`, optional, defaults to ``300``):
+        max_combined_length (:obj:`int`, optional, defaults to ``300``):
             Max length of contextualized input returned by `:func:`~transformers.RagModel.contextualize``.
         retrieval_vector_size (:obj:`int`, optional, defaults to ``768``):
             Dimensionality of the document embeddings indexed by the ``retriever``.

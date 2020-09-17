@@ -91,7 +91,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         from all the processes in the main training process group, performs the retrieval and scatters back the results.
 
         Args:
-            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`:
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`):
                 A batch of query vectors to retrieve with.
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
