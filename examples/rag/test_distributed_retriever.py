@@ -22,7 +22,7 @@ from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FI
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
 
-from examples.rag.distributed_retriever import RagPyTorchDistributedRetriever
+from examples.rag.distributed_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
 
 
 @require_faiss
