@@ -6,10 +6,10 @@ import tempfile
 from unittest import TestCase
 from unittest.mock import patch
 
-import faiss
 import numpy as np
 from datasets import Dataset
 
+import faiss
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig

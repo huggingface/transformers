@@ -19,12 +19,13 @@ import pickle
 import time
 from typing import Iterable, List, Optional, Tuple
 
-import faiss
 import numpy as np
 import psutil
 import torch
 import torch.distributed as dist
 from datasets import load_dataset
+
+import faiss
 
 from .configuration_rag import RagConfig
 from .file_utils import cached_path, is_remote_url

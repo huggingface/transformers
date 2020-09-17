@@ -30,7 +30,6 @@ from transformers.file_utils import (
     is_psutil_available,
     is_torch_available,
 )
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
@@ -46,10 +45,10 @@ TOLERANCE = 1e-4
 
 
 if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available():
-    import faiss
     import torch
     from datasets import Dataset
 
+    import faiss
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -62,6 +61,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available() and
         RagSequenceForGeneration,
         RagTokenForGeneration,
     )
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
@@ -349,6 +349,8 @@ class RagTestMixin:
                 num_return_sequences=2,
                 decoder_start_token_id=config.generator.eos_token_id,
             )
+
+            self.assertIsNotNone(outputs)
 
     def check_model_without_retriever(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
