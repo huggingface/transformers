@@ -368,13 +368,13 @@ This feature can only be used:
 For example, 
 ```bash
 python save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
-./distil_marian_dynb.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
+./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
 ```
 splits `wmt_en_ro/train` into 11,197 uneven lengthed batches and can finish 1 epoch in 8 minutes on a v100.
 
 For comparison,
 ```bash
-./distil_marian_dynb.sh --sortish_sampler --train_batch_size 48
+./dynamic_bs_example.sh --sortish_sampler --train_batch_size 48
 ```
 uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
 
