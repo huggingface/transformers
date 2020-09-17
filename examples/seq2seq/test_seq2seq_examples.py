@@ -106,6 +106,9 @@ T5_TINY = "patrickvonplaten/t5-tiny-random"
 BART_TINY = "sshleifer/bart-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+BERT_BASE_CASED = "bert-base-cased"
+PEGASUS_XSUM = "google/pegasus-xsum"
+
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
@@ -554,7 +557,7 @@ def test_pack_dataset():
         MARIAN_TINY,
         T5_TINY,
         BART_TINY,
-        "google/pegasus-xsum",
+        PEGASUS_XSUM,
     ],
 )
 def test_seq2seq_dataset_truncation(tok_name):
@@ -596,7 +599,7 @@ def test_seq2seq_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize("tok", [BART_TINY, "bert-base-cased"])
+@pytest.mark.parametrize("tok", [BART_TINY, BERT_BASE_CASED])
 def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
