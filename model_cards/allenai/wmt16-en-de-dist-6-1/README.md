@@ -1,7 +1,13 @@
 
 ---
+<<<<<<< HEAD
 
 language: en, de
+=======
+language:
+- en
+- de
+>>>>>>> origin/master
 thumbnail:
 tags:
 - translation

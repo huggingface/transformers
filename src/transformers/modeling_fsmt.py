@@ -56,8 +56,12 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "FSMTConfig"
 _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
+<<<<<<< HEAD
 # See all FSMT models at https://huggingface.co/models?search=fsmt
 
+=======
+# See all FSMT models at https://huggingface.co/models?filter=fsmt
+>>>>>>> origin/master
 
 # Porting notes:
 # this one is modeled after BartModel*
