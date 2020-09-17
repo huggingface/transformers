@@ -25,13 +25,15 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel
+
+    from transformers import TransfoXLConfig, TransfoXLLMHeadModel, TransfoXLModel
     from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class TransfoXLModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 14

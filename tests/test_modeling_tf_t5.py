@@ -26,12 +26,14 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFT5Model, TFT5ForConditionalGeneration, T5Tokenizer
+
+    from transformers import T5Tokenizer, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -94,7 +96,7 @@ class TFT5ModelTester:
 
         result = model(input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.decoder_past_key_values
+        decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
         self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
@@ -180,7 +182,10 @@ class TFT5ModelTester:
 
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
+        attn_mask = tf.concat(
+            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
+            axis=1,
+        )
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]

@@ -15,4 +15,4 @@ python finetune.py \
     --warmup_steps 500 \
     --freeze_embeds \
     --model_name_or_path=facebook/mbart-large-cc25 \
-    $@
+    "$@"

@@ -10,18 +10,21 @@ from unittest.mock import patch
 import pytest
 import pytorch_lightning as pl
 import torch
-from pytest import param
 from torch.utils.data import DataLoader
 
 import lightning_base
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu
+from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers.hf_api import HfApi
+from transformers.modeling_bart import shift_tokens_right
+from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
 
+from .convert_pl_checkpoint_to_hf import convert_pl_to_hf
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import SummarizationModule, main
 from .pack_dataset import pack_data_dir
 from .run_eval import generate_summaries_or_translations, run_generate
-from .utils import Seq2SeqDataset, TranslationDataset, label_smoothed_nll_loss, lmap, load_json
+from .run_eval_search import run_search
+from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -29,7 +32,14 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
+    "supervise_forward": True,
+    "normalize_hidden": True,
     "label_smoothing": 0.2,
+    "eval_max_gen_length": None,
+    "eval_beams": 1,
+    "val_metric": "loss",
+    "save_top_k": 1,
+    "adafactor": True,
     "early_stopping_patience": 2,
     "logger_name": "default",
     "length_penalty": 0.5,
@@ -115,10 +125,34 @@ class TestSummarizationDistiller(unittest.TestCase):
         logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
         return cls
 
+    @slow
+    @require_torch_and_cuda
+    def test_hub_configs(self):
+        """I put require_torch_and_cuda cause I only want this to run with self-scheduled."""
+
+        model_list = HfApi().model_list()
+        org = "sshleifer"
+        model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
+        allowed_to_be_broken = ["sshleifer/blenderbot-3B", "sshleifer/blenderbot-90M"]
+        failures = []
+        for m in model_ids:
+            if m in allowed_to_be_broken:
+                continue
+            try:
+                AutoConfig.from_pretrained(m)
+            except Exception:
+                failures.append(m)
+        assert not failures, f"The following models could not be loaded through AutoConfig: {failures}"
+
     @require_multigpu
     def test_multigpu(self):
-        updates = dict(no_teacher=True, freeze_encoder=True, gpus=2, sortish_sampler=False,)
-        self._test_distiller_cli(updates)
+        updates = dict(
+            no_teacher=True,
+            freeze_encoder=True,
+            gpus=2,
+            sortish_sampler=True,
+        )
+        self._test_distiller_cli(updates, check_contents=False)
 
     def test_distill_no_teacher(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True)
@@ -145,6 +179,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
+        out_path_new = tempfile.mkdtemp()
+        convert_pl_to_hf(ckpts[0], transformer_ckpts[0].parent, out_path_new)
+        assert os.path.exists(os.path.join(out_path_new, "pytorch_model.bin"))
 
     def test_loss_fn(self):
         model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY, return_dict=True)
@@ -181,6 +218,7 @@ class TestSummarizationDistiller(unittest.TestCase):
             tgt_lang="ro_RO",
         )
         model = self._test_distiller_cli(updates, check_contents=False)
+        assert model.model.config.model_type == "mbart"
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
         self.assertEqual(1, len(ckpts))
@@ -228,9 +266,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         if not check_contents:
             return model
         contents = os.listdir(output_dir)
-        ckpt_name = "val_avg_rouge2=0.0000-step_count=2.ckpt"  # "val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
         contents = {os.path.basename(p) for p in contents}
-        self.assertIn(ckpt_name, contents)
+        ckpt_files = [p for p in contents if p.endswith("ckpt")]
+        assert len(ckpt_files) > 0
 
         self.assertIn("test_generations.txt", contents)
         self.assertIn("test_results.txt", contents)
@@ -246,22 +284,91 @@ class TestSummarizationDistiller(unittest.TestCase):
         return model
 
 
-@pytest.mark.parametrize(["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY)])
-def test_run_eval_bart(model):
+@pytest.mark.parametrize("model", [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY)])
+def test_run_eval(model):
     input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
     output_file_name = input_file_name.parent / "utest_output.txt"
     assert not output_file_name.exists()
     articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
     _dump_articles(input_file_name, articles)
-    testargs = ["run_eval.py", model, str(input_file_name), str(output_file_name)]  # TODO: test score_path
+    score_path = str(Path(tempfile.mkdtemp()) / "scores.json")
+    task = "translation_en_to_de" if model == T5_TINY else "summarization"
+    testargs = [
+        "run_eval.py",
+        model,
+        str(input_file_name),
+        str(output_file_name),
+        "--score_path",
+        score_path,
+        "--task",
+        task,
+        "--num_beams",
+        "2",
+        "--length_penalty",
+        "2.0",
+    ]
     with patch.object(sys, "argv", testargs):
         run_generate()
         assert Path(output_file_name).exists()
         os.remove(Path(output_file_name))
 
 
+@slow
+@pytest.mark.parametrize("model", [pytest.param(T5_TINY)])
+def test_run_eval_search(model):
+    input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
+    output_file_name = input_file_name.parent / "utest_output.txt"
+    assert not output_file_name.exists()
+
+    text = {
+        "en": ["Machine learning is great, isn't it?", "I like to eat bananas", "Tomorrow is another great day!"],
+        "de": [
+            "Maschinelles Lernen ist großartig, oder?",
+            "Ich esse gerne Bananen",
+            "Morgen ist wieder ein toller Tag!",
+        ],
+    }
+
+    tmp_dir = Path(tempfile.mkdtemp())
+    score_path = str(tmp_dir / "scores.json")
+    reference_path = str(tmp_dir / "val.target")
+    _dump_articles(input_file_name, text["en"])
+    _dump_articles(reference_path, text["de"])
+    task = "translation_en_to_de" if model == T5_TINY else "summarization"
+    testargs = [
+        "run_eval_search.py",
+        model,
+        str(input_file_name),
+        str(output_file_name),
+        "--score_path",
+        score_path,
+        "--reference_path",
+        reference_path,
+        "--task",
+        task,
+        "--search",
+        "num_beams=1:2 length_penalty=0.9:1.0",
+    ]
+    with patch.object(sys, "argv", testargs):
+        with CaptureStdout() as cs:
+            run_search()
+        expected_strings = [" num_beams | length_penalty", model, "Best score args"]
+        un_expected_strings = ["Info"]
+        if "translation" in task:
+            expected_strings.append("bleu")
+        else:
+            expected_strings.extend(["rouge1", "rouge2", "rougeL"])
+        for w in expected_strings:
+            assert w in cs.out
+        for w in un_expected_strings:
+            assert w not in cs.out
+        assert Path(output_file_name).exists()
+        os.remove(Path(output_file_name))
+
+
 @pytest.mark.parametrize(
-    ["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)],
+    ["model"],
+    [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)],
 )
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
@@ -329,7 +436,8 @@ def test_finetune_extra_model_args():
     output_dir = tempfile.mkdtemp(prefix="output_1_")
     args_d1 = args_d.copy()
     args_d1.update(
-        model_name_or_path=model, output_dir=output_dir,
+        model_name_or_path=model,
+        output_dir=output_dir,
     )
     extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
     for p in extra_model_params:
@@ -344,7 +452,8 @@ def test_finetune_extra_model_args():
     output_dir = tempfile.mkdtemp(prefix="output_2_")
     args_d2 = args_d.copy()
     args_d2.update(
-        model_name_or_path=model, output_dir=output_dir,
+        model_name_or_path=model,
+        output_dir=output_dir,
     )
     unsupported_param = "encoder_layerdrop"
     args_d2[unsupported_param] = 0.5
@@ -431,18 +540,27 @@ def test_pack_dataset():
     assert orig_paths == new_paths
 
 
-@pytest.mark.parametrize(["tok_name"], [pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)])
-def test_mbart_dataset_truncation(tok_name):
+@pytest.mark.parametrize(
+    ["tok_name"],
+    [
+        pytest.param(MBART_TINY),
+        pytest.param(MARIAN_TINY),
+        pytest.param(T5_TINY),
+        pytest.param(BART_TINY),
+        pytest.param("google/pegasus-xsum"),
+    ],
+)
+def test_seq2seq_dataset_truncation(tok_name):
     tokenizer = AutoTokenizer.from_pretrained(tok_name)
     tmp_dir = make_test_data_dir()
     max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
     max_src_len = 4
     max_tgt_len = 8
-    assert max_len_target > max_src_len  # Truncated
-    assert max_len_source > max_src_len
-    src_lang, tgt_lang = "ro_RO", "de_DE"  # NOT WHAT IT WAS TRAINED ON
-    train_dataset = TranslationDataset(
+    assert max_len_target > max_src_len  # Will be truncated
+    assert max_len_source > max_src_len  # Will be truncated
+    src_lang, tgt_lang = "ro_RO", "de_DE"  # ignored for all but mbart, but never causes error.
+    train_dataset = Seq2SeqDataset(
         tokenizer,
         data_dir=tmp_dir,
         type_path="train",
@@ -458,10 +576,11 @@ def test_mbart_dataset_truncation(tok_name):
         # show that articles were trimmed.
         assert batch["input_ids"].shape[1] == max_src_len
         # show that targets are the same len
-        assert batch["decoder_input_ids"].shape[1] == max_tgt_len
-        if tok_name == MARIAN_TINY:
+        assert batch["labels"].shape[1] == max_tgt_len
+        if tok_name != MBART_TINY:
             continue
         # check language codes in correct place
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], tokenizer.pad_token_id)
         assert batch["decoder_input_ids"][0, 0].item() == tokenizer.lang_code_to_id[tgt_lang]
         assert batch["decoder_input_ids"][0, -1].item() == tokenizer.eos_token_id
         assert batch["input_ids"][0, -2].item() == tokenizer.eos_token_id
@@ -470,15 +589,19 @@ def test_mbart_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), param(MARIAN_TINY)])
-def test_summarization_dataset_truncation(tok):
+@pytest.mark.parametrize(["tok"], [pytest.param(BART_TINY), pytest.param("bert-base-cased")])
+def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
     max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
     trunc_target = 4
-    train_dataset = Seq2SeqDataset(
-        tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
+    train_dataset = LegacySeq2SeqDataset(
+        tokenizer,
+        data_dir=tmp_dir,
+        type_path="train",
+        max_source_length=20,
+        max_target_length=trunc_target,
     )
     dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
     for batch in dataloader:
@@ -487,6 +610,6 @@ def test_summarization_dataset_truncation(tok):
         assert batch["input_ids"].shape[1] == max_len_source
         assert 20 >= batch["input_ids"].shape[1]  # trimmed significantly
         # show that targets were truncated
-        assert batch["decoder_input_ids"].shape[1] == trunc_target  # Truncated
+        assert batch["labels"].shape[1] == trunc_target  # Truncated
         assert max_len_target > trunc_target  # Truncated
         break  # No need to test every batch

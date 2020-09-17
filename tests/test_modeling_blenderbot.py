@@ -27,7 +27,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import BlenderbotConfig, BlenderbotTokenizer, BlenderbotForConditionalGeneration
+
+    from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotTokenizer
     from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 
@@ -174,7 +175,9 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
             dropout=0.1,
         )
         input_ids = torch.tensor(
-            [[49, 12, 38, 24, 13, 25, 10, 28, 37, 7, 44, 7, 2, 3]], dtype=torch.long, device=torch_device,
+            [[49, 12, 38, 24, 13, 25, 10, 28, 37, 7, 44, 7, 2, 3]],
+            dtype=torch.long,
+            device=torch_device,
         )
         model = BlenderbotForConditionalGeneration(config)
         model.eval()
@@ -340,7 +343,9 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             dropout=0.1,
         )
         input_ids = torch.tensor(
-            [[49, 12, 38, 24, 13, 25, 10, 28, 37, 7, 44, 7, 2, 3]], dtype=torch.long, device=torch_device,
+            [[49, 12, 38, 24, 13, 25, 10, 28, 37, 7, 44, 7, 2, 3]],
+            dtype=torch.long,
+            device=torch_device,
         )
         model = BlenderbotForConditionalGeneration(config)
         model.eval()

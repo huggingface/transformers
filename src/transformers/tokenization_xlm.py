@@ -16,7 +16,6 @@
 
 
 import json
-import logging
 import os
 import re
 import sys
@@ -26,9 +25,10 @@ from typing import List, Optional
 import sacremoses as sm
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -79,37 +79,37 @@ PRETRAINED_INIT_CONFIGURATION = {
     "xlm-mlm-en-2048": {"do_lowercase_and_remove_accent": True},
     "xlm-mlm-ende-1024": {
         "do_lowercase_and_remove_accent": True,
-        "id2lang": {"0": "de", "1": "en"},
+        "id2lang": {0: "de", 1: "en"},
         "lang2id": {"de": 0, "en": 1},
     },
     "xlm-mlm-enfr-1024": {
         "do_lowercase_and_remove_accent": True,
-        "id2lang": {"0": "en", "1": "fr"},
+        "id2lang": {0: "en", 1: "fr"},
         "lang2id": {"en": 0, "fr": 1},
     },
     "xlm-mlm-enro-1024": {
         "do_lowercase_and_remove_accent": True,
-        "id2lang": {"0": "en", "1": "ro"},
+        "id2lang": {0: "en", 1: "ro"},
         "lang2id": {"en": 0, "ro": 1},
     },
     "xlm-mlm-tlm-xnli15-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {
-            "0": "ar",
-            "1": "bg",
-            "2": "de",
-            "3": "el",
-            "4": "en",
-            "5": "es",
-            "6": "fr",
-            "7": "hi",
-            "8": "ru",
-            "9": "sw",
-            "10": "th",
-            "11": "tr",
-            "12": "ur",
-            "13": "vi",
-            "14": "zh",
+            0: "ar",
+            1: "bg",
+            2: "de",
+            3: "el",
+            4: "en",
+            5: "es",
+            6: "fr",
+            7: "hi",
+            8: "ru",
+            9: "sw",
+            10: "th",
+            11: "tr",
+            12: "ur",
+            13: "vi",
+            14: "zh",
         },
         "lang2id": {
             "ar": 0,
@@ -132,21 +132,21 @@ PRETRAINED_INIT_CONFIGURATION = {
     "xlm-mlm-xnli15-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {
-            "0": "ar",
-            "1": "bg",
-            "2": "de",
-            "3": "el",
-            "4": "en",
-            "5": "es",
-            "6": "fr",
-            "7": "hi",
-            "8": "ru",
-            "9": "sw",
-            "10": "th",
-            "11": "tr",
-            "12": "ur",
-            "13": "vi",
-            "14": "zh",
+            0: "ar",
+            1: "bg",
+            2: "de",
+            3: "el",
+            4: "en",
+            5: "es",
+            6: "fr",
+            7: "hi",
+            8: "ru",
+            9: "sw",
+            10: "th",
+            11: "tr",
+            12: "ur",
+            13: "vi",
+            14: "zh",
         },
         "lang2id": {
             "ar": 0,
@@ -168,34 +168,34 @@ PRETRAINED_INIT_CONFIGURATION = {
     },
     "xlm-clm-enfr-1024": {
         "do_lowercase_and_remove_accent": True,
-        "id2lang": {"0": "en", "1": "fr"},
+        "id2lang": {0: "en", 1: "fr"},
         "lang2id": {"en": 0, "fr": 1},
     },
     "xlm-clm-ende-1024": {
         "do_lowercase_and_remove_accent": True,
-        "id2lang": {"0": "de", "1": "en"},
+        "id2lang": {0: "de", 1: "en"},
         "lang2id": {"de": 0, "en": 1},
     },
     "xlm-mlm-17-1280": {
         "do_lowercase_and_remove_accent": False,
         "id2lang": {
-            "0": "ar",
-            "1": "de",
-            "2": "en",
-            "3": "es",
-            "4": "fr",
-            "5": "hi",
-            "6": "it",
-            "7": "ja",
-            "8": "ko",
-            "9": "nl",
-            "10": "pl",
-            "11": "pt",
-            "12": "ru",
-            "13": "sv",
-            "14": "tr",
-            "15": "vi",
-            "16": "zh",
+            0: "ar",
+            1: "de",
+            2: "en",
+            3: "es",
+            4: "fr",
+            5: "hi",
+            6: "it",
+            7: "ja",
+            8: "ko",
+            9: "nl",
+            10: "pl",
+            11: "pt",
+            12: "ru",
+            13: "sv",
+            14: "tr",
+            15: "vi",
+            16: "zh",
         },
         "lang2id": {
             "ar": 0,
@@ -220,106 +220,106 @@ PRETRAINED_INIT_CONFIGURATION = {
     "xlm-mlm-100-1280": {
         "do_lowercase_and_remove_accent": False,
         "id2lang": {
-            "0": "af",
-            "1": "als",
-            "2": "am",
-            "3": "an",
-            "4": "ang",
-            "5": "ar",
-            "6": "arz",
-            "7": "ast",
-            "8": "az",
-            "9": "bar",
-            "10": "be",
-            "11": "bg",
-            "12": "bn",
-            "13": "br",
-            "14": "bs",
-            "15": "ca",
-            "16": "ceb",
-            "17": "ckb",
-            "18": "cs",
-            "19": "cy",
-            "20": "da",
-            "21": "de",
-            "22": "el",
-            "23": "en",
-            "24": "eo",
-            "25": "es",
-            "26": "et",
-            "27": "eu",
-            "28": "fa",
-            "29": "fi",
-            "30": "fr",
-            "31": "fy",
-            "32": "ga",
-            "33": "gan",
-            "34": "gl",
-            "35": "gu",
-            "36": "he",
-            "37": "hi",
-            "38": "hr",
-            "39": "hu",
-            "40": "hy",
-            "41": "ia",
-            "42": "id",
-            "43": "is",
-            "44": "it",
-            "45": "ja",
-            "46": "jv",
-            "47": "ka",
-            "48": "kk",
-            "49": "kn",
-            "50": "ko",
-            "51": "ku",
-            "52": "la",
-            "53": "lb",
-            "54": "lt",
-            "55": "lv",
-            "56": "mk",
-            "57": "ml",
-            "58": "mn",
-            "59": "mr",
-            "60": "ms",
-            "61": "my",
-            "62": "nds",
-            "63": "ne",
-            "64": "nl",
-            "65": "nn",
-            "66": "no",
-            "67": "oc",
-            "68": "pl",
-            "69": "pt",
-            "70": "ro",
-            "71": "ru",
-            "72": "scn",
-            "73": "sco",
-            "74": "sh",
-            "75": "si",
-            "76": "simple",
-            "77": "sk",
-            "78": "sl",
-            "79": "sq",
-            "80": "sr",
-            "81": "sv",
-            "82": "sw",
-            "83": "ta",
-            "84": "te",
-            "85": "th",
-            "86": "tl",
-            "87": "tr",
-            "88": "tt",
-            "89": "uk",
-            "90": "ur",
-            "91": "uz",
-            "92": "vi",
-            "93": "war",
-            "94": "wuu",
-            "95": "yi",
-            "96": "zh",
-            "97": "zh_classical",
-            "98": "zh_min_nan",
-            "99": "zh_yue",
+            0: "af",
+            1: "als",
+            2: "am",
+            3: "an",
+            4: "ang",
+            5: "ar",
+            6: "arz",
+            7: "ast",
+            8: "az",
+            9: "bar",
+            10: "be",
+            11: "bg",
+            12: "bn",
+            13: "br",
+            14: "bs",
+            15: "ca",
+            16: "ceb",
+            17: "ckb",
+            18: "cs",
+            19: "cy",
+            20: "da",
+            21: "de",
+            22: "el",
+            23: "en",
+            24: "eo",
+            25: "es",
+            26: "et",
+            27: "eu",
+            28: "fa",
+            29: "fi",
+            30: "fr",
+            31: "fy",
+            32: "ga",
+            33: "gan",
+            34: "gl",
+            35: "gu",
+            36: "he",
+            37: "hi",
+            38: "hr",
+            39: "hu",
+            40: "hy",
+            41: "ia",
+            42: "id",
+            43: "is",
+            44: "it",
+            45: "ja",
+            46: "jv",
+            47: "ka",
+            48: "kk",
+            49: "kn",
+            50: "ko",
+            51: "ku",
+            52: "la",
+            53: "lb",
+            54: "lt",
+            55: "lv",
+            56: "mk",
+            57: "ml",
+            58: "mn",
+            59: "mr",
+            60: "ms",
+            61: "my",
+            62: "nds",
+            63: "ne",
+            64: "nl",
+            65: "nn",
+            66: "no",
+            67: "oc",
+            68: "pl",
+            69: "pt",
+            70: "ro",
+            71: "ru",
+            72: "scn",
+            73: "sco",
+            74: "sh",
+            75: "si",
+            76: "simple",
+            77: "sk",
+            78: "sl",
+            79: "sq",
+            80: "sr",
+            81: "sv",
+            82: "sw",
+            83: "ta",
+            84: "te",
+            85: "th",
+            86: "tl",
+            87: "tr",
+            88: "tt",
+            89: "uk",
+            90: "ur",
+            91: "uz",
+            92: "vi",
+            93: "war",
+            94: "wuu",
+            95: "yi",
+            96: "zh",
+            97: "zh_classical",
+            98: "zh_min_nan",
+            99: "zh_yue",
         },
         "lang2id": {
             "af": 0,
@@ -578,9 +578,9 @@ class XLMTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
             List of additional special tokens.
-        lang2id (:obj:`Dict[str, int]`, `optional`, defaults to :obj:`None`):
+        lang2id (:obj:`Dict[str, int]`, `optional`):
             Dictionary mapping languages string identifiers to their IDs.
-        id2lang (:obj:`Dict[int, str`, `optional`, defaults to :obj:`None`):
+        id2lang (:obj:`Dict[int, str`, `optional`):
             Dictionary mapping language IDs to their string identifiers.
         do_lowercase_and_remove_accent (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to lowercase and remove accents when tokenizing.
@@ -863,7 +863,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -887,7 +887,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Set to True if the token list is already formatted with special tokens for the model
@@ -902,7 +902,12 @@ class XLMTokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formated with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0,))
+            return list(
+                map(
+                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
+                    token_ids_0,
+                )
+            )
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
@@ -925,7 +930,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:

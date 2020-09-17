@@ -8,10 +8,7 @@ from transformers.testing_utils import require_torch, torch_device
 
 
 if is_torch_available():
-    from transformers import (
-        PyTorchBenchmarkArguments,
-        PyTorchBenchmark,
-    )
+    from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments
 
 
 @require_torch

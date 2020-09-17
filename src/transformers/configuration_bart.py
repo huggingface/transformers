@@ -14,14 +14,12 @@
 # limitations under the License.
 """ BART configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
@@ -67,17 +65,17 @@ BART_CONFIG_ARGS_DOC = r"""
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        add_bias_logits (:obj:`int`, optional, defaults to False):
+        add_bias_logits (:obj:`bool`, optional, defaults to :obj:`False`):
             True for marian only.
-        normalize_before (:obj:`bool`, optional, defaults to False):
+        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
             Call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
-        normalize_embedding (:obj:`bool`, optional, defaults to True):
+        normalize_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
             Call layernorm after embeddings. Only True for Bart.
-        static_position_embeddings (:obj:`bool`, optional, defaults to False):
+        static_position_embeddings (:obj:`bool`, optional, defaults to :obj:`False`):
             Don't learn positional embeddings, use sinusoidal. True for marian, pegasus.
-        add_final_layer_norm (:obj:`bool`, optional, defaults to False):
+        add_final_layer_norm (:obj:`bool`, optional, defaults to :obj:`False`):
             Why not add another layernorm?
-        scale_embedding (:obj:`bool`, optional, defaults to False):
+        scale_embedding (:obj:`bool`, optional, defaults to :obj:`False`):
             Scale embeddings by diving by sqrt(d_model).
         eos_token_id (:obj:`int`, optional, defaults to 2)
             End of stream token id.
@@ -91,10 +89,12 @@ BART_CONFIG_ARGS_DOC = r"""
             Google "layerdrop arxiv", as its not explainable in one line.
         extra_pos_embeddings: (:obj:`int`, optional, defaults to 2):
             How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
-        num_labels: (:obj:`int`, optional, defaults to 2):
+        num_labels: (:obj:`int`, optional, defaults to 3):
             for SequenceClassification
-        is_encoder_decoder (:obj:`int`, optional, defaults to True):
-            True
+        is_encoder_decoder (:obj:`bool`, optional, defaults to :obj:`True`):
+            Whether this is an encoder/decoder model
+        force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
 
 """
 
@@ -102,7 +102,7 @@ BART_CONFIG_ARGS_DOC = r"""
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
     r"""
-        Configuration class for Bart. Parameters are renamed from the fairseq implementation
+    Configuration class for Bart. Parameters are renamed from the fairseq implementation
     """
     model_type = "bart"
 
@@ -138,17 +138,18 @@ class BartConfig(PretrainedConfig):
         static_position_embeddings=False,
         add_bias_logits=False,
         variant="bart",
+        force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
         r"""
-            :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
+        :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
 
-            Examples::
+        Examples::
 
-                >>> from transformers import BartConfig, BartModel
+            >>> from transformers import BartConfig, BartModel
 
-                >>> config = BartConfig.from_pretrained('facebook/bart-large')
-                >>> model = BartModel(config)
+            >>> config = BartConfig.from_pretrained('facebook/bart-large')
+            >>> model = BartModel(config)
 
         """
         if "hidden_size" in common_kwargs:
@@ -197,6 +198,8 @@ class BartConfig(PretrainedConfig):
         # pos embedding offset
         self.extra_pos_embeddings = self.pad_token_id + 1
 
+        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -212,12 +215,3 @@ class BartConfig(PretrainedConfig):
         if self.variant == "prelayernorm" or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
-
-
-class MBartConfig(BartConfig):
-    model_type = "mbart"
-
-    def __init__(self, variant="prelayernorm", **kwargs):
-        super().__init__(variant=variant, **kwargs)
-
-    """See real config values at https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json."""

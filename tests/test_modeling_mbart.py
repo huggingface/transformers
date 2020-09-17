@@ -9,12 +9,13 @@ from .test_modeling_bart import TOLERANCE, _long_tensor, assert_tensors_close
 
 if is_torch_available():
     import torch
+
     from transformers import (
         AutoModelForSeq2SeqLM,
+        AutoTokenizer,
+        BatchEncoding,
         MBartConfig,
         MBartForConditionalGeneration,
-        BatchEncoding,
-        AutoTokenizer,
     )
 
 
