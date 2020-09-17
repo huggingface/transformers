@@ -68,8 +68,11 @@ class SummarizationModule(BaseTransformer):
     def __init__(self, hparams, **kwargs):
         if hparams.sortish_sampler and hparams.gpus > 1:
             hparams.replace_sampler_ddp = False
-        elif hparams.max_tokens_per_batch is not None and hparams.gpus > 1:
-            raise NotImplementedError("Dynamic Batch size does not work for multi-gpu training")
+        elif hparams.max_tokens_per_batch is not None:
+            if hparams.gpus > 1:
+                raise NotImplementedError("Dynamic Batch size does not work for multi-gpu training")
+            if hparams.sortish_sampler:
+                raise ValueError("--sortish_sampler and --max_tokens_per_batch may not be used simultaneously")
 
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
