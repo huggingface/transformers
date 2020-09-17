@@ -10,9 +10,9 @@ from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
 
 from .pack_dataset import pack_data_dir
+from .save_len_file import save_len_file
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from .utils import DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
-from .save_len_file import save_len_file
 
 
 @pytest.mark.parametrize(
@@ -113,14 +113,13 @@ def test_dynamic_batch_size():
         data_dir = "examples/seq2seq/wmt_en_ro"
         max_len = 128
         max_tokens = max_len * 2 * 64
-        assert Path(data_dir).joinpath('train.len').exists()
+        assert Path(data_dir).joinpath("train.len").exists()
 
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         max_len = 64
         max_tokens = 128
         save_len_file(MARIAN_TINY, data_dir)
-
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
@@ -174,7 +173,7 @@ def _get_dataset(n_obs=1000):
     if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
         max_len = 128
-        max_tokens = max_len * 2* 64
+        max_tokens = max_len * 2 * 64
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         max_len = 128
