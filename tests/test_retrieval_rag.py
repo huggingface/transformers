@@ -23,6 +23,7 @@ from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FI
 
 @require_faiss
 @require_datasets
+@require_torch
 class RagRetrieverTest(TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -183,7 +184,6 @@ class RagRetrieverTest(TestCase):
         self.assertEqual(doc_dicts[1]["text"][0], "foo")  # max inner product is reached with first doc
         self.assertListEqual(list(doc_ids), [1, 0])
 
-    @require_torch
     def test_hf_index_retriever_call(self):
         import torch
 
