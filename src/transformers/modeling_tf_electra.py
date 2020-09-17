@@ -3,9 +3,8 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from transformers import ElectraConfig
-
 from .activations_tf import get_tf_activation
+from .configuration_electra import ElectraConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -501,14 +500,14 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
 
         Examples::
 
-            import tensorflow as tf
-            from transformers import ElectraTokenizer, TFElectraForPreTraining
+            >>> import tensorflow as tf
+            >>> from transformers import ElectraTokenizer, TFElectraForPreTraining
 
-            tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-            model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
-            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-            outputs = model(input_ids)
-            scores = outputs[0]
+            >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+            >>> model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+            >>> outputs = model(input_ids)
+            >>> scores = outputs[0]
         """
         return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
 
