@@ -309,7 +309,6 @@ def run_eval_tester(model):
         os.remove(Path(output_file_name))
 
 
-
 # test one model to quickly (no-@slow) to catch simple problems and do an
 # extensive testing of functionality with multiple models as @slow
 def test_run_eval():
@@ -318,14 +317,14 @@ def test_run_eval():
 
 # any extra models should go into the list here - can be slow
 @slow
-@pytest.mark.parametrize("model", [pytest.param(BART_TINY), pytest.param(MBART_TINY)])
+@pytest.mark.parametrize("model", [BART_TINY, MBART_TINY])
 def test_run_eval_slow(model):
     run_eval_tester(model)
 
 
 # testing with 2 models to validate: 1. translation (t5) 2. summarization (mbart)
 @slow
-@pytest.mark.parametrize("model", [pytest.param(T5_TINY), pytest.param(MBART_TINY)])
+@pytest.mark.parametrize("model", [T5_TINY, MBART_TINY])
 def test_run_eval_search(model):
     input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
     output_file_name = input_file_name.parent / "utest_output.txt"
@@ -375,7 +374,7 @@ def test_run_eval_search(model):
 
 
 @slow
-@pytest.mark.parametrize("model", [pytest.param(T5_TINY)])
+@pytest.mark.parametrize("model", [(T5_TINY)])
 def test_run_eval_search(model):
     input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
     output_file_name = input_file_name.parent / "utest_output.txt"
@@ -429,7 +428,7 @@ def test_run_eval_search(model):
 
 @pytest.mark.parametrize(
     ["model"],
-    [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)],
+    [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY],
 )
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
@@ -604,11 +603,11 @@ def test_pack_dataset():
 @pytest.mark.parametrize(
     ["tok_name"],
     [
-        pytest.param(MBART_TINY),
-        pytest.param(MARIAN_TINY),
-        pytest.param(T5_TINY),
-        pytest.param(BART_TINY),
-        pytest.param("google/pegasus-xsum"),
+        MBART_TINY,
+        MARIAN_TINY,
+        T5_TINY,
+        BART_TINY,
+        "google/pegasus-xsum",
     ],
 )
 def test_seq2seq_dataset_truncation(tok_name):
@@ -650,7 +649,7 @@ def test_seq2seq_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [pytest.param(BART_TINY), pytest.param("bert-base-cased")])
+@pytest.mark.parametrize(["tok"], [BART_TINY, "bert-base-cased"])
 def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
