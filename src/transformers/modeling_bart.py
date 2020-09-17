@@ -1026,7 +1026,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
                 >>> # Mask filling only works for bart-large
                 >>> from transformers import BartTokenizer, BartForConditionalGeneration
                 >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-                >>>TXT = "My friends are <mask> but they eat too many carbs."
+                >>> TXT = "My friends are <mask> but they eat too many carbs."
 
                 >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
                 >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
