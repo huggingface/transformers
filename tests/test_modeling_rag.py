@@ -681,6 +681,82 @@ class RagModelIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUT_TEXT = """. The song peaked at"""
         self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)
 
+    @slow
+    def test_rag_token_generate_beam(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_token = self.token_model
+        rag_token.set_retriever(rag_retriever)
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
+
+        input_ids = input_ids.to(torch_device)
+
+        output_ids = rag_token.generate(
+            input_ids,
+            decoder_start_token_id=rag_token.generator.config.decoder_start_token_id,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+        # sequence generate test
+        output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_TEXT_1 = "The songwriting sessions for ABBA's first album, \""
+        EXPECTED_OUTPUT_TEXT_2 = """The songwriting sessions for ABBA's first album were recorded"""
+
+        self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
+        self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
+
+    @slow
+    def test_rag_sequence_generate_beam(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_token = self.sequence_model
+        rag_token.set_retriever(rag_retriever)
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="pt"
+        ).input_ids
+
+        input_ids = input_ids.to(torch_device)
+
+        output_ids = rag_token.generate(
+            input_ids,
+            decoder_start_token_id=rag_token.generator.config.decoder_start_token_id,
+            num_doc_beams=2,
+            num_doc_return_sequences=2,
+        )
+        # sequence generate test
+        output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_TEXT_1 = """ ABBA / small label like Playboy Records did not have the distribution resources to meet the demand for the single from retailers and radio programmers. The foursome decided to record their first album together in late 1972, and sessions began on 26 September 1972. The women shared lead vocals on "Nina, Pretty Ballerina" that day."""
+        EXPECTED_OUTPUT_TEXT_2 = """ ABBA / small label like Playboy Records did not have the distribution resources to meet the demand for the single from retailers and radio programmers. The foursome decided to record their first album together in late 1972, and sessions began on 26 September 1972. The women shared lead vocals on "Nina, Pretty Ballerina" (a top ten hit in Austria)"""
+
+        self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
+        self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
+
 
 @require_torch
 @require_retrieval

@@ -579,15 +579,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self,
         input_ids,
         context_input_ids=None,
-        deduplicate=None,  # defaults to True
+        do_deduplication=None,  # defaults to True
         num_doc_return_sequences=None,  # defaults to 1
         num_doc_beams=None,  # defaults to 1
-        generator_attention_mask=None,
         **kwargs
         # TODO (Patrick): set those values to `None` and set the config values accordingly
     ):
 
-        deduplicate = deduplicate if deduplicate is not None else self.config.deduplicate
+        do_deduplication = do_deduplication if do_deduplication is not None else self.config.do_deduplication
         num_doc_return_sequences = (
             num_doc_return_sequences if num_doc_return_sequences is not None else self.config.num_doc_return_sequences
         )
@@ -602,8 +601,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
             retriever (:class:`~transformers.RagRetriever`):
                 A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
-            deduplicate (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Controls whether we want to deduplicatelicate the generations from different context documents for a given input.
+            do_deduplication (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Controls whether we want to do_deduplicationlicate the generations from different context documents for a given input.
                 Has to be set to :obj:`False` if used while training with distributed backend.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this is not the value
@@ -653,8 +652,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 generator_input_ids,
                 **kwargs,
             )  # n_docs * n_beam, tgt_len
-            if deduplicate:
-                # deduplicate, max_output_len
+            if do_deduplication:
+                # do_deduplication, max_output_len
                 output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
 
             # then, run model forwards to get nll scores:
@@ -911,7 +910,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
-        retrieved_doc_embeds=None,
+        doc_scores=None,
         max_length=None,
         min_length=None,
         early_stopping=None,
@@ -975,11 +974,13 @@ class RagTokenForGeneration(RagPreTrainedModel):
             context_input_ids = context_input_ids.to(input_ids)
             context_attention_mask = context_attention_mask.to(input_ids)
 
+            # compute doc_scores
+            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
+                1
+            )
+
         encoder = self.rag.generator.get_encoder()
         encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask, return_dict=True)
-
-        # compute doc_scores
-        doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1)
 
         decoder_input_ids = torch.full(
             (batch_size * num_beams, 1),
@@ -987,9 +988,24 @@ class RagTokenForGeneration(RagPreTrainedModel):
             dtype=torch.long,
             device=next(self.parameters()).device,
         )
-        context_attention_mask = context_attention_mask.repeat_interleave(num_beams, dim=0)
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(num_beams, dim=0)
-        doc_scores = doc_scores.repeat_interleave(num_beams, dim=0)
+        last_hidden_state = encoder_outputs["last_hidden_state"]
+
+        context_attention_mask = context_attention_mask.repeat_interleave(
+            num_beams, dim=0
+        )  # TODO(Patrick, Aleksandra) - I think this is false and should not be interleaved, but concatenated. To discuss with Aleksandra.
+        #        context_attention_mask = context_attention_mask.unsqueeze(0).expand((num_beams,) + context_attention_mask.shape).reshape((-1,) + context_attention_mask.shape[1:])
+
+        last_hidden_state = (
+            last_hidden_state.unsqueeze(0)
+            .expand((num_beams,) + last_hidden_state.shape)
+            .reshape((-1,) + last_hidden_state.shape[1:])
+        )
+
+        encoder_outputs["last_hidden_state"] = last_hidden_state
+        doc_scores = doc_scores.repeat_interleave(
+            num_beams, dim=0
+        )  # TODO(Patrick, Aleksandra) - I think this is false and should NOT be interleaved, but concatenated. This would make a difference for `batch_size > 1. To discuss with Aleksandra.
+        #        doc_scores = doc_scores.unsqueeze(0).expand((num_beams,) + doc_scores.shape).reshape((-1,) + doc_scores.shape[1:])
 
         # define start_len & additional parameters
         cur_len = 1
