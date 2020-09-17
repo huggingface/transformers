@@ -379,14 +379,6 @@ class GenerationMixin:
         else:
             raise ValueError("either self.config.vocab_size or self.config.decoder.vocab_size needs to be defined")
 
-        # set effective batch size and effective batch multiplier according to do_sample
-        if do_sample:
-            effective_batch_size = batch_size * num_return_sequences
-            effective_batch_mult = num_return_sequences
-        else:
-            effective_batch_size = batch_size
-            effective_batch_mult = 1
-
         # retrieve encoder_outputs if necessary
         encoder_outputs = model_kwargs.get("encoder_outputs", None)
 
@@ -430,6 +422,14 @@ class GenerationMixin:
             assert isinstance(
                 encoder_outputs, ModelOutput
             ), f"`encoder_outputs` should be of type `ModelOutput`, but is of type `{type(encoder_outputs)}`."
+
+        # set effective batch size and effective batch multiplier according to do_sample
+        if do_sample:
+            effective_batch_size = batch_size * num_return_sequences
+            effective_batch_mult = num_return_sequences
+        else:
+            effective_batch_size = batch_size
+            effective_batch_mult = 1
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:

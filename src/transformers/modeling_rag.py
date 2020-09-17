@@ -22,7 +22,7 @@ import torch
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
-from .modeling_outputs import BaseModelOutput, ModelOutput
+from .modeling_outputs import ModelOutput
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
 from .utils import logging
@@ -397,15 +397,17 @@ class RagModel(RagPreTrainedModel):
                     doc_scores is not None
                 ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
 
+        all_doc_batch_size = context_input_ids.shape[0] if encoder_outputs is None else encoder_outputs.last_hidden_state.shape[0]
+
         assert (
             doc_scores is not None
-        ), f"Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
         # Decoder input without context documents
-        if decoder_input_ids is not None:
+        if decoder_input_ids is not None and decoder_input_ids.shape[0] < all_doc_batch_size:
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.config.n_docs, dim=0)
 
-        if decoder_attention_mask is not None:
+        if decoder_attention_mask is not None and decoder_input_ids.shape[0] < all_doc_batch_size:
             decoder_attention_mask = decoder_attention_mask.repeat_interleave(self.config.n_docs, dim=0)
 
         gen_outputs = self.generator(
@@ -766,21 +768,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         return self.rag.generator.adjust_logits_during_generation(logits, cur_len, max_length)
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, doc_scores, **kwargs
     ):
-        last_hidden_state = encoder_outputs["last_hidden_state"]
-        doc_scores = kwargs["doc_scores"]
-
-        beam_size = decoder_input_ids.shape[0] // doc_scores.shape[0]
-        doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
-        attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
-        last_hidden_state = last_hidden_state.view(-1, *last_hidden_state.shape[2:])
-
-        encoder_outputs = BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-        )
-
         return {
             "input_ids": None,
             "encoder_outputs": encoder_outputs,
@@ -925,8 +914,51 @@ class RagTokenForGeneration(RagPreTrainedModel):
         context_input_ids=None,
         context_attention_mask=None,
         retrieved_doc_embeds=None,
+        max_length=None,
+        min_length=None,
+        early_stopping=None,
+        use_cache=None,
+        num_beams=None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_id=None,
+        length_penalty=None,
+        no_repeat_ngram_size=None,
+        bad_words_ids=None,
+        num_return_sequences=None,
+        decoder_start_token_id=None,
         **kwargs
     ):
+
+        # set default parameters
+        max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
+        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.generator.bos_token_id
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.generator.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.generator.eos_token_id
+        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+        no_repeat_ngram_size = (
+            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
+        )
+        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.generator.decoder_start_token_id
+        )
+
+        # not needed
+        do_sample = False
+        temperature = self.config.temperature
+        top_k = self.config.top_k
+        top_p = self.config.top_p
+        repetition_penalty = self.config.repetition_penalty
+
+        batch_size = input_ids.shape[0]
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids)[0]
@@ -954,20 +986,66 @@ class RagTokenForGeneration(RagPreTrainedModel):
         # compute doc_scores
         doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1)
 
-        # needed to satisfy assertion that encoder_outputs.last_hidden_state.shape[0] == batch_size in generation_utils
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = last_hidden_state.view(-1, self.rag.config.n_docs, *last_hidden_state.shape[1:])
-
-        encoder_outputs = BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            #            attention_mask=context_attention_mask,
-            #            doc_scores=doc_scores,
+        decoder_input_ids = torch.full(
+            (batch_size * num_beams, 1),
+            decoder_start_token_id,
+            dtype=torch.long,
+            device=next(self.parameters()).device,
         )
+        context_attention_mask = context_attention_mask.repeat_interleave(num_beams, dim=0)
+        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(num_beams, dim=0)
+        doc_scores = doc_scores.repeat_interleave(num_beams, dim=0)
 
-        kwargs["encoder_outputs"] = encoder_outputs
-        kwargs["bos_token_id"] = self.generator.config.decoder_start_token_id
-        return super().generate(**kwargs, attention_mask=context_attention_mask, doc_scores=doc_scores)
+        # define start_len & additional parameters
+        cur_len = 1
+        vocab_size = self.config.generator.vocab_size
+        kwargs["doc_scores"] = doc_scores
+
+        if num_beams > 1:
+            return self._generate_beam_search(
+                decoder_input_ids,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                early_stopping=early_stopping,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                batch_size=batch_size,
+                num_return_sequences=num_return_sequences,
+                length_penalty=length_penalty,
+                num_beams=num_beams,
+                vocab_size=vocab_size,
+                attention_mask=context_attention_mask,
+                use_cache=use_cache,
+                model_kwargs=kwargs,
+            )
+        else:
+            return self._generate_no_beam_search(
+                decoder_input_ids,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                batch_size=batch_size,
+                attention_mask=context_attention_mask,
+                use_cache=use_cache,
+                model_kwargs=kwargs,
+            )
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()
