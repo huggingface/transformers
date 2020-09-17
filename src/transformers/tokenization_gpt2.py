@@ -187,6 +187,11 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
