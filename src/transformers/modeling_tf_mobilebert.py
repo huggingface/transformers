@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 import tensorflow as tf
 
 from . import MobileBertConfig
+from .activations_tf import get_tf_activation
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -30,7 +31,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import TFBertIntermediate, gelu, gelu_new, swish
+from .modeling_tf_bert import TFBertIntermediate
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -67,10 +68,6 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def mish(x):
-    return x * tf.tanh(tf.math.softplus(x))
-
-
 class TFLayerNorm(tf.keras.layers.LayerNormalization):
     def __init__(self, feat_size, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -89,12 +86,6 @@ class TFNoNorm(tf.keras.layers.Layer):
         return inputs * self.weight + self.bias
 
 
-ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-    "gelu_new": tf.keras.layers.Activation(gelu_new),
-}
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
@@ -621,7 +612,7 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
+            self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm")

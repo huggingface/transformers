@@ -12,7 +12,7 @@ import itertools
 
 from .pack_dataset import pack_data_dir
 from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
-from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, DistributedSortishSampler, DistributedDynamicBatchSizeSampler
+from .utils import LegacySeq2SeqDataset, Seq2SeqDataset, DistributedSortishSampler
 import os
 
 @pytest.mark.parametrize(
@@ -118,8 +118,8 @@ def test_dynamic_batch_size():
         max_tokens = max_len * 2 * 64
     else:
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
-        max_tokens = 320
         max_len = 64
+        max_tokens = 320
 
     tokenizer = AutoTokenizer.from_pretrained(MARIAN_TINY)
     ds = Seq2SeqDataset(
@@ -134,20 +134,14 @@ def test_dynamic_batch_size():
     logs = defaultdict(list)
     mult = 64
     batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
-    from durbango import pickle_save
-
-    pickle_save(batch_sampler, "batches/dynamic_sampler.pkl")
     batch_sizes = [len(x) for x in batch_sampler]
-    assert len(set(batch_sizes)) > 1
+    assert len(set(batch_sizes)) > 1  # it's not dynamic batch size if every batch is the same length
     data_loader = DataLoader(
         ds,
         batch_sampler=batch_sampler,
         collate_fn=ds.collate_fn,
-        # shuffle=True,
         num_workers=2,
-        # batch_size=None,
     )
-
     failures = []
     pad = tokenizer.pad_token_id
     for batch in data_loader:
@@ -162,32 +156,23 @@ def test_dynamic_batch_size():
         num_tgt_tokens = shapes["labels"][0] * shapes["labels"][1]
         if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
             failures.append(num_tgt_tokens + num_src_tokens)
-    from durbango import pickle_save
 
-    pickle_save(logs, "batches/dynb_logs.pkl")
-    # if failures:raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")
+    if failures:
+        raise AssertionError(f'too many tokens in {len(failures)} batches')
 
 
 def test_sortish():
-    ds, max_tokens, tokenizer = get_dataset()
+    ds, max_tokens, tokenizer = _get_dataset()
     sampler = ds.make_sortish_sampler(64)
-    pickle_save(sampler, "batches/sortish.pkl")
-    from collections import defaultdict
 
     logs = defaultdict(list)
     mult = 64
-    # batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=mult)
-    # batch_sizes = [len(x) for x in batch_sampler]
-    # assert len(set(batch_sizes)) > 1
     data_loader = DataLoader(
         ds,
         sampler=sampler,
         batch_size=64,
-        # batch_sampler=batch_sampler,
         collate_fn=ds.collate_fn,
-        # shuffle=True,
         num_workers=2,
-        # batch_size=None,
     )
 
     failures = []
@@ -205,11 +190,14 @@ def test_sortish():
         if num_tgt_tokens + num_src_tokens > (max_tokens * 1.1):
             failures.append(num_tgt_tokens + num_src_tokens)
 
-    pickle_save(logs, "batches/sortish_logs.pkl")
+
+        if failures:
+            raise AssertionError(f'too many tokens in {len(failures)} batches')
+
     # if failures:raise AssertionError(f"found {len(failures)} batches with more than {max_tokens}")
 
 
-def get_dataset(n_obs=1000):
+def _get_dataset(n_obs=1000):
     if os.getenv("USE_REAL_DATA", False):
         data_dir = "examples/seq2seq/wmt_en_ro"
         max_len = 128
@@ -231,9 +219,9 @@ def get_dataset(n_obs=1000):
 
 
 def test_distributed_stuff():
-    ds, max_tokens, tokenizer = get_dataset()
-    s1 = list(DistributedDynamicBatchSizeSampler(ds, 256, num_replicas=2, rank=0))
-    s2 = list(DistributedDynamicBatchSizeSampler(ds, 256, num_replicas=2, rank=1))
+    ds, max_tokens, tokenizer = _get_dataset()
+    s1 = DistributedSortishSampler(ds, 256, num_replicas=2, rank=0)
+    s2 = DistributedSortishSampler(ds, 256, num_replicas=2, rank=1)
     ids1 = set(itertools.chain.from_iterable(s1))
     ids2 = set(itertools.chain.from_iterable(s2))
     assert ids1.intersection(ids2) == set()

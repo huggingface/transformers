@@ -1483,7 +1483,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, use_cdn=False
+                            pretrained_model_name_or_path, filename=file_name, use_cdn=False, mirror=None
                         )
 
                     vocab_files[file_id] = full_file_name
@@ -2477,7 +2477,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             logger.warning(
                 "Token indices sequence length is longer than the specified maximum sequence length "
                 "for this model ({} > {}). Running this sequence through the model will result in "
-                "indexing errors".format(len(ids), self.model_max_length)
+                "indexing errors".format(len(encoded_inputs["input_ids"]), self.model_max_length)
             )
 
         # Padding
