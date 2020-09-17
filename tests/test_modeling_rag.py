@@ -192,9 +192,16 @@ class RagModelTester:
         return input_ids, attention_mask
 
 
+@require_torch
+@require_retrieval
 class RagTestMixin:
 
-    all_model_classes = (RagModel, RagTokenForGeneration, RagSequenceForGeneration)
+    all_model_classes = (
+        (RagModel, RagTokenForGeneration, RagSequenceForGeneration)
+        if is_torch_available() and is_datasets_available() and is_faiss_available() and is_psutil_available()
+        else ()
+    )
+
     retrieval_vector_size = 32
     n_docs = 2
     max_combined_length = 16
@@ -273,7 +280,7 @@ class RagTestMixin:
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def get_retriever(self, config) -> RagRetriever:
+    def get_retriever(self, config):
         dataset = Dataset.from_dict(
             {
                 "id": ["0", "1"],
