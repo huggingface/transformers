@@ -14,7 +14,7 @@ def save_len_file(tokenizer_name, data_dir, max_source_length=1024, max_target_l
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
     train_ds = Seq2SeqDataset(tok, data_dir, max_source_length, max_target_length, type_path='train', **kwargs)
     def get_lens(ds):
-        dl = tqdm(DataLoader(ds, batch_size=1, num_workers=2, shuffle=False, collate_fn=ds.collate_fn), desc=ds.len_file)
+        dl = tqdm(DataLoader(ds, batch_size=1, num_workers=2, shuffle=False, collate_fn=ds.collate_fn), desc=str(ds.len_file))
         return [max(batch['input_ids'][0].shape[0], batch['labels'][0].shape[0]) for batch in dl]
     train_lens = get_lens(train_ds)
     val_ds = Seq2SeqDataset(tok, data_dir, max_source_length, max_target_length, type_path='val', **kwargs)
