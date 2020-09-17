@@ -17,6 +17,7 @@ logger = getLogger(__name__)
 
 from .utils import calculate_bleu, calculate_rouge, parse_numeric_n_bool_cl_kwargs, use_task_specific_params
 
+
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 

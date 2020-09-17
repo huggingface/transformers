@@ -4,8 +4,8 @@ import operator
 import sys
 from collections import OrderedDict
 
-
 from .run_eval import datetime_now, run_generate
+
 
 # A table of supported tasks and the list of scores in the order of importance to be sorted by.
 # To add a new task, simply list the score names that `run_eval.run_generate()` returns

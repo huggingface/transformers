@@ -14,8 +14,6 @@ from lightning_base import generic_train
 from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5Config, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 
-
-
 from .finetune import SummarizationModule, TranslationModule
 from .finetune import main as ft_main
 from .initialization_utils import copy_layers, init_student
@@ -28,7 +26,6 @@ from .utils import (
     pickle_load,
     use_task_specific_params,
 )
-
 
 
 class BartSummarizationDistiller(SummarizationModule):
