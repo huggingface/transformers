@@ -22,7 +22,6 @@ from transformers import (
     AutoTokenizer,
     BartForConditionalGeneration,
     RagConfig,
-    RagPyTorchDistributedRetriever,
     RagSequenceForGeneration,
     RagTokenForGeneration,
     T5ForConditionalGeneration,
@@ -35,6 +34,7 @@ sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:sk
 
 from examples.lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa: E402 # isort:skip
 from examples.rag.callbacks import get_checkpoint_callback  # noqa: E402 # isort:skip
+from examples.rag.distributed_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
 from examples.rag.utils import (  # noqa: E402 # isort:skip
     Seq2SeqDataset,
     calculate_exact_match,
