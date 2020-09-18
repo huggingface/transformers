@@ -88,6 +88,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
+    @classmethod
+    def from_slow_tokenizer(tokenizer: PreTrainedTokenizer):
+        raise NotImplementedError  # Implemented in each specific Fast tokenizer implementation
+
     @property
     def is_fast(self) -> bool:
         return True
@@ -521,10 +525,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         else:
             slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs)
             return cls.from_slow_tokenizer(slow_tokenizer)
-
-    @classmethod
-    def from_slow_tokenizer(tokenizer: PreTrainedTokenizer):
-        raise NotImplementedError  # Implemented in each specific Fast tokenizer implementation
 
     def _save_pretrained(self, save_directory: str, file_names: Tuple[str]) -> Tuple[str]:
         full_tokenizer_file = os.path.join(save_directory, TOKENIZER_FILE)

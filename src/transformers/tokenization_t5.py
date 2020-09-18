@@ -418,6 +418,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = T5Tokenizer
 
     prefix_tokens: List[int] = []
 
@@ -436,13 +437,13 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         tokenizer.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
 
         tokenizer.backend_tokenizer._tokenizer.post_processor = TemplateProcessing(
-            seq_a=f"$0 {str(eos_token)}",
-            seq_b=f"$1 {str(eos_token)}",
-            special_tokens=[(str(eos_token), self.convert_tokens_to_ids(eos_token))],
+            seq_a=f"$0 {str(slow_tokenizer.eos_token)}",
+            seq_b=f"$1 {str(slow_tokenizer.eos_token)}",
+            special_tokens=[(str(slow_tokenizer.eos_token), slow_tokenizer.eos_token_id)]
         )
 
-        tokenizer.vocab_file = vocab_file
-        tokenizer._extra_ids = extra_ids
+        tokenizer.vocab_file = slow_tokenizer.vocab_file
+        tokenizer._extra_ids = slow_tokenizer._extra_ids
         return tokenizer
 
     def build_inputs_with_special_tokens(
