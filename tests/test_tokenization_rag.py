@@ -97,10 +97,14 @@ class RagTokenizerTest(TestCase):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_with_saved_config(self):
+
         save_dir = os.path.join(self.tmpdirname, "rag_tokenizer")
         rag_config = RagConfig(question_encoder=DPRConfig().to_dict(), generator=BartConfig().to_dict())
         rag_tokenizer = RagTokenizer(question_encoder=self.get_dpr_tokenizer(), generator=self.get_bart_tokenizer())
         rag_config.save_pretrained(save_dir)
         rag_tokenizer.save_pretrained(save_dir)
-        new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir)
-        self.assertEqual(rag_tokenizer, new_rag_tokenizer)
+        new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir, config=rag_config)
+        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizer)
+        self.assertEqual(new_rag_tokenizer.question_encoder.vocab, rag_tokenizer.question_encoder.vocab)
+        self.assertIsInstance(new_rag_tokenizer.generator, BartTokenizer)
+        self.assertEqual(new_rag_tokenizer.generator.encoder, rag_tokenizer.generator.encoder)
