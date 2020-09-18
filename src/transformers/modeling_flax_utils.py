@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from pickle import UnpicklingError
 from typing import Dict
 
-from flax.nn import Model, Module
+from flax.linen import Module
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
@@ -17,14 +17,14 @@ class FlaxPreTrainedModel(ABC):
     base_model_prefix = ""
     model_class = None
 
-    def __init__(self, config: PretrainedConfig, module: Module, state: Dict, seed: int = 0):
+    def __init__(self, config: PretrainedConfig, module: Module, params: Dict, seed: int = 0):
         if config is None:
             raise ValueError("config cannot be None")
 
         if module is None:
             raise ValueError("module cannot be None")
 
-        if state is None:
+        if params is None:
             raise ValueError("state cannot be None")
 
         # Those are private to be exposed as typed property on derived classes.
@@ -33,8 +33,8 @@ class FlaxPreTrainedModel(ABC):
 
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
-        self.state = state
-        self.model = Model(module, state)
+        self.params = params
+        self.model = module
 
     @staticmethod
     @abstractmethod
@@ -44,7 +44,7 @@ class FlaxPreTrainedModel(ABC):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
-        Instantiate a pretrained pytorch model from a pre-trained model configuration.
+        Instantiate a pretrained Flax model from a pre-trained model configuration.
         """
         config = kwargs.pop("config", None)
         # state_dict = kwargs.pop("state_dict", None)
@@ -142,5 +142,5 @@ class FlaxPreTrainedModel(ABC):
             os.mkdir(folder_abs)
 
         with open(os.path.join(folder_abs, "{}.flax".format(self._config.model_type)), "wb") as f:
-            model_bytes = to_bytes(self.model)
+            model_bytes = to_bytes(self.params)
             f.write(model_bytes)
