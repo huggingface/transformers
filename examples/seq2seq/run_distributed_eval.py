@@ -94,7 +94,6 @@ def eval_data_dir(
         preds = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         ids = batch["ids"]
         for i, pred in enumerate(preds):
-            if 'unk_7' in pred: raise ValueError(f'unk_7 at id {ids[i].item()}')
             results.append(dict(pred=pred, id=ids[i].item()))
     save_json(results, save_path)
     return results, sampler.num_replicas
