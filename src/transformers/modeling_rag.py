@@ -250,7 +250,7 @@ class RagPreTrainedModel(PreTrainedModel):
                 - To update the parent model configuration, do not use a prefix for each configuration parameter
                 Behave differently depending on whether a :obj:`config` is provided or automatically loaded.
 
-        Examples::
+        Example::
 
             >>> from transformers import RagModel
             >>> # initialize a RAG from two pretrained models.
@@ -647,8 +647,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> from transformers import RagTokenizer, RagRetriever, RagSequenceForGeneration
             >>> import torch
 
-            >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-            >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+            >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+            >>> retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
             >>> # initialize with RagRetriever to do everything in one forward call
             >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
@@ -657,17 +657,17 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
 
             >>> # or use retriever seperately
-            >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq")
+            >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", use_dummy_dataset=True)
             >>> # 1. Encode
-            >>> question_hidden_states = model.question_encoder(input_ids)
+            >>> question_hidden_states = model.question_encoder(input_ids)[0]
             >>> # 2. Retrieve
-            >>> docs_dict = retriever(input_ids, question_hidden_states, prefix=config.generator.prefix, return_tensors="pt")
-            >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1))
-            >>> # 3. Generate
-            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=docs_dict["doc_scores"], decoder_input_ids=input_dict["labels"])
+            >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
+            >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
+            >>> # 3. Forward to generator
+            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
 
             >>> # or directly generate
-            >>> generated = model.generate(input_ids=input_dict["input_ids"], num_beams=4)
+            >>> generated = model.generate(input_ids=input_dict["input_ids"])
             >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         """
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
@@ -748,13 +748,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     ):
         """
         Implements RAG sequence "thorough" decoding.
+        Read the :meth:`~transformers.PreTrainedModel.generate`` documentation for more information on how to set other generate input parameters.
 
         Args:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`input_ids` is not passed, then :obj:`context_input_ids` has to be provided.
             context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
                 Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
-            do_deduplication (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            do_deduplication (:obj:`bool`, `optional`):
                 Controls whether we want to deduplicate the generations from different context documents for a given input.
                 Has to be set to :obj:`False` if used while training with distributed backend.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
@@ -765,9 +766,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 Number of beams for beam search. ``1`` means no beam search.
             kwargs:
                 Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate``.
-
-            Read the :meth:`~transformers.PreTrainedModel.generate`` documentation for more information on how to set other generate input parameters.
-
         Return:
 
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
@@ -1028,17 +1026,17 @@ class RagTokenForGeneration(RagPreTrainedModel):
             >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
 
             >>> # or use retriever seperately
-            >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq")
+            >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", use_dummy_dataset=True)
             >>> # 1. Encode
-            >>> question_hidden_states = model.question_encoder(input_ids)
+            >>> question_hidden_states = model.question_encoder(input_ids)[0]
             >>> # 2. Retrieve
-            >>> docs_dict = retriever(input_ids, question_hidden_states, prefix=config.generator.prefix, return_tensors="pt")
-            >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(1))
-            >>> # 3. Generate
-            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=docs_dict["doc_scores"], decoder_input_ids=input_dict["labels"])
+            >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
+            >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
+            >>> # 3. Forward to generator
+            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
 
             >>> # or directly generate
-            >>> generated = model.generate(input_ids=input_dict["input_ids"], num_beams=4)
+            >>> generated = model.generate(input_ids=input_dict["input_ids"])
             >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         """
         do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize

@@ -53,31 +53,26 @@ RagTokenizer
     :members:
 
 
-RAG retriever
+RAGRetriever
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagRetriever
     :members:
 
-
-RAG specific outputs
-~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.modeling_rag.RetrievAugLMMarginOutput
-    :members:
-
-.. autoclass:: transformers.modeling_rag.RetrievAugLMOutput
-    :members:
-
-
-RAG models
+RagModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagModel
-    :members:
+    :members: forward
+
+RagSequenceForGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagSequenceForGeneration
-    :members:
+    :members: forward, generate
+
+RagTokenForGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagTokenForGeneration
-    :members:
+    :members: forward, generate

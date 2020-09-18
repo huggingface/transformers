@@ -27,54 +27,46 @@ RAG_CONFIG_DOC = r"""
     for more information.
 
     Args:
-        title_sep (:obj:`str`, optional, defaults to  ``" / "``):
-            Separator inserted between the title and the text of the retrieved document when running
-            `:func:`~transformers.RagModel.contextualize``.
-        doc_sep (:obj:`str`, optional, defaults to  ``" // "``):
-            Separator inserted between the the text of the retrieved document and the original input when running
-            `:func:`~transformers.RagModel.contextualize``.
-        n_docs (:obj:`int`, optional, defaults to ``5``):
-            Number of retrieved docs.
-        max_combined_length (:obj:`int`, optional, defaults to ``300``):
-            Max length of contextualized input returned by `:func:`~transformers.RagModel.contextualize``.
-        retrieval_vector_size (:obj:`int`, optional, defaults to ``768``):
-            Dimensionality of the document embeddings indexed by the ``retriever``.
-        retrieval_batch_size (:obj:`int`, optional, defaults to ``8``):
-            Retrieval batch size - the number of queries issues concurrently to the faiss index excapsulated
-            by the ``retriever``.
-        retriever_type (:obj:`str`, optional, defaults to ``hf_retriever``):
-            A type of index encapsulated by the ``retriever``. Possible options include:
-
-                - ``hf_retriever`` - and index build for an instance of :class:`~nlp.Datasets`
-                - ``legacy_retriever`` - an index build with the native DPR implementation (see https://github.com/facebookresearch/DPR for details).
-        dataset (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``nlp.list_datasets()``).
-        dataset_split (:obj:`str`, optional, defaults to ``train``)
+        title_sep (:obj:`str`, `optional`, defaults to  ``" / "``):
+            Separator inserted between the title and the text of the retrieved document when calling :class:`~transformers.RagRetriever`.
+        doc_sep (:obj:`str`, `optional`, defaults to  ``" // "``):
+            Separator inserted between the the text of the retrieved document and the original input when calliang :class:`~transformers.RagRetriever`.
+        n_docs (:obj:`int`, `optional`, defaults to 5):
+            Number of documents to retrieve.
+        max_combined_length (:obj:`int`, `optional`, defaults to 300):
+            Max length of contextualized input returned by :meth:`~transformers.RagRetriever.__call__`.
+        retrieval_vector_size (:obj:`int`, `optional`, defaults to 768):
+            Dimensionality of the document embeddings indexed by :class:`~transformers.RagRetriever`.
+        retrieval_batch_size (:obj:`int`, `optional`, defaults to 8):
+            Retrieval batch size, defined as the number of queries issues concurrently to the faiss index excapsulated :class:`~transformers.RagRetriever`.
+        dataset (:obj:`str`, `optional`, defaults to :obj:`wiki_dpr`):
+            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids using :obj:`datasets.list_datasets()`).
+        dataset_split (:obj:`str`, `optional`, defaults to :obj:`train`)
             Which split of the ``dataset`` to load.
-        index_name (:obj:`str`, optional, defaults to ``train``)
-            The index_name of the index associated with the ``dataset``.
-        index_path (:obj:`str`, optional, defaults to ``None``)
+        index_name (:obj:`str`, `optional`, defaults to :obj:`compressed`)
+            The index_name of the index associated with the :obj:`dataset`. One can choose between :obj:`legacy`, :obj:`exact` and :obj:`compressed`.
+        index_path (:obj:`str`, `optional`)
             The path to the serialized faiss index on disk.
-        passages_path: (:obj:`str`, optional, defaults to ``None``):
+        passages_path: (:obj:`str`, `optional`):
             A path to text passages compatible with the faiss index. Required if using :class:`~transformers.retrieval_rag.LegacyIndex`
-        dummy (:obj:`bool`, optional, defaults to ``False``)
-            Whether to load a ``dummy`` variant of the dataset specified by ``dataset`` argument.
-        pretrained_question_encoder_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
-            A string specifying the ``question_encoder`` tokenizer to be loaded.
-        pretrained_question_encoder_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
-            A string specifying the ``question_encoder`` model to be loaded.
-        pretrained_generator_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
-            A string specifying the ``generator`` tokenizer to be loaded.
-        pretrained_generator_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
-            A string specifying the ``generator`` model to be loaded.
-
-    Args linked to the tokenizer - they have to be compatible with equivalent parameters of the ``generator``:
+        use_dummy_dataset (:obj:`bool`, `optional`, defaults to ``False``)
+            Whether to load a "dummy" variant of the dataset specified by :obj:`dataset`.
+        label_smoothing (:obj:`float`, `optional`, defaults to 0.0):
+            Only relevant if ``return_loss`` is set to :obj:`True`. Controls the ``epsilon`` parameter value for label smoothing in the loss calculation.
+            If set to ``0.0``, no label smoothing is performed.
         do_marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, `logits`, returned as part of :class:`~transformers.file_utils.Seq2SeqLMOutputWithDocs` are marginalized, yielding
-            the shape of :obj:`(batch_size, sequence_length, hidden_size)`. Otherwise we return raw, non-marginalized logits of shape
-            :obj:`(batch_size * n_docs, sequence_length, hidden_size)`. ``marginalize`` is set to :obj:`True` during generation. The parameter is
-            ignored if ``return_loss`` is set to :obj:`True`.
-
+            If :obj:`True`, the logits are marginalized over all documents
+            by making use of ``torch.nn.functional.log_softmax``.
+        reduce_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, the NLL loss is reduced using the ``torch.Tensor.sum`` operation.
+        do_deduplication (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Controls whether we want to deduplicate the generations from different context documents for a given input.
+            Has to be set to :obj:`False` if used while training with distributed backend.
+        exclude_bos_score (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, the score of the BOS token is disregarded when computing
+            the loss.
+        output_retrieved(:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If set to ``True``, :obj:`retrieved_doc_embeds`, :obj:`retrieved_doc_ids`, :obj:`context_input_ids` and :obj:`context_attention_mask` are returned. See returned tensors for more detail.
 """
 
 
@@ -105,7 +97,7 @@ class RagConfig(PretrainedConfig):
         use_dummy_dataset=False,
         reduce_loss=False,
         label_smoothing=0.0,
-        do_deduplication=True,  # defaults to True
+        do_deduplication=True,
         exclude_bos_score=False,
         do_marginalize=False,
         output_retrieved=False,
