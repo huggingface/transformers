@@ -21,15 +21,18 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 import torch
-from datasets import load_dataset
-
-import faiss
 
 from .configuration_rag import RagConfig
-from .file_utils import cached_path, is_remote_url
+from .file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url
 from .tokenization_rag import RagTokenizer
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
+
+
+if is_datasets_available() and is_faiss_available():
+    from datasets import load_dataset
+
+    import faiss
 
 
 logger = logging.get_logger(__name__)
