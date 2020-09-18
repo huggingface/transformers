@@ -122,9 +122,23 @@ class Seq2SeqDataCollator:
 
 @dataclass
 class Seq2SeqTrainingArguments(TrainingArguments):
-    label_smoothing: Optional[float] = field(default=0.0, metadata={"help": "Label smoothing"})
-    sortish_sampler: bool = field(default=False, metadata={"help": "Sortish Sampler"})
-    predict_with_generate: bool = field(default=False, metadata={"help": "should generate or not"})
+    """
+    Parameters:
+        label_smoothing (:obj:`float`, `optional`, defaults to 0):
+            The label smoothing epsilon to apply (if not zero).
+        sortish_sampler (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to SortishSamler or not. It sorts the inputs according to lenghts in-order to minimizing the padding size.
+        predict_with_generate (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use generate to calculate generative metrics (ROUGE, BLEU).
+    """
+
+    label_smoothing: Optional[float] = field(
+        default=0.0, metadata={"help": "The label smoothing epsilon to apply (if not zero)."}
+    )
+    sortish_sampler: bool = field(default=False, metadata={"help": "Whether to SortishSamler or not."})
+    predict_with_generate: bool = field(
+        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
+    )
 
 
 @dataclass
@@ -145,8 +159,8 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
-    freeze_encoder: bool = field(default=False, metadata={"help": "Freeze the encoder"})
-    freeze_embeds: bool = field(default=False, metadata={"help": "Freeze the embeddings"})
+    freeze_encoder: bool = field(default=False, metadata={"help": "Whether tp freeze the encoder."})
+    freeze_embeds: bool = field(default=False, metadata={"help": "Whether  to freeze the embeddings."})
 
 
 @dataclass
@@ -160,7 +174,7 @@ class DataTrainingArguments:
     )
     task: Optional[str] = field(
         default="summarization",
-        metadata={"help": "summarization (or summarization_{dataset} for pegasus) or translation"},
+        metadata={"help": "Task name, summarization (or summarization_{dataset} for pegasus) or translation"},
     )
     max_source_length: Optional[int] = field(
         default=1024,
@@ -172,30 +186,30 @@ class DataTrainingArguments:
     max_target_length: Optional[int] = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
         },
     )
     val_max_target_length: Optional[int] = field(
         default=142,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
         },
     )
     test_max_target_length: Optional[int] = field(
         default=142,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "help": "The maximum total sequence length for test target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
         },
     )
-    n_train: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
-    n_val: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
-    n_test: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
-    src_lang: Optional[str] = field(default=None, metadata={"help": "Source language for translation"})
-    tgt_lang: Optional[str] = field(default=None, metadata={"help": "Target language for translation"})
-    eval_beams: Optional[int] = field(default=None, metadata={"help": "num_beams for evaluation"})
+    n_train: Optional[int] = field(default=-1, metadata={"help": "# training examples. -1 means use all."})
+    n_val: Optional[int] = field(default=-1, metadata={"help": "# validation examples. -1 means use all."})
+    n_test: Optional[int] = field(default=-1, metadata={"help": "# test examples. -1 means use all."})
+    src_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
+    tgt_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
+    eval_beams: Optional[int] = field(default=None, metadata={"help": "# num_beams to use for evaluation."})
 
 
 def main():
