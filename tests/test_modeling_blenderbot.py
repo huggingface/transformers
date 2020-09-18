@@ -111,9 +111,9 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     def test_embed_pos_shape(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = BlenderbotForConditionalGeneration(config)
-        expected_shape = (config.max_position_embeddings, config.d_model)
-        self.assertEqual(model.model.encoder.embed_positions.weight.shape, expected_shape)
-        self.assertEqual(model.model.decoder.embed_positions.weight.shape, expected_shape)
+        expected_shape = (config.max_position_embeddings + config.extra_pos_embeddings, config.d_model)
+        assert model.model.encoder.embed_positions.weight.shape == expected_shape
+        model.model.decoder.embed_positions.weight.shape == expected_shape
 
 
 @unittest.skipUnless(torch_device != "cpu", "3B test too slow on CPU.")

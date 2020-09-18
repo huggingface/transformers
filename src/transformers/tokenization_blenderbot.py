@@ -17,18 +17,19 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/blenderbot-3B": 128,
-    "facebook/blenderbot-90M": 128,
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",},
+    "merges_file": {"facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",},
 }
+
 logger = logging.getLogger(__name__)
 
 
 class BlenderbotTokenizer(RobertaTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
-    #pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = {"facebook/blenderbot-3B": 128}
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
         """
@@ -46,6 +47,13 @@ class BlenderbotTokenizer(RobertaTokenizer):
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
+
+
+BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
+    "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
+}
+
 
 
 def get_pairs(word):
@@ -82,6 +90,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {"facebook/blenderbot-90M": 512}
 
     def __init__(
