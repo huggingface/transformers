@@ -40,6 +40,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    RagConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -148,6 +149,11 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
+    RagModel,
+    RagSequenceForGeneration,
+    RagTokenForGeneration,
+)
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -404,6 +410,12 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
+    ]
+)
+
+MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING = OrderedDict(
+    [
+        (RagConfig, RagModel),
     ]
 )
 
@@ -1468,5 +1480,105 @@ class AutoModelForMultipleChoice:
                 config.__class__,
                 cls.__name__,
                 ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
+            )
+        )
+
+
+class AutoModelForRetrievalAugmented:
+    r"""
+    Instantiates one of the retrieval augmented model classes of the library from
+    a pretrained model :meth:`~transformers.AutoModelForRetrievalAugmented.from_pretrained` class method or the
+    :meth:`~transformers.AutoModelForRetrievalAugmented.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForRetrievalAugmented is designed to be instantiated "
+            "using the `AutoModelForRetrievalAugmented.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForRetrievalAugmented.from_config(config)` methods."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING, use_model_types=False)
+    def from_config(cls, config):
+        r"""
+        Instantiates one of the retrieval augmented model classes of the library from
+        a pretrained model :meth:`~transformers.AutoModelForRetrievalAugmented.from_pretrained` class method or the
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :meth:`~transformers.AutoModelForRetrievalAugmented.from_pretrained`
+            to load the model weights.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForRetrievalAugmented
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('facebook/rag-token-nq')
+            >>> model = AutoModelForRetrievalAugmented.from_config(config)
+        """
+        for config_class, model_class in MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a sequence-to-sequence language modeling "
+        "head---from a pretrained model.",
+        AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForRetrievalAugmented
+
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = AutoModelForRetrievalAugmented.from_pretrained('facebook/rag-token-nq')
+
+            >>> # Update configuration during loading
+            >>> model = AutoModelForRetrievalAugmented.from_pretrained('facebook/rag-token-nq', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        for config_class, model_class in MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING.items():
+            if isinstance(config, config_class):
+                if hasattr(config, "architectures") and len(config.architectures) > 0:
+                    model_class_candidate = config.architectures[0]
+                    model_class = globals().get(model_class_candidate)
+                    if model_class is None:
+                        raise ValueError(
+                            "model class {} does not exist or is not currently imported.".format(model_class_candidate)
+                        )
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING.keys()),
             )
         )

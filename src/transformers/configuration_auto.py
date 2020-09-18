@@ -38,6 +38,7 @@ from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfi
 from .configuration_mobilebert import MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
+from .configuration_rag import RagConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -111,6 +112,7 @@ CONFIG_MAPPING = OrderedDict(
         ("funnel", FunnelConfig),
         ("lxmert", LxmertConfig),
         ("dpr", DPRConfig),
+        ("rag", RagConfig),
     ]
 )
 
@@ -145,6 +147,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
         ("dpr", "DPR"),
+        ("rag", "RAG"),
     ]
 )
 

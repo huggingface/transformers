@@ -417,7 +417,7 @@ class RagModel(RagPreTrainedModel):
                 question_enc_outputs = self.question_encoder(
                     input_ids, attention_mask=attention_mask, return_dict=True
                 )
-                question_enc_pool_output = question_enc_outputs.pooler_output
+                question_enc_pool_output = question_enc_outputs[0]  # hidden states of question encoder
 
                 retriever_outputs = self.retriever(
                     input_ids,
@@ -641,7 +641,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         num_return_sequences=None,  # defaults to 1
         num_beams=None,  # defaults to 1
         **kwargs
-        # TODO (Patrick): set those values to `None` and set the config values accordingly
     ):
 
         do_deduplication = do_deduplication if do_deduplication is not None else self.config.do_deduplication

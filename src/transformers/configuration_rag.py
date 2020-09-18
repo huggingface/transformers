@@ -20,19 +20,13 @@ from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
 
 
-RAG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/rag-sequence-nq": "TBA",
-    "facebook/rag-token-nq": "TBA",
-}
-
 RAG_CONFIG_DOC = r"""
-    :class:`~transformers.RagConfig` is the configuration class to store the configuration of a `RagModel`.
+    :class:`~transformers.RagConfig` stores the configuration of a `RagModel`.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
     Args:
-        vocab_size (:obj:`int`, optional, defaults to ``None``):
-            Vocabulary size of the underlying generator model.
-        is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether the model is used as an encoder/decoder or not.
         title_sep (:obj:`str`, optional, defaults to  ``" / "``):
             Separator inserted between the title and the text of the retrieved document when running
             `:func:`~transformers.RagModel.contextualize``.
@@ -75,17 +69,7 @@ RAG_CONFIG_DOC = r"""
             A string specifying the ``generator`` model to be loaded.
 
     Args linked to the tokenizer - they have to be compatible with equivalent parameters of the ``generator``:
-        prefix (:obj:`str`, `optional`):
-            A specific prompt that should be added at the beginning of each text before calling the model.
-        bos_token_id (:obj:`int`, `optional`):
-            The id of the `beginning-of-stream` token.
-        pad_token_id (:obj:`int`, `optional`):
-            The id of the `padding` token.
-        eos_token_id (:obj:`int`, `optional`)"
-            The id of the `end-of-stream` token.
-        decoder_start_token_id** (:obj:`int`, `optional`):
-            If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
-        marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, `logits`, returned as part of :class:`~transformers.file_utils.Seq2SeqLMOutputWithDocs` are marginalized, yielding
             the shape of :obj:`(batch_size, sequence_length, hidden_size)`. Otherwise we return raw, non-marginalized logits of shape
             :obj:`(batch_size * n_docs, sequence_length, hidden_size)`. ``marginalize`` is set to :obj:`True` during generation. The parameter is
@@ -127,7 +111,16 @@ class RagConfig(PretrainedConfig):
         output_retrieved=False,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            prefix=prefix,
+            vocab_size=vocab_size,
+            **kwargs,
+        )
         assert (
             "question_encoder" in kwargs and "generator" in kwargs
         ), "Config has to be initialized with question_encoder and generator config"
@@ -145,13 +138,6 @@ class RagConfig(PretrainedConfig):
         self.label_smoothing = label_smoothing
         self.exclude_bos_score = exclude_bos_score
         self.do_marginalize = do_marginalize
-        self.vocab_size = vocab_size
-        self.is_encoder_decoder = is_encoder_decoder
-        self.prefix = prefix
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
 
         self.title_sep = title_sep
         self.doc_sep = doc_sep
