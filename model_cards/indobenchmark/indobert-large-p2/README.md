@@ -1,5 +1,5 @@
 ---
-language: indonesian
+language: id
 tags:
 - indobert
 - indobenchmark
