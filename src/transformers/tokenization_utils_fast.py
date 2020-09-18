@@ -373,21 +373,21 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 encodings = self._tokenizer.encode(
                     *batch_text_or_text_pairs[0],
                     add_special_tokens=add_special_tokens,
-                    is_split_into_words=is_split_into_words,
+                    is_pretokenized=is_split_into_words,
                 )
             else:
                 # We got a single sequence
                 encodings = self._tokenizer.encode(
                     batch_text_or_text_pairs[0],
                     add_special_tokens=add_special_tokens,
-                    is_split_into_words=is_split_into_words,
+                    is_pretokenized=is_split_into_words,
                 )
             encodings = [encodings]
         else:
             encodings = self._tokenizer.encode_batch(
                 batch_text_or_text_pairs,
                 add_special_tokens=add_special_tokens,
-                is_split_into_words=is_split_into_words,
+                is_pretokenized=is_split_into_words,
             )
 
         # Convert encoding to dict
