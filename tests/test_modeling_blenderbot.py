@@ -422,39 +422,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
         generated_utterances = self.model.generate(**model_inputs)
-        tgt_text = "__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor."
+        tgt_text = "__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor. __end__"
 
         generated_txt = self.tokenizer.batch_decode(generated_utterances)[0]
         assert tgt_text == generated_txt
-
-    def test_generation_ids_same_as_parlai_90_short_input(self):
-        input_ids = _long_tensor([[1384]])  # sam
-        assert self.model.config.variant == "xlm"
-
-        generated_utterances = self.model.generate(
-            input_ids, min_length=20, length_penalty=1.0, max_length=128, early_stopping=True
-        ).tolist()[0]
-        expected_tokens = [
-            1,
-            49,
-            15,
-            286,
-            474,
-            10,
-            1384,
-            5186,
-            20,
-            21,
-            8,
-            17,
-            50,
-            241,
-            1789,
-            6,
-            6299,
-            6,
-            9,
-            2147,
-            5,
-        ]
-        assert expected_tokens == generated_utterances

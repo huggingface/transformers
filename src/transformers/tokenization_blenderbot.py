@@ -17,17 +17,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
-        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
-    },
-    "merges_file": {
-        "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
-        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
-    },
-}
-
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/blenderbot-3B": 128,
     "facebook/blenderbot-90M": 128,
@@ -38,48 +27,8 @@ logger = logging.getLogger(__name__)
 class BlenderbotTokenizer(RobertaTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    #pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-
-    def __init__(
-        self,
-        vocab_file,
-        merges_file,
-        errors="replace",
-        bos_token="<s>",
-        eos_token="</s>",
-        sep_token="</s>",
-        cls_token="<s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        mask_token="<mask>",
-        add_prefix_space=True,
-        **kwargs
-    ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
-        )
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
         """
@@ -96,20 +45,11 @@ class BlenderbotTokenizer(RobertaTokenizer):
         Returns:
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-        return token_ids_0 + [self.sep_token_id]
-
-
-BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
-    "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
-}
-
-BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/blenderbot-90M": 512,
-}
+        return token_ids_0 + [self.eos_token_id]
 
 
 def get_pairs(word):
+
     """Return set of symbol pairs in a word.
 
     Word is represented as tuple of symbols (symbols being variable-length strings).
@@ -142,8 +82,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = {"facebook/blenderbot-90M": 512}
 
     def __init__(
         self,
