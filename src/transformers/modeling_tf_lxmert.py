@@ -23,8 +23,6 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
-from transformers import BatchEncoding
-
 from .activations_tf import get_tf_activation
 from .configuration_lxmert import LxmertConfig
 from .file_utils import (
@@ -35,6 +33,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .tokenization_utils_base import BatchEncoding
 
 
 logger = logging.getLogger(__name__)

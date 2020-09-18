@@ -25,7 +25,9 @@ def write_model_card(model_card_dir, src_lang, tgt_lang, model_name):
     readme = f"""
 ---
 
-language: {src_lang}, {tgt_lang}
+language:
+- {src_lang}
+- {tgt_lang}
 thumbnail:
 tags:
 - translation
@@ -33,21 +35,34 @@ tags:
 - allenai
 license: Apache 2.0
 datasets:
-- http://www.statmt.org/wmt19/ ([test-set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561))
+- wmt19
 metrics:
-- http://www.statmt.org/wmt19/metrics-task.html
+- bleu
 ---
 
 # FSMT
 
 ## Model description
 
-This is a ported version of fairseq-based wmt19 transformer created by [jungokasai]](https://github.com/jungokasai/) @ allenai for {src_lang}-{tgt_lang}.
+This is a ported version of fairseq-based [wmt19 transformer](https://github.com/jungokasai/deep-shallow/) for {src_lang}-{tgt_lang}.
+
+For more details, please, see [Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation](https://arxiv.org/abs/2006.10369).
 
 2 models are available:
 
 * [wmt19-de-en-6-6-big](https://huggingface.co/allenai/wmt19-de-en-6-6-big)
 * [wmt19-de-en-6-6-base](https://huggingface.co/allenai/wmt19-de-en-6-6-base)
+
+```
+@misc{{kasai2020deep,
+    title={{Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation}},
+    author={{Jungo Kasai and Nikolaos Pappas and Hao Peng and James Cross and Noah A. Smith}},
+    year={{2020}},
+    eprint={{2006.10369}},
+    archivePrefix={{arXiv}},
+    primaryClass={{cs.CL}}
+}}
+```
 
 ## Intended uses & limitations
 
@@ -73,7 +88,7 @@ print(decoded) # {texts[tgt_lang]}
 
 ## Training data
 
-Pretrained weights were left identical to the original model released by the researcher.
+Pretrained weights were left identical to the original model released by allenai. For more details, please, see the [paper](https://arxiv.org/abs/2006.10369).
 
 ## Eval results
 
@@ -100,6 +115,10 @@ echo $PAIR
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py allenai/{model_name} $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 ```
 
+## Data Sources
+
+- [training, etc.](http://www.statmt.org/wmt19/)
+- [test set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
 """
     model_card_dir.mkdir(parents=True, exist_ok=True)
     path = os.path.join(model_card_dir, "README.md")

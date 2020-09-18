@@ -352,3 +352,33 @@ runtime: 13H on V-100 16GB GPU.
 ```bash
 pytest examples/seq2seq/
 ```
+
+
+## Experimental Features 
+These features are harder to use and not always useful.
+
+###  Dynamic Batch Size for MT
+`finetune.py` has a command line arg `--max_tokens_per_batch` that allows batches to be dynamically sized.
+This feature can only be used:
+- with fairseq installed
+- on 1 GPU
+- without sortish sampler
+- after calling `python save_len_file.py $tok $data_dir`
+
+For example, 
+```bash
+python save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
+./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
+```
+splits `wmt_en_ro/train` into 11,197 uneven lengthed batches and can finish 1 epoch in 8 minutes on a v100.
+
+For comparison,
+```bash
+./dynamic_bs_example.sh --sortish_sampler --train_batch_size 48
+```
+uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
+
+The feature is still experimental, because:
++ we can make it much more robust if we have memory mapped/preprocessed datasets.
++ The speedup over sortish sampler is not that large at the moment.
+

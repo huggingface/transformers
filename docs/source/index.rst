@@ -225,6 +225,7 @@ conversion utilities for the following models:
     model_doc/pegasus
     model_doc/blenderbot
     model_doc/mbart
+    model_doc/fsmt
     model_doc/funnel
     model_doc/lxmert
     model_doc/bertgeneration

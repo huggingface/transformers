@@ -30,6 +30,7 @@ from .configuration_auto import (
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
+    FSMTConfig,
     FunnelConfig,
     GPT2Config,
     LongformerConfig,
@@ -61,6 +62,7 @@ from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
+from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
@@ -113,6 +115,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
     ]
 )
@@ -186,16 +189,16 @@ class AutoTokenizer:
 
         Examples::
 
-            from transformers import AutoTokenizer
+            >>> from transformers import AutoTokenizer
 
-            # Download vocabulary from S3 and cache.
-            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+            >>> # Download vocabulary from S3 and cache.
+            >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 
-            # Download vocabulary from S3 (user-uploaded) and cache.
-            tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+            >>> # Download vocabulary from S3 (user-uploaded) and cache.
+            >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
-            # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
-            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
+            >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
+            >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
         config = kwargs.pop("config", None)

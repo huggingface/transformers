@@ -278,18 +278,18 @@ class CustomDPRReaderTokenizerMixin:
 
         Examples::
 
-            from transformers import DPRReader, DPRReaderTokenizer
-            tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-            model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
-            encoded_inputs = tokenizer(
-                    questions=["What is love ?"],
-                    titles=["Haddaway"],
-                    texts=["'What Is Love' is a song recorded by the artist Haddaway"],
-                    return_tensors='pt'
-                )
-            outputs = model(**encoded_inputs)
-            predicted_spans = tokenizer.decode_best_spans(encoded_inputs, outputs)
-            print(predicted_spans[0].text)  # best span
+            >>> from transformers import DPRReader, DPRReaderTokenizer
+            >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
+            >>> model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
+            >>> encoded_inputs = tokenizer(
+            ...         questions=["What is love ?"],
+            ...         titles=["Haddaway"],
+            ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
+            ...         return_tensors='pt'
+            ...     )
+            >>> outputs = model(**encoded_inputs)
+            >>> predicted_spans = tokenizer.decode_best_spans(encoded_inputs, outputs)
+            >>> print(predicted_spans[0].text)  # best span
 
         """
         input_ids = reader_input["input_ids"]
