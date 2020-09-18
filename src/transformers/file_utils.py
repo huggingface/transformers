@@ -73,22 +73,6 @@ try:
     if USE_JAX in ENV_VARS_TRUE_VALUES:
         import flax
         import jax
-
-        logger.info("JAX version {}, Flax: available".format(jax.__version__))
-
-        _flax_available = True
-    else:
-        _flax_available = False
-except ImportError:
-    _flax_available = False  # pylint: disable=invalid-name
-
-
-try:
-    USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
-
-    if USE_JAX in ENV_VARS_TRUE_VALUES:
-        import flax
-        import jax
         from jax.config import config
         # TODO(marcvanzee): Flax Linen requires JAX omnistaging. Remove this
         # once JAX enables it by default.
