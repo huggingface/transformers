@@ -738,8 +738,8 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_ids = rag_token.generate(
             input_ids,
             decoder_start_token_id=rag_token.generator.config.decoder_start_token_id,
-            num_doc_beams=2,
-            num_doc_return_sequences=2,
+            num_beams=2,
+            num_return_sequences=2,
         )
         # sequence generate test
         output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)

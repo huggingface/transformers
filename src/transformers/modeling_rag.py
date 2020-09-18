@@ -638,17 +638,17 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         input_ids,
         context_input_ids=None,
         do_deduplication=None,  # defaults to True
-        num_doc_return_sequences=None,  # defaults to 1
-        num_doc_beams=None,  # defaults to 1
+        num_return_sequences=None,  # defaults to 1
+        num_beams=None,  # defaults to 1
         **kwargs
         # TODO (Patrick): set those values to `None` and set the config values accordingly
     ):
 
         do_deduplication = do_deduplication if do_deduplication is not None else self.config.do_deduplication
         num_doc_return_sequences = (
-            num_doc_return_sequences if num_doc_return_sequences is not None else self.config.num_doc_return_sequences
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
-        num_doc_beams = num_doc_beams if num_doc_beams is not None else self.config.num_doc_beams
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
 
         """
         Implements RAG sequence "thorough" decoding.
@@ -696,8 +696,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = context_input_ids.to(input_ids)
 
         hypos = []
-        kwargs["num_beams"] = num_doc_beams
-        kwargs["num_return_sequences"] = num_doc_return_sequences
+        kwargs["num_beams"] = num_beams
+        kwargs["num_return_sequences"] = num_return_sequences
         kwargs["attention_mask"] = None
 
         for index in range(len(input_ids)):
