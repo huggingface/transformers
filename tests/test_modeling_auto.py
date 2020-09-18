@@ -28,7 +28,6 @@ if is_torch_available():
         AutoModelForMaskedLM,
         AutoModelForPreTraining,
         AutoModelForQuestionAnswering,
-        AutoModelForRetrievalAugmented,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
@@ -42,7 +41,6 @@ if is_torch_available():
         BertModel,
         GPT2Config,
         GPT2LMHeadModel,
-        RagSequenceForGeneration,
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
@@ -52,7 +50,6 @@ if is_torch_available():
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
@@ -172,12 +169,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
-    def test_retrieval_augmented_model_from_pretrained(self):
-        model = AutoModelForRetrievalAugmented.from_pretrained("patrickvonplaten/rag-tiny-random")
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, RagSequenceForGeneration)
-
-    @slow
     def test_token_classification_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
@@ -211,7 +202,6 @@ class AutoModelTest(unittest.TestCase):
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-            MODEL_FOR_RETRIEVAL_AUGMENTED_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
