@@ -35,8 +35,8 @@ class RagTokenizer:
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
         os.makedirs(save_directory, exist_ok=True)
-        question_encoder_path = os.path.join(save_directory, "question_encoder")
-        generator_path = os.path.join(save_directory, "generator")
+        question_encoder_path = os.path.join(save_directory, "question_encoder_tokenizer")
+        generator_path = os.path.join(save_directory, "generator_tokenizer")
         self.question_encoder.save_pretrained(question_encoder_path)
         self.generator.save_pretrained(generator_path)
 

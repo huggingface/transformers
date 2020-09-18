@@ -20,7 +20,6 @@ import time
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
-import torch
 
 from .configuration_rag import RagConfig
 from .file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url
@@ -286,9 +285,6 @@ class RagRetriever(object):
 
         self.n_docs = config.n_docs
         self.batch_size = config.retrieval_batch_size
-
-        if torch.cuda.is_available():
-            self.batch_size *= torch.cuda.device_count()
 
         self.config = config
         if self._init_retrieval:
