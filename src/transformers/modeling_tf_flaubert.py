@@ -15,10 +15,8 @@
 """ TF 2.0 Flaubert model.
 """
 
-import dataclasses
 from dataclasses import dataclass
 import itertools
-import math
 import random
 from typing import Optional, Tuple
 
@@ -224,9 +222,8 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             klen = shape_list(kv)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
         n_heads = self.n_heads
-        # dim_per_head = tf.math.divide(self.dim, n_heads)
-        # dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
-        dim_per_head = self.dim // n_heads
+        dim_per_head = tf.math.divide(self.dim, n_heads)
+        dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
         mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
 
         def shape(x):
@@ -256,14 +253,13 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
                     k, v = cache[self.layer_id]
             cache[self.layer_id] = (k, v)
 
-        # q = tf.cast(q, dtype=tf.float64)
-        # q = tf.divide(q, tf.math.sqrt(tf.cast(dim_per_head, dtype=tf.float64)))  # (bs, n_heads, qlen, dim_per_head)
-        # k = tf.cast(k, dtype=q.dtype)
-        q = q / math.sqrt(dim_per_head)
+        q = tf.cast(q, dtype=tf.float64)
+        q = tf.divide(q, tf.math.sqrt(tf.cast(dim_per_head, dtype=tf.float64)))  # (bs, n_heads, qlen, dim_per_head)
+        k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
-        # mask = tf.cast(mask, dtype=scores.dtype)
+        mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
 
         weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
@@ -305,7 +301,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
     config_class = FlaubertConfig
 
     def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+        super().__init__(**kwargs)
 
         self.n_heads = config.n_heads
         self.n_langs = config.n_langs
@@ -507,8 +503,8 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         attentions = () if output_attentions else None
         for i in range(self.n_layers):
             # LayerDrop
-            dropout_probability = random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):
+            dropout_probability =  tf.random.uniform([1], 0, 1)
+            if training and tf.less(dropout_probability, self.layerdrop):
                 continue
 
             if output_hidden_states:
