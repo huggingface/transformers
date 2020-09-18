@@ -28,10 +28,9 @@ class Seq2SeqTrainer(Trainer):
             return get_tpu_sampler(self.train_dataset)
         else:
             if self.args.sortish_sampler:
-                if self.args.n_gpu <= 1 and self.args.local_rank == -1:
-                    return self.train_dataset.make_sortish_sampler(self.args.per_device_train_batch_size)
-                else:
-                    warnings.warn("sortish_sampler is being ignored because n_gpu > 1")
+                self.train_dataset.make_sortish_sampler(
+                    self.args.per_device_train_batch_size, distributed=self.args.n_gpu > 1
+                )
 
             return (
                 RandomSampler(self.train_dataset)
