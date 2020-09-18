@@ -574,7 +574,8 @@ class RagModel(RagPreTrainedModel):
 
 
 @add_start_docstrings_to_callable(
-    """A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass
+    """
+    A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass
     and specializes some of the functions of :class:`~transformers.PreTrainedModel` to enable RAG-sequence generation.
     """,
     RAG_START_DOCSTRING,
@@ -851,7 +852,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
 
 @add_start_docstrings_to_callable(
-    """A RAG-token model impementation. It performs RAG-token specific marginalization in the forward pass
+    """
+    A RAG-token model impementation. It performs RAG-token specific marginalization in the forward pass
     and specializes some of the functions of :class:`~transformers.PreTrainedModel` to enable RAG-token generation.
     """,
     RAG_START_DOCSTRING,
