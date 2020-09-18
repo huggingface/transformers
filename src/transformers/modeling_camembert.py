@@ -15,11 +15,10 @@
 # limitations under the License.
 """PyTorch CamemBERT model. """
 
-import logging
-
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -27,9 +26,10 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _TOKENIZER_FOR_DOC = "CamembertTokenizer"
 
@@ -68,7 +68,8 @@ class CamembertModel(RobertaModel):
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top. """, CAMEMBERT_START_DOCSTRING,
+    """CamemBERT Model with a `language modeling` head on top. """,
+    CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForMaskedLM(RobertaForMaskedLM):
     """
@@ -129,6 +130,18 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
 class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     """
     This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = CamembertConfig
+
+
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning. """, CAMEMBERT_START_DOCSTRING
+)
+class CamembertForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

@@ -15,7 +15,6 @@
 # limitations under the License.
 """TF general model utils."""
 import functools
-import logging
 import os
 import warnings
 from typing import Dict, List, Optional, Union
@@ -29,9 +28,10 @@ from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFModelUtilsMixin:
@@ -137,7 +137,7 @@ class TFCausalLanguageModelingLoss:
         )
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        active_loss = tf.reshape(labels, (-1,)) != -100
+        active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
         return loss_fn(labels, reduced_logits)
@@ -174,7 +174,7 @@ class TFTokenClassificationLoss:
         )
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        if tf.math.reduce_any(labels == -1).numpy() is True:
+        if tf.math.reduce_any(labels == -1):
             warnings.warn("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
             active_loss = tf.reshape(labels, (-1,)) != -1
         else:
@@ -191,7 +191,7 @@ class TFSequenceClassificationLoss:
     """
 
     def compute_loss(self, labels, logits):
-        if shape_list(logits)[1] == 1:
+        if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -207,13 +207,12 @@ class TFMultipleChoiceLoss(TFSequenceClassificationLoss):
 
 class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
     """
-   Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
+    Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
 
-   .. note::
+    .. note::
 
-        Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
-
-"""
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
@@ -485,9 +484,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+                Mirror source to accelerate downloads in China. If you are from China and have an accessibility problem,
+                you can set this option to resolve it. Note that we do not guarantee the timeliness or safety. Please
+                refer to the mirror site for more information.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                :obj:`output_attention=True`). Behaves differently depending on whether a ``config`` is provided or
+                :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
                 automatically loaded:
 
                     - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
@@ -501,17 +504,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         Examples::
 
-            from transformers import BertConfig, TFBertModel
-            # Download model and configuration from S3 and cache.
-            model = TFBertModel.from_pretrained('bert-base-uncased')
-            # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
-            model = TFBertModel.from_pretrained('./test/saved_model/')
-            # Update configuration during loading.
-            model = TFBertModel.from_pretrained('bert-base-uncased', output_attention=True)
-            assert model.config.output_attention == True
-            # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
-            config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
-            model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
+            >>> from transformers import BertConfig, TFBertModel
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = TFBertModel.from_pretrained('bert-base-uncased')
+            >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
+            >>> model = TFBertModel.from_pretrained('./test/saved_model/')
+            >>> # Update configuration during loading.
+            >>> model = TFBertModel.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> assert model.config.output_attentions == True
+            >>> # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
+            >>> config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
+            >>> model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
 
         """
         config = kwargs.pop("config", None)
@@ -523,6 +526,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
+        mirror = kwargs.pop("mirror", None)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -565,6 +569,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     pretrained_model_name_or_path,
                     filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
                     use_cdn=use_cdn,
+                    mirror=mirror,
                 )
 
             try:
@@ -700,7 +705,7 @@ class TFConv1D(tf.keras.layers.Layer):
 
 
 class TFSharedEmbeddings(tf.keras.layers.Layer):
-    """
+    r"""
     Construct shared token embeddings.
 
     The weights of the embedding layer is usually shared with the weights of the linear decoder when doing

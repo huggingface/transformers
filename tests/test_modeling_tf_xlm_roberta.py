@@ -20,8 +20,9 @@ from transformers.testing_utils import require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
+
     from transformers import TFXLMRobertaModel
 
 

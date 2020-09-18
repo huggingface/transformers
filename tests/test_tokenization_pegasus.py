@@ -63,7 +63,6 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         batch = self.pegasus_large_tokenizer.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts, max_target_length=5)
         assert batch.input_ids.shape == (2, 1024)
         assert batch.attention_mask.shape == (2, 1024)
-        assert "decoder_input_ids" in batch  # because tgt_texts was specified
-        assert batch.decoder_input_ids.shape == (2, 5)
-        assert batch.decoder_attention_mask.shape == (2, 5)
-        assert len(batch) == 4  # no extra keys
+        assert "labels" in batch  # because tgt_texts was specified
+        assert batch.labels.shape == (2, 5)
+        assert len(batch) == 3  # input_ids, attention_mask, labels. Other things make by BartModel

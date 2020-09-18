@@ -32,7 +32,7 @@ BartForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartForConditionalGeneration
-    :members: generate, forward
+    :members: forward
 
 
 BartConfig

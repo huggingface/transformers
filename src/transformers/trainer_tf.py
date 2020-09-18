@@ -1,7 +1,6 @@
 """Tensorflow trainer class."""
 
 import datetime
-import logging
 import math
 import os
 import warnings
@@ -10,12 +9,14 @@ from typing import Callable, Dict, Optional, Tuple
 import numpy as np
 import tensorflow as tf
 from packaging.version import parse
+from tensorflow.python.distribute.values import PerReplica
 
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
+from .utils import logging
 
 
 if is_wandb_available():
@@ -24,7 +25,7 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFTrainer:
@@ -38,9 +39,17 @@ class TFTrainer:
         args (:class:`~transformers.TFTrainingArguments`):
             The arguments to tweak training.
         train_dataset (:class:`~tf.data.Dataset`, `optional`):
-            The dataset to use for training.
+            The dataset to use for training. The dataset should yield tuples of ``(features, labels)`` where
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
+            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``model(features, **labels)``.
         eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-            The dataset to use for evaluation.
+            The dataset to use for evaluation. The dataset should yield tuples of ``(features, labels)`` where
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
+            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``model(features, **labels)``.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -145,7 +154,11 @@ class TFTrainer:
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-                If provided, will override `self.eval_dataset`.
+                If provided, will override `self.eval_dataset`. The dataset should yield tuples of ``(features,
+                labels)`` where ``features`` is a dict of input features and ``labels`` is the labels. If ``labels``
+                is a tensor, the loss is calculated by the model by calling ``model(features, labels=labels)``. If
+                ``labels`` is a dict, such as when using a QuestionAnswering head model with multiple targets, the
+                loss is instead calculated by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -173,7 +186,12 @@ class TFTrainer:
         Returns a test :class:`~tf.data.Dataset`.
 
         Args:
-            test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
+            test_dataset (:class:`~tf.data.Dataset`):
+                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is
+                a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+                calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such
+                as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
+                by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -346,7 +364,7 @@ class TFTrainer:
         else:
             metrics = {}
 
-        metrics["eval_loss"] = self.eval_loss.result().numpy() / (steps * self.args.eval_batch_size)
+        metrics["eval_loss"] = self.eval_loss.result().numpy() / steps
 
         for key in list(metrics.keys()):
             if not key.startswith("eval_"):
@@ -405,14 +423,18 @@ class TFTrainer:
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. The dataset should yield tuples of
+                ``(features, labels)`` where ``features`` is a dict of input features and ``labels`` is the labels.
+                If ``labels`` is a tensor, the loss is calculated by the model by calling ``model(features,
+                labels=labels)``. If ``labels`` is a dict, such as when using a QuestionAnswering head model with
+                multiple targets, the loss is instead calculated by calling ``model(features, **labels)``.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
         eval_ds, steps, num_examples = self.get_eval_tfdataset(eval_dataset)
 
-        output = self._prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
+        output = self.prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
         logs = {**output.metrics}
         logs["epoch"] = self.epoch_logging
 
@@ -420,21 +442,28 @@ class TFTrainer:
 
         return output.metrics
 
-    def prediction_step(self, features: tf.Tensor, labels: tf.Tensor) -> tf.Tensor:
+    def prediction_step(
+        self, features: tf.Tensor, labels: tf.Tensor, nb_instances_in_global_batch: tf.Tensor
+    ) -> tf.Tensor:
         """
         Compute the prediction on features and update the loss with labels.
 
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, logits = self.run_model(features, labels, False)
+        scaled_loss = per_example_loss / tf.cast(nb_instances_in_global_batch, dtype=per_example_loss.dtype)
 
-        self.eval_loss.update_state(per_example_loss)
+        self.eval_loss.update_state(scaled_loss)
 
         return logits
 
     @tf.function
     def distributed_prediction_steps(self, batch):
-        logits = self.args.strategy.run(self.prediction_step, batch)
+
+        nb_instances_in_batch = self._compute_nb_instances(batch)
+        inputs = self._get_step_inputs(batch, nb_instances_in_batch)
+
+        logits = self.args.strategy.run(self.prediction_step, inputs)
 
         return logits
 
@@ -521,7 +550,7 @@ class TFTrainer:
 
                     self.distributed_training_steps(batch)
 
-                    training_loss = self.train_loss.result() / ((step + 1) * self.total_train_batch_size)
+                    training_loss = self.train_loss.result() / (step + 1)
 
                     if self.args.debug:
                         logs = {}
@@ -571,14 +600,14 @@ class TFTrainer:
             # Clean the state at the end of training
             delattr(self, "_past")
 
-    def training_step(self, features, labels):
+    def training_step(self, features, labels, nb_instances_in_global_batch):
         """
         Perform a training step on features and labels.
 
         Subclass and override to inject some custom behavior.
         """
         per_example_loss, _ = self.run_model(features, labels, True)
-        scaled_loss = per_example_loss / self.total_train_batch_size
+        scaled_loss = per_example_loss / tf.cast(nb_instances_in_global_batch, dtype=per_example_loss.dtype)
         gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
         gradients = [
             g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
@@ -587,25 +616,35 @@ class TFTrainer:
         if self.args.gradient_accumulation_steps > 1:
             self.gradient_accumulator(gradients)
 
-        self.train_loss.update_state(per_example_loss)
+        self.train_loss.update_state(scaled_loss)
 
         if self.args.gradient_accumulation_steps == 1:
             return gradients
 
-    def apply_gradients(self, features, labels):
+    def apply_gradients(self, features, labels, nb_instances_in_global_batch):
         if self.args.gradient_accumulation_steps == 1:
-            gradients = self.training_step(features, labels)
+            gradients = self.training_step(features, labels, nb_instances_in_global_batch)
 
             self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
         else:
             for _ in tf.range(self.args.gradient_accumulation_steps):
-                reduced_features = features[: self.args.train_batch_size / self.args.n_replicas]
-                reduced_labels = labels[: self.args.train_batch_size / self.args.n_replicas]
+                reduced_features = {
+                    k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
+                }
+                reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
 
-                self.training_step(reduced_features, reduced_labels)
+                self.training_step(reduced_features, reduced_labels, nb_instances_in_global_batch)
 
-                features = tf.concat(
-                    [features[self.args.train_batch_size / self.args.n_replicas :], reduced_features], axis=0
+                features = {
+                    k: tf.concat(
+                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]],
+                        axis=0,
+                    )
+                    for k, ft in features.items()
+                }
+
+                labels = tf.concat(
+                    [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
                 )
 
             gradients = self.gradient_accumulator.gradients
@@ -619,7 +658,35 @@ class TFTrainer:
     @tf.function
     def distributed_training_steps(self, batch):
         with self.args.strategy.scope():
-            self.args.strategy.run(self.apply_gradients, batch)
+
+            nb_instances_in_batch = self._compute_nb_instances(batch)
+            inputs = self._get_step_inputs(batch, nb_instances_in_batch)
+
+            self.args.strategy.run(self.apply_gradients, inputs)
+
+    @staticmethod
+    def _compute_nb_instances(batch):
+
+        labels = batch[-1]
+        if isinstance(labels, PerReplica):
+            labels = tf.concat(labels.values, axis=0)
+
+        nb_instances = tf.reduce_sum(tf.cast(labels != -100, dtype=tf.int32))
+
+        return nb_instances
+
+    @staticmethod
+    def _get_step_inputs(batch, nb_instances):
+
+        features, labels = batch
+
+        if isinstance(labels, PerReplica):
+            # need to make a `PerReplica` objects for ``nb_instances``
+            nb_instances = PerReplica([nb_instances] * len(labels.values))
+
+        step_inputs = (features, labels, nb_instances)
+
+        return step_inputs
 
     def run_model(self, features, labels, training):
         """
@@ -666,7 +733,11 @@ class TFTrainer:
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
-                Dataset to run the predictions on.
+                Dataset to run the predictions on. The dataset should yield tuples of ``(features, labels)`` where
+                ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor,
+                the loss is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is
+                a dict, such as when using a QuestionAnswering head model with multiple targets, the loss is instead
+                calculated by calling ``model(features, **labels)``.
         Returns:
             `NamedTuple`:
             predictions (:obj:`np.ndarray`):

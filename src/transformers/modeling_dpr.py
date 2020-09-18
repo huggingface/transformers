@@ -15,7 +15,6 @@
 """ PyTorch DPR model for Open Domain Question Answering."""
 
 
-import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -27,9 +26,10 @@ from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_
 from .modeling_bert import BertModel
 from .modeling_outputs import BaseModelOutputWithPooling
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
 
@@ -265,8 +265,8 @@ class DPRSpanPredictor(PreTrainedModel):
 
 
 class DPRPretrainedContextEncoder(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = DPRConfig
@@ -278,8 +278,8 @@ class DPRPretrainedContextEncoder(PreTrainedModel):
 
 
 class DPRPretrainedQuestionEncoder(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = DPRConfig
@@ -291,8 +291,8 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
 
 
 class DPRPretrainedReader(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = DPRConfig
@@ -346,22 +346,22 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`transformers.DPRTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        attention_mask: (:obj:``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        attention_mask: (:obj:``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        token_type_ids: (:obj:``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        token_type_ids: (:obj:``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states tensors of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -380,18 +380,18 @@ DPR_READER_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
             See :class:`transformers.DPRReaderTokenizer` for more details
-        attention_mask: (:obj:torch.FloatTensor``, of shape ``(n_passages, sequence_length)``, `optional`, defaults to :obj:`None):
+        attention_mask: (:obj:torch.FloatTensor``, of shape ``(n_passages, sequence_length)``, `optional`:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(n_passages, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(n_passages, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states tensors of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -421,15 +421,15 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         return_dict=None,
     ) -> Union[DPRContextEncoderOutput, Tuple[Tensor, ...]]:
         r"""
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
-        tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', return_dict=True)
-        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids).pooler_output
+            >>> from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
+            >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+            >>> model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', return_dict=True)
+            >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+            >>> embeddings = model(input_ids).pooler_output
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -499,15 +499,15 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         return_dict=None,
     ) -> Union[DPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
         r"""
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
-        tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', return_dict=True)
-        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids).pooler_output
+            >>> from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
+            >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+            >>> model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', return_dict=True)
+            >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+            >>> embeddings = model(input_ids).pooler_output
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -553,7 +553,8 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
 
 @add_start_docstrings(
-    "The bare DPRReader transformer outputting span predictions.", DPR_START_DOCSTRING,
+    "The bare DPRReader transformer outputting span predictions.",
+    DPR_START_DOCSTRING,
 )
 class DPRReader(DPRPretrainedReader):
     def __init__(self, config: DPRConfig):
@@ -574,23 +575,23 @@ class DPRReader(DPRPretrainedReader):
         return_dict=None,
     ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
         r"""
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        from transformers import DPRReader, DPRReaderTokenizer
-        tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-        model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', return_dict=True)
-        encoded_inputs = tokenizer(
-                questions=["What is love ?"],
-                titles=["Haddaway"],
-                texts=["'What Is Love' is a song recorded by the artist Haddaway"],
-                return_tensors='pt'
-            )
-        outputs = model(**encoded_inputs)
-        start_logits = outputs.stat_logits
-        end_logits = outputs.end_logits
-        relevance_logits = outputs.relevance_logits
+            >>> from transformers import DPRReader, DPRReaderTokenizer
+            >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
+            >>> model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', return_dict=True)
+            >>> encoded_inputs = tokenizer(
+            ...         questions=["What is love ?"],
+            ...         titles=["Haddaway"],
+            ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
+            ...         return_tensors='pt'
+            ...     )
+            >>> outputs = model(**encoded_inputs)
+            >>> start_logits = outputs.stat_logits
+            >>> end_logits = outputs.end_logits
+            >>> relevance_logits = outputs.relevance_logits
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
