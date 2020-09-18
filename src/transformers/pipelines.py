@@ -965,7 +965,7 @@ class TextClassificationPipeline(Pipeline):
 
         Args:
             args (:obj:`str` or :obj:`List[str]`):
-                One or several textts (or one list of prompts) to classify.
+                One or several texts (or one list of prompts) to classify.
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
