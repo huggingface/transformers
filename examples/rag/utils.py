@@ -51,11 +51,6 @@ class Seq2SeqDataset(Dataset):
         self.prefix = prefix
         if n_obs is not None:
             self.src_lens = self.src_lens[:n_obs]
-        self.pad_token_id = (
-            self.tokenizer.question_encoder.pad_token_id
-            if isinstance(self.tokenizer, RagTokenizer)
-            else self.tokenizer.pad_token_id
-        )
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
 
@@ -75,8 +70,13 @@ class Seq2SeqDataset(Dataset):
             tgt_line += self.tokenizer.eos_token
 
         # Pad source and target to the right
-        source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length, "right")
-        target_inputs = encode_line(self.tokenizer, tgt_line, self.max_target_length, "right")
+        source_tokenizer = (
+            self.tokenizer.question_encoder if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer
+        )
+        target_tokenizer = self.tokenizer.generator if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer
+
+        source_inputs = encode_line(source_tokenizer, source_line, self.max_source_length, "right")
+        target_inputs = encode_line(target_tokenizer, tgt_line, self.max_target_length, "right")
 
         source_ids = source_inputs["input_ids"].squeeze()
         target_ids = target_inputs["input_ids"].squeeze()
@@ -95,9 +95,18 @@ class Seq2SeqDataset(Dataset):
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
         target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
-        pad_token_id = self.pad_token_id
-        y = trim_batch(target_ids, pad_token_id)
-        source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
+        tgt_pad_token_id = (
+            self.tokenizer.generator.pad_token_id
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer.pad_token_id
+        )
+        src_pad_token_id = (
+            self.tokenizer.question_encoder.pad_token_id
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer.pad_token_id
+        )
+        y = trim_batch(target_ids, tgt_pad_token_id)
+        source_ids, source_mask = trim_batch(input_ids, src_pad_token_id, attention_mask=masks)
         batch = {
             "input_ids": source_ids,
             "attention_mask": source_mask,

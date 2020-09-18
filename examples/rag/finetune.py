@@ -203,14 +203,26 @@ class GenerativeQAModule(BaseTransformer):
 
     @property
     def pad(self) -> int:
-        return self.tokenizer.question_encoder.pad_token_id if self.is_rag_model else self.tokenizer.pad_token_id
+        raise NotImplementedError("pad not implemented")
 
     def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
 
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
-        logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["decoder_input_ids"].ne(self.pad).sum()
+        tgt_pad_token_id = (
+            self.tokenizer.generator.pad_token_id
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer.pad_token_id
+        )
+        src_pad_token_id = (
+            self.tokenizer.question_encoder.pad_token_id
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer.pad_token_id
+        )
+        logs["tpb"] = (
+            batch["input_ids"].ne(src_pad_token_id).sum() + batch["decoder_input_ids"].ne(tgt_pad_token_id).sum()
+        )
 
         return {"loss": loss_tensors[0], "log": logs}
 

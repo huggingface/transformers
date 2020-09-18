@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_checkpoint_callback(output_dir, metric):
-    """Saves the best model by validation ROUGE2 score."""
+    """Saves the best model by validation EM score."""
     if metric == "rouge2":
         exp = "{val_avg_rouge2:.4f}-{step_count}"
     elif metric == "bleu":
