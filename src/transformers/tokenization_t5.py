@@ -22,9 +22,15 @@ import warnings
 from shutil import copyfile
 from typing import List, Optional
 
-from tokenizers import SentencePieceUnigramTokenizer
+from tokenizers import (
+    Tokenizer,
+    pre_tokenizers,
+    decoders,
+    trainers,
+    normalizers,
+)
+from tokenizers.models import Unigram
 from tokenizers.processors import TemplateProcessing
-from tokenizers.implementations import BaseTokenizer
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -427,21 +433,34 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         sp = slow_tokenizer.sp_model
         vocab = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.piece_size())]
 
-        tokenizer = cls(SentencePieceUnigramTokenizer(vocab, sp.unk_id()),
-            eos_token=slow_tokenizer.eos_token,
-            unk_token=slow_tokenizer.unk_token,
-            pad_token=slow_tokenizer.pad_token,
-            additional_special_tokens=slow_tokenizer.additional_special_tokens,
+        out_vocab_filename = 'vocab.json'
+        data = {"unk_id": sp.unk_id(), "vocab": vocab}
+        with open(out_vocab_filename, "w") as f:
+            json.dump(data, f, indent=4)
+
+        backend_tokenizer = Tokenizer(Unigram(out_vocab_filename))
+        backend_tokenizer.add_special_tokens(slow_tokenizer.all_special_tokens_extended)
+
+        backend_tokenizer.normalizer = normalizers.Sequence([normalizers.Nmt(), normalizers.NFKC(),])
+        backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(
+                    replacement=SPIECE_UNDERLINE, add_prefix_space=True
+                ),
+            ]
+        )
+        backend_tokenizer.decoder = decoders.Metaspace(
+            replacement=SPIECE_UNDERLINE, add_prefix_space=True
         )
 
-        tokenizer.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
-
-        tokenizer.backend_tokenizer._tokenizer.post_processor = TemplateProcessing(
+        backend_tokenizer.post_processor = TemplateProcessing(
             seq_a=f"$0 {str(slow_tokenizer.eos_token)}",
             seq_b=f"$1 {str(slow_tokenizer.eos_token)}",
             special_tokens=[(str(slow_tokenizer.eos_token), slow_tokenizer.eos_token_id)]
         )
 
+        tokenizer = cls(backend_tokenizer, **slow_tokenizer.special_tokens_map_extended)
         tokenizer.vocab_file = slow_tokenizer.vocab_file
         tokenizer._extra_ids = slow_tokenizer._extra_ids
         return tokenizer

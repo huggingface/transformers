@@ -20,12 +20,11 @@ import os
 import json
 import copy
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from tokenizers import Encoding as EncodingFast
+from tokenizers import Tokenizer, Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
-from tokenizers import Tokenizer
 
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
@@ -36,11 +35,11 @@ from .tokenization_utils_base import (
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
-    PreTrainedTokenizer,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
+from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
 
 
@@ -78,18 +77,18 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     slow_tokenizer_class: PreTrainedTokenizer = None
 
-    def __init__(self, tokenizer: BaseTokenizerFast, **kwargs):
-        if not isinstance(tokenizer, BaseTokenizerFast):
+    def __init__(self, tokenizer: Tokenizer, **kwargs):
+        if not isinstance(tokenizer, Tokenizer):
             raise ValueError(
                 "Tokenizer should be an instance of a BaseTokenizer " "provided by HuggingFace tokenizers library."
             )
-        self._tokenizer: BaseTokenizerFast = tokenizer
+        self._tokenizer: Tokenizer = tokenizer
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
     @classmethod
-    def from_slow_tokenizer(tokenizer: PreTrainedTokenizer):
+    def from_slow_tokenizer(cls, tokenizer: PreTrainedTokenizer):
         raise NotImplementedError  # Implemented in each specific Fast tokenizer implementation
 
     @property
