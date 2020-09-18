@@ -55,7 +55,6 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         encoder_outputs = self.model.model.encoder(**inputs)[0]
         import torch
         assert not torch.isnan(encoder_outputs).any().item()
-        self.assertListEqual(decoded, bad_fp16_result)
         assert decoded_fp16 == ["California's largest electricity provider has begun", 'N-Dubz have revealed they were']
 
 
