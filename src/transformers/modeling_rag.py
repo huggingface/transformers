@@ -1238,10 +1238,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         )
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
-        context_attention_mask = context_attention_mask.repeat_interleave(
-            num_beams, dim=0
-        )  # TODO(Patrick, Aleksandra) - I think this is false and should not be interleaved, but concatenated. To discuss with Aleksandra.
-        #        context_attention_mask = context_attention_mask.unsqueeze(0).expand((num_beams,) + context_attention_mask.shape).reshape((-1,) + context_attention_mask.shape[1:])
+        context_attention_mask = context_attention_mask.repeat_interleave(num_beams, dim=0)
 
         last_hidden_state = (
             last_hidden_state.unsqueeze(0)
@@ -1250,10 +1247,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         )
 
         encoder_outputs["last_hidden_state"] = last_hidden_state
-        doc_scores = doc_scores.repeat_interleave(
-            num_beams, dim=0
-        )  # TODO(Patrick, Aleksandra) - I think this is false and should NOT be interleaved, but concatenated. This would make a difference for `batch_size > 1. To discuss with Aleksandra.
-        #        doc_scores = doc_scores.unsqueeze(0).expand((num_beams,) + doc_scores.shape).reshape((-1,) + doc_scores.shape[1:])
+        doc_scores = doc_scores.repeat_interleave(num_beams, dim=0)
 
         # define start_len & additional parameters
         cur_len = 1
