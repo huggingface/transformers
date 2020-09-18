@@ -35,76 +35,47 @@ if is_torch_available():
 
 @require_torch
 class BlenderbotModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_len=10,
-        vocab_size=99,
-        hidden_size=16,
-        is_training=True,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        hidden_dropout_prob=0.2,
-        max_position_embeddings=50,
-        eos_token_id=2,
-        bos_token_id=0,
-        pad_token_id=1,
-        use_labels=True,
-        ffn_size=4,
-        attention_dropout=0.2,
-        activation="gelu",
-        variant="xlm",
-        scale_embedding=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_len
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.is_training = is_training
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.max_position_embeddings = max_position_embeddings
-        self.use_labels = use_labels
-        self.ffn_size = ffn_size
-        self.activation = activation
-        self.attention_dropout = attention_dropout
-        self.variant = variant
-        self.scale_embedding = scale_embedding
+    # Required attributes
+    vocab_size = 99
+    batch_size = 13
+    seq_length = 7
+    num_hidden_layers = 2
+    hidden_size = 16
+    num_attention_heads = 4
+    is_training = True
+
+    def __init__(self, parent):
         torch.manual_seed(0)
-
-    def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        config = BlenderbotConfig(
+        self.parent = parent
+        self.config = BlenderbotConfig(
             d_model=self.hidden_size,
-            dropout=self.hidden_dropout_prob,
+            dropout=0.0,
+            activation_function="gelu",
             vocab_size=self.vocab_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
             decoder_attention_heads=self.num_attention_heads,
-            attention_dropout=self.attention_dropout,
-            encoder_ffn_dim=self.ffn_size,
-            decoder_ffn_dim=self.ffn_size,
-            max_position_embeddings=self.max_position_embeddings,
-            variant=self.variant,
-            scale_embedding=self.scale_embedding,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
+            attention_dropout=0.0,
+            encoder_ffn_dim=4,
+            decoder_ffn_dim=4,
+            max_position_embeddings=50,
+            variant="prelayernorm",
+            static_position_embeddings=False,
+            scale_embedding=True,
+            bos_token_id=0,
+            eos_token_id=2,
+            pad_token_id=1,
             num_beams=1,
             min_length=3,
             max_length=10,
         )
+
+    def prepare_config_and_inputs_for_common(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
-        return config, inputs_dict
+        return self.config, inputs_dict
 
 
 @require_torch
@@ -119,6 +90,7 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     test_missing_keys = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = BlenderbotModelTester(self)
@@ -129,12 +101,12 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 
     def test_initialization_module(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = BlenderbotForConditionalGeneration(config)
+        model = BlenderbotForConditionalGeneration(config).model
         model.to(torch_device)
         model.eval()
-        self.assertTrue((model.model.encoder.embed_tokens.weight == model.model.shared.weight).all().item())
-        self.assertAlmostEqual(torch.std(model.model.encoder.embed_tokens.weight).item(), config.init_std, 2)
-        self.assertAlmostEqual(torch.std(model.model.encoder.embed_positions.weight).item(), config.init_std, 2)
+        enc_embeds = model.encoder.embed_tokens.weight
+        assert (enc_embeds == model.shared.weight).all().item()
+        self.assertAlmostEqual(torch.std(enc_embeds).item(), config.init_std, 2)
 
     def test_embed_pos_shape(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
