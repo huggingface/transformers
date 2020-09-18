@@ -1361,7 +1361,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
 
     @classmethod
-    def from_pretrained(cls, *inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
         r"""
         Instantiate a :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase` (or a derived class) from
         a predefined tokenizer.
@@ -1422,10 +1422,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             assert tokenizer.unk_token == '<unk>'
 
         """
-        return cls._from_pretrained(*inputs, **kwargs)
-
-    @classmethod
-    def _from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -1472,7 +1468,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     "added_tokens_file": ADDED_TOKENS_FILE,
                     "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    "full_tokenizer_file": FULL_TOKENIZER_FILE,
+                    "tokenizer_file": FULL_TOKENIZER_FILE,
                 }
                 # Look for the tokenizer files
                 for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
@@ -1538,96 +1534,25 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             else:
                 logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
 
-        # Prepare tokenizer initialization kwargs
-        # Did we saved some inputs and kwargs to reload ?
-        tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
-        if tokenizer_config_file is not None:
-            with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
-                init_kwargs = json.load(tokenizer_config_handle)
-            saved_init_inputs = init_kwargs.pop("init_inputs", ())
-            if not init_inputs:
-                init_inputs = saved_init_inputs
-        else:
-            init_kwargs = init_configuration
+        return cls._from_pretrained(cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs):
 
-        # Update with newly provided kwargs
-        init_kwargs.update(kwargs)
-
-        # Set max length if needed
-        if pretrained_model_name_or_path in cls.max_model_input_sizes:
-            # if we're using a pretrained model, ensure the tokenizer
-            # wont index sequences longer than the number of positional embeddings
-            model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
-            if model_max_length is not None and isinstance(model_max_length, (int, float)):
-                init_kwargs["model_max_length"] = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
-
-        # Merge resolved_vocab_files arguments in init_kwargs.
-        added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
-        for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in init_kwargs:
-                init_kwargs[args_name] = file_path
-
-        # Instantiate tokenizer.
-        try:
-            tokenizer = cls(*init_inputs, **init_kwargs)
-        except OSError:
-            raise OSError(
-                "Unable to load vocabulary from file. "
-                "Please check that the provided vocabulary is accessible and not corrupted."
-            )
-
-        # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
-        tokenizer.init_inputs = init_inputs
-        tokenizer.init_kwargs = init_kwargs
-
-        # If there is a complementary special token map, load it
-        special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
-        if special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
-
-            for key, value in special_tokens_map.items():
-                if isinstance(value, dict):
-                    value = AddedToken(**value)
-                elif isinstance(value, list):
-                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
-                setattr(tokenizer, key, value)
-
-        # Add supplementary tokens.
-        special_tokens = tokenizer.all_special_tokens
-        if added_tokens_file is not None:
-            with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = json.load(added_tokens_handle)
-
-            # Sort added tokens by index
-            added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
-
-            for token, index in added_tok_encoder_sorted:
-                assert index == len(tokenizer), (
-                    f"Non-consecutive added token '{token}' found. "
-                    f"Should have index {len(tokenizer)} but has index {index} in saved vocabulary."
-                )
-                tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
-
-        # Check all our special tokens are registrered as "no split" token (we don't cut them) and are in the vocab
-        added_tokens = tokenizer.sanitize_special_tokens()
-        if added_tokens:
-            logger.warning(
-                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained."
-            )
-
-        return tokenizer
+    @classmethod
+    def _from_pretrained(cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs):
+        raise NotImplementedError  # Implemented in PreTrainedTokenizer and PreTrainedTokenizerFast
 
     def save_pretrained(self, save_directory: str) -> Tuple[str]:
         """
-        Save the tokenizer vocabulary files together with:
+        Save the full tokenizer state.
 
-            - added tokens,
-            - special tokens to class attributes mapping,
-            - tokenizer instantiation positional and keywords inputs (e.g. do_lower_case for Bert).
 
         This method make sure the full tokenizer can then be re-loaded using the
-        :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained` class method.
+        :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained` class method.
+
+        .. Note::
+            A "fast" tokenizer (instance of :class:`transformers.PreTrainedTokenizerFast`) saved with
+            this method will not be possible to load back
+            in a "slow" tokenizer, i.e. in a :class:`transformers.PreTrainedTokenizer` instance. It can only be loaded
+            in a "fast" tokenizer, i.e. in a :class:`transformers.PreTrainedTokenizerFast` instance.
 
         .. Warning::
            This won't save modifications you may have applied to the tokenizer after the instantiation (for instance,
@@ -1645,7 +1570,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         os.makedirs(save_directory, exist_ok=True)
 
         special_tokens_map_file = os.path.join(save_directory, SPECIAL_TOKENS_MAP_FILE)
-        added_tokens_file = os.path.join(save_directory, ADDED_TOKENS_FILE)
         tokenizer_config_file = os.path.join(save_directory, TOKENIZER_CONFIG_FILE)
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
@@ -1670,15 +1594,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
 
-        added_vocab = self.get_added_vocab()
-        if added_vocab:
-            with open(added_tokens_file, "w", encoding="utf-8") as f:
-                out_str = json.dumps(added_vocab, ensure_ascii=False)
-                f.write(out_str)
+        file_names = (tokenizer_config_file, special_tokens_map_file)
 
-        vocab_files = self.save_vocabulary(save_directory)
+        return self._save_pretrained(save_directory, file_names)
 
-        return vocab_files + (special_tokens_map_file, added_tokens_file)
+    def _save_pretrained(self, save_directory: str, file_names: Tuple[str]) -> Tuple[str]:
+        raise NotImplementedError  # Implemented in PreTrainedTokenizer and PreTrainedTokenizerFast
 
     @add_end_docstrings(
         ENCODE_KWARGS_DOCSTRING,

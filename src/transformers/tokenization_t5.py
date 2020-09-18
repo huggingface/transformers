@@ -24,6 +24,7 @@ from typing import List, Optional
 
 from tokenizers import SentencePieceUnigramTokenizer
 from tokenizers.processors import TemplateProcessing
+from tokenizers.implementations import BaseTokenizer
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -420,55 +421,29 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     prefix_tokens: List[int] = []
 
-    def __init__(
-        self,
-        vocab_file,
-        eos_token="</s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        extra_ids=100,
-        additional_special_tokens=None,
-        **kwargs
-    ):
-        # Add extra_ids to the special token list
-        if extra_ids > 0:
-            if additional_special_tokens is None:
-                additional_special_tokens = []
-            additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids - 1, 0, -1)])
-
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
-        sp = spm.SentencePieceProcessor()
-        sp.Load(vocab_file)
+    @classmethod
+    def from_slow_tokenizer(cls, slow_tokenizer: T5Tokenizer):
+        sp = slow_tokenizer.sp_model
         vocab = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.piece_size())]
 
-        super().__init__(
-            SentencePieceUnigramTokenizer(vocab, sp.unk_id()),
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            additional_special_tokens=additional_special_tokens,
-            **kwargs,
+        tokenizer = cls(SentencePieceUnigramTokenizer(vocab, sp.unk_id()),
+            eos_token=slow_tokenizer.eos_token,
+            unk_token=slow_tokenizer.unk_token,
+            pad_token=slow_tokenizer.pad_token,
+            additional_special_tokens=slow_tokenizer.additional_special_tokens,
         )
 
-        self.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
+        tokenizer.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
 
-        self.backend_tokenizer._tokenizer.post_processor = TemplateProcessing(
+        tokenizer.backend_tokenizer._tokenizer.post_processor = TemplateProcessing(
             seq_a=f"$0 {str(eos_token)}",
             seq_b=f"$1 {str(eos_token)}",
             special_tokens=[(str(eos_token), self.convert_tokens_to_ids(eos_token))],
         )
 
-        self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
+        tokenizer.vocab_file = vocab_file
+        tokenizer._extra_ids = extra_ids
+        return tokenizer
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

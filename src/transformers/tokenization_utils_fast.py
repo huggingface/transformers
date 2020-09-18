@@ -17,12 +17,15 @@
 """
 
 import os
+import json
+import copy
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
+from tokenizers import Tokenizer
 
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
@@ -33,6 +36,7 @@ from .tokenization_utils_base import (
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
+    PreTrainedTokenizer,
     TextInput,
     TextInputPair,
     TruncationStrategy,
@@ -41,6 +45,15 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+# Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
+TOKENIZER_FILE = "tokenizer.json"
+SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
+TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+
+# Slow tokenizers have an additional addedd tokens files
+ADDED_TOKENS_FILE = "added_tokens.json"
 
 
 @add_end_docstrings(
@@ -62,6 +75,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     have to handle the specific vocabulary augmentation methods of the various underlying
     dictionary structures (BPE, sentencepiece...).
     """
+
+    slow_tokenizer_class: PreTrainedTokenizer = None
 
     def __init__(self, tokenizer: BaseTokenizerFast, **kwargs):
         if not isinstance(tokenizer, BaseTokenizerFast):
@@ -498,14 +513,33 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         else:
             return text
 
+    @classmethod
+    def _from_pretrained(cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs):
+        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
+        if tokenizer_file is not None:
+            return cls(Tokenizer.from_file(tokenizer_file))
+        else:
+            slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs)
+            return cls.from_slow_tokenizer(slow_tokenizer)
+
+    @classmethod
+    def from_slow_tokenizer(tokenizer: PreTrainedTokenizer):
+        raise NotImplementedError  # Implemented in each specific Fast tokenizer implementation
+
+    def _save_pretrained(self, save_directory: str, file_names: Tuple[str]) -> Tuple[str]:
+        full_tokenizer_file = os.path.join(save_directory, TOKENIZER_FILE)
+        self.backend_tokenizer.save(full_tokenizer_file)
+
+        return file_names + (full_tokenizer_file,)
+
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
         """
         Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
         and special token mappings.
 
         .. warning::
-            Please use :meth:`~transformers.PreTrainedTokenizer.save_pretrained` to save the full tokenizer state if
-            you want to reload it using the :meth:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
+            Please use :meth:`~transformers.PreTrainedTokenizerFast.save_pretrained` to save the full tokenizer state if
+            you want to reload it using the :meth:`~transformers.PreTrainedTokenizerFast.from_pretrained` class method.
 
         Args:
             save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
