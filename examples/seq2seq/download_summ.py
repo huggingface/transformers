@@ -4,6 +4,14 @@ import fire
 from tqdm import tqdm
 
 
+DS_TO_KEY = {
+    'gigaword': ('document', 'summary'),
+    'xsum': ('document', 'summary'),
+    'aeslc': ('email_body', 'subject_line'),
+    'billsum': ('text', 'summary'), # title also a field...
+
+}
+
 def download_summarization_dataset(dataset, save_dir=None, split=None, **load_kwargs) -> None:
     """Download a dataset using the datasets package and save it to the format expected by finetune.py
     Format of save_dir: train.source, train.target, val.source, val.target, test.source, test.target.
