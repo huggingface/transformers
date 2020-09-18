@@ -39,8 +39,11 @@ def download_summarization_dataset(dataset, save_dir=None, split=None, **load_kw
 
         # reader is the bottleneck so writing one record at a time doesn't slow things down
         for x in tqdm(ds[split]):
-            src_fp.write(x['document'] + "\n")
-            tgt_fp.write(x['summary'] + "\n")
+            try:
+                src_fp.write(x['document'] + "\n")
+                tgt_fp.write(x['summary'] + "\n")
+            except KeyError:
+                raise KeyError(f'Keys are {x.keys()}')
 
     print(f"Saved {dataset} dataset to {save_dir}")
 
