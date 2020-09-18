@@ -271,7 +271,7 @@ class EncoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.final_layer_norm(x)
         if torch.isinf(x).any() or torch.isnan(x).any():
-            torch.clamp(x, min=-FP16_CLAMP_VALUE, max=FP16_CLAMP_VALUE)
+            x = torch.clamp(x, min=-FP16_CLAMP_VALUE, max=FP16_CLAMP_VALUE)
         return x, attn_weights
 
 
