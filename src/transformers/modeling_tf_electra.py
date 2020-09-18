@@ -13,7 +13,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
@@ -29,6 +28,7 @@ from .modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFSequenceSummary,
     TFTokenClassificationLoss,
+    TFPreTrainedModel,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -51,6 +51,228 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-large-discriminator",
     # See all ELECTRA models at https://huggingface.co/models?filter=electra
 ]
+
+
+class TFElectraSelfAttention(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        assert config.hidden_size % config.num_attention_heads == 0
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.query = tf.keras.layers.Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+        )
+        self.key = tf.keras.layers.Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+        )
+        self.value = tf.keras.layers.Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+        )
+        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+
+    def transpose_for_scores(self, x, batch_size):
+        x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
+
+        return tf.transpose(x, perm=[0, 2, 1, 3])
+
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
+        batch_size = shape_list(hidden_states)[0]
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
+        query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
+        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
+        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = tf.matmul(
+            query_layer, key_layer, transpose_b=True
+        )  # (batch size, num_heads, seq_len_q, seq_len_k)
+        dk = tf.cast(shape_list(key_layer)[-1], attention_scores.dtype)  # scale attention_scores
+        attention_scores = attention_scores / tf.math.sqrt(dk)
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs, training=training)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = tf.matmul(attention_probs, value_layer)
+        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
+        context_layer = tf.reshape(
+            context_layer, (batch_size, -1, self.all_head_size)
+        )  # (batch_size, seq_len_q, all_head_size)
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
+class TFElectraSelfOutput(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+
+    def call(self, hidden_states, input_tensor, training=False):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+
+        return hidden_states
+
+
+class TFElectraAttention(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.self_attention = TFElectraSelfAttention(config, name="self")
+        self.dense_output = TFElectraSelfOutput(config, name="output")
+
+    def prune_heads(self, heads):
+        raise NotImplementedError
+
+    def call(self, input_tensor, attention_mask, head_mask, output_attentions, training=False):
+        self_outputs = self.self_attention(
+            input_tensor, attention_mask, head_mask, output_attentions, training=training
+        )
+        attention_output = self.dense_output(self_outputs[0], input_tensor, training=training)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+
+        return outputs
+
+
+class TFElectraIntermediate(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+
+        return hidden_states
+
+
+class TFElectraOutput(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+
+    def call(self, hidden_states, input_tensor, training=False):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+
+        return hidden_states
+
+
+class TFElectraLayer(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.attention = TFElectraAttention(config, name="attention")
+        self.intermediate = TFElectraIntermediate(config, name="intermediate")
+        self.bert_output = TFElectraOutput(config, name="output")
+
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
+        attention_outputs = self.attention(
+            hidden_states, attention_mask, head_mask, output_attentions, training=training
+        )
+        attention_output = attention_outputs[0]
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.bert_output(intermediate_output, attention_output, training=training)
+        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+
+        return outputs
+
+
+class TFElectraEncoder(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.layer = [TFElectraLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+
+    def call(
+        self,
+        hidden_states,
+        attention_mask,
+        head_mask,
+        output_attentions,
+        output_hidden_states,
+        return_dict,
+        training=False,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        for i, layer_module in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(
+                hidden_states, attention_mask, head_mask[i], output_attentions, training=training
+            )
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        # Add last layer
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
+class TFElectraPooler(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
+
+    def call(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+
+        return pooled_output
 
 
 class TFElectraEmbeddings(tf.keras.layers.Layer):
@@ -194,7 +416,7 @@ class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFElectraPreTrainedModel(TFBertPreTrainedModel):
+class TFElectraPreTrainedModel(TFPreTrainedModel):
 
     config_class = ElectraConfig
     base_model_prefix = "electra"
@@ -241,7 +463,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
 
         if config.embedding_size != config.hidden_size:
             self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
-        self.encoder = TFBertEncoder(config, name="encoder")
+        self.encoder = TFElectraEncoder(config, name="encoder")
         self.config = config
 
     def get_input_embeddings(self):
