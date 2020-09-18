@@ -30,7 +30,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/blenderbot-3B": 128,
-    "facebook/blenderbot-9B": 128,
+    "facebook/blenderbot-90M": 128,
 }
 logger = logging.getLogger(__name__)
 

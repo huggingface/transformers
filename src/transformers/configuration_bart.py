@@ -196,7 +196,8 @@ class BartConfig(PretrainedConfig):
         self.classif_dropout = classifier_dropout
 
         # pos embedding offset
-        self.extra_pos_embeddings = self.pad_token_id + 1
+        self.extra_pos_embeddings = extra_pos_embeddings
+        # bart has a hack that offsets positional embeddings by 2, other models don't do do this
 
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
-from .configuration_utils import PretrainedConfig
+from .modeling_bart import BartConfig
 
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -23,16 +23,15 @@ BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class BlenderbotConfig(PretrainedConfig):
+class BlenderbotConfig(BartConfig):
     """
-    This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotModel`.
-    It is used to instantiate an Blenderbot model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+    This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotForConditionalGeneration`.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of
     the `blenderbot <https://huggingface.co/blenderbot>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from  :class:`~transformers.BartConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.BartConfig`
+    for more information. The
 
     Args:
         d_model: (:obj:`int`, default to 2560), dimension of the embeddings vector
@@ -67,88 +66,3 @@ class BlenderbotConfig(PretrainedConfig):
     """
 
     model_type = "blenderbot"
-
-    def __init__(
-        self,
-        activation_dropout=0.0,
-        extra_pos_embeddings=0,
-        activation_function="gelu",
-        vocab_size=8008,
-        d_model=2560,
-        encoder_ffn_dim=10240,
-        encoder_layers=2,
-        encoder_attention_heads=32,
-        decoder_ffn_dim=10240,
-        decoder_layers=24,
-        decoder_attention_heads=32,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        attention_dropout=0.0,
-        dropout=0.1,
-        max_position_embeddings=128,
-        init_std=0.02,
-        is_encoder_decoder=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        add_final_layer_norm=False,
-        scale_embedding=False,
-        normalize_embedding=False,
-        static_position_embeddings=False,
-        add_bias_logits=False,
-        normalize_before=True,
-        variant="prelayernorm",
-        **kwargs
-    ):
-        r"""
-        :class:`~transformers.BlenderbotConfig` is the configuration class for `BlenderbotForConditionalGeneration`.
-
-        Examples::
-
-            >>> from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration
-
-            >>> config = BlenderbotConfig.from_pretrained('facebook/blenderbot-3B')
-            >>> model = BlenderbotForComditionalGeneration(config)
-        """
-        if "hidden_size" in kwargs:
-            raise ValueError("hidden size is called d_model")
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = self.num_hidden_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.init_std = init_std
-        self.activation_function = activation_function
-        self.variant = variant
-        self.scale_embedding = scale_embedding
-        self.normalize_embedding = normalize_embedding
-        self.normalize_before = normalize_before
-        self.add_final_layer_norm = add_final_layer_norm
-        self.add_bias_logits = add_bias_logits
-        self.static_position_embeddings = static_position_embeddings
-
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.dropout = dropout
-        self.extra_pos_embeddings = extra_pos_embeddings
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
