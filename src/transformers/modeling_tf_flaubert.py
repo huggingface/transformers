@@ -15,22 +15,26 @@
 """ TF 2.0 Flaubert model.
 """
 
+import dataclasses
+from dataclasses import dataclass
 import itertools
+import math
 import random
+from typing import Optional, Tuple
 
 import tensorflow as tf
 
 from transformers.activations_tf import get_tf_activation
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_outputs import TFBaseModelOutput
 from .modeling_tf_utils import TFSharedEmbeddings, get_initializer, keras_serializable, shape_list, TFPreTrainedModel
 from .modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
-    TFXLMForTokenClassification,
+    TFXLMForTokenClassification, TFXLMWithLMHeadModelOutput,
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
@@ -220,6 +224,8 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             klen = shape_list(kv)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
         n_heads = self.n_heads
+        # dim_per_head = tf.math.divide(self.dim, n_heads)
+        # dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
         dim_per_head = self.dim // n_heads
         mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
 
@@ -250,10 +256,14 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
                     k, v = cache[self.layer_id]
             cache[self.layer_id] = (k, v)
 
-        q = q / tf.math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        # q = tf.cast(q, dtype=tf.float64)
+        # q = tf.divide(q, tf.math.sqrt(tf.cast(dim_per_head, dtype=tf.float64)))  # (bs, n_heads, qlen, dim_per_head)
+        # k = tf.cast(k, dtype=q.dtype)
+        q = q / math.sqrt(dim_per_head)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
+        # mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
 
         weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
@@ -296,6 +306,12 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
+        self.n_heads = config.n_heads
+        self.n_langs = config.n_langs
+        self.dim = config.emb_dim
+        self.hidden_dim = self.dim * 4
+        self.n_words = config.n_words
         self.pad_index = config.pad_index
         self.causal = config.causal
         self.n_layers = config.n_layers
@@ -346,6 +362,9 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             self.layer_norm2.append(
                 tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2_._{}".format(i))
             )
+
+    def get_input_embeddings(self):
+        return self.embeddings
 
     def call(
         self,
@@ -584,18 +603,81 @@ class TFFlaubertPredLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
+@dataclass
+class TFFlaubertWithLMHeadModelOutput(ModelOutput):
+    """
+    Base class for :class:`~transformers.TFXLMWithLMHeadModel` outputs.
+
+    Args:
+        logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    logits: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
+
+
 @add_start_docstrings(
     """The Flaubert Model transformer with a language modeling head on top
     (linear layer with weights tied to the input embeddings). """,
     FLAUBERT_START_DOCSTRING,
 )
-class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
-    config_class = FlaubertConfig
-
+class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
         self.pred_layer = TFFlaubertPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+
+    def get_output_embeddings(self):
+        return self.pred_layer.input_embeddings
+
+    def prepare_inputs_for_generation(self, inputs, **kwargs):
+        mask_token_id = self.config.mask_token_id
+        lang_id = self.config.lang_id
+
+        effective_batch_size = inputs.shape[0]
+        mask_token = tf.ones((effective_batch_size, 1), dtype=tf.int32) * mask_token_id
+        inputs = tf.concat([inputs, mask_token], axis=1)
+
+        if lang_id is not None:
+            langs = tf.ones_like(inputs) * lang_id
+        else:
+            langs = None
+        return {"inputs": inputs, "langs": langs}
+
+    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="jplu/tf-flaubert-small-cased",
+        output_type=TFFlaubertWithLMHeadModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(self, inputs, **kwargs):
+        return_dict = kwargs.get("return_dict")
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(inputs, **kwargs)
+
+        output = transformer_outputs[0]
+        outputs = self.pred_layer(output)
+
+        if not return_dict:
+            return (outputs,) + transformer_outputs[1:]
+
+        return TFFlaubertWithLMHeadModelOutput(
+            logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
+        )
 
 
 @add_start_docstrings(
