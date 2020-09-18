@@ -411,7 +411,7 @@ def main():
 
         test_output = trainer.predict(test_dataset=test_dataset)
         test_metrics = test_output.metrics
-        test_metrics = {k.replace("eval", "test"): v for k,v in test_metrics.items()}
+        test_metrics = {k.replace("eval", "test"): v for k, v in test_metrics.items()}
 
         output_test_file = os.path.join(training_args.output_dir, "test_results.json")
 
