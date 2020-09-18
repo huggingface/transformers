@@ -35,6 +35,7 @@ CHEAP_ARGS = {
     "label_smoothing": 0.2,
     "eval_max_gen_length": None,
     "eval_beams": 1,
+    "reload_dataloaders_every_epoch": True,
     "val_metric": "loss",
     "save_top_k": 1,
     "adafactor": True,

@@ -212,6 +212,7 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument(
             "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
         )
+        parser.add_argument('--reload_dataloaders_every_epoch', type=bool, action='store_true')
         parser.add_argument(
             "--tokenizer_name",
             default=None,
