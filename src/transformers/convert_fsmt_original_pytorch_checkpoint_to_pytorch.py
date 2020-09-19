@@ -31,13 +31,11 @@ import torch
 from fairseq import hub_utils
 from fairseq.data.dictionary import Dictionary
 
-from transformers import WEIGHTS_NAME
+from transformers import WEIGHTS_NAME, logging
 from transformers.configuration_fsmt import FSMTConfig
 from transformers.modeling_fsmt import FSMTForConditionalGeneration
 from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
-
-from transformers import logging
 
 
 logging.set_verbosity_warning()
