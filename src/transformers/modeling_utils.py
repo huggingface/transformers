@@ -1054,6 +1054,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         return model
 
+    def quantize_int8(self) -> None:
+        """This is for CPU speedups, not supported in cuda. Operates in place."""
+        if self.device != torch.device('cpu'):
+            raise ValueError('Quantization only supported on CPU')
+        torch.quantization.quantize_dynamic(self, {torch.nn.Linear}, dtype=torch.qint8, inplace=True)
+        # This will raise AttributeError in early pytorch versions
+
 
 class Conv1D(nn.Module):
     """
@@ -1495,6 +1502,8 @@ class SequenceSummary(nn.Module):
         output = self.last_dropout(output)
 
         return output
+
+
 
 
 def prune_linear_layer(layer: torch.nn.Linear, index: torch.LongTensor, dim: int = 0) -> torch.nn.Linear:

@@ -92,6 +92,7 @@ class MarianIntegrationTest(unittest.TestCase):
         if torch_device == "cuda":
             return model.half()
         else:
+            model.quantize_int8()
             return model
 
     def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
