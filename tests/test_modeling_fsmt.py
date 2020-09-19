@@ -220,14 +220,6 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip("failing on CI - needs review")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip("failing on CI - needs review")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
     # def test_auto_model(self):
     #     # XXX: add a tiny model to s3?
     #     model_name = "facebook/wmt19-ru-en-tiny"
@@ -445,6 +437,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
 
         input_ids = tokenizer.encode(src_text, return_tensors="pt").to(torch_device)
+
         outputs = model.generate(input_ids)
         decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
         assert decoded == tgt_text, f"\n\ngot: {decoded}\nexp: {tgt_text}\n"
@@ -466,7 +459,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = SinusoidalPositionalEmbedding(embedding_dim=6, padding_idx=self.padding_idx, init_size=6).to(
+        emb1 = SinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6, padding_idx=self.padding_idx).to(
             torch_device
         )
         emb = emb1(input_ids)
@@ -483,14 +476,10 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_odd_embed_dim(self):
         # odd embedding_dim  is allowed
-        SinusoidalPositionalEmbedding.get_embedding(
-            num_embeddings=4, embedding_dim=5, padding_idx=self.padding_idx
-        ).to(torch_device)
+        SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(torch_device)
 
         # odd num_embeddings is allowed
-        SinusoidalPositionalEmbedding.get_embedding(
-            num_embeddings=5, embedding_dim=4, padding_idx=self.padding_idx
-        ).to(torch_device)
+        SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(torch_device)
 
     @unittest.skip("different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
@@ -502,7 +491,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
                 [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
             ]
         )
-        emb1 = SinusoidalPositionalEmbedding(init_size=512, embedding_dim=512, padding_idx=self.padding_idx).to(
+        emb1 = SinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=self.padding_idx).to(
             torch_device
         )
         weights = emb1.weights.data[:3, :5]
