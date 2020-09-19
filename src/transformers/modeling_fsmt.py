@@ -1001,6 +1001,14 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
+    authorized_missing_keys = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
+    state_dict_no_save_keys = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -1139,7 +1147,12 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     """
     This module produces sinusoidal positional embeddings of any length.
 
+    We don't want to save the weight of this embedding since it's not trained
+    (deterministic) and it can be huge.
+
     Padding symbols are ignored.
+
+    These embeddings get automatically extended in forward if more positions is needed.
     """
 
     def __init__(self, num_positions, embedding_dim, padding_idx):

@@ -688,6 +688,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
+        state_dict = model_to_save.state_dict()
+
+        # Handle the case where some state_dict keys shouldn't be saved
+        state_dict_no_save_keys = getattr(self, "state_dict_no_save_keys", None)
+        if state_dict_no_save_keys:
+            state_dict = {k: v for k, v in model_to_save.state_dict().items() if k not in state_dict_no_save_keys}
+
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
@@ -698,10 +705,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 # Save configuration file
                 model_to_save.config.save_pretrained(save_directory)
             # xm.save takes care of saving only from master
-            xm.save(model_to_save.state_dict(), output_model_file)
+            xm.save(state_dict, output_model_file)
         else:
             model_to_save.config.save_pretrained(save_directory)
-            torch.save(model_to_save.state_dict(), output_model_file)
+            torch.save(state_dict, output_model_file)
 
         logger.info("Model weights saved in {}".format(output_model_file))
 
