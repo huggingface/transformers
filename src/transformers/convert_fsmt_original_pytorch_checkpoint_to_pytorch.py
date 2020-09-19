@@ -229,6 +229,8 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         "model.decoder.version",
         "model.encoder_embed_tokens.weight",
         "model.decoder_embed_tokens.weight",
+        "model.encoder.embed_positions._float_tensor",
+        "model.decoder.embed_positions._float_tensor"
     ]
     for k in ignore_keys:
         model_state_dict.pop(k, None)
