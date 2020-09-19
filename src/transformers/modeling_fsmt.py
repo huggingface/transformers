@@ -997,7 +997,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
-    state_dict_no_save_keys = [
+    keys_to_never_save = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
