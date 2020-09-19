@@ -151,8 +151,10 @@ def main():
     def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
         def compute_metrics_fn(p: EvalPrediction):
             if output_mode == "classification":
+                preds = p.predictions[0] if type(p.predictions) == tuple else p.predictions
                 preds = np.argmax(p.predictions, axis=1)
             elif output_mode == "regression":
+                preds = p.predictions[0] if type(p.predictions) == tuple else p.predictions
                 preds = np.squeeze(p.predictions)
             return glue_compute_metrics(task_name, preds, p.label_ids)
 
