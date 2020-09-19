@@ -108,7 +108,7 @@ def eval_data_dir(
         ids = batch["ids"]
         if num_return_sequences > 1:
             preds = chunks(preds, num_return_sequences)
-        assert len(preds) == len(ids)
+        #assert len(preds) == len(ids)
         for i, pred in enumerate(preds):
             results.append(dict(pred=pred, id=ids[i].item()))
     save_json(results, save_path)
