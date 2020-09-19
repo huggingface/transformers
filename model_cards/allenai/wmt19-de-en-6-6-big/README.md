@@ -9,7 +9,7 @@ tags:
 - translation
 - wmt19
 - allenai
-license: Apache 2.0
+license: apache-2.0
 datasets:
 - wmt19
 metrics:

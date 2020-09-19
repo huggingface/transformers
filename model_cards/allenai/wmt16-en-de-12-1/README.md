@@ -8,7 +8,7 @@ tags:
 - translation
 - wmt16
 - allenai
-license: Apache 2.0
+license: apache-2.0
 datasets:
 - wmt16
 metrics:
