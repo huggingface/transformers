@@ -431,8 +431,8 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         model = self.get_model(mname)
         return tokenizer, model, src_text, tgt_text
 
-    @slow
     @parameterized.expand(pairs)
+    @slow
     def test_translation_direct(self, pair):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
 
@@ -442,8 +442,8 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
         assert decoded == tgt_text, f"\n\ngot: {decoded}\nexp: {tgt_text}\n"
 
-    @slow
     @parameterized.expand(pairs)
+    @slow
     def test_translation_pipeline(self, pair):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
         device = 0 if torch_device == "cuda" else -1
