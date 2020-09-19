@@ -42,27 +42,36 @@ class RetrievAugLMMarginOutput(ModelOutput):
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Languaged modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head. The score is possibly marginalized over all documents for each vocabulary token.
+            Prediction scores of the language modeling head.
+            The score is possibly marginalized over all documents for each vocabulary token.
         doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-            Score between each retrieved document embeddigs (see :obj:`retrieved_doc_embeds`) and :obj:`question_encoder_last_hidden_state`.
+            Score between each retrieved document embeddigs
+            (see :obj:`retrieved_doc_embeds`) and :obj:`question_encoder_last_hidden_state`.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
+            Contains pre-computed hidden-states (key and values in the attention blocks)
+            of the decoder that can be used (see ``past_key_values`` input) to
+            speed up sequential decoding.
         retrieved_doc_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs, hidden_size)`, `optional`, returned when `output_retrieved=True`):
-            Embedded documents retrieved by the retriever. Is used with ``question_encoder_last_hidden_state`` to compute the ``doc_scores``.
+            Embedded documents retrieved by the retriever.
+            Is used with ``question_encoder_last_hidden_state`` to compute
+            the ``doc_scores``.
         retrieved_doc_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, config.n_docs)`, `optional`, returned when `output_retrieved=True`):
             The indexes of the embedded documents retrieved by the retriever.
         context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
-            Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
+            Input ids post-processed from the retrieved documents
+            and the question encoder input_ids by the retriever.
         context_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
-            Attention mask post-processed from the retrieved documents and the question encoder input_ids by the retriever.
+            Attention mask post-processed from the retrieved documents
+            and the question encoder input_ids by the retriever.
         question_encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the question encoder pooled output of the model.
+            Sequence of hidden-states at the output of the last layer
+            of the question encoder pooled output of the model.
         question_enc_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings
+            + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the question encoder at the output of each layer plus the initial embedding outputs.
@@ -121,30 +130,37 @@ class RetrievAugLMOutput(ModelOutput):
     """
     Args:
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head. The score is possibly marginalized over all documents for each vocabulary token.
+            Prediction scores of the language modeling head.
+            The score is possibly marginalized over all documents for each vocabulary token.
         doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
             Score between each retrieved document embeddigs (see :obj:`retrieved_doc_embeds`) and :obj:`question_encoder_last_hidden_state`.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,
+            with each tensor of shape
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
-
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
+            Contains pre-computed hidden-states (key and values in the attention blocks)
+            of the decoder that can be used (see ``past_key_values`` input) to
+            speed up sequential decoding.
         retrieved_doc_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs, hidden_size)`, `optional`, returned when `output_retrieved=True`):
-            Embedded documents retrieved by the retriever. Is used with ``question_encoder_last_hidden_state`` to compute the ``doc_scores``.
+            Embedded documents retrieved by the retriever.
+            Is used with ``question_encoder_last_hidden_state`` to compute the ``doc_scores``.
         retrieved_doc_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, config.n_docs)`, `optional`, returned when `output_retrieved=True`):
             The indexes of the embedded documents retrieved by the retriever.
         context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
-            Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
+            Input ids post-processed from the retrieved documents
+            and the question encoder input_ids by the retriever.
         context_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
-            Attention mask post-processed from the retrieved documents and the question encoder input_ids by the retriever.
+            Attention mask post-processed from the retrieved
+            documents and the question encoder input_ids by the retriever.
         question_encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the question encoder pooled output of the model.
+            Sequence of hidden-states at the output of the last layer
+            of the question encoder pooled output of the model.
         question_enc_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the question encoder at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the question encoder at the output of each
+            layer plus the initial embedding outputs.
         question_enc_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
@@ -157,7 +173,8 @@ class RetrievAugLMOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the generator encoder at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the generator encoder at the output
+            of each layer plus the initial embedding outputs.
         generator_enc_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
@@ -464,6 +481,21 @@ class RagModel(RagPreTrainedModel):
     ):
         r"""
         Returns:
+
+        Example::
+
+            >>> from transformers import RagTokenizer, RagRetriever, RagModel
+            >>> import torch
+
+            >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
+            >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
+            >>> # initialize with RagRetriever to do everything in one forward call
+            >>> model = RagModel.from_pretrained("facebook/rag-token-base", retriever=retriever)
+
+            >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="pt")
+            >>> input_ids = input_dict["input_ids"]
+            >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
+
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -762,8 +794,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 The number of independently computed returned sequences for each element in the batch. Note that this is not the value
                 we pass to the ``generator``'s  `:func:`~transformers.PreTrainedModel.generate`` function, where we set ``num_return_sequences``
                 to `num_beams`.
-            num_beams (:obj:`int`, `optional`, defaults to ``1``):
-                Number of beams for beam search. ``1`` means no beam search.
+            num_beams (:obj:`int`, `optional`, defaults to 1):
+                Number of beams for beam search. 1 means no beam search.
             kwargs:
                 Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate``.
         Return:

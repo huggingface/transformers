@@ -17,7 +17,7 @@
 import copy
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
@@ -39,7 +39,7 @@ RAG_CONFIG_DOC = r"""
             Dimensionality of the document embeddings indexed by :class:`~transformers.RagRetriever`.
         retrieval_batch_size (:obj:`int`, `optional`, defaults to 8):
             Retrieval batch size, defined as the number of queries issues concurrently to the faiss index excapsulated :class:`~transformers.RagRetriever`.
-        dataset (:obj:`str`, `optional`, defaults to :obj:`wiki_dpr`):
+        dataset (:obj:`str`, `optional`, defaults to :obj:`"wiki_dpr"`):
             A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids using :obj:`datasets.list_datasets()`).
         dataset_split (:obj:`str`, `optional`, defaults to :obj:`train`)
             Which split of the ``dataset`` to load.
@@ -70,7 +70,7 @@ RAG_CONFIG_DOC = r"""
 """
 
 
-@add_start_docstrings_to_callable(RAG_CONFIG_DOC)
+@add_start_docstrings(RAG_CONFIG_DOC)
 class RagConfig(PretrainedConfig):
     model_type = "rag"
 
@@ -164,7 +164,7 @@ class RagConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig`.
+        Serializes this instance to a Python dictionary. Override the default :meth:`~transformers.PretrainedConfig.to_dict`.
 
         Returns:
             :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

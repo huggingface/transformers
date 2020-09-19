@@ -17,7 +17,6 @@ import os
 from typing import List, Optional
 
 from .configuration_rag import RagConfig
-from .tokenization_auto import AutoTokenizer
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -42,6 +41,9 @@ class RagTokenizer:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        # dynamically import AutoTokenizer
+        from transformers import AutoTokenizer
+
         config = kwargs.pop("config", None)
 
         if config is None:

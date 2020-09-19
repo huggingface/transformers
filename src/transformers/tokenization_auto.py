@@ -40,6 +40,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    RagConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -72,6 +73,7 @@ from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_pegasus import PegasusTokenizer
+from .tokenization_rag import RagTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -116,6 +118,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
+        (RagConfig, (RagTokenizer, None)),
     ]
 )
 

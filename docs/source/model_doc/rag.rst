@@ -8,10 +8,7 @@ Retrieval-augmented generation ("RAG") models combine the powers of pretrained d
 RAG models retrieve docs, pass them to a seq2seq model, then marginalize to generate outputs.
 The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing both retrieval and generation to adapt to downstream tasks.
 
-It is based on the following paper:
-
-Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela
-, Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.
+It is based on the paper `Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks <https://arxiv.org/abs/2005.11401>`__ by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
 
 The abstract from the paper is the following:
 
@@ -53,11 +50,22 @@ RagTokenizer
     :members:
 
 
+Rag specific outputs
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_rag.RetrievAugLMMarginOutput
+    :members:
+
+.. autoclass:: transformers.modeling_rag.RetrievAugLMOutput
+    :members:
+
+
 RAGRetriever
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagRetriever
     :members:
+
 
 RagModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,11 +73,13 @@ RagModel
 .. autoclass:: transformers.RagModel
     :members: forward
 
+
 RagSequenceForGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagSequenceForGeneration
     :members: forward, generate
+
 
 RagTokenForGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
