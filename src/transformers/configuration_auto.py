@@ -74,7 +74,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -97,6 +97,7 @@ CONFIG_MAPPING = OrderedDict(
         ("reformer", ReformerConfig),
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
+        ("deberta", DeBERTaConfig),
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
         ("bert", BertConfig),
@@ -110,7 +111,6 @@ CONFIG_MAPPING = OrderedDict(
         ("encoder-decoder", EncoderDecoderConfig),
         ("funnel", FunnelConfig),
         ("lxmert", LxmertConfig),
-        ("deberta", DeBERTaConfig),
     ]
 )
 
@@ -144,6 +144,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("encoder-decoder", "Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
+        ("deberta", "DeBERTa"),
     ]
 )
 

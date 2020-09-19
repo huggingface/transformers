@@ -1139,7 +1139,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         num_labels = getattr(config, "num_labels", 2)
         self.num_labels = num_labels
 
-        self.deberta = DeBERTaModel(config)
+        self.bert = DeBERTaModel(config)
         pool_config = PoolConfig(self.config)
         self.pooler = ContextPooler(pool_config)
         output_dim = self.pooler.output_dim()
@@ -1150,6 +1150,12 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         self.dropout = StableDropout(drop_out)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.bert.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings):
+        self.bert.set_input_embeddings(new_embeddings)
 
     @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -1179,7 +1185,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.deberta(
+        outputs = self.bert(
             input_ids,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
