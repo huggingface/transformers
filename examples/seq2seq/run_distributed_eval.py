@@ -188,7 +188,7 @@ def run_generate():
         preds = combine_partial_results(partial_results)
         if args.num_return_sequences > 1:
             save_path = save_dir.joinpath('pseudolabel_results.json')
-            print(f'Saving aggregated results at {save_path}, intermediate at {json_save_dir}')
+            print(f'Saving aggregated results at {save_path}, intermediate in {json_save_dir}/')
             save_json(preds, save_path)
             return
         tgt_file = Path(args.data_dir).joinpath(args.type_path + ".target")
