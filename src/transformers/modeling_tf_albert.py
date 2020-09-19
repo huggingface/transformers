@@ -204,14 +204,6 @@ class TFAlbertAttention(tf.keras.layers.Layer):
 
         self.hidden_size = config.hidden_size
         self.output_attentions = config.output_attentions
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.pruned_heads = set()
-        # Two different dropout probabilities; see https://github.com/google-research/albert/blob/master/modeling.py#L971-L993
-        self.attention_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
-        self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.num_attention_heads = config.num_attention_heads
         assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -225,6 +217,14 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         self.value = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.pruned_heads = set()
+        # Two different dropout probabilities; see https://github.com/google-research/albert/blob/master/modeling.py#L971-L993
+        self.attention_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
