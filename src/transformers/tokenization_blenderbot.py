@@ -6,7 +6,7 @@ from typing import List
 import regex as re
 
 from .tokenization_roberta import RobertaTokenizer
-from .tokenization_utils import AddedToken, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,12 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",},
-    "merges_file": {"facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",},
+    "vocab_file": {
+        "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
+    },
+    "merges_file": {
+        "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
+    },
 }
 
 logger = logging.getLogger(__name__)
@@ -53,7 +57,6 @@ BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
     "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
 }
-
 
 
 def get_pairs(word):
