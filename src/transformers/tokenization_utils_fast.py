@@ -26,6 +26,8 @@ from tokenizers import Tokenizer, Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
+from .convert_slow_tokenizer import convert_slow_tokenizer
+
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -77,19 +79,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     slow_tokenizer_class: PreTrainedTokenizer = None
 
-    def __init__(self, tokenizer: Tokenizer, **kwargs):
-        if not isinstance(tokenizer, Tokenizer):
-            raise ValueError(
-                "Tokenizer should be an instance of a BaseTokenizer " "provided by HuggingFace tokenizers library."
-            )
-        self._tokenizer: Tokenizer = tokenizer
+    def __init__(self, *args, **kwargs):
+        slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
+        self._tokenizer: Tokenizer = convert_sentencepiece_tokenizer(slow_tokenizer)
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_slow_tokenizer(cls, tokenizer: PreTrainedTokenizer):
-        raise NotImplementedError  # Implemented in each specific Fast tokenizer implementation
 
     @property
     def is_fast(self) -> bool:
@@ -518,6 +513,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     @classmethod
     def _from_pretrained(cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs):
+        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
+        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
         tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
         if tokenizer_file is not None:
             return cls(Tokenizer.from_file(tokenizer_file))

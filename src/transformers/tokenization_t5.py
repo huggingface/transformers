@@ -428,43 +428,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     prefix_tokens: List[int] = []
 
-    @classmethod
-    def from_slow_tokenizer(cls, slow_tokenizer: T5Tokenizer):
-        sp = slow_tokenizer.sp_model
-        vocab = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.piece_size())]
-
-        out_vocab_filename = 'vocab.json'
-        data = {"unk_id": sp.unk_id(), "vocab": vocab}
-        with open(out_vocab_filename, "w") as f:
-            json.dump(data, f, indent=4)
-
-        backend_tokenizer = Tokenizer(Unigram(out_vocab_filename))
-        backend_tokenizer.add_special_tokens(slow_tokenizer.all_special_tokens_extended)
-
-        backend_tokenizer.normalizer = normalizers.Sequence([normalizers.Nmt(), normalizers.NFKC(),])
-        backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(
-                    replacement=SPIECE_UNDERLINE, add_prefix_space=True
-                ),
-            ]
-        )
-        backend_tokenizer.decoder = decoders.Metaspace(
-            replacement=SPIECE_UNDERLINE, add_prefix_space=True
-        )
-
-        backend_tokenizer.post_processor = TemplateProcessing(
-            seq_a=f"$0 {str(slow_tokenizer.eos_token)}",
-            seq_b=f"$1 {str(slow_tokenizer.eos_token)}",
-            special_tokens=[(str(slow_tokenizer.eos_token), slow_tokenizer.eos_token_id)]
-        )
-
-        tokenizer = cls(backend_tokenizer, **slow_tokenizer.special_tokens_map_extended)
-        tokenizer.vocab_file = slow_tokenizer.vocab_file
-        tokenizer._extra_ids = slow_tokenizer._extra_ids
-        return tokenizer
-
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
