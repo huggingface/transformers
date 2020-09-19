@@ -400,7 +400,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
 
         src_text = "My friend computer will translate this for me"
         input_ids = tokenizer([src_text], return_tensors="pt")["input_ids"]
-        input_ids = _long_tensor(input_ids)
+        input_ids = _long_tensor(input_ids).to(torch_device)
         inputs_dict = prepare_fsmt_inputs_dict(model.config, input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
@@ -410,7 +410,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         # may have to adjust if switched to a different checkpoint
         expected_slice = torch.tensor(
             [[-1.5753, -1.5753, 2.8975], [-0.9540, -0.9540, 1.0299], [-3.3131, -3.3131, 0.5219]]
-        )
+        ).to(torch_device)
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def translation_setup(self, pair):
