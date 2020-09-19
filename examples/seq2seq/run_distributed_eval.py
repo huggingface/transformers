@@ -187,7 +187,9 @@ def run_generate():
         partial_results = gather_results_from_each_node(num_replicas, json_save_dir, args.sync_timeout)
         preds = combine_partial_results(partial_results)
         if args.num_return_sequences > 1:
-            save_json(preds, save_dir.joinpath('pseudolabel_results.json'))
+            save_path = save_dir.joinpath('pseudolabel_results.json')
+            print(f'Saving aggregated results at {save_path}, intermediate at {json_save_dir}')
+            save_json(preds, save_path)
             return
         tgt_file = Path(args.data_dir).joinpath(args.type_path + ".target")
         labels = [x.rstrip() for x in open(tgt_file).readlines()][: len(preds)]
