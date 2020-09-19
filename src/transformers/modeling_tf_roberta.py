@@ -26,7 +26,6 @@ from .file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_callable,
 )
-from .modeling_tf_bert import TFBertMainLayer
 from .modeling_tf_outputs import (
     TFBaseModelOutput, TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
@@ -440,9 +439,9 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
-        self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
         self.encoder = TFRobertaEncoder(config, name="encoder")
         self.pooler = TFRobertaPooler(config, name="pooler")
+        self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
     def get_input_embeddings(self):
         return self.embeddings
