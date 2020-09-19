@@ -397,22 +397,18 @@ class FSMTEncoder(nn.Module):
 
     def __init__(self, config: FSMTConfig, embed_tokens):
         super().__init__()
-
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-
+        self.padding_idx = embed_tokens.padding_idx
+        self.embed_tokens = embed_tokens
         embed_dim = embed_tokens.embedding_dim
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-        self.padding_idx = embed_tokens.padding_idx
-        self.max_source_positions = config.max_position_embeddings
-
-        self.embed_tokens = embed_tokens
-        # print(config.max_position_embeddings, embed_dim, self.padding_idx)
-        num_embeddings = config.src_vocab_size
         self.embed_positions = SinusoidalPositionalEmbedding(
-            num_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
+            config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [EncoderLayer(config) for _ in range(config.encoder_layers)]
+        )  # type: List[EncoderLayer]
 
     def forward(
         self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
@@ -568,15 +564,11 @@ class FSMTDecoder(nn.Module):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
-        self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.embed_tokens = embed_tokens
         embed_dim = embed_tokens.embedding_dim
-        num_embeddings = config.tgt_vocab_size
         self.embed_positions = SinusoidalPositionalEmbedding(
-            num_embeddings + self.padding_idx + 1,
-            embed_dim,
-            self.padding_idx,
+            config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
