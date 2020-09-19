@@ -9,7 +9,7 @@ tags:
 - translation
 - wmt19
 - allenai
-license: Apache 2.0
+license: apache-2.0
 datasets:
 - wmt19
 metrics:
@@ -29,16 +29,6 @@ For more details, please, see [Deep Encoder, Shallow Decoder: Reevaluating the S
 * [wmt19-de-en-6-6-big](https://huggingface.co/allenai/wmt19-de-en-6-6-big)
 * [wmt19-de-en-6-6-base](https://huggingface.co/allenai/wmt19-de-en-6-6-base)
 
-```
-@misc{kasai2020deep,
-    title={Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation},
-    author={Jungo Kasai and Nikolaos Pappas and Hao Peng and James Cross and Noah A. Smith},
-    year={2020},
-    eprint={2006.10369},
-    archivePrefix={arXiv},
-    primaryClass={cs.CL}
-}
-```
 
 ## Intended uses & limitations
 
@@ -95,3 +85,18 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py allenai/wm
 
 - [training, etc.](http://www.statmt.org/wmt19/)
 - [test set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
+
+
+### BibTeX entry and citation info
+
+```
+@misc{kasai2020deep,
+    title={Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation},
+    author={Jungo Kasai and Nikolaos Pappas and Hao Peng and James Cross and Noah A. Smith},
+    year={2020},
+    eprint={2006.10369},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL}
+}
+```
+
