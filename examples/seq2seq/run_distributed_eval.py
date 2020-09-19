@@ -39,7 +39,10 @@ except ImportError:
         use_task_specific_params,
         write_txt_file,
     )
-
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]
 
 def eval_data_dir(
     data_dir,
@@ -52,6 +55,7 @@ def eval_data_dir(
     fp16=False,
     task="summarization",
     local_rank=None,
+    num_return_sequences=1,
     **generate_kwargs,
 ) -> Dict:
     """Run evaluation on part of the data for one gpu and save to {save_dir}/rank_{rank}_output.json"""
@@ -59,16 +63,23 @@ def eval_data_dir(
     assert local_rank is not None
     torch.distributed.init_process_group(backend="nccl", rank=local_rank)
 
+
     save_dir = Path(save_dir)
     save_path = save_dir.joinpath(f"rank_{local_rank}_output.json")
     torch.cuda.set_device(local_rank)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
     if fp16:
         model = model.half()
+    # do we need to increase num_beams?
+    use_task_specific_params(model, task)  # update config with task specific params
+    num_beams = generate_kwargs.pop('num_beams', model.config.num_beams)  # AttributeError risk?
+    if num_return_sequences > num_beams:
+        num_beams = num_return_sequences
+
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
-    use_task_specific_params(model, task)  # update config with task specific params
+
     if max_source_length is None:
         max_source_length = tokenizer.model_max_length
     ds = Seq2SeqDataset(
@@ -89,10 +100,15 @@ def eval_data_dir(
         summaries = model.generate(
             input_ids=batch["input_ids"].to(model.device),
             attention_mask=batch["attention_mask"].to(model.device),
+            num_return_sequences=num_return_sequences,
+            num_beams=num_beams,
             **generate_kwargs,
         )
         preds = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         ids = batch["ids"]
+        if num_return_sequences > 1:
+            preds = chunks(preds, num_return_sequences)
+        assert len(preds) == len(ids)
         for i, pred in enumerate(preds):
             results.append(dict(pred=pred, id=ids[i].item()))
     save_json(results, save_path)
@@ -124,6 +140,9 @@ def run_generate():
 
     parser.add_argument(
         "--n_obs", type=int, default=None, required=False, help="How many observations. Defaults to all."
+    )
+    parser.add_argument(
+        "--num_return_sequences", type=int, default=1, required=False, help="How many sequences to return"
     )
     parser.add_argument(
         "--sync_timeout",
@@ -158,6 +177,7 @@ def run_generate():
         local_rank=args.local_rank,
         n_obs=args.n_obs,
         max_source_length=args.max_source_length,
+        num_return_sequences=args.num_return_sequences,
         **generate_kwargs,
     )
 
@@ -166,6 +186,9 @@ def run_generate():
         save_dir.mkdir(exist_ok=True)
         partial_results = gather_results_from_each_node(num_replicas, json_save_dir, args.sync_timeout)
         preds = combine_partial_results(partial_results)
+        if args.num_return_sequences > 1:
+            save_json(preds, save_dir.joinpath('pseudolabel_results.json'))
+            return
         tgt_file = Path(args.data_dir).joinpath(args.type_path + ".target")
         labels = [x.rstrip() for x in open(tgt_file).readlines()][: len(preds)]
 
