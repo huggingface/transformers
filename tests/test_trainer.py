@@ -24,17 +24,21 @@ PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
 class RegressionDataset:
-    def __init__(self, a=2, b=3, length=64, seed=42):
+    def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
         np.random.seed(seed)
+        self.label_names = ["labels"] if label_names is None else label_names
         self.length = length
         self.x = np.random.normal(size=(length,)).astype(np.float32)
-        self.y = a * self.x + b + np.random.normal(scale=0.1, size=(length,))
+        self.ys = [a * self.x + b + np.random.normal(scale=0.1, size=(length,)) for _ in self.label_names]
+        self.ys = [y.astype(np.float32) for y in self.ys]
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, i):
-        return {"input_x": self.x[i], "label": self.y[i]}
+        result = {name: y[i] for name, y in zip(self.label_names, self.ys)}
+        result["input_x"] = self.x[i]
+        return result
 
 
 class AlmostAccuracy:
@@ -61,22 +65,25 @@ if is_torch_available():
             return iter(self.parse_file())
 
     class RegressionModel(torch.nn.Module):
-        def __init__(self, a=0, b=0):
+        def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
             self.a = torch.nn.Parameter(torch.tensor(a).float())
             self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.double_output = double_output
+            self.config = None
 
-        def forward(self, input_x=None, labels=None):
+        def forward(self, input_x=None, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:
-                return (y,)
+                return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
-            return (loss, y)
+            return (loss, y, y) if self.double_output else (loss, y)
 
-    def get_regression_trainer(a=0, b=0, train_len=64, eval_len=64, **kwargs):
-        train_dataset = RegressionDataset(length=train_len)
-        eval_dataset = RegressionDataset(length=eval_len)
-        model = RegressionModel(a, b)
+    def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, **kwargs):
+        label_names = kwargs.get("label_names", None)
+        train_dataset = RegressionDataset(length=train_len, label_names=label_names)
+        eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
+        model = RegressionModel(a, b, double_output)
         compute_metrics = kwargs.pop("compute_metrics", None)
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
@@ -172,7 +179,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
         results = trainer.evaluate()
 
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.y
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
         pred = 1.5 * x + 2.5
         expected_loss = ((pred - y) ** 2).mean()
         self.assertAlmostEqual(results["eval_loss"], expected_loss)
@@ -183,7 +190,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy())
         results = trainer.evaluate()
 
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.y
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
         pred = 1.5 * x + 2.5
         expected_loss = ((pred - y) ** 2).mean()
         self.assertAlmostEqual(results["eval_loss"], expected_loss)
@@ -201,6 +208,26 @@ class TrainerIntegrationTest(unittest.TestCase):
         preds = trainer.predict(trainer.eval_dataset).predictions
         x = trainer.eval_dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+        # With more than one output of the model
+        trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True)
+        preds = trainer.predict(trainer.eval_dataset).predictions
+        x = trainer.eval_dataset.x
+        self.assertTrue(len(preds), 2)
+        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+
+        # With more than one output/label of the model
+        trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, label_names=["labels", "labels_2"])
+        outputs = trainer.predict(trainer.eval_dataset)
+        preds = outputs.predictions
+        labels = outputs.label_ids
+        x = trainer.eval_dataset.x
+        self.assertTrue(len(preds), 2)
+        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+        self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
+        self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
     def test_trainer_with_datasets(self):
         np.random.seed(42)
@@ -292,3 +319,18 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
+
+    def test_num_train_epochs_in_training(self):
+        # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.
+        # It should give 1 update step for each epoch.
+        trainer = get_regression_trainer(
+            max_steps=3, train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5
+        )
+        train_output = trainer.train()
+        self.assertEqual(train_output.global_step, 3)
+
+        # Even ``max_steps`` is not specified, we still expect 1 update step for each epoch if
+        # len(train_dl) < gradient_accumulation_steps.
+        trainer = get_regression_trainer(train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5)
+        train_output = trainer.train()
+        self.assertEqual(train_output.global_step, int(self.n_epochs))

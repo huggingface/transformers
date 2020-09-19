@@ -504,17 +504,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         Examples::
 
-            from transformers import BertConfig, TFBertModel
-            # Download model and configuration from S3 and cache.
-            model = TFBertModel.from_pretrained('bert-base-uncased')
-            # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
-            model = TFBertModel.from_pretrained('./test/saved_model/')
-            # Update configuration during loading.
-            model = TFBertModel.from_pretrained('bert-base-uncased', output_attentions=True)
-            assert model.config.output_attentions == True
-            # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
-            config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
-            model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
+            >>> from transformers import BertConfig, TFBertModel
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = TFBertModel.from_pretrained('bert-base-uncased')
+            >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
+            >>> model = TFBertModel.from_pretrained('./test/saved_model/')
+            >>> # Update configuration during loading.
+            >>> model = TFBertModel.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> assert model.config.output_attentions == True
+            >>> # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
+            >>> config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
+            >>> model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
 
         """
         config = kwargs.pop("config", None)

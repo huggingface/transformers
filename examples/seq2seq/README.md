@@ -46,7 +46,7 @@ export DATA_DIR=${PWD}/wmt_en_de
 
 #### Private Data
 
-If you are using your own data, it must be formatted as one directory with 6 files: 
+If you are using your own data, it must be formatted as one directory with 6 files:
 ```
 train.source
 train.target
@@ -227,6 +227,81 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --fp16 \
     --bs 32
 ```
+### Multi-GPU Evalulation
+here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
+because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
+`{type_path}.source` and `{type_path}.target`. Run `python run_distributed_eval.py --help` for all clargs.
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8  run_distributed_eval.py \
+    --model_name sshleifer/distilbart-large-xsum-12-3  \
+    --save_dir xsum_generations \
+    --data_dir xsum \
+    --fp16  # you can pass generate kwargs like num_beams here, just like run_eval.py
+```
+
+Contributions that implement this command for other distributed hardware setups are welcome!
+
+#### run_eval tips and tricks
+
+When using `run_eval.py`, the following features can be useful:
+
+* if you running the script multiple times and want to make it easier to track what arguments produced that output, use `--dump-args`. Along with the results it will also dump any custom params that were passed to the script. For example if you used: `--num_beams 8 --early_stopping true`, the output will be:
+   ```
+   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True}
+   ```
+
+   `--info` is an additional argument available for the same purpose of tracking the conditions of the experiment. It's useful to pass things that weren't in the argument list, e.g. a language pair `--info "lang:en-ru"`. But also if you pass `--info` without a value it will fallback to the current date/time string, e.g. `2020-09-13 18:44:43`.
+
+   If using `--dump-args --info`, the output will be:
+   
+   ```
+   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': '2020-09-13 18:44:43'}
+   ```
+
+   If using `--dump-args --info "pair:en-ru chkpt=best`, the output will be:
+   
+   ```
+   {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': 'pair=en-ru chkpt=best'}
+   ```
+      
+
+* if you need to perform a parametric search in order to find the best ones that lead to the highest BLEU score, let `run_eval_search.py` to do the searching for you.
+
+   The script accepts the exact same arguments as `run_eval.py`, plus an additional argument `--search`. The value of `--search` is parsed, reformatted and fed to ``run_eval.py`` as additional args.
+
+   The format for the `--search` value is a simple string with hparams and colon separated values to try, e.g.:
+   ```
+    --search "num_beams=5:10 length_penalty=0.8:1.0:1.2 early_stopping=true:false"
+   ```
+   which will generate `12` `(2*3*2)` searches for a product of each hparam. For example the example that was just used will invoke `run_eval.py` repeatedly with:
+   
+   ```
+    --num_beams 5 --length_penalty 0.8 --early_stopping true
+    --num_beams 5 --length_penalty 0.8 --early_stopping false
+    [...]
+    --num_beams 10 --length_penalty 1.2 --early_stopping false
+   ```
+   
+   On completion, this function prints a markdown table of the results sorted by the best BLEU score and the winning arguments.
+
+```
+bleu  | num_beams | length_penalty | early_stopping
+----- | --------- | -------------- | --------------
+26.71 |         5 |            1.1 |              1
+26.66 |         5 |            0.9 |              1
+26.66 |         5 |            0.9 |              0
+26.41 |         5 |            1.1 |              0
+21.94 |         1 |            0.9 |              1
+21.94 |         1 |            0.9 |              0
+21.94 |         1 |            1.1 |              1
+21.94 |         1 |            1.1 |              0
+
+Best score args:
+stas/wmt19-en-ru data/en-ru/val.source data/en-ru/test_translations.txt --reference_path data/en-ru/val.target --score_path data/en-ru/test_bleu.json --bs 8 --task translation --num_beams 5 --length_penalty 1.1 --early_stopping True
+```
+
+If you pass `--info "some experiment-specific info"` it will get printed before the results table - this is useful for scripting and multiple runs, so one can tell the different sets of results from each other.
 
 
 ### DistilBART
@@ -277,3 +352,33 @@ runtime: 13H on V-100 16GB GPU.
 ```bash
 pytest examples/seq2seq/
 ```
+
+
+## Experimental Features 
+These features are harder to use and not always useful.
+
+###  Dynamic Batch Size for MT
+`finetune.py` has a command line arg `--max_tokens_per_batch` that allows batches to be dynamically sized.
+This feature can only be used:
+- with fairseq installed
+- on 1 GPU
+- without sortish sampler
+- after calling `python save_len_file.py $tok $data_dir`
+
+For example, 
+```bash
+python save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
+./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
+```
+splits `wmt_en_ro/train` into 11,197 uneven lengthed batches and can finish 1 epoch in 8 minutes on a v100.
+
+For comparison,
+```bash
+./dynamic_bs_example.sh --sortish_sampler --train_batch_size 48
+```
+uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
+
+The feature is still experimental, because:
++ we can make it much more robust if we have memory mapped/preprocessed datasets.
++ The speedup over sortish sampler is not that large at the moment.
+
