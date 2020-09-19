@@ -37,10 +37,10 @@ from transformers.modeling_fsmt import FSMTForConditionalGeneration
 from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 
-from .utils import logging
+from transformers import logging
 
 
-logging.set_verbosity_info()
+logging.set_verbosity_warning()
 
 json_indent = 2
 
