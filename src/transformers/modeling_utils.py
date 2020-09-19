@@ -693,7 +693,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # Handle the case where some state_dict keys shouldn't be saved
         state_dict_no_save_keys = getattr(self, "state_dict_no_save_keys", None)
         if state_dict_no_save_keys:
-            state_dict = {k: v for k, v in model_to_save.state_dict().items() if k not in state_dict_no_save_keys}
+            state_dict = {k: v for k, v in state_dict.items() if k not in state_dict_no_save_keys}
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
