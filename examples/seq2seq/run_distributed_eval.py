@@ -176,7 +176,8 @@ def run_generate():
         metrics: Dict = score_fn(preds, labels)
         metrics["n_obs"] = len(preds)
         runtime = time.time() - start_time
-        metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 2)
+        metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 4)
+        metrics["n_gpus"] = num_replicas
         # TODO(@stas00): add whatever metadata to metrics
         metrics_save_path = save_dir.joinpath(f"{args.type_path}_{metric_name}.json")
         save_json(metrics, metrics_save_path, indent=None)

@@ -48,7 +48,7 @@ Here are a few examples:
 
 ## Quick tour
 
-To immediately use a model on a given text, we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model training. Here is how to quickly use a pipeline to classify postivive versus negative texts 
+To immediately use a model on a given text, we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model training. Here is how to quickly use a pipeline to classify positive versus negative texts 
 
 ```python
 >>> from transformers import pipeline
