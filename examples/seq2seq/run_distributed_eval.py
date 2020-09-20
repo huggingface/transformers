@@ -11,38 +11,20 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from utils import (
+    Seq2SeqDataset,
+    calculate_bleu,
+    calculate_rouge,
+    lmap,
+    load_json,
+    parse_numeric_n_bool_cl_kwargs,
+    save_json,
+    use_task_specific_params,
+    write_txt_file,
+)
 
 
 logger = getLogger(__name__)
-
-try:
-    from .utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        lmap,
-        load_json,
-        parse_numeric_n_bool_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-        write_txt_file,
-    )
-except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        lmap,
-        load_json,
-        parse_numeric_n_bool_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-        write_txt_file,
-    )
-def chunks(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i : i + n]
 
 def eval_data_dir(
     data_dir,

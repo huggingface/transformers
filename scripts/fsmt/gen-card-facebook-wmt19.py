@@ -34,7 +34,7 @@ tags:
 - translation
 - wmt19
 - facebook
-license: Apache 2.0
+license: apache-2.0
 datasets:
 - wmt19
 metrics:
@@ -117,6 +117,19 @@ note: fairseq reports using a beam of 50, so you should get a slightly higher sc
 
 - [training, etc.](http://www.statmt.org/wmt19/)
 - [test set](http://matrix.statmt.org/test_sets/newstest2019.tgz?1556572561)
+
+
+### BibTeX entry and citation info
+
+```bibtex
+@inproceedings{{...,
+  year={{2020}},
+  title={{Facebook FAIR's WMT19 News Translation Task Submission}},
+  author={{Ng, Nathan and Yee, Kyra and Baevski, Alexei and Ott, Myle and Auli, Michael and Edunov, Sergey}},
+  booktitle={{Proc. of WMT}},
+}}
+```
+
 
 ## TODO
 
