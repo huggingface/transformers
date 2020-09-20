@@ -380,7 +380,7 @@ def test_run_eval_search(model):
 )
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
-    task = "translation" if model in [MBART_TINY, MARIAN_TINY] else "summarization"
+    task = "translation" if model in [MBART_TINY, MARIAN_TINY, FSMT_TINY] else "summarization"
     args_d["label_smoothing"] = 0.1 if task == "translation" else 0
 
     tmp_dir = make_test_data_dir()
