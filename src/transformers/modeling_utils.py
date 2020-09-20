@@ -695,7 +695,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         state_dict = model_to_save.state_dict()
 
         # Handle the case where some state_dict keys shouldn't be saved
-        if self.keys_to_never_save:
+        if self.keys_to_never_save is not None:
             state_dict = {k: v for k, v in state_dict.items() if k not in self.keys_to_never_save}
 
         # If we save using the predefined names, we can load using `from_pretrained`
