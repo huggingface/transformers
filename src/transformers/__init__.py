@@ -137,7 +137,7 @@ from .pipelines import (
 )
 
 # Tokenizers
-from .tokenization_albert import AlbertTokenizer
+from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer

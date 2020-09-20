@@ -345,6 +345,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
+
 class AlbertTokenizerFast(PreTrainedTokenizerFast):
     """
     Constructs a Fast ALBERT tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__
@@ -401,6 +402,7 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    slow_tokenizer_class = AlbertTokenizer
 
     def __init__(
         self,
@@ -427,95 +429,23 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
             raise
 
         super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            **kwargs,
-        )
-
-        sp = spm.SentencePieceProcessor()
-        sp.Load(vocab_file)
-        vocab = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.piece_size())]
-
-        super().__init__(
-            SentencePieceUnigramTokenizer(vocab, sp.unk_id()),
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            **kwargs,
-        )
-
-        self.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
-
-        self.backend_tokenizer._tokenizer.post_processor = TemplateProcessing(
-            seq_a=f"$0 {str(eos_token)}",
-            seq_b=f"$1 {str(eos_token)}",
-            special_tokens=[(str(eos_token), self.convert_tokens_to_ids(eos_token))],
-        )
+        vocab_file,
+        do_lower_case=do_lower_case,
+        remove_space=remove_space,
+        keep_accents=keep_accents,
+        bos_token=bos_token,
+        eos_token=eos_token,
+        unk_token=unk_token,
+        sep_token=sep_token,
+        pad_token=pad_token,
+        cls_token=cls_token,
+        mask_token=mask_token,
+        **kwargs)
 
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
-
-    def preprocess_text(self, inputs):
-        if self.remove_space:
-            outputs = " ".join(inputs.strip().split())
-        else:
-            outputs = inputs
-        outputs = outputs.replace("``", '"').replace("''", '"')
-
-        if not self.keep_accents:
-            outputs = unicodedata.normalize("NFKD", outputs)
-            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
-        if self.do_lower_case:
-            outputs = outputs.lower()
-
-        return outputs
-
-    def _tokenize(self, text, sample=False):
-        """ Tokenize a string. """
-        text = self.preprocess_text(text)
-
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        new_pieces = []
-        for piece in pieces:
-            if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
-                cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
-                if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
-                    if len(cur_pieces[0]) == 1:
-                        cur_pieces = cur_pieces[1:]
-                    else:
-                        cur_pieces[0] = cur_pieces[0][1:]
-                cur_pieces.append(piece[-1])
-                new_pieces.extend(cur_pieces)
-            else:
-                new_pieces.append(piece)
-
-        return new_pieces
-
-    def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
-        return self.sp_model.PieceToId(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.sp_model.IdToPiece(index)
-
-    def convert_tokens_to_string(self, tokens):
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

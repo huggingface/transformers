@@ -4,6 +4,8 @@ from collections import namedtuple
 from itertools import takewhile
 
 from transformers import (
+    AlbertTokenizer,
+    AlbertTokenizerFast,
     BertTokenizer,
     BertTokenizerFast,
     DistilBertTokenizer,
@@ -894,6 +896,7 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
             padding="max_length",
         )
 
+
 class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
     """
     Override specific methods to test SentencePiece behavior
@@ -901,6 +904,7 @@ class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
 
     TOKENIZERS_CLASSES = frozenset(
         [
+            Tokenizer("Albert", AlbertTokenizerFast, AlbertTokenizer, "vocab_file", None, None),
             Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
         ]
     )

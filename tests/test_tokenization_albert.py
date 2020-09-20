@@ -17,7 +17,8 @@
 import os
 import unittest
 
-from transformers.tokenization_albert import AlbertTokenizer
+from transformers.tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -28,6 +29,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = AlbertTokenizer
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
@@ -36,10 +38,35 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = AlbertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+        return AlbertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"
         output_text = "this is a test"
         return input_text, output_text
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
 
     def test_full_tokenizer(self):
         tokenizer = AlbertTokenizer(SAMPLE_VOCAB, keep_accents=True)

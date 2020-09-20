@@ -1,0 +1,15 @@
+[UNK]
+[CLS]
+[SEP]
+[PAD]
+[MASK]
+want
+##want
+##ed
+wa
+un
+runn
+##ing
+,
+low
+lowest

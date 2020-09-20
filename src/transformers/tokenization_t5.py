@@ -22,13 +22,7 @@ import warnings
 from shutil import copyfile
 from typing import List, Optional
 
-from tokenizers import (
-    Tokenizer,
-    pre_tokenizers,
-    decoders,
-    trainers,
-    normalizers,
-)
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, trainers
 from tokenizers.models import Unigram
 from tokenizers.processors import TemplateProcessing
 
@@ -427,6 +421,43 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = T5Tokenizer
 
     prefix_tokens: List[int] = []
+
+    def __init__(
+        self,
+        vocab_file,
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        extra_ids=100,
+        additional_special_tokens=None,
+        **kwargs
+    ):
+        super().__init__(
+            vocab_file,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            extra_ids=extra_ids,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
+        self.vocab_file = vocab_file
+        self._extra_ids = extra_ids
+
+    def save_vocabulary(self, save_directory):
+        """Save the sentencepiece vocabulary (copy original file) and special tokens file
+        to a directory.
+        """
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

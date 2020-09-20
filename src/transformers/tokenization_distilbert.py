@@ -87,3 +87,4 @@ class DistilBertTokenizerFast(BertTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = DistilBertTokenizer

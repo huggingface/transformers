@@ -20,13 +20,11 @@ from shutil import copyfile
 from typing import List, Optional
 
 import sentencepiece as spm
-
 from tokenizers import SentencePieceUnigramTokenizer
 from tokenizers.processors import TemplateProcessing
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
-
 from .utils import logging
 
 
@@ -52,6 +50,7 @@ SHARED_MODEL_IDENTIFIERS = [
 ]
 
 SPIECE_UNDERLINE = "▁"
+
 
 class CamembertTokenizer(PreTrainedTokenizer):
     """
@@ -345,6 +344,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = CamembertTokenizer
 
     def __init__(
         self,
@@ -359,33 +359,20 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
         **kwargs
     ):
-        sp = spm.SentencePieceProcessor()
-        sp.Load(vocab_file)
-        vocab = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.piece_size())]
-
         super().__init__(
-            SentencePieceUnigramTokenizer(vocab, sp.unk_id()),
-            max_len=512,
+            vocab_file,
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
             sep_token=sep_token,
             cls_token=cls_token,
+            unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs,
+            **kwargs
         )
 
-        self.sanitize_special_tokens()  # Add the additional tokens to the fast tokenizer vocab if necessary
-
         self.vocab_file = vocab_file
-        # HACK: These tokens were added by fairseq but don't seem to be actually used when duplicated in the actual
-        # sentencepiece vocabulary (this is the case for <s> and </s>
-        self.fairseq_tokens_to_ids = {"<s>NOTUSED": 0, "<pad>": 1, "</s>NOTUSED": 2, "<unk>": 3}
-        self.fairseq_offset = len(self.fairseq_tokens_to_ids)
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.fairseq_tokens_to_ids)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -467,51 +454,6 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-    @property
-    def vocab_size(self):
-        return len(self.fairseq_tokens_to_ids) + len(self.sp_model)
-
-    def _tokenize(self, text):
-        return self.sp_model.EncodeAsPieces(text)
-
-    def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
-        elif self.sp_model.PieceToId(token) == 0:
-            # Convert sentence piece unk token to fairseq unk token index
-            return self.unk_token_id
-        return self.fairseq_offset + self.sp_model.PieceToId(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.vocab_file)
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
 
     def save_vocabulary(self, save_directory):
         """

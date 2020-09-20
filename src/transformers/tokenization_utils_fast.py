@@ -16,19 +16,19 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import os
-import json
 import copy
+import json
+import os
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from tokenizers import Tokenizer, Encoding as EncodingFast
+from tokenizers import Encoding as EncodingFast
+from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
-from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
-
 from .file_utils import add_end_docstrings
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,
@@ -41,7 +41,6 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
 
 
@@ -81,7 +80,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def __init__(self, *args, **kwargs):
         slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
-        self._tokenizer: Tokenizer = convert_sentencepiece_tokenizer(slow_tokenizer)
+        self._tokenizer = convert_slow_tokenizer(slow_tokenizer)
+
+        kwargs = slow_tokenizer.init_kwargs
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
@@ -128,7 +129,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return self._tokenizer.get_vocab_size(with_added_tokens=True)
 
     @property
-    def backend_tokenizer(self) -> BaseTokenizerFast:
+    def backend_tokenizer(self) -> TokenizerFast:
         """
         :obj:`tokenizers.implementations.BaseTokenizer`: The Rust tokenizer used as a backend.
         """
@@ -511,23 +512,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         else:
             return text
 
-    @classmethod
-    def _from_pretrained(cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs):
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
-        if tokenizer_file is not None:
-            return cls(Tokenizer.from_file(tokenizer_file))
-        else:
-            slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs)
-            return cls.from_slow_tokenizer(slow_tokenizer)
-
-    def _save_pretrained(self, save_directory: str, file_names: Tuple[str]) -> Tuple[str]:
-        full_tokenizer_file = os.path.join(save_directory, TOKENIZER_FILE)
-        self.backend_tokenizer.save(full_tokenizer_file)
-
-        return file_names + (full_tokenizer_file,)
-
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
         """
         Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
@@ -544,7 +528,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             A tuple of :obj:`str`: The files saved.
         """
         if os.path.isdir(save_directory):
-            files = self._tokenizer.save_model(save_directory)
+            files = self._tokenizer.model.save(save_directory)
         else:
             folder, file = os.path.split(os.path.abspath(save_directory))
             files = self._tokenizer.save_model(folder, name=file)

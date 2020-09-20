@@ -350,6 +350,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = GPT2Tokenizer
 
     def __init__(
         self,
@@ -359,20 +360,16 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
-        trim_offsets=True,
         **kwargs
     ):
         super().__init__(
-            ByteLevelBPETokenizer(
-                vocab_file=vocab_file,
-                merges_file=merges_file,
-                add_prefix_space=add_prefix_space,
-                trim_offsets=trim_offsets,
-            ),
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            **kwargs,
+        vocab_file,
+        merges_file,
+        unk_token=unk_token,
+        bos_token=bos_token,
+        eos_token=eos_token,
+        add_prefix_space=add_prefix_space,
+        **kwargs
         )
         self.add_prefix_space = add_prefix_space
 
