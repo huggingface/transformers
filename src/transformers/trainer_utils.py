@@ -3,7 +3,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import is_tf_available, is_torch_available
+from .file_utils import is_tf_available, is_torch_available, is_torch_tpu_available
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -132,9 +132,49 @@ default_hp_space = {
 }
 
 
+def nested_concat(tensors, new_tensors, dim=0):
+    "Concat the `new_tensors` to `tensors` on `dim`. Works for tensors or nested list/tuples of tensors."
+    if is_torch_available():
+        assert type(tensors) == type(
+            new_tensors
+        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        if isinstance(tensors, (list, tuple)):
+            return type(tensors)(nested_concat(t, n, dim) for t, n in zip(tensors, new_tensors))
+        return torch.cat((tensors, new_tensors), dim=dim)
+    else:
+        raise ImportError("Torch must be installed to use `nested_concat`")
+
+
+def nested_numpify(tensors):
+    "Numpify `tensors` (even if it's a nested list/tuple of tensors)."
+    if isinstance(tensors, (list, tuple)):
+        return type(tensors)(nested_numpify(t) for t in tensors)
+    return tensors.cpu().numpy()
+
+
+def nested_detach(tensors):
+    "Detach `tensors` (even if it's a nested list/tuple of tensors)."
+    if isinstance(tensors, (list, tuple)):
+        return type(tensors)(nested_detach(t) for t in tensors)
+    return tensors.detach()
+
+
+def nested_xla_mesh_reduce(tensors, name):
+    if is_torch_tpu_available():
+        import torch_xla.core.xla_model as xm
+
+        if isinstance(tensors, (list, tuple)):
+            return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
+        return xm.mesh_reduce(name, tensors, torch.cat)
+    else:
+        raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
+
+
 def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> "torch.Tensor":
     if is_torch_available():
         try:
+            if isinstance(tensor, (tuple, list)):
+                return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
             output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
             torch.distributed.all_gather(output_tensors, tensor)
             concat = torch.cat(output_tensors, dim=0)

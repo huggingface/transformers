@@ -297,15 +297,15 @@ class CaptureLogger:
 
     Example:
 
-    from transformers import logging
-    from transformers.testing_utils import CaptureLogger
+    >>> from transformers import logging
+    >>> from transformers.testing_utils import CaptureLogger
 
-    msg = "Testing 1, 2, 3"
-    logging.set_verbosity_info()
-    logger = logging.get_logger("transformers.tokenization_bart")
-    with CaptureLogger(logger) as cl:
-        logger.info(msg)
-    assert cl.out, msg+"\n"
+    >>> msg = "Testing 1, 2, 3"
+    >>> logging.set_verbosity_info()
+    >>> logger = logging.get_logger("transformers.tokenization_bart")
+    >>> with CaptureLogger(logger) as cl:
+    ...     logger.info(msg)
+    >>> assert cl.out, msg+"\n"
     """
 
     def __init__(self, logger):

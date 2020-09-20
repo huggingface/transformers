@@ -827,13 +827,13 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         Return:
 
         Examples::
-            import tensorflow as tf
-            from transformers import AlbertTokenizer, TFAlbertForPreTraining
-            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            model = TFAlbertForPreTraining.from_pretrained('albert-base-v2')
-            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-            outputs = model(input_ids)
-            prediction_scores, sop_scores = outputs[:2]
+            >>> import tensorflow as tf
+            >>> from transformers import AlbertTokenizer, TFAlbertForPreTraining
+            >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+            >>> model = TFAlbertForPreTraining.from_pretrained('albert-base-v2')
+            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+            >>> outputs = model(input_ids)
+            >>> prediction_scores, sop_scores = outputs[:2]
         """
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.albert.return_dict
