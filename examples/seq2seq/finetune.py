@@ -339,7 +339,7 @@ class SummarizationModule(BaseTransformer):
         return parser
 
 
-from ray import tune
+
 
 
 class TranslationModule(SummarizationModule):
@@ -383,6 +383,7 @@ def main(args, model=None) -> SummarizationModule:
         logger = WandbLogger(name=model.output_dir.name, project=project)
     elif args.logger_name == "ray_wandb":
         from pytorch_lightning.loggers import WandbLogger
+        from ray import tune
 
         os.environ["WANDB_API_KEY"] = args.wandb["api_key"]
         project = os.environ.get("WANDB_PROJECT", dataset)
