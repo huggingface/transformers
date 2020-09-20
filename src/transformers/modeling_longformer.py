@@ -29,7 +29,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bert import BertIntermediate, BertLayerNorm, BertOutput, BertPooler, BertPreTrainedModel, BertSelfOutput
+from .modeling_bert import BertIntermediate, BertLayerNorm, BertOutput, BertPooler, BertSelfOutput
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1208,7 +1208,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     on top of the pooled output) e.g. for GLUE tasks. """,
     LONGFORMER_START_DOCSTRING,
 )
-class LongformerForSequenceClassification(BertPreTrainedModel):
+class LongformerForSequenceClassification(LongformerPreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
 
@@ -1316,7 +1316,7 @@ class LongformerClassificationHead(nn.Module):
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     LONGFORMER_START_DOCSTRING,
 )
-class LongformerForQuestionAnswering(BertPreTrainedModel):
+class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
 
@@ -1446,7 +1446,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     LONGFORMER_START_DOCSTRING,
 )
-class LongformerForTokenClassification(BertPreTrainedModel):
+class LongformerForTokenClassification(LongformerPreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
 
@@ -1535,7 +1535,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     LONGFORMER_START_DOCSTRING,
 )
-class LongformerForMultipleChoice(BertPreTrainedModel):
+class LongformerForMultipleChoice(LongformerPreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
 
