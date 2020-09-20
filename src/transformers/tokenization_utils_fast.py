@@ -16,11 +16,9 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import copy
-import json
 import os
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast

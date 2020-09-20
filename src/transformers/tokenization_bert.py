@@ -20,8 +20,6 @@ import os
 import unicodedata
 from typing import List, Optional
 
-from tokenizers import BertWordPieceTokenizer
-
 from .tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
@@ -635,7 +633,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            **kwargs
+            **kwargs,
         )
 
         self.do_lower_case = do_lower_case

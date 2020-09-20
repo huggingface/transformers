@@ -15,16 +15,11 @@
 """ Tokenization class for model T5."""
 
 
-import json
 import os
 import re
 import warnings
 from shutil import copyfile
 from typing import List, Optional
-
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, trainers
-from tokenizers.models import Unigram
-from tokenizers.processors import TemplateProcessing
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast

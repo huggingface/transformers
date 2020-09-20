@@ -15,10 +15,7 @@
 """ Tokenization classes for python tokenizers.
     For fast tokenizers (provided by HuggingFace's tokenizers library) see tokenization_utils_fast.py
 """
-import copy
 import itertools
-import json
-import os
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple, Union, overload

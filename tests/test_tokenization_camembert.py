@@ -17,12 +17,9 @@
 import os
 import unittest
 
-from transformers import BatchEncoding
-from transformers.file_utils import cached_property
 from transformers.testing_utils import _torch_available
 from transformers.tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
 from .test_tokenization_common import TokenizerTesterMixin
 

@@ -20,10 +20,8 @@ from shutil import copyfile
 from typing import List, Optional
 
 import sentencepiece as spm
-from tokenizers import SentencePieceUnigramTokenizer
-from tokenizers.processors import TemplateProcessing
 
-from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
@@ -369,7 +367,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             pad_token=pad_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_file = vocab_file

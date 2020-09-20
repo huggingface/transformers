@@ -100,6 +100,7 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
+
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
     Constructs a  DPRQuestionEncoderTokenizer.
@@ -133,6 +134,7 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = DPRQuestionEncoderTokenizer
+
 
 DPRSpanPrediction = collections.namedtuple(
     "DPRSpanPrediction", ["span_score", "relevance_score", "doc_id", "start_index", "end_index", "text"]

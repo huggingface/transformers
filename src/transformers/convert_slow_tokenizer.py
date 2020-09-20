@@ -1,17 +1,15 @@
-import argparse
 import json
 import os
 from typing import Dict, List, Tuple
 
 from sentencepiece import SentencePieceProcessor
-from tokenizers import Tokenizer, decoders
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
-from tokenizers.normalizers import NFKD, Lowercase, Precompiled, Replace, Sequence, StripAccents, BertNormalizer
-from tokenizers.pre_tokenizers import Metaspace, BertPreTokenizer, ByteLevel
+from tokenizers.normalizers import NFKD, Lowercase, Precompiled, Replace, Sequence, StripAccents
+from tokenizers.pre_tokenizers import Metaspace
 from tokenizers.pre_tokenizers import Sequence as PSequence
 from tokenizers.pre_tokenizers import WhitespaceSplit
-from tokenizers.processors import TemplateProcessing, BertProcessing, ByteLevel
-
+from tokenizers.processors import TemplateProcessing
 from transformers.utils import sentencepiece_model_pb2 as model
 
 
@@ -83,18 +81,18 @@ class BertConverter(Converter):
         tokenize_chinese_chars = False
         strip_accents = False
         do_lower_case = False
-        if hasattr(self.original_tokenizer, 'basic_tokenizer'):
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
             tokenize_chinese_chars = self.original_tokenizer.basic_tokenizer.tokenize_chinese_chars
             strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
             do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
 
-        tokenizer.normalizer = BertNormalizer(
+        tokenizer.normalizer = normalizers.BertNormalizer(
             clean_text=True,
             handle_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             lowercase=do_lower_case,
         )
-        tokenizer.pre_tokenizer = BertPreTokenizer()
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
 
         sep_token_id = tokenizer.token_to_id(str(self.original_tokenizer.sep_token))
         if sep_token_id is None:
@@ -103,8 +101,9 @@ class BertConverter(Converter):
         if cls_token_id is None:
             raise TypeError("cls_token not found in the vocabulary")
 
-        tokenizer.post_processor = BertProcessing(
-            (str(self.original_tokenizer.sep_token), sep_token_id), (str(self.original_tokenizer.cls_token), cls_token_id)
+        tokenizer.post_processor = processors.BertProcessing(
+            (str(self.original_tokenizer.sep_token), sep_token_id),
+            (str(self.original_tokenizer.cls_token), cls_token_id),
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -127,18 +126,18 @@ class GPT2Converter(Converter):
         )
 
         # Check for Unicode normalization first (before everything else)
-        normalizers = []
+        tokenizer_normalizers = []
 
         # Create the normalizer structure
-        if len(normalizers) > 0:
-            if len(normalizers) > 1:
-                tokenizer.normalizer = Sequence(normalizers)
+        if len(tokenizer_normalizers) > 0:
+            if len(tokenizer_normalizers) > 1:
+                tokenizer.normalizer = normalizers.Sequence(tokenizer_normalizers)
             else:
-                tokenizer.normalizer = normalizers[0]
+                tokenizer.normalizer = tokenizer_normalizers[0]
 
-        tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = ByteLevel(trim_offsets=False)
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         return tokenizer
 

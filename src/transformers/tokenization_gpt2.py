@@ -20,7 +20,6 @@ import os
 from functools import lru_cache
 
 import regex as re
-from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import AddedToken, PreTrainedTokenizer
 from .tokenization_utils_base import BatchEncoding
@@ -363,13 +362,13 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         **kwargs
     ):
         super().__init__(
-        vocab_file,
-        merges_file,
-        unk_token=unk_token,
-        bos_token=bos_token,
-        eos_token=eos_token,
-        add_prefix_space=add_prefix_space,
-        **kwargs
+            vocab_file,
+            merges_file,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
         )
         self.add_prefix_space = add_prefix_space
 

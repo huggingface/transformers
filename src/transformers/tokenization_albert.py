@@ -20,10 +20,7 @@ import unicodedata
 from shutil import copyfile
 from typing import List, Optional
 
-from tokenizers import SentencePieceUnigramTokenizer
-from tokenizers.processors import TemplateProcessing
-
-from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
@@ -419,28 +416,20 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         **kwargs
     ):
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
         super().__init__(
-        vocab_file,
-        do_lower_case=do_lower_case,
-        remove_space=remove_space,
-        keep_accents=keep_accents,
-        bos_token=bos_token,
-        eos_token=eos_token,
-        unk_token=unk_token,
-        sep_token=sep_token,
-        pad_token=pad_token,
-        cls_token=cls_token,
-        mask_token=mask_token,
-        **kwargs)
+            vocab_file,
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
 
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
