@@ -15,6 +15,7 @@ from utils import (
     Seq2SeqDataset,
     calculate_bleu,
     calculate_rouge,
+    chunks,
     lmap,
     load_json,
     parse_numeric_n_bool_cl_kwargs,
@@ -25,6 +26,7 @@ from utils import (
 
 
 logger = getLogger(__name__)
+
 
 def eval_data_dir(
     data_dir,
@@ -45,7 +47,6 @@ def eval_data_dir(
     assert local_rank is not None
     torch.distributed.init_process_group(backend="nccl", rank=local_rank)
 
-
     save_dir = Path(save_dir)
     save_path = save_dir.joinpath(f"rank_{local_rank}_output.json")
     torch.cuda.set_device(local_rank)
@@ -54,10 +55,9 @@ def eval_data_dir(
         model = model.half()
     # do we need to increase num_beams?
     use_task_specific_params(model, task)  # update config with task specific params
-    num_beams = generate_kwargs.pop('num_beams', model.config.num_beams)  # AttributeError risk?
+    num_beams = generate_kwargs.pop("num_beams", model.config.num_beams)  # AttributeError risk?
     if num_return_sequences > num_beams:
         num_beams = num_return_sequences
-
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
@@ -90,7 +90,7 @@ def eval_data_dir(
         ids = batch["ids"]
         if num_return_sequences > 1:
             preds = chunks(preds, num_return_sequences)
-        #assert len(preds) == len(ids)
+        # assert len(preds) == len(ids)
         for i, pred in enumerate(preds):
             results.append(dict(pred=pred, id=ids[i].item()))
     save_json(results, save_path)
@@ -113,7 +113,6 @@ def run_generate():
     parser.add_argument(
         "--type_path", type=str, default="test", help="which subset to evaluate typically train/val/test"
     )
-    parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument(
@@ -169,8 +168,8 @@ def run_generate():
         partial_results = gather_results_from_each_node(num_replicas, json_save_dir, args.sync_timeout)
         preds = combine_partial_results(partial_results)
         if args.num_return_sequences > 1:
-            save_path = save_dir.joinpath('pseudolabel_results.json')
-            print(f'Saving aggregated results at {save_path}, intermediate in {json_save_dir}/')
+            save_path = save_dir.joinpath("pseudolabel_results.json")
+            print(f"Saving aggregated results at {save_path}, intermediate in {json_save_dir}/")
             save_json(preds, save_path)
             return
         tgt_file = Path(args.data_dir).joinpath(args.type_path + ".target")
