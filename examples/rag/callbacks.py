@@ -24,7 +24,7 @@ def get_checkpoint_callback(output_dir, metric):
         filepath=os.path.join(output_dir, exp),
         monitor=f"val_{metric}",
         mode="max",
-        save_top_k=10,
+        save_top_k=3,
         period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
     return checkpoint_callback

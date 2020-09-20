@@ -40,13 +40,10 @@ logger = logging.get_logger(__name__)
 LEGACY_INDEX_PATH = "https://storage.googleapis.com/huggingface-nlp/datasets/wiki_dpr/"
 
 
-class Index(object):
+class Index:
     """
     A base class for the Indices encapsulated by the :class:`~transformers.RagRetriever`.
     """
-
-    def __init__(self, *args, **kwargs):
-        pass
 
     def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
         """
@@ -56,7 +53,7 @@ class Index(object):
             doc_ids (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`):
                 A tensor of document indices.
         """
-        pass
+        raise NotImplementedError
 
     def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -88,7 +85,7 @@ class Index(object):
         raise NotImplementedError
 
 
-class LegacyIndex(Index):
+class LegacyIndex:
     """
     An index which can be deserialized from the files built using https://github.com/facebookresearch/DPR.
     We use default faiss index parameters as specified in that repository.
@@ -162,7 +159,7 @@ class LegacyIndex(Index):
         self._deserialize_index()
         self._index_initialize = True
 
-    def get_doc_dicts(self, doc_ids):
+    def get_doc_dicts(self, doc_ids: np.array):
         doc_list = []
         for doc_ids_i in doc_ids:
             ids = [str(int(doc_id)) for doc_id in doc_ids_i]
@@ -185,7 +182,7 @@ class LegacyIndex(Index):
         return np.array(ids), np.array(vectors)
 
 
-class HFIndex(Index):
+class HFIndex:
     """
     A wrapper around an instance of :class:`~datasets.Datasets`. If ``index_path`` is set to ``None``,
     we load the pre-computed index available with the :class:`~datasets.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
@@ -251,7 +248,7 @@ class HFIndex(Index):
         return np.array(ids), np.array(vectors)  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
 
-class RagRetriever(object):
+class RagRetriever:
     """
     Retriever used to get documents from vector queries.
     It retrieves the documents embeddings as well as the documents contents, and it formats them to be used with a RagModel.
@@ -344,8 +341,6 @@ class RagRetriever(object):
                 doc_title = doc_title[:-1]
             if prefix is None:
                 prefix = ""
-            # TODO(Patrick, piktus, quention) with current master, T5Tokenizer should add eos token => so `add_eos` is not needed anymore
-            #            suffix = self.generator_tokenizer.eos_token if add_eos else ""
             out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
                 "  ", " "
             )
@@ -403,7 +398,7 @@ class RagRetriever(object):
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
 
-        Ouput:
+        Return:
             retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
                 The retrieval embeddings of the retrieved docs per query.
             doc_ids (:obj:`np.ndarray` of shape :obj:`batch_size, n_docs`)

@@ -306,7 +306,7 @@ class RagTestMixin:
             self.assertTrue(model.config.is_encoder_decoder)
 
             outputs = model(
-                input_ids=input_ids,
+                input_ids=input_ids[0, :1],
                 attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
@@ -642,6 +642,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         # sequence generate test
         output_text = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
+        # Expected output as given by model at integration time.
         EXPECTED_OUTPUT_TEXT = """The album showed a songwriting maturity and depth of feeling distinctly lacking from their earlier recordings. The album\'s title track refers to secret meetings held against the approval of totalitarian governments in Soviet-dominated states. The only major single release, "One of Us", proved to be the last of ABBA\'s nine number-one singles in Germany."""
         self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)
 
@@ -672,6 +673,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         )
         # sequence generate test
         output_text = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        # Expected output as given by model at integration time.
         EXPECTED_OUTPUT_TEXT = """. The song peaked at"""
         self.assertEqual(output_text, EXPECTED_OUTPUT_TEXT)
 
@@ -707,6 +709,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
+        # Expected outputs as given by model at integration time.
         EXPECTED_OUTPUT_TEXT_1 = "The songwriting sessions for ABBA's first album, \""
         EXPECTED_OUTPUT_TEXT_2 = """The songwriting sessions for ABBA's first album were recorded"""
 
@@ -745,6 +748,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
+        # Expected outputs as given by model at integration time.
         EXPECTED_OUTPUT_TEXT_1 = """ ABBA / small label like Playboy Records did not have the distribution resources to meet the demand for the single from retailers and radio programmers. The foursome decided to record their first album together in late 1972, and sessions began on 26 September 1972. The women shared lead vocals on "Nina, Pretty Ballerina" that day."""
         EXPECTED_OUTPUT_TEXT_2 = """ ABBA / small label like Playboy Records did not have the distribution resources to meet the demand for the single from retailers and radio programmers. The foursome decided to record their first album together in late 1972, and sessions began on 26 September 1972. The women shared lead vocals on "Nina, Pretty Ballerina" (a top ten hit in Austria)"""
 
@@ -807,10 +811,11 @@ class RagModelSaveLoadTests(unittest.TestCase):
                 "facebook/bart-large-cnn",
                 retriever=rag_retriever,
                 config=rag_config,
-            )
+            ).to(torch_device)
             # check that the from pretrained methods work
             rag_sequence.save_pretrained(tmp_dirname)
             rag_sequence.from_pretrained(tmp_dirname, retriever=rag_retriever)
+            rag_sequence.to(torch_device)
 
             with torch.no_grad():
                 output = rag_sequence(
@@ -826,6 +831,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
         rag_sequence = RagSequenceForGeneration(
             config=rag_config, question_encoder=question_encoder, generator=generator, retriever=rag_retriever
         )
+        rag_sequence.to(torch_device)
 
         with torch.no_grad():
             output = rag_sequence(
@@ -864,10 +870,11 @@ class RagModelSaveLoadTests(unittest.TestCase):
                 "facebook/bart-large-cnn",
                 retriever=rag_retriever,
                 config=rag_config,
-            )
+            ).to(torch_device)
             # check that the from pretrained methods work
             rag_token.save_pretrained(tmp_dirname)
             rag_token.from_pretrained(tmp_dirname, retriever=rag_retriever)
+            rag_token.to(torch_device)
 
             with torch.no_grad():
                 output = rag_token(
@@ -883,6 +890,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
         rag_token = RagTokenForGeneration(
             config=rag_config, question_encoder=question_encoder, generator=generator, retriever=rag_retriever
         )
+        rag_token.to(torch_device)
 
         with torch.no_grad():
             output = rag_token(

@@ -35,11 +35,7 @@ def infer_model_type(model_name_or_path):
 
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
-    scores_for_ground_truths = []
-    for ground_truth in ground_truths:
-        score = metric_fn(prediction, ground_truth)
-        scores_for_ground_truths.append(score)
-    return max(scores_for_ground_truths)
+    return max(metric_fn(prediction, gt) for gt in ground_truths)
 
 
 def get_scores(args, preds_path, gold_data_path):
@@ -64,8 +60,8 @@ def get_scores(args, preds_path, gold_data_path):
     em = 100.0 * em / total
     f1 = 100.0 * f1 / total
 
-    logger.info("F1: {}".format(f1))
-    logger.info("EM: {}".format(em))
+    logger.info(f"F1: {f1:.2f}")
+    logger.info(f"EM: {em:.2f}")
 
 
 def get_precision_at_k(args, preds_path, gold_data_path):
@@ -81,7 +77,7 @@ def get_precision_at_k(args, preds_path, gold_data_path):
         em += len(hypo_provenance & ref_provenance) / k
 
     em = 100.0 * em / total
-    logger.info("Precision@{}: {}".format(k, em))
+    logger.info(f"Precision@{k}: {em: .2f}")
 
 
 def evaluate_batch_retrieval(args, rag_model, questions):
@@ -122,7 +118,7 @@ def evaluate_batch_e2e(args, rag_model, questions):
         input_ids = rag_model.retriever.question_encoder_tokenizer.batch_encode_plus(
             questions, return_tensors="pt", padding=True, truncation=True
         )["input_ids"].to(args.device)
-        outputs = rag_model.generate(
+        outputs = rag_model.generate(  # rag_model overwrites generate
             input_ids,
             num_beams=args.num_beams,
             min_length=args.min_length,

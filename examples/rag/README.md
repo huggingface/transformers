@@ -74,7 +74,7 @@ python examples/rag/eval_rag.py \
 ## End-to-end evaluation
 ```
 python examples/rag/eval_rag.py \
-    --model_name_or_path /private/home/piktus/rag_huggingface/data/repro-rag-sequence-63/ \
+	--model_name_or_path $MODEL_NAME_OR_PATH \
     --model_type rag_sequence \
     --evaluation_set path/to/test.source \
     --gold_data_path path/to/gold_data \

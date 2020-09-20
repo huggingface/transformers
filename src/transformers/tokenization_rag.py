@@ -31,8 +31,7 @@ class RagTokenizer:
 
     def save_pretrained(self, save_directory):
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
-            return
+            raise ValueError("Provided path ({}) should be a directory, not a file".format(save_directory))
         os.makedirs(save_directory, exist_ok=True)
         question_encoder_path = os.path.join(save_directory, "question_encoder_tokenizer")
         generator_path = os.path.join(save_directory, "generator_tokenizer")
@@ -42,7 +41,7 @@ class RagTokenizer:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         # dynamically import AutoTokenizer
-        from transformers import AutoTokenizer
+        from .tokenization_auto import AutoTokenizer
 
         config = kwargs.pop("config", None)
 
@@ -127,15 +126,13 @@ class RagTokenizer:
 
             - **input_ids** -- List of token ids to be fed to the encoder.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
-            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
-                This does not include causal mask, which is built by the model.
+            - **labels** -- List of token ids for tgt_texts
 
-            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
+            The full set of keys ``[input_ids, attention_mask, labels]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
         """
         if max_length is None:
-            max_length = self.generator.model_max_length
+            max_length = self.question_encoder.model_max_length
         model_inputs: BatchEncoding = self.question_encoder(
             src_texts,
             add_special_tokens=True,

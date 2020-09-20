@@ -162,24 +162,15 @@ def require_torch_and_cuda(test_case):
 
 
 def require_datasets(test_case):
-    """
-    Decorator marking a test that requires TensorFlow.
+    """Decorator marking a test that requires datasets."""
 
-    These tests are skipped when TensorFlow isn't installed.
-
-    """
     if not _datasets_available:
         test_case = unittest.skip("test requires Datasets")(test_case)
     return test_case
 
 
 def require_faiss(test_case):
-    """
-    Decorator marking a test that requires TensorFlow.
-
-    These tests are skipped when TensorFlow isn't installed.
-
-    """
+    """Decorator marking a test that requires faiss."""
     if not _faiss_available:
         test_case = unittest.skip("test requires Faiss")(test_case)
     return test_case
