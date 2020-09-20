@@ -127,14 +127,19 @@ class SummarizationModule(BaseTransformer):
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        try:
-            freeze_params(self.model.model.shared)
+        model_type = self.config.model_type
+        if model_type == "t5":
+            freeze_params(self.model.shared)
+            for d in [self.model.encoder, self.model.decoder]:
+                freeze_params(d.embed_tokens)
+        elif model_type == "fsmt":
             for d in [self.model.model.encoder, self.model.model.decoder]:
                 freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
-        except AttributeError:
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
+        else:
+            freeze_params(self.model.model.shared)
+            for d in [self.model.model.encoder, self.model.model.decoder]:
+                freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
 
     def forward(self, input_ids, **kwargs):
@@ -158,10 +163,16 @@ class SummarizationModule(BaseTransformer):
         outputs = self(src_ids, attention_mask=src_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
         lm_logits = outputs[0]
         if self.hparams.label_smoothing == 0:
+            model_type = self.config.model_type
+            if model_type == "fsmt":
+                vocab_size = self.model.config.tgt_vocab_size
+            else:
+                vocab_size = self.model.config.vocab_size
+
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
 
-            assert lm_logits.shape[-1] == self.model.config.vocab_size
+            assert lm_logits.shape[-1] == vocab_size
             loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
