@@ -10,13 +10,12 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from lightning_base import generic_train
-from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5Config, T5ForConditionalGeneration
-from transformers.modeling_bart import shift_tokens_right
-
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
 from initialization_utils import copy_layers, init_student
+from lightning_base import generic_train
+from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5Config, T5ForConditionalGeneration
+from transformers.modeling_bart import shift_tokens_right
 from utils import (
     any_requires_grad,
     assert_all_frozen,

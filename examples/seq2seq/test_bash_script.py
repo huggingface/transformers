@@ -10,12 +10,11 @@ import pytorch_lightning as pl
 import timeout_decorator
 import torch
 
-from transformers import BartForConditionalGeneration, MarianMTModel
-from transformers.testing_utils import slow
-
 from distillation import BartSummarizationDistiller, distill_main
 from finetune import SummarizationModule, main
 from test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
+from transformers import BartForConditionalGeneration, MarianMTModel
+from transformers.testing_utils import slow
 from utils import load_json
 
 
