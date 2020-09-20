@@ -53,7 +53,7 @@ def eval_data_dir(
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).cuda()
     if fp16:
         model = model.half()
-    # do we need to increase num_beams?
+    # determine if we need to increase num_beams
     use_task_specific_params(model, task)  # update config with task specific params
     num_beams = generate_kwargs.pop("num_beams", model.config.num_beams)  # AttributeError risk?
     if num_return_sequences > num_beams:
