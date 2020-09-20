@@ -306,7 +306,7 @@ class RagTestMixin:
             self.assertTrue(model.config.is_encoder_decoder)
 
             outputs = model(
-                input_ids=input_ids[0, :1],
+                input_ids=input_ids,
                 attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,

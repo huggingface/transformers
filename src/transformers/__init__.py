@@ -141,6 +141,9 @@ from .pipelines import (
     pipeline,
 )
 
+# Retriever
+from .retrieval_rag import RagRetriever
+
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
@@ -409,6 +412,7 @@ if is_torch_available():
         load_tf_weights_in_openai_gpt,
     )
     from .modeling_pegasus import PegasusForConditionalGeneration
+    from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
     from .modeling_reformer import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerAttention,
@@ -716,11 +720,6 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
-
-
-if is_torch_available() and is_datasets_available() and is_faiss_available():
-    from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
-    from .retrieval_rag import RagRetriever
 
 
 if not is_tf_available() and not is_torch_available():
