@@ -1,4 +1,4 @@
-#/usr/bin/env bash
+#!/usr/bin/env bash
 
 # these scripts need to be run before any changes to FSMT-related code - it should cover all bases
 
