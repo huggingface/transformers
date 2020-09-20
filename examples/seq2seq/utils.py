@@ -331,8 +331,7 @@ def get_git_info():
             "repo_branch": str(repo.active_branch),
         }
     except Exception:
-        return {'repo_sha': 'RAY', 'repo_id': 'RAY', 'repo_branch': 'RAY'}
-
+        return {"repo_sha": "RAY", "repo_id": "RAY", "repo_branch": "RAY"}
 
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]

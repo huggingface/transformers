@@ -337,17 +337,10 @@ class SummarizationModule(BaseTransformer):
             help="-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So val_check_interval will effect it.",
         )
         return parser
-# from pytorch_lightning.callbacks import Callback
+
+
 from ray import tune
-# class TuneReportCallback(Callback):
 
-#     def on_validation_end(self, trainer, pl_module):
-#         metric = pl_module.val_metric
-#         # trainer.metrics
-#         loss = trainer.callback_metrics['val_avg_loss']
-#         metric = trainer.callback_metrics[f'val_avg_{pl_module.val_metric}']
-
-#         tune.report(val_avg_loss=loss, val_avg_bleu=metric)
 
 class TranslationModule(SummarizationModule):
     mode = "translation"
@@ -374,6 +367,8 @@ def main(args, model=None) -> SummarizationModule:
         else:
             model: SummarizationModule = TranslationModule(args)
     dataset = Path(args.data_dir).name
+
+    extra_callbacks = []
     if (
         args.logger_name == "default"
         or args.fast_dev_run
@@ -385,13 +380,18 @@ def main(args, model=None) -> SummarizationModule:
         from pytorch_lightning.loggers import WandbLogger
 
         project = os.environ.get("WANDB_PROJECT", dataset)
-        os.environ["WANDB_API_KEY"] = args.wandb["api_key"]
-        logger = WandbLogger(
-            name=model.output_dir.name + tune.get_trial_name(),
-            group=args.wandb["group"],
-            project=project
-        )
+        logger = WandbLogger(name=model.output_dir.name, project=project)
+    elif args.logger_name == "ray_wandb":
+        from pytorch_lightning.loggers import WandbLogger
 
+        os.environ["WANDB_API_KEY"] = args.wandb["api_key"]
+        project = os.environ.get("WANDB_PROJECT", dataset)
+        logger = WandbLogger(
+            name=model.output_dir.name + tune.get_trial_name(), group=args.wandb["group"], project=project
+        )
+        from ray.tune.integration.pytorch_lightning import TuneReportCallback
+
+        extra_callbacks = [TuneReportCallback([f"val_avg_{model.val_metric}"], on="validation_end")]
 
     if args.early_stopping_patience >= 0:
         es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
@@ -399,19 +399,19 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = False
 
     lower_is_better = args.val_metric == "loss"
-    from ray.tune.integration.pytorch_lightning import TuneReportCallback
 
-
+    pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric, args.save_top_k, lower_is_better),
+        checkpoint_callback=get_checkpoint_callback(
+            args.output_dir, model.val_metric, args.save_top_k, lower_is_better
+        ),
         early_stopping_callback=es_callback,
-        extra_callbacks=[TuneReportCallback(["val_avg_bleu"], on="validation_end")],
+        extra_callbacks=extra_callbacks,
         logger=logger,
     )
-    pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
         return model
 
