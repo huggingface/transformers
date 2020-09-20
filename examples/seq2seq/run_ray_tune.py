@@ -4,10 +4,29 @@ from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from functools import partial
-from durbango import *
-from finetune import main as ft_main
-from pathlib import Path
 import os
+import sys
+# from durbango import *
+
+def fix_import_paths():
+    import os
+    import sys
+    import transformers
+    sys.path.append(
+        os.path.join(
+            os.path.dirname(transformers.__file__),
+            "../../examples/seq2seq/"))
+
+    sys.path.append(
+        os.path.join(
+            os.path.dirname(transformers.__file__),
+            "../../examples/"))
+
+fix_import_paths()
+
+
+from pathlib import Path
+
 
 def get_ray_slug(cfg):
     strang = ''
@@ -27,11 +46,12 @@ def get_ray_slug(cfg):
 from ray.tune.logger import DEFAULT_LOGGERS
 from ray.tune.integration.wandb import WandbLogger
 def ray_main(args, config):
-
+    fix_import_paths()
     for k,v in config.items():
         #assert hasattr(args, k), k
         setattr(args, k, v)
     args.output_dir = get_ray_slug(config)
+    from finetune import main as ft_main
     ft_main(args)
 
 
@@ -39,24 +59,49 @@ def tune_helsinki_(args, num_samples=100, num_epochs=1):
     args.num_train_epochs = num_epochs
     # args.n_train = 10000
     search_space = {
-        "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
+        "learning_rate": tune.loguniform(1e-6, 0.5),
         "gradient_accumulation_steps": tune.choice([1, 8, 32, 128, 256]),
-        "dropout": tune.choice([0, 0.1, 0.2, 0.4]),
+        "dropout": tune.uniform(0, 0.4),
+        'label_smoothing': tune.uniform(0, 0.4),
     }
-    scheduler = ASHAScheduler(
-         metric="val_avg_bleu",
-         mode="max",
-         max_t=num_epochs* int(1/args.val_check_interval),  # max number of reports until termination
-         grace_period=1,
-         reduction_factor=4,  # cut 1/4 of trials really quickly, and another 1/4 pretty soon
-     )
+    # scheduler = ASHAScheduler(
+    #      metric="val_avg_bleu",
+    #      mode="max",
+    #      max_t=num_epochs* int(1/args.val_check_interval),  # max number of reports until termination
+    #      grace_period=1,
+    #      reduction_factor=4,  # cut 1/4 of trials really quickly, and another 1/4 pretty soon
+    #  )
+
+    from ray.tune.suggest.hyperopt import HyperOptSearch
+
+    searcher = HyperOptSearch(metric="val_avg_bleu", mode="max")
     reporter = CLIReporter(
-        parameter_columns=list(search_space.keys()),
-        metric_columns=["val_avg_loss", "val_avg_bleu", "global_step"]
+        parameter_columns={
+            "learning_rate": "lr",
+            "gradient_accumulation_steps": "grad_accum",
+            "dropout": "dropout",
+            "label_smoothing": "l_smooth",
+
+        },
+        metric_columns={
+            "val_avg_loss": "loss",
+            "val_avg_bleu": "bleu",
+            "global_step": "step",
+            "training_iteration": "iter"
+        }
     )
     config = search_space.copy()
-    config["wandb"] = {"project": "RAY", "group": "gcp_sep16_wmt"}
-    ray.init(log_to_driver=False)
+
+    def datetime_now():
+        import datetime
+        return datetime.datetime.now().strftime("%H:%M:%S")
+
+    config["wandb"] = {
+        "project": "RAY",
+        "group": f"gcp_sep16_wmt-{datetime_now()}",
+        "api_key": "REMOVE_THIS" # consider setting env var too
+    }
+    ray.init(log_to_driver=True, address="auto")
     tune.run(
         partial(
             ray_main,
@@ -64,15 +109,15 @@ def tune_helsinki_(args, num_samples=100, num_epochs=1):
         ),
         resources_per_trial={"gpu": args.gpus},
         config=config,
-        num_samples=num_samples,
-        scheduler=scheduler,
+        num_samples=10,
+        search_alg=searcher,
+        # scheduler=scheduler,
         progress_reporter=reporter,
         name="tune_helsinki_asha",
-        loggers=DEFAULT_LOGGERS+ (WandbLogger,),
-        max_failures=3,
-        # fail_fast=True,
+        # loggers=DEFAULT_LOGGERS + (WandbLogger,),
+        # max_failures=3,
+        fail_fast=True,
     )
-
 
 # Make default args
 import argparse
@@ -105,7 +150,7 @@ DEFAULTS = {
     'limit_train_batches': 1.0,
     'limit_val_batches': 1.0,
     'limit_test_batches': 1.0,
-    'val_check_interval': 0.1,
+    'val_check_interval': 0.01,
     'log_save_interval': 100,
     'row_log_interval': 50,
     'distributed_backend': None,
@@ -152,7 +197,7 @@ DEFAULTS = {
     'do_train': True,
     'do_predict': True,
     'seed': 42,
-    'data_dir': '/home/shleifer/transformers_fork/examples/seq2seq/wmt_en_ro',
+    'data_dir': os.path.expanduser('~/wmt_en_ro'),
     'max_source_length': 128,
     'max_target_length': 128,
     'val_max_target_length': 128,
@@ -160,7 +205,7 @@ DEFAULTS = {
     'freeze_encoder': True,
     'freeze_embeds': True,
     'sortish_sampler': True,
-    'logger_name': 'default',
+    'logger_name': 'wandb',
     'n_train': -1,
     'n_val': 500,
     'n_test': -1,
