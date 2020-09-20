@@ -37,7 +37,7 @@ from utils import (
 )
 
 
-# need the parent dir scripts
+# need the parent dir module
 sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
 from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 
