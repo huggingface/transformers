@@ -912,7 +912,9 @@ class LongformerModel(LongformerPreTrainedModel):
 
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = LongformerEncoder(config)
-        self.pooler = BertPooler(config)
+
+        if config.add_pooling_layer:
+            self.pooler = BertPooler(config)
 
         self.init_weights()
 
@@ -1082,7 +1084,7 @@ class LongformerModel(LongformerPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.config.add_pooling_layer else None
 
         # undo padding
         if padding_len > 0:
