@@ -68,7 +68,7 @@ class BenchmarkArguments:
     trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
-    env_print: bool = field(default=False, metadata={"help": "Wheter to  print environment information"})
+    env_print: bool = field(default=False, metadata={"help": "Whether to print environment information"})
     multi_process: bool = field(
         default=False,
         metadata={
