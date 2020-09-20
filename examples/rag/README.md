@@ -1,14 +1,17 @@
 # Intro
-RAG (for Retrieval Augmented Generation) is a seq2seq model which encapsulates two core components: a question encoder and a generator. During a forward pass, we encode the input with the question encoder and pass it
-to the retriever to extract relevant context documents. The documents are then prepended to the input. Such contextualized input is passed to the generator. See [the paper](https://arxiv.org/pdf/2005.11401.pdf) for mored details.
+RAG is a seq2seq model which encapsulates two core components: a question encoder and a generator.
+During a forward pass, we encode the input with the question encoder and pass it
+to the retriever to extract relevant context documents. The documents are then prepended to the input.
+Such contextualized inputs is passed to the generator.
 
-We implement two variants of the model, both presented in the paper - `RagSequenceForGeneration` and `RagTokenForGeneration`. In both cases we use `DPRQuestionEncoder` as the question encoder. As for the generator, two compatible architectures have been tested: `BartForConditionalGeneration`  and `T5ForConditionalGeneration`.
+The question encoder can be any `autoencoding` model, preferably :obj:`~transformers.DPRQuestionEncoder`, and the generator can be any `seq2seq` model, preferably :obj:`~transformers.BartForConditionalGeneration`.
 
-Key files:
-- `modeling_rag.py`, `tokenization_rag.py`, `configuration_rag.py` the core model implementation
-- `retrieval_rag.py` - a distributed retriever built on top of the `torch.distributed` communication package. The retriever is an interface between the model and the faiss index of the encoded documents. During training, all workers initialize their own instance of the retriever, however, only the main worker loads the index into memory, which prevents OOMs on machines with multiple GPUs (we store the index in RAM). The index itself is based on the `nlp.Datasets`. We also implement a variant compatible with indices built using the original DPR implementation (https://github.com/facebookresearch/DPR)
-- `eval_rag.py` - an evaluation script which allows to perform the evaluation end to end (measures the exact match and F1 on the downstream task) as well as the evaluation of the retrieval component alone (measures precision@k).
-- `finetune.py` - a training script for finetuning RAG models.
+The model can be initialized with a :obj:`~transformers.RagRetriever` for end-to-end generation or used in combination with the outputs of a retriever in multiple steps - see examples for more details.
+The model is compatible any `autoencoding` model as the ``question_encoder`` and any `seq2seq` model with language model head as the ``generator``.
+The model has been tested with :class:`~transformers.DPRQuestionEncoder` as the ``question_encoder`` and :class:`~transformers.BartForConditionalGeneration` or :class:`~transformers.T5ForConditionalGeneration` as the ``generator``.
+
+RAG models were released with the paper `Retrieval-Augmented Generation for
+Knowledge-Intensive NLP Tasks <https://arxiv.org/abs/2005.11401>`_ by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
 
 # Finetuning
@@ -27,19 +30,19 @@ python examples/rag/finetune.py \
 
 
 # Evaluation
-Apart for parameters specifying the model that's being evaluated and some extra parameters, the evaluation script expects paths to two files:
-- `evaluation_set` - a path file specifying the input dataset for evaluation, a single datapoint per line, e.g.
+Apart from the parameters specifying the model to evaluate and some extra parameters, the evaluation script expects paths to two files:
+- `evaluation_set` - a path to a file specifying the evaluation dataset, a single datapoint per line, e.g.
 ```who is the owner of reading football club```
-- `gold_data_path` - a path to a file contaning ground truth answers for samples from the `evaluation_set`.
+- `gold_data_path` - a path to a file contaning ground truth answers for datapoints from the `evaluation_set`.
 
 We expect the following formats of the gold data file:
 
-- for e2e evaluation, we support two formats of gold files:
+- for e2e evaluation, we support two formats of the gold file:
     - `qa` - where a single line in the following format: input [tab] output_list, e.g.:
     ```
     who is the owner of reading football club	['Xiu Li Dai', 'Dai Yongge', 'Dai Xiuli', 'Yongge Dai']
     ```
-    - `ans` - where a single line of the gold file contains the expected output string,
+    - `ans` - where a single line of the gold file contains the expected output string, e.g.:
     ```
     Xiu Li Dai
     ```
@@ -65,8 +68,8 @@ python examples/rag/eval_rag.py \
     --model_type rag_sequence \ # RAG model type (rag_token or rag_sequence)
     --evaluation_set path/to/output/biencoder-nq-dev.questions \ # an input dataset for evaluation
     --gold_data_path path/to/output/biencoder-nq-dev.pages \ # a dataset containing ground truth answers for samples from the evaluation_set
-    --predictions_filename retrieval_preds.tsv  \ # name of file in which predictions will be stored
-    --eval_mode retrieval  \ # indicates whether we're performing retrieval evaluation or e2e evaluation
+    --predictions_path path/to/retrieval_preds.tsv  \ # name of file in which predictions will be stored
+    --eval_mode retrieval \ # indicates whether we're performing retrieval evaluation or e2e evaluation
     --recalculate # if predictions_filename already exists, and this option is set - we regenerate the answers, otherwise we reuse the predicsion file to calculate metrics.
 ```
 
@@ -78,8 +81,8 @@ python examples/rag/eval_rag.py \
     --model_type rag_sequence \
     --evaluation_set path/to/test.source \
     --gold_data_path path/to/gold_data \
-    --predictions_filename e2e_preds.txt \
-    --eval_mode e2e  \ # indicates whether we're performing retrieval evaluation or e2e evaluation (default)
+    --predictions_path path/to/e2e_preds.txt \
+    --eval_mode e2e \ # indicates whether we're performing retrieval evaluation or e2e evaluation (default)
     --n_docs 5 \ # You can experiment with retrieving different number of documents at evaluation time
     --print_predictions
 ```
