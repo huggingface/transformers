@@ -13,10 +13,10 @@ import torch
 from transformers import BartForConditionalGeneration, MarianMTModel
 from transformers.testing_utils import slow
 
-from .distillation import BartSummarizationDistiller, distill_main
-from .finetune import SummarizationModule, main
-from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
-from .utils import load_json
+from distillation import BartSummarizationDistiller, distill_main
+from finetune import SummarizationModule, main
+from test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
+from utils import load_json
 
 
 MODEL_NAME = MBART_TINY

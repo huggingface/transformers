@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-from .utils import (
+from utils import (
     Seq2SeqDataset,
     calculate_bleu,
     calculate_rouge,
