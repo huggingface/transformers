@@ -1,0 +1,51 @@
+# An unique identifier for the head node and workers of this cluster.
+cluster_name: transformers-gpu
+# The maximum number of workers nodes to launch in addition to the head
+# node. This takes precedence over min_workers. min_workers default to 0.
+min_workers: 0
+initial_workers: 0
+max_workers: 0
+# Cloud-provider specific configuration.
+provider:
+    type: aws
+    cache_stopped_nodes: False
+    region: us-west-2
+    availability_zone: us-west-2a,us-west-2b
+# How Ray will authenticate with newly launched nodes.
+auth:
+    ssh_user: ubuntu
+head_node:
+    InstanceType: c5.4xlarge # CPU, doesn't run anything
+    ImageId: latest_dlami
+    BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+              VolumeSize: 300
+    # InstanceMarketOptions:
+    #     MarketType: spot
+           # SpotOptions:
+           #     MaxPrice: "9.0"
+worker_nodes:
+    InstanceType: p3.8xlarge # 8 V100s
+    ImageId: latest_dlami
+    # Run workers on spot by default. Comment this out to use on-demand.
+    BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+              VolumeSize: 300
+    InstanceMarketOptions:
+        MarketType: spot
+        # SpotOptions:
+        #     MaxPrice: "9.0"
+file_mounts: {
+    /home/ubuntu/transformers/: ~/dev/transformers,
+}
+setup_commands:
+    - cd transformers && pip install -e .
+    - pip install -U https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp37-cp37m-manylinux1_x86_64.whl
+    - wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz && tar -xzvf wmt_en_ro.tar.gz
+    - pip install -q ipdb ray[tune] torch torchvision hyperopt
+    - pip install wandb
+    - cd transformers && pip install -r examples/requirements.txt
+    - pip install -U pytorch-lightning
+    # Install apex.
