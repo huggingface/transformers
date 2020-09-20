@@ -717,6 +717,105 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
     @slow
+    def test_rag_token_generate_batch(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_token = self.token_model
+        rag_token.set_retriever(rag_retriever)
+
+        questions = [
+            "who sings does he love me with reba",
+            "how many pages is invisible man by ralph ellison",
+        ]
+        input_ids = rag_question_encoder_tokenizer.batch_encode_plus(
+            questions,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        ).input_ids
+
+        input_ids = input_ids.to(torch_device)
+
+        output_ids = rag_token.generate(
+            input_ids,
+            retriever=rag_retriever,
+            decoder_start_token_id=rag_token.generator.config.decoder_start_token_id,
+            num_beams=4,
+            num_return_sequences=1,
+            max_length=10,
+        )
+
+        # sequence generate test
+        output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
+
+        # Expected outputs as given by model at integration time.
+        EXPECTED_OUTPUT_TEXT_1 = '"People Need Love" is the'
+        EXPECTED_OUTPUT_TEXT_2 = '"How many pages is invisible man'
+
+        self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
+        self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
+
+    @slow
+    def test_rag_sequence_generate_batch(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_sequence = self.sequence_model
+        rag_sequence.set_retriever(rag_retriever)
+
+        questions = [
+            "who sings does he love me with reba",
+            "how many pages is invisible man by ralph ellison",
+        ]
+        input_ids = rag_question_encoder_tokenizer.batch_encode_plus(
+            questions,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        ).input_ids
+
+        input_ids = input_ids.to(torch_device)
+
+        output_ids = rag_sequence.generate(
+            input_ids,
+            retriever=rag_retriever,
+            decoder_start_token_id=rag_sequence.generator.config.decoder_start_token_id,
+            num_beams=4,
+            num_return_sequences=1,
+            max_length=10,
+        )
+
+        # sequence generate test
+        output_text_1 = rag_decoder_tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
+
+        # Expected outputs as given by model at integration time.
+        EXPECTED_OUTPUT_TEXT_1 = '"I Know Him So Well"'
+        EXPECTED_OUTPUT_TEXT_2 = '"Howl" chronicles the'
+
+        self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
+        self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
+
+
+    @slow
     def test_rag_sequence_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
