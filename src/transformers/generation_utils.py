@@ -27,6 +27,47 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
+def length_normalization(log_probs, length,  alpha, min_len, max_len, out_of_range_penalty=-0.5, start=0.5,):
+    r"""Create length normalization function.
+    Combines length penalty from https://arxiv.org/abs/1609.08144,
+    and length constraint from https://www.aclweb.org/anthology/W18-2706.pdf.
+    scores = \sum_j log(P_j) / ((start + lengths)/(1 + start))**alpha
+          + out_of_range_penalty * (length > max_len or length < min_len)
+    Args:
+        start: int, length normalization start offset.
+        alpha: float, [0, 1.0],  length normalization power.
+        min_len: int, minimum decode length.
+        max_len: int, maximum decode lengths.
+        out_of_range_penalty: float, penalty for lengths outside min len and max
+          len. Use a negative number that penalize out of range decodes, does hard
+          constraint if set to -inf.
+        Returns:
+        fn(log_probs_BxM, length)->scores_BxM: a function to normalize sum log
+        probabilities of sequence with current decoding lengths.
+    """
+    scores_denom = ((start + length)/(1+start))** alpha
+    log_probs = log_probs / scores_denom
+    # soft length constrain
+    over_boundaries: bool = (length < min_len) or (length > max_len)
+    penalty = int(over_boundaries) * out_of_range_penalty
+    log_probs = log_probs + penalty
+    return log_probs
+
+    # TF Implementation from https://github.com/google-research/pegasus/blob/master/pegasus/layers/beam_search.py
+    # def length_norm_fn(log_probs_BxM, length_int):
+    #     """Normalize sum log probabilities given a sequence length."""
+    #     dtype = log_probs_BxM.dtype
+    #     norm_flt = tf.pow(((start + tf.cast(length_int, dtype)) / (1. + start)),
+    #                       alpha)
+    #     log_probs_BxM /= norm_flt
+    #     too_short_bool = tf.less(length_int, min_len)
+    #     too_long_bool = tf.logical_and(tf.greater(length_int, max_len), max_len > 0)
+    #     out_of_range_bool = tf.logical_or(too_long_bool, too_short_bool)
+    #     log_probs_BxM += out_of_range_penalty * tf.cast(out_of_range_bool, dtype)
+    #     return log_probs_BxM
+
+
+
 class GenerationMixin:
     """
     A class contraining all of the functions supporting generation, to be used as a mixin in
@@ -1012,7 +1053,10 @@ class BeamHypotheses(object):
         """
         Add a new hypothesis to the list.
         """
-        score = sum_logprobs / len(hyp) ** self.length_penalty
+        score = sum_logprobs #/ len(hyp) ** self.length_penalty
+        length_normalization(sum_logprobs, len(hyp), alpha=self.length_penalty,
+                             min_len=10, max_len=self.max_length-20)
+
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:
