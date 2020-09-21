@@ -29,13 +29,12 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
-
     from transformers import (  # XxxForMaskedLM,; XxxForQuestionAnswering,; XxxForTokenClassification,
         DeBERTaConfig,
         DeBERTaForSequenceClassification,
         DeBERTaModel,
     )
+    from transformers.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
