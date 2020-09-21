@@ -19,7 +19,7 @@ from run_eval import generate_summaries_or_translations, run_generate
 from run_eval_search import run_search
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.hf_api import HfApi
-from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
+from transformers.testing_utils import CaptureStderr, CaptureStdout, require_torch_and_cuda, slow
 from utils import label_smoothed_nll_loss, lmap, load_json
 
 
