@@ -110,14 +110,18 @@ def make_test_data_dir(**kwargs):
         _dump_articles((tmp_dir / f"{split}.target"), SUMMARIES)
     return tmp_dir
 
+
 # XXX: a candidate for testing_utils (python>=3.6)
 # https://stackoverflow.com/a/59041913/9201239
-import asyncio
-class RunOutput():
+import asyncio  # noqa
+
+
+class RunOutput:
     def __init__(self, returncode, stdout, stderr):
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
+
 
 async def _read_stream(stream, callback):
     while True:
@@ -127,35 +131,43 @@ async def _read_stream(stream, callback):
         else:
             break
 
-async def _stream_subprocess(cmd, env=None, stdin=None, quiet=False, echo=False) -> RunOutput:
+
+async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> RunOutput:
     if echo:
         print(cmd)
 
-    p = await asyncio.create_subprocess_exec(cmd[0], *cmd[1:],
-                                              stdin=stdin,
-                                              stdout=asyncio.subprocess.PIPE,
-                                              stderr=asyncio.subprocess.PIPE,
-                                              env=env,)
+    p = await asyncio.create_subprocess_exec(
+        cmd[0],
+        *cmd[1:],
+        stdin=stdin,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
     out = []
     err = []
+
     def tee(line, sink, pipe, label=""):
-        line = line.decode('utf-8').rstrip()
+        line = line.decode("utf-8").rstrip()
         sink.append(line)
         if not quiet:
             print(label, line, file=pipe)
 
-    await asyncio.wait([
-        _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout)),
-        _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="ERR:")),
-    ])
+    await asyncio.wait(
+        [
+            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout)),
+            _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="ERR:")),
+        ],
+        timeout=timeout,
+    )
 
     return RunOutput(await p.wait(), out, err)
 
 
-def execute_async_std(cmd, env=None, stdin=None, quiet=False, echo=False) -> RunOutput:
+def execute_async_std(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> RunOutput:
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
-        _stream_subprocess(cmd, env=env, stdin=stdin, quiet=quiet, echo=echo)
+        _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
     )
 
     return result
@@ -220,8 +232,8 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
 
-        result = execute_async_std(cmd, env=env, stdin=None, quiet=False, echo=False)
-        
+        result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
+
         assert result.stdout, "produced no output"
         if result.returncode > 0:
             pytest.fail(f"failed with returncode {returncode}")
