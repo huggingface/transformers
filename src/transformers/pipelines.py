@@ -1391,17 +1391,17 @@ class TokenClassificationPipeline(Pipeline):
                     return_offsets_mapping=self.tokenizer.is_fast,
                 )
                 if "offset_mapping" in tokens:
-                    offset_mapping = tokens["offset_mapping"].cpu().numpy()
+                    offset_mapping = tokens["offset_mapping"].cpu().numpy()[0]
                     del tokens["offset_mapping"]
-
+                special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
+                del tokens["special_tokens_mask"]
+                
                 # Forward
                 if self.framework == "tf":
                     entities = self.model(tokens.data)[0][0].numpy()
                     input_ids = tokens["input_ids"].numpy()[0]
                 else:
                     with torch.no_grad():
-                        special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
-                        del tokens["special_tokens_mask"]
                         tokens = self.ensure_tensor_on_device(**tokens)
                         entities = self.model(**tokens)[0][0].cpu().numpy()
                         input_ids = tokens["input_ids"].cpu().numpy()[0]
