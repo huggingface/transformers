@@ -27,7 +27,8 @@ from .file_utils import (
     add_start_docstrings_to_callable,
 )
 from .modeling_tf_outputs import (
-    TFBaseModelOutput, TFBaseModelOutputWithPooling,
+    TFBaseModelOutput,
+    TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,

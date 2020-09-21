@@ -24,11 +24,11 @@ from .modeling_tf_outputs import (
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
+    TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFSequenceSummary,
     TFTokenClassificationLoss,
-    TFPreTrainedModel,
     get_initializer,
     keras_serializable,
     shape_list,

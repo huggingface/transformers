@@ -15,9 +15,8 @@
 """ TF 2.0 Flaubert model.
 """
 
-from dataclasses import dataclass
 import itertools
-import random
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import tensorflow as tf
@@ -27,12 +26,12 @@ from transformers.activations_tf import get_tf_activation
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_outputs import TFBaseModelOutput
-from .modeling_tf_utils import TFSharedEmbeddings, get_initializer, keras_serializable, shape_list, TFPreTrainedModel
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list
 from .modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
-    TFXLMForTokenClassification, TFXLMWithLMHeadModelOutput,
+    TFXLMForTokenClassification,
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
@@ -503,7 +502,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         attentions = () if output_attentions else None
         for i in range(self.n_layers):
             # LayerDrop
-            dropout_probability =  tf.random.uniform([1], 0, 1)
+            dropout_probability = tf.random.uniform([1], 0, 1)
             if training and tf.less(dropout_probability, self.layerdrop):
                 continue
 
