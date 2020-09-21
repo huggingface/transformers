@@ -6,11 +6,11 @@ by Patrick Lewis, Ethan Perez, Aleksandara Piktus et al.
 ## Usage:
 
 ```python
-from transformers import RagTokenizer, RagRetriever, RagSequenceForGeneration
+from transformers import RagTokenizer, RagRetriever, RagTokenForGeneration
 
 tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
 retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
-model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-base", retriever=retriever)
+model = RagTokenForGeneration.from_pretrained("facebook/rag-token-base", retriever=retriever)
 
 input_ids = tokenizer("What is the largest country in the world?", return_tensors="pt").input_ids
 
