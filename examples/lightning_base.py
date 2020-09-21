@@ -119,7 +119,7 @@ class BaseTransformer(pl.LightningModule):
     def get_lr_scheduler(self):
         get_schedule_func = arg_to_scheduler[self.hparams.lr_scheduler]
         scheduler = get_schedule_func(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps()
         )
         scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
         return scheduler
@@ -159,7 +159,6 @@ class BaseTransformer(pl.LightningModule):
     def test_epoch_end(self, outputs):
         return self.validation_end(outputs)
 
-    @property
     def total_steps(self) -> int:
         """The number of total training steps that will be run. Used for lr scheduler purposes."""
         num_devices = max(1, self.hparams.gpus)  # TODO: consider num_tpu_cores
