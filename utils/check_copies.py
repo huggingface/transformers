@@ -17,6 +17,7 @@ import argparse
 import glob
 import os
 import re
+import tempfile
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -70,6 +71,23 @@ _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)
 _re_replace_pattern = re.compile(r"with\s+(\S+)->(\S+)(?:\s|$)")
 
 
+def blackify(code):
+    """
+    Applies the black part of our `make style` command to `code`.
+    """
+    has_indent = code.startswith("    ")
+    if has_indent:
+        code = f"class Bla:\n{code}"
+    with tempfile.TemporaryDirectory() as d:
+        fname = os.path.join(d, "tmp.py")
+        with open(fname, "w") as f:
+            f.write(code)
+        os.system(f"black -q --line-length 119 --target-version py35 {fname}")
+        with open(fname, "r") as f:
+            result = f.read()
+            return result[len("class Bla:\n") :] if has_indent else result
+
+
 def is_copy_consistent(filename, overwrite=False):
     """
     Check if the code commented as a copy in `filename` matches the original.
@@ -100,6 +118,8 @@ def is_copy_consistent(filename, overwrite=False):
         should_continue = True
         while line_index < len(lines) and should_continue:
             line_index += 1
+            if line_index >= len(lines):
+                break
             line = lines[line_index]
             should_continue = (len(line) <= 1 or line.startswith(indent)) and re.search(
                 f"^{indent}# End copy", line
@@ -117,6 +137,10 @@ def is_copy_consistent(filename, overwrite=False):
             if search_patterns is not None:
                 obj1, obj2 = search_patterns.groups()
                 theoretical_code = re.sub(obj1, obj2, theoretical_code)
+
+        # Blackify each version before comparing them.
+        observed_code = blackify(observed_code)
+        theoretical_code = blackify(theoretical_code)
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
