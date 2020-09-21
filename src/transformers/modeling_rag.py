@@ -1270,11 +1270,22 @@ class RagTokenForGeneration(RagPreTrainedModel):
         )
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
+        vec_1 = context_attention_mask.sum(-1)[:, None]
+
         context_attention_mask = context_attention_mask.repeat_interleave(num_beams, dim=0)
 
+        # repeat same last hidden states over beam_idx dimension
         last_hidden_state = (
-            last_hidden_state.unsqueeze(0)
-            .expand((num_beams,) + last_hidden_state.shape)
+            last_hidden_state[None, None, :]
+            .reshape((batch_size, 1, self.config.n_docs) + last_hidden_state.shape[1:])
+            .expand(
+                (
+                    batch_size,
+                    num_beams,
+                    self.config.n_docs,
+                )
+                + last_hidden_state.shape[1:]
+            )
             .reshape((-1,) + last_hidden_state.shape[1:])
         )
 
