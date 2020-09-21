@@ -707,7 +707,7 @@ class Trainer:
                 self.total_flos = 0
                 logger.info("  Starting fine-tuning.")
 
-        tr_loss = torch.tensor(0.0).to(self.args.device)
+        tr_loss = 0.0
         logging_loss_scalar = 0.0
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
@@ -737,7 +737,7 @@ class Trainer:
                     epoch_pbar.update(1)
                     continue
 
-                tr_loss += self.training_step(model, inputs)
+                tr_loss += self.training_step(model, inputs).item()
                 self.total_flos += self.floating_point_ops(inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
@@ -770,15 +770,14 @@ class Trainer:
                         self.global_step == 1 and self.args.logging_first_step
                     ):
                         logs: Dict[str, float] = {}
-                        tr_loss_scalar = tr_loss.item()
-                        logs["loss"] = (tr_loss_scalar - logging_loss_scalar) / self.args.logging_steps
+                        logs["loss"] = (tr_loss - logging_loss_scalar) / self.args.logging_steps
                         # backward compatibility for pytorch schedulers
                         logs["learning_rate"] = (
                             self.lr_scheduler.get_last_lr()[0]
                             if version.parse(torch.__version__) >= version.parse("1.4")
                             else self.lr_scheduler.get_lr()[0]
                         )
-                        logging_loss_scalar = tr_loss_scalar
+                        logging_loss_scalar = tr_loss
 
                         self.log(logs)
 
@@ -844,7 +843,7 @@ class Trainer:
             delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        return TrainOutput(self.global_step, tr_loss.item() / self.global_step)
+        return TrainOutput(self.global_step, tr_loss / self.global_step)
 
     def hyperparameter_search(
         self,
