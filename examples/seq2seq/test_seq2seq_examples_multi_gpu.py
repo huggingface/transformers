@@ -210,9 +210,8 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(data_dir=tmp_dir, output_dir=output_dir, **default_updates)
 
-        # XXX: should be --alpha_encoder_loss and not alpha_loss_encoder
         def convert(k, v):
-            if k in ["tgt_suffix", "server_ip", "server_port", "out", "n_tpu_cores", "alpha_loss_encoder"]:
+            if k in ["tgt_suffix", "server_ip", "server_port", "out", "n_tpu_cores"]:
                 return ""
             if v is False or v is None:
                 return ""
