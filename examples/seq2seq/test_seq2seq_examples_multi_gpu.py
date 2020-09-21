@@ -2,7 +2,6 @@
 
 import logging
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -236,7 +235,7 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
 
         assert result.stdout, "produced no output"
         if result.returncode > 0:
-            pytest.fail(f"failed with returncode {returncode}")
+            pytest.fail(f"failed with returncode {result.returncode}")
 
         # XXX: need to complete the test
         return
