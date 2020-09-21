@@ -505,10 +505,11 @@ class DataCollatorForNextSentencePrediction:
                         # This should rarely go for more than one iteration for large
                         # corpora. However, just to be careful, we try to make sure that
                         # the random document is not the same as the document
-                        # we're processing.
+                        # we're processing. Also check to make sure that the random document
+                        # is not empty.
                         for _ in range(10):
                             random_document_index = random.randint(0, len(examples) - 1)
-                            if random_document_index != doc_index:
+                            if random_document_index != doc_index and len(examples[random_document_index]) > 0:
                                 break
 
                         random_document = examples[random_document_index]

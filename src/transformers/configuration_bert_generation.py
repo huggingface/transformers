@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""  BertForSeqGeneration model configuration """
+"""  BertGeneration model configuration """
 
 from .configuration_utils import PretrainedConfig
 
@@ -29,8 +29,8 @@ class BertGenerationConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50358):
-            Vocabulary size of the BertForSeqGeneration model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertForSeqGeneration`.
+            Vocabulary size of the BertGeneration model. Defines the different tokens that
+            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertGeneration`.
         hidden_size (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 24):
@@ -60,7 +60,7 @@ class BertGenerationConfig(PretrainedConfig):
 
         >>> from transformers import BertGenerationConfig, BertGenerationEncoder
 
-        >>> # Initializing a BertForSeqGeneration config
+        >>> # Initializing a BertGeneration config
         >>> configuration = BertGenerationConfig()
 
         >>> # Initializing a modelfrom the config
@@ -69,7 +69,7 @@ class BertGenerationConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "bert-for-seq-generation"
+    model_type = "bert-generation"
 
     def __init__(
         self,

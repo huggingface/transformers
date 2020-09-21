@@ -139,9 +139,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual((2, 9), batch.input_ids.shape)
         self.assertEqual((2, 9), batch.attention_mask.shape)
 
-        # Test that special tokens are reset
-        self.assertEqual(tokenizer.prefix_tokens, [])
-
     def test_empty_target_text(self):
         tokenizer = self.t5_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
@@ -184,7 +181,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         src_text = ["A long paragraph for summarization. </s>"]
         tgt_text = ["Summary of the text. </s>"]
         expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, 1]
-        expected_tgt_tokens = [0, 20698, 13, 8, 1499, 5, 1]
+        expected_tgt_tokens = [20698, 13, 8, 1499, 5, 1]
 
         batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK)
 
