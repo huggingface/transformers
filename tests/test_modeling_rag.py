@@ -711,6 +711,7 @@ class RagModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_rag_sequence_generate_batch(self):
+        # IMPORTAN: This test fails on GPU, but is fine on CPU -> beam search is very sensible
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(

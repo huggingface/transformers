@@ -331,7 +331,7 @@ class RagPreTrainedModel(PreTrainedModel):
                 kwargs_generator["config"] = generator_config
 
             generator = AutoModelForSeq2SeqLM.from_pretrained(
-                generator_pretrained_model_name_or_path, **kwargs_generator, use_cdn=False
+                generator_pretrained_model_name_or_path, **kwargs_generator
             )
 
         # instantiate config with corresponding kwargs
