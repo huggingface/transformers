@@ -1,6 +1,5 @@
 # as due to their complexity multi-gpu tests could impact other tests, and to aid debug we have those in a separate module.
 
-import argparse
 import logging
 import os
 import subprocess
@@ -8,19 +7,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
-import pytorch_lightning as pl
 import torch
 
-import lightning_base
-from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.testing_utils import require_multigpu
 
-from .distillation import distill_main, evaluate_checkpoint
-from .finetune import SummarizationModule, main
-from .utils import label_smoothed_nll_loss, lmap, load_json
+from .utils import load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
