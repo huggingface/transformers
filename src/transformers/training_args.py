@@ -51,11 +51,11 @@ class TrainingArguments:
             Whether to run evaluation on the dev set or not.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not.
-        evaluation_strategy(:obj:`bool` or :obj:`str`, `optional`, defaults to :obj:`"False"`):
-            The evulation strategy to adopt during training. Possible values are:
+        evaluation_strategy(:obj:`str`, `optional`, defaults to :obj:`"no"`):
+            The evaulation strategy to adopt during training. Possible values are:
 
-                * :obj:`False` or :obj:`"no"`: No evaluation is done during training.
-                * :obj:`True` or :obj:`"steps"`: Evaluation is done (and logged) ever :obj:`eval_steps`.
+                * :obj:`"no"`: No evaluation is done during training.
+                * :obj:`"steps"`: Evaluation is done (and logged) ever :obj:`eval_steps`.
                 * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
@@ -163,7 +163,7 @@ class TrainingArguments:
         default=None,
         metadata={"help": "Run evaluation during training at each logging step."},
     )
-    evaluation_strategy: Union[bool, str] = field(
+    evaluation_strategy: str = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
     )
@@ -281,15 +281,11 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         if self.evaluate_during_training is not None:
-            self.evaluation_strategy = self.evaluate_during_training
+            self.evaluation_strategy = "steps" if self.evaluate_during_training else "no"
             warnings.warn(
                 "The `evaluate_during_training` argument is deprecated in favor of `evaluation_strategy` (which has more options)",
                 FutureWarning,
             )
-        if self.evaluation_strategy is True:
-            self.evaluation_strategy = "steps"
-        elif self.evaluation_strategy is False:
-            self.evaluation_strategy = "no"
 
         if self.eval_steps is None:
             self.eval_steps = self.logging_steps
