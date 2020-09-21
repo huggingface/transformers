@@ -19,6 +19,7 @@ from torch.utils.data import Dataset, Sampler
 
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
+import socket
 
 
 try:
@@ -372,6 +373,7 @@ def get_git_info():
         "repo_id": str(repo),
         "repo_sha": str(repo.head.object.hexsha),
         "repo_branch": str(repo.active_branch),
+        "hostname": str(socket.gethostname()),
     }
     return repo_infos
 
