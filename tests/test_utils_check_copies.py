@@ -5,13 +5,11 @@ import sys
 import tempfile
 import unittest
 
-import transformers
-
 
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
-import check_copies
+import check_copies  # noqa: E402
 
 
 # This is the reference code that will be used in the tests.
@@ -61,7 +59,7 @@ class CopyCheckTester(unittest.TestCase):
         else:
             check_copies.is_copy_consistent(f.name, overwrite=True)
             with open(fname, "r") as f:
-                return self.assertTrue(f.read(), expected)
+                self.assertTrue(f.read(), expected)
 
     def test_find_code_in_transformers(self):
         code = check_copies.find_code_in_transformers("modeling_bert.BertLMPredictionHead")
@@ -98,7 +96,7 @@ class CopyCheckTester(unittest.TestCase):
         )
 
         # Copy consistency with overwrite
-        result = self.check_copy_consistency(
+        self.check_copy_consistency(
             "# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->TestModel",
             "TestModelLMPredictionHead",
             REFERENCE_CODE,

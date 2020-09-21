@@ -14,6 +14,10 @@ quality:
 style:
 	black --line-length 119 --target-version py35 examples templates tests src utils
 	isort examples templates tests src utils
+
+# Make marked copies of snippets of codes conform to the original
+
+fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
 
 # Run tests for the library

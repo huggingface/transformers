@@ -169,7 +169,7 @@ def check_copies(overwrite: bool = False):
         raise Exception(
             "Found copy inconsistencies in the following files:\n"
             + diff
-            + "\nRun `make style` or `python utils/check_copies --fix_and_overwrite` to fix them."
+            + "\nRun `make fix-copies` or `python utils/check_copies --fix_and_overwrite` to fix them."
         )
 
 
