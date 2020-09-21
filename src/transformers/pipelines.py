@@ -1395,7 +1395,7 @@ class TokenClassificationPipeline(Pipeline):
                     del tokens["offset_mapping"]
                 special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
                 del tokens["special_tokens_mask"]
-                
+
                 # Forward
                 if self.framework == "tf":
                     entities = self.model(tokens.data)[0][0].numpy()
