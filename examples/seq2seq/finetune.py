@@ -36,7 +36,7 @@ from utils import (
 
 
 logger = logging.getLogger(__name__)
-
+from pytorch_lightning.utilities import rank_zero_only
 
 class SummarizationModule(BaseTransformer):
     mode = "summarization"
@@ -169,6 +169,7 @@ class SummarizationModule(BaseTransformer):
         return self._generative_step(batch)
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
+
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
@@ -183,6 +184,19 @@ class SummarizationModule(BaseTransformer):
         losses.update(generative_metrics)
         all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         all_metrics["step_count"] = self.step_count
+
+        def get_date_str(seconds=True) -> str:
+            """Returns 2019-09-25-10:02:07, for example."""
+            if seconds:
+                return time.strftime('%Y-%m-%d-%H:%M:%S')
+            else:
+                return time.strftime('%Y-%m-%d-%H:%M')
+
+        all_metrics['Time'] = get_date_str(seconds=True)
+
+
+        all_metrics['rank'] = getattr(self.train_dataloader(), 'rank', -1.)
+
         self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
         return {
