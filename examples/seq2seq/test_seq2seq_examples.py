@@ -346,14 +346,14 @@ def test_run_eval_search(model):
     task = "translation_en_to_de" if model == T5_TINY else "summarization"
     testargs = f"""
         run_eval_search.py
-        --model_name {model}
-        --data_dir {str(input_file_name)}
-        --save_dir {str(output_file_name)}
+        {model}
+        {str(input_file_name)}
+        {str(output_file_name)}
         --score_path {score_path}
-        --reference_path {reference_path},
+        --reference_path {reference_path}
         --task {task}
-        --search num_beams=1:2 length_penalty=0.9:1.0
         """.split()
+    testargs.extend(["--search", "num_beams=1:2 length_penalty=0.9:1.0"])
 
     with patch.object(sys, "argv", testargs):
         with CaptureStdout() as cs:
