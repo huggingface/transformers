@@ -110,6 +110,56 @@ def make_test_data_dir(**kwargs):
         _dump_articles((tmp_dir / f"{split}.target"), SUMMARIES)
     return tmp_dir
 
+# XXX: a candidate for testing_utils (python>=3.6)
+# https://stackoverflow.com/a/59041913/9201239
+import asyncio
+class RunOutput():
+    def __init__(self, returncode, stdout, stderr):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+async def _read_stream(stream, callback):
+    while True:
+        line = await stream.readline()
+        if line:
+            callback(line)
+        else:
+            break
+
+async def _stream_subprocess(cmd, env=None, stdin=None, quiet=False, echo=False) -> RunOutput:
+    if echo:
+        print(cmd)
+
+    p = await asyncio.create_subprocess_exec(cmd[0], *cmd[1:],
+                                              stdin=stdin,
+                                              stdout=asyncio.subprocess.PIPE,
+                                              stderr=asyncio.subprocess.PIPE,
+                                              env=env,)
+    out = []
+    err = []
+    def tee(line, sink, pipe, label=""):
+        line = line.decode('utf-8').rstrip()
+        sink.append(line)
+        if not quiet:
+            print(label, line, file=pipe)
+
+    await asyncio.wait([
+        _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout)),
+        _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="ERR:")),
+    ])
+
+    return RunOutput(await p.wait(), out, err)
+
+
+def execute_async_std(cmd, env=None, stdin=None, quiet=False, echo=False) -> RunOutput:
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(
+        _stream_subprocess(cmd, env=env, stdin=stdin, quiet=quiet, echo=echo)
+    )
+
+    return result
+
 
 class TestSummarizationDistillerMultiGPU(unittest.TestCase):
     @classmethod
@@ -170,17 +220,11 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
 
-        # for running in ddp mode, we need to lauch its own process, otherwise pytest will get stuck
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-        print("\nWarning: there will be no output while subprocess will take some time to complete")
-        out, err = p.communicate(timeout=360)
-        out = out.decode("utf-8").strip()
-        err = err.decode("utf-8").strip()
-        print(f"ERROR!!! {err}")
-        print(f"OUT!!! --->{out}<--")
-        assert out, "produced no output"
-        if p.returncode > 0:
-            pytest.fail(err)
+        result = execute_async_std(cmd, env=env, stdin=None, quiet=False, echo=False)
+        
+        assert result.stdout, "produced no output"
+        if result.returncode > 0:
+            pytest.fail(f"failed with returncode {returncode}")
 
         # XXX: need to complete the test
         return
