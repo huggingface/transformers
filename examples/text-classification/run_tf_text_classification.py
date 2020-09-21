@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-import nlp as hfnlp
+import datasets
 import numpy as np
 import tensorflow as tf
 
@@ -34,13 +34,13 @@ def get_tfds(
     files = {}
 
     if train_file is not None:
-        files[hfnlp.Split.TRAIN] = [train_file]
+        files[datasets.Split.TRAIN] = [train_file]
     if eval_file is not None:
-        files[hfnlp.Split.VALIDATION] = [eval_file]
+        files[datasets.Split.VALIDATION] = [eval_file]
     if test_file is not None:
-        files[hfnlp.Split.TEST] = [test_file]
+        files[datasets.Split.TEST] = [test_file]
 
-    ds = hfnlp.load_dataset("csv", data_files=files)
+    ds = datasets.load_dataset("csv", data_files=files)
     features_name = list(ds[list(files.keys())[0]].features.keys())
     label_name = features_name.pop(label_column_id)
     label_list = list(set(ds[list(files.keys())[0]][label_name]))
@@ -69,19 +69,19 @@ def get_tfds(
             )
 
     def gen_train():
-        for ex in transformed_ds[hfnlp.Split.TRAIN]:
+        for ex in transformed_ds[datasets.Split.TRAIN]:
             d = {k: v for k, v in ex.items() if k in input_names}
             label = label2id[ex[label_name]]
             yield (d, label)
 
     def gen_val():
-        for ex in transformed_ds[hfnlp.Split.VALIDATION]:
+        for ex in transformed_ds[datasets.Split.VALIDATION]:
             d = {k: v for k, v in ex.items() if k in input_names}
             label = label2id[ex[label_name]]
             yield (d, label)
 
     def gen_test():
-        for ex in transformed_ds[hfnlp.Split.TEST]:
+        for ex in transformed_ds[datasets.Split.TEST]:
             d = {k: v for k, v in ex.items() if k in input_names}
             label = label2id[ex[label_name]]
             yield (d, label)
@@ -92,7 +92,7 @@ def get_tfds(
             ({k: tf.int32 for k in input_names}, tf.int64),
             ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
-        if hfnlp.Split.TRAIN in transformed_ds
+        if datasets.Split.TRAIN in transformed_ds
         else None
     )
 
@@ -102,7 +102,7 @@ def get_tfds(
             ({k: tf.int32 for k in input_names}, tf.int64),
             ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
-        if hfnlp.Split.VALIDATION in transformed_ds
+        if datasets.Split.VALIDATION in transformed_ds
         else None
     )
 
@@ -112,7 +112,7 @@ def get_tfds(
             ({k: tf.int32 for k in input_names}, tf.int64),
             ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
-        if hfnlp.Split.TEST in transformed_ds
+        if datasets.Split.TEST in transformed_ds
         else None
     )
 
