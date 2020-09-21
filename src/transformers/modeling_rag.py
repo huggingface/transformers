@@ -1278,8 +1278,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
             # merge `batch_size`, `num_beams`, `num_docs` dims again
             return tensor.reshape((batch_size * num_beams * self.config.n_docs,) + tensor.shape[3:])
 
-        context_attention_mask = context_attention_mask.repeat_interleave(num_beams, dim=0)
-
+        # correctly extend last_hidden_state and attention mask
+        context_attention_mask = extend_enc_output(context_attention_mask, num_beams=num_beams)
         encoder_outputs["last_hidden_state"] = extend_enc_output(last_hidden_state, num_beams=num_beams)
 
         doc_scores = doc_scores.repeat_interleave(num_beams, dim=0)
