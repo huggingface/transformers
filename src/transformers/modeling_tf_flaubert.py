@@ -317,17 +317,13 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
-        self.embeddings = TFSharedEmbeddings(
-            self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
-        )
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             self.dim,
             embeddings_initializer=get_initializer(config.embed_init_std),
             name="position_embeddings",
         )
-        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
 
         if config.n_langs > 1 and config.use_lang_emb:
             self.lang_embeddings = tf.keras.layers.Embedding(
@@ -337,6 +333,10 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                 name="lang_embeddings",
             )
 
+        self.embeddings = TFSharedEmbeddings(
+            self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
+        )
+        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
         self.attentions = []
         self.layer_norm1 = []
         self.ffns = []
