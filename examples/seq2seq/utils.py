@@ -4,6 +4,7 @@ import linecache
 import math
 import os
 import pickle
+import socket
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Union
@@ -19,7 +20,6 @@ from torch.utils.data import Dataset, Sampler
 
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
-import socket
 
 
 try:
