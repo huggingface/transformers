@@ -11,34 +11,20 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from utils import (
+    Seq2SeqDataset,
+    calculate_bleu,
+    calculate_rouge,
+    lmap,
+    load_json,
+    parse_numeric_n_bool_cl_kwargs,
+    save_json,
+    use_task_specific_params,
+    write_txt_file,
+)
 
 
 logger = getLogger(__name__)
-
-try:
-    from .utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        lmap,
-        load_json,
-        parse_numeric_n_bool_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-        write_txt_file,
-    )
-except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        calculate_bleu,
-        calculate_rouge,
-        lmap,
-        load_json,
-        parse_numeric_n_bool_cl_kwargs,
-        save_json,
-        use_task_specific_params,
-        write_txt_file,
-    )
 
 
 def eval_data_dir(
@@ -176,7 +162,8 @@ def run_generate():
         metrics: Dict = score_fn(preds, labels)
         metrics["n_obs"] = len(preds)
         runtime = time.time() - start_time
-        metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 2)
+        metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 4)
+        metrics["n_gpus"] = num_replicas
         # TODO(@stas00): add whatever metadata to metrics
         metrics_save_path = save_dir.joinpath(f"{args.type_path}_{metric_name}.json")
         save_json(metrics, metrics_save_path, indent=None)

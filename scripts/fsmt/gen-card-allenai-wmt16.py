@@ -25,19 +25,19 @@ def write_model_card(model_card_dir, src_lang, tgt_lang, model_name):
 
     readme = f"""
 ---
-
-language: {src_lang}, {tgt_lang}
+language:
+- {src_lang}
+- {tgt_lang}
 thumbnail:
 tags:
 - translation
 - wmt16
 - allenai
-license: Apache 2.0
+license: apache-2.0
 datasets:
-- http://www.statmt.org/wmt16/ ([test-set](http://matrix.statmt.org/test_sets/newstest2016.tgz?1504722372))
-
+- wmt16
 metrics:
-- http://www.statmt.org/wmt16/metrics-task.html
+- bleu
 ---
 
 # FSMT
@@ -54,16 +54,6 @@ All 3 models are available:
 * [wmt16-en-de-dist-6-1](https://huggingface.co/allenai/wmt16-en-de-dist-6-1)
 * [wmt16-en-de-12-1](https://huggingface.co/allenai/wmt16-en-de-12-1)
 
-```
-@misc{{kasai2020deep,
-    title={{Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation}},
-    author={{Jungo Kasai and Nikolaos Pappas and Hao Peng and James Cross and Noah A. Smith}},
-    year={{2020}},
-    eprint={{2006.10369}},
-    archivePrefix={{arXiv}},
-    primaryClass={{cs.CL}}
-}}
-```
 
 ## Intended uses & limitations
 
@@ -116,6 +106,25 @@ sacrebleu -t wmt16 -l $PAIR --echo src > $DATA_DIR/val.source
 sacrebleu -t wmt16 -l $PAIR --echo ref > $DATA_DIR/val.target
 echo $PAIR
 PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py allenai/{model_name} $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+```
+
+## Data Sources
+
+- [training, etc.](http://www.statmt.org/wmt16/)
+- [test set](http://matrix.statmt.org/test_sets/newstest2016.tgz?1504722372)
+
+
+### BibTeX entry and citation info
+
+```
+@misc{{kasai2020deep,
+    title={{Deep Encoder, Shallow Decoder: Reevaluating the Speed-Quality Tradeoff in Machine Translation}},
+    author={{Jungo Kasai and Nikolaos Pappas and Hao Peng and James Cross and Noah A. Smith}},
+    year={{2020}},
+    eprint={{2006.10369}},
+    archivePrefix={{arXiv}},
+    primaryClass={{cs.CL}}
+}}
 ```
 
 """
