@@ -44,8 +44,8 @@ Two pre-trained models `vinai/bertweet-covid19-base-cased` and `vinai/bertweet-c
 import torch
 from transformers import AutoModel, AutoTokenizer 
 
-bertweet = AutoModel.from_pretrained("vinai/bertweet-base")
-tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
+bertweet = AutoModel.from_pretrained("vinai/bertweet-covid19-base-uncased")
+tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-covid19-base-uncased")
 
 # INPUT TWEET IS ALREADY NORMALIZED!
 line = "SC has first two presumptive cases of coronavirus , DHEC confirms HTTPURL via @USER :cry:"
@@ -57,7 +57,7 @@ with torch.no_grad():
     
 ## With TensorFlow 2.0+:
 # from transformers import TFAutoModel
-# bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
+# bertweet = TFAutoModel.from_pretrained("vinai/bertweet-covid19-base-uncased")
 ```
 
 ### <a name="preprocess"></a> Normalize raw input Tweets 
@@ -69,10 +69,10 @@ import torch
 from transformers import AutoTokenizer
 
 # Load the AutoTokenizer with a normalization mode if the input Tweet is raw
-tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base", normalization=True)
+tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-covid19-base-uncased", normalization=True)
 
 # from transformers import BertweetTokenizer
-# tokenizer = BertweetTokenizer.from_pretrained("vinai/bertweet-base", normalization=True)
+# tokenizer = BertweetTokenizer.from_pretrained("vinai/bertweet-covid19-base-uncased", normalization=True)
 
 line = "SC has first two presumptive cases of coronavirus, DHEC confirms https://postandcourier.com/health/covid19/sc-has-first-two-presumptive-cases-of-coronavirus-dhec-confirms/article_bddfe4ae-5fd3-11ea-9ce4-5f495366cee6.html?utm_medium=social&utm_source=twitter&utm_campaign=user-share… via @postandcourier"
 

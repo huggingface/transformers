@@ -12,49 +12,28 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
+from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
+from utils import (
+    ROUGE_KEYS,
+    LegacySeq2SeqDataset,
+    Seq2SeqDataset,
+    assert_all_frozen,
+    calculate_bleu,
+    calculate_rouge,
+    flatten_list,
+    freeze_params,
+    get_git_info,
+    label_smoothed_nll_loss,
+    lmap,
+    pickle_save,
+    save_git_info,
+    save_json,
+    use_task_specific_params,
+)
 
-
-try:
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-    from .utils import (
-        ROUGE_KEYS,
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        flatten_list,
-        freeze_params,
-        get_git_info,
-        label_smoothed_nll_loss,
-        lmap,
-        pickle_save,
-        save_git_info,
-        save_json,
-        use_task_specific_params,
-    )
-except ImportError:
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-    from utils import (
-        ROUGE_KEYS,
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        flatten_list,
-        freeze_params,
-        get_git_info,
-        label_smoothed_nll_loss,
-        lmap,
-        pickle_save,
-        save_git_info,
-        save_json,
-        use_task_specific_params,
-    )
 
 logger = logging.getLogger(__name__)
 

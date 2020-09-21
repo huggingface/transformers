@@ -756,7 +756,14 @@ To run such tests set ``RUN_SLOW=1`` env var, e.g.:
 .. code-block:: bash
 
     RUN_SLOW=1 pytest tests
+    
+It's important that the decorator ``@slow`` appears last in the stack of decorators, as some decorators like ``parametrized`` may interfere with its normal functioning. Here is an example of the correct usage:
 
+.. code-block:: python
+
+    @parameterized.expand(...)
+    @slow
+    def test_integration_foo():
 
 Testing the stdout/stderr output
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
