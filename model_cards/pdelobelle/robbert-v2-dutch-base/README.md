@@ -1,12 +1,13 @@
 ---
 language: "nl"
-thumbnail: "https://github.com/iPieter/RobBERT/blob/master/res/robbert_logo.png"
+thumbnail: "https://github.com/iPieter/RobBERT/raw/master/res/robbert_logo.png"
 tags:
 - Dutch
 - RoBERTa
 - RobBERT
 license: "MIT"
 datasets:
+- oscar
 - Shuffled Dutch section of the OSCAR corpus (https://oscar-corpus.com/)
 ---
 
