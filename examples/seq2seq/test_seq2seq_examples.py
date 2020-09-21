@@ -411,8 +411,7 @@ def test_finetune(model):
     elif model == FSMT_TINY:
         fsmt = module.model.model
         embed_pos = fsmt.decoder.embed_positions
-        # XXX: about to change to embed_pos.weight.requires_grad
-        assert not embed_pos.weights.requires_grad
+        assert not embed_pos.weight.requires_grad
         assert not fsmt.decoder.embed_tokens.weight.requires_grad
         # check that embeds are not the same
         assert fsmt.decoder.embed_tokens != fsmt.encoder.embed_tokens
