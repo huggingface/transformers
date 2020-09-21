@@ -160,6 +160,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         timeout=timeout,
     )
 
+    # XXX: warning for a possible deadlock when using `wait` with huge amounts of data in the pipe
+    # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process.wait
     return RunOutput(await p.wait(), out, err)
 
 
