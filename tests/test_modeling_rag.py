@@ -595,8 +595,8 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = "The songwriting sessions for ABBA's first album, \""
-        EXPECTED_OUTPUT_TEXT_2 = """The songwriting sessions for ABBA's first album were recorded"""
+        EXPECTED_OUTPUT_TEXT_1 = "The songwriting credits are credited to ABBA"
+        EXPECTED_OUTPUT_TEXT_2 = 'The songwriting credits are credited to "B'
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
@@ -632,7 +632,6 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         output_ids = rag_token.generate(
             input_ids,
-            retriever=rag_retriever,
             decoder_start_token_id=rag_token.generator.config.decoder_start_token_id,
             num_beams=4,
             num_return_sequences=1,
@@ -652,6 +651,7 @@ class RagModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_rag_sequence_generate_batch(self):
+        # IMPORTAN: This test fails on GPU, but is fine on CPU -> beam search is very sensible
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
