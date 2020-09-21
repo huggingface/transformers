@@ -500,15 +500,23 @@ class RagDPRBartTest(RagTestMixin, unittest.TestCase):
 class RagModelIntegrationTests(unittest.TestCase):
     @cached_property
     def sequence_model(self):
-        return RagSequenceForGeneration.from_pretrained_question_encoder_generator(
-            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
-        ).to(torch_device)
+        return (
+            RagSequenceForGeneration.from_pretrained_question_encoder_generator(
+                "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
+            )
+            .to(torch_device)
+            .eval()
+        )
 
     @cached_property
     def token_model(self):
-        return RagTokenForGeneration.from_pretrained_question_encoder_generator(
-            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
-        ).to(torch_device)
+        return (
+            RagTokenForGeneration.from_pretrained_question_encoder_generator(
+                "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
+            )
+            .to(torch_device)
+            .eval()
+        )
 
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
@@ -732,7 +740,6 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         output_ids = rag_sequence.generate(
             input_ids,
-            retriever=rag_retriever,
             decoder_start_token_id=rag_sequence.generator.config.decoder_start_token_id,
             num_beams=4,
             num_return_sequences=1,
@@ -744,8 +751,8 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = "The song peaked at number 17 in the"
-        EXPECTED_OUTPUT_TEXT_2 = '"Howl" chronicles the the'
+        EXPECTED_OUTPUT_TEXT_1 = '"I Know Him So Well"'
+        EXPECTED_OUTPUT_TEXT_2 = '"Howl" chronicles the'
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)

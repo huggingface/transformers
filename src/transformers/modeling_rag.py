@@ -331,7 +331,7 @@ class RagPreTrainedModel(PreTrainedModel):
                 kwargs_generator["config"] = generator_config
 
             generator = AutoModelForSeq2SeqLM.from_pretrained(
-                generator_pretrained_model_name_or_path, **kwargs_generator
+                generator_pretrained_model_name_or_path, **kwargs_generator, use_cdn=False
             )
 
         # instantiate config with corresponding kwargs
@@ -1270,26 +1270,18 @@ class RagTokenForGeneration(RagPreTrainedModel):
         )
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
-        vec_1 = context_attention_mask.sum(-1)[:, None]
+        def extend_enc_output(tensor, num_beams=None):
+            # split into `batch_size`, `num_beams`, `num_docs`
+            tensor = tensor[None, None, :].reshape((batch_size, 1, self.config.n_docs) + tensor.shape[1:])
+            # repeat same last hidden states over `num_beams` dimension
+            tensor = tensor.expand((batch_size, num_beams, self.config.n_docs) + tensor.shape[3:])
+            # merge `batch_size`, `num_beams`, `num_docs` dims again
+            return tensor.reshape((batch_size * num_beams * self.config.n_docs,) + tensor.shape[3:])
 
         context_attention_mask = context_attention_mask.repeat_interleave(num_beams, dim=0)
 
-        # repeat same last hidden states over beam_idx dimension
-        last_hidden_state = (
-            last_hidden_state[None, None, :]
-            .reshape((batch_size, 1, self.config.n_docs) + last_hidden_state.shape[1:])
-            .expand(
-                (
-                    batch_size,
-                    num_beams,
-                    self.config.n_docs,
-                )
-                + last_hidden_state.shape[1:]
-            )
-            .reshape((-1,) + last_hidden_state.shape[1:])
-        )
+        encoder_outputs["last_hidden_state"] = extend_enc_output(last_hidden_state, num_beams=num_beams)
 
-        encoder_outputs["last_hidden_state"] = last_hidden_state
         doc_scores = doc_scores.repeat_interleave(num_beams, dim=0)
 
         # define start_len & additional parameters
