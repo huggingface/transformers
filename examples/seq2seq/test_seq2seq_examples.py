@@ -12,16 +12,15 @@ import pytorch_lightning as pl
 import torch
 
 import lightning_base
+from convert_pl_checkpoint_to_hf import convert_pl_to_hf
+from distillation import distill_main, evaluate_checkpoint
+from finetune import SummarizationModule, main
+from run_eval import generate_summaries_or_translations, run_generate
+from run_eval_search import run_search
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.hf_api import HfApi
 from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
-
-from .convert_pl_checkpoint_to_hf import convert_pl_to_hf
-from .distillation import distill_main, evaluate_checkpoint
-from .finetune import SummarizationModule, main
-from .run_eval import generate_summaries_or_translations, run_generate
-from .run_eval_search import run_search
-from .utils import label_smoothed_nll_loss, lmap, load_json
+from utils import label_smoothed_nll_loss, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -87,7 +86,7 @@ CHEAP_ARGS = {
     "n_val": -1,
     "n_test": -1,
     "student_encoder_layers": 1,
-    "alpha_loss_encoder": 0.0,
+    "alpha_encoder_loss": 0.0,
     "freeze_encoder": False,
     "auto_scale_batch_size": False,
 }
@@ -104,6 +103,7 @@ T5_TINY = "patrickvonplaten/t5-tiny-random"
 BART_TINY = "sshleifer/bart-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+FSMT_TINY = "stas/tiny-wmt19-en-de"
 
 
 stream_handler = logging.StreamHandler(sys.stdout)
@@ -422,14 +422,14 @@ def test_run_eval_search(model):
     task = "translation_en_to_de" if model == T5_TINY else "summarization"
     testargs = f"""
         run_eval_search.py
-        --model_name {model}
-        --data_dir {str(input_file_name)}
-        --save_dir {str(output_file_name)}
+        {model}
+        {str(input_file_name)}
+        {str(output_file_name)}
         --score_path {score_path}
-        --reference_path {reference_path},
+        --reference_path {reference_path}
         --task {task}
-        --search num_beams=1:2 length_penalty=0.9:1.0
         """.split()
+    testargs.extend(["--search", "num_beams=1:2 length_penalty=0.9:1.0"])
 
     with patch.object(sys, "argv", testargs):
         with CaptureStdout() as cs:
@@ -450,11 +450,11 @@ def test_run_eval_search(model):
 
 @pytest.mark.parametrize(
     "model",
-    [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY],
+    [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY, FSMT_TINY],
 )
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
-    task = "translation" if model in [MBART_TINY, MARIAN_TINY] else "summarization"
+    task = "translation" if model in [MBART_TINY, MARIAN_TINY, FSMT_TINY] else "summarization"
     args_d["label_smoothing"] = 0.1 if task == "translation" else 0
 
     tmp_dir = make_test_data_dir()
@@ -483,7 +483,13 @@ def test_finetune(model):
         lm_head = module.model.lm_head
         assert not lm_head.weight.requires_grad
         assert (lm_head.weight == input_embeds.weight).all().item()
-
+    elif model == FSMT_TINY:
+        fsmt = module.model.model
+        embed_pos = fsmt.decoder.embed_positions
+        assert not embed_pos.weight.requires_grad
+        assert not fsmt.decoder.embed_tokens.weight.requires_grad
+        # check that embeds are not the same
+        assert fsmt.decoder.embed_tokens != fsmt.encoder.embed_tokens
     else:
         bart = module.model.model
         embed_pos = bart.decoder.embed_positions

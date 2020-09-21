@@ -303,6 +303,7 @@ class RobertaForCausalLM(BertPreTrainedModel):
 class RobertaForMaskedLM(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+    authorized_missing_keys = [r"position_ids", r"lm_head\.decoder\.bias"]
 
     def __init__(self, config):
         super().__init__(config)
