@@ -171,8 +171,11 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
 
         print("Running: ", " ".join(cmd))
 
+        path = Path(__file__).resolve()
+        examples_path = path.parents[1]
+        src_path = f"{path.parents[2]}/src"
         env = os.environ.copy()
-        env["PYTHONPATH"] = "examples/:" + env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
 
         # for running in ddp mode, we need to lauch its own process, otherwise pytest will get stuck
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
