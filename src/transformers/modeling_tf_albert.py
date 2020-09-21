@@ -747,15 +747,15 @@ ALBERT_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
 
-            - ``1`` for tokens that are **not masked**, 
+            - ``1`` for tokens that are **not masked**,
             - ``0`` for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``:
-            
-            - ``0`` corresponds to a `sentence A` token, 
+
+            - ``0`` corresponds to a `sentence A` token,
             - ``1`` corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
@@ -767,7 +767,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            
+
             - ``1`` indicates the head is **not masked**,
             - ``0`` indicates the head is **masked**.
 
