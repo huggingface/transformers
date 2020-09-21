@@ -97,7 +97,6 @@ def keras_serializable(cls):
                 initializer(self, config, *args, **kwargs)
         else:
             raise ValueError("Must pass either `config` (PretrainedConfig) or `config` (dict)")
-            
 
         self._config = config
         self._kwargs = kwargs
