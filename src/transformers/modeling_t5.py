@@ -780,11 +780,12 @@ class T5Stack(T5PreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                if len(layer_outputs) >= 5:
-                    all_attentions = all_attentions + (layer_outputs[2],) + (layer_outputs[4],)
-                else:
-                    all_attentions = all_attentions + (layer_outputs[2],)
-
+                all_attentions = all_attentions + (layer_outputs[2],)
+                if self.is_decoder:
+                    if i == 0:
+                        all_attentions = all_attentions + (layer_outputs[4],)  # append cross-attention weights
+                    else:
+                        all_attentions = all_attentions + (layer_outputs[3],)  # append cross-attention weights
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
