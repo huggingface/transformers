@@ -782,7 +782,7 @@ class Trainer:
 
                         self.log(logs)
 
-                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                    if self.args.evaluation_strategy == "steps" and self.global_step % self.args.eval_steps == 0:
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
 
@@ -820,6 +820,9 @@ class Trainer:
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
                 epoch_pbar.update(1)
+                if self.args.evaluation_strategy == "epoch":
+                    metrics = self.evaluate()
+                    self._report_to_hp_search(trial, epoch, metrics)
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                     break
             epoch_pbar.close()
