@@ -29,13 +29,16 @@ from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
+from transformers.tokenization_t5 import T5Tokenizer
 
 from .test_modeling_bart import ModelTester as BartModelTester
-from .test_modeling_common import ids_tensor
 from .test_modeling_dpr import DPRModelTester
+from .test_modeling_t5 import T5ModelTester
 
 
 TOLERANCE = 1e-3
+
+T5_SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 if is_torch_available() and is_datasets_available() and is_faiss_available():
     import torch
@@ -46,8 +49,6 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
         AutoConfig,
         AutoModel,
         AutoModelForSeq2SeqLM,
-        BartConfig,
-        DPRConfig,
         RagConfig,
         RagModel,
         RagRetriever,
@@ -83,106 +84,6 @@ def require_retrieval(test_case):
     if not (is_torch_available() and is_datasets_available() and is_faiss_available()):
         test_case = unittest.skip("test requires PyTorch")(test_case)
     return test_case
-
-
-class RagModelTester:
-    def __init__(
-        self,
-        parent,
-    ):
-        # Global params
-        self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-
-        # RAG params
-        self.n_docs = 3
-        self.vocab_size = 50265
-        self.bos_token_id = 0
-        self.pad_token_id = 1
-        self.eos_token_id = 2
-        self.decoder_start_token_id = 2
-        self.max_combined_length = 123
-        self.retrieval_vector_size = 768
-        self.retrieval_batch_size = 8
-
-        self.rag_config = RagConfig(
-            n_docs=self.n_docs,
-            vocab_size=self.vocab_size,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
-            eos_token_id=self.eos_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-            max_combined_length=self.max_combined_length,
-            retrieval_vector_size=self.retrieval_vector_size,
-            retrieval_batch_size=self.retrieval_batch_size,
-        )
-
-        # BART params
-        self.hidden_size = 16
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 4
-        self.intermediate_size = 4
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 20
-
-        self.bart_config = BartConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
-            dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-        )
-
-        # DPR params
-        self.dpr_vocab_size = 51
-        self.hidden_size = 20
-        self.num_hidden_layers = 3
-        self.num_attention_heads = 5
-        self.intermediate_size = 5
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.2
-        self.attention_probs_dropout_prob = 0.2
-        self.max_position_embeddings = 19
-        self.type_vocab_size = 17
-        self.initializer_range = 0.02
-        self.projection_dim = 0
-
-        self.dpr_config = DPRConfig(
-            projection_dim=self.projection_dim,
-            vocab_size=self.dpr_vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-        )
-
-    def prepare_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
-        input_ids[:, -1] = self.eos_token_id
-        attention_mask = input_ids.ne(self.pad_token_id)
-
-        return input_ids, attention_mask
 
 
 @require_torch
@@ -262,6 +163,10 @@ class RagTestMixin:
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
+        t5_tokenizer = T5Tokenizer(T5_SAMPLE_VOCAB)
+        t5_tokenizer_path = os.path.join(self.tmpdirname, "t5_tokenizer")
+        t5_tokenizer.save_pretrained(t5_tokenizer_path)
+
     @cached_property
     def dpr_tokenizer(self) -> DPRQuestionEncoderTokenizer:
         return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
@@ -269,6 +174,10 @@ class RagTestMixin:
     @cached_property
     def bart_tokenizer(self) -> BartTokenizer:
         return BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
+
+    @cached_property
+    def t5_tokenizer(self) -> BartTokenizer:
+        return T5Tokenizer.from_pretrained(os.path.join(self.tmpdirname, "t5_tokenizer"))
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -283,12 +192,13 @@ class RagTestMixin:
             }
         )
         dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
+        tokenizer = self.bart_tokenizer if config.generator.model_type == "bart" else self.t5_tokenizer
         with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagRetriever(
                 config,
                 question_encoder_tokenizer=self.dpr_tokenizer,
-                generator_tokenizer=self.bart_tokenizer,
+                generator_tokenizer=tokenizer,
             )
         return retriever
 
@@ -477,6 +387,37 @@ class RagDPRBartTest(RagTestMixin, unittest.TestCase):
         (generator_config, bart_inputs_dict) = bart_config_and_inputs
         decoder_input_ids, decoder_attention_mask = bart_inputs_dict["input_ids"], bart_inputs_dict["attention_mask"]
 
+        config = RagConfig.from_question_encoder_generator_configs(
+            question_encoder_config,
+            generator_config,
+            n_docs=self.n_docs,
+            retrieval_vector_size=self.retrieval_vector_size,
+            max_combined_length=self.max_combined_length,
+            use_cache=False,
+        )
+
+        return {
+            "config": config,
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+        }
+
+
+@require_torch
+@require_retrieval
+class RagDPRT5Test(RagTestMixin, unittest.TestCase):
+    @cached_property
+    def config_and_inputs(self):
+        question_encoder_tester = DPRModelTester(self)
+        dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
+        generator_tester = T5ModelTester(self, vocab_size=1100, n_positions=30)
+        t5_config_and_inputs = generator_tester.prepare_config_and_inputs()
+
+        (question_encoder_config, input_ids, _, input_mask, _, _, _) = dpr_config_and_inputs
+        #        import ipdb; ipdb.set_trace()
+        (generator_config, _, decoder_input_ids, _, decoder_attention_mask, _) = t5_config_and_inputs
         config = RagConfig.from_question_encoder_generator_configs(
             question_encoder_config,
             generator_config,
