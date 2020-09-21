@@ -391,10 +391,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
           derived classes of the same architecture adding modules on top of the base model.
         - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
           when loading the model (and avoid unnecessary warnings).
+        - **keys_to_never_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore
+          when saving the model (useful for keys that aren't trained, but which are deterministic)
+
     """
     config_class = None
     base_model_prefix = ""
     authorized_missing_keys = None
+    keys_to_never_save = None
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -688,6 +692,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
+        state_dict = model_to_save.state_dict()
+
+        # Handle the case where some state_dict keys shouldn't be saved
+        if self.keys_to_never_save is not None:
+            state_dict = {k: v for k, v in state_dict.items() if k not in self.keys_to_never_save}
+
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
@@ -698,10 +708,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 # Save configuration file
                 model_to_save.config.save_pretrained(save_directory)
             # xm.save takes care of saving only from master
-            xm.save(model_to_save.state_dict(), output_model_file)
+            xm.save(state_dict, output_model_file)
         else:
             model_to_save.config.save_pretrained(save_directory)
-            torch.save(model_to_save.state_dict(), output_model_file)
+            torch.save(state_dict, output_model_file)
 
         logger.info("Model weights saved in {}".format(output_model_file))
 
