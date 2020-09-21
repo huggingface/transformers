@@ -504,8 +504,8 @@ def get_layers_to_copy(n_student, n_teacher):
 
 def distill_main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
-    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+    #    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
+    #        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     model = create_module(args)
     return ft_main(args, model=model)

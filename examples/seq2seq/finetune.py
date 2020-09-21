@@ -385,8 +385,8 @@ class TranslationModule(SummarizationModule):
 
 def main(args, model=None) -> SummarizationModule:
     Path(args.output_dir).mkdir(exist_ok=True)
-    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+    #    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
+    #        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
         if "summarization" in args.task:
             model: SummarizationModule = SummarizationModule(args)
