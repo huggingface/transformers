@@ -86,7 +86,8 @@ class BenchmarkArguments:
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
     env_print: bool = field(default=False, metadata={"help": "Whether to print environment information"})
     multi_process: bool = field(
-        default=False,
+        default=True,
+
         metadata={
             "help": "Whether to use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be used for debugging / testing and on TPU."
         },
