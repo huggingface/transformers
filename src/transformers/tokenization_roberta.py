@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
 
-
+import warnings
 from typing import List, Optional
 
 from tokenizers.processors import RobertaProcessing
@@ -81,7 +81,7 @@ class RobertaTokenizer(GPT2Tokenizer):
 
     .. note::
 
-        When used with ``is_pretokenized=True``, this tokenizer will add a space before each word (even the first one).
+        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first one).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -251,9 +251,16 @@ class RobertaTokenizer(GPT2Tokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
+
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if (is_pretokenized or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
+        if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
 
@@ -280,7 +287,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
 
     .. note::
 
-        When used with ``is_pretokenized=True``, this tokenizer needs to be instantiated with
+        When used with ``is_split_into_words=True``, this tokenizer needs to be instantiated with
         ``add_prefix_space=True``.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users

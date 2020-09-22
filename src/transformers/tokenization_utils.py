@@ -19,6 +19,7 @@
 import itertools
 import re
 import unicodedata
+import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .file_utils import add_end_docstrings
@@ -250,6 +251,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             :obj:`List[str]`: The list of tokens.
         """
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            kwargs["is_split_into_words"] = kwargs.pop("is_pretokenized")
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
             (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
@@ -402,7 +409,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -419,17 +426,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                if is_pretokenized:
-                    tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
+                if is_split_into_words:
+                    tokens = list(
+                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
+                    )
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
-                if is_pretokenized:
+                if is_split_into_words:
                     raise ValueError(
-                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_pretokenized=True`."
+                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_split_into_words=True`."
                     )
                 else:
                     raise ValueError(
@@ -444,6 +453,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
+
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
 
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
@@ -482,7 +498,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -499,8 +515,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                if is_pretokenized:
-                    tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
+                if is_split_into_words:
+                    tokens = list(
+                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
+                    )
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)
@@ -518,11 +536,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "transformers.PreTrainedTokenizerFast."
             )
 
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
+
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if not isinstance(ids_or_pair_ids, (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
-            elif is_pretokenized and not isinstance(ids_or_pair_ids[0], (list, tuple)):
+            elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
                 ids, pair_ids = ids_or_pair_ids
@@ -616,7 +641,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return batch_outputs
 
     def prepare_for_tokenization(
-        self, text: str, is_pretokenized: bool = False, **kwargs
+        self, text: str, is_split_into_words: bool = False, **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -627,7 +652,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             test (:obj:`str`):
                 The text to prepare.
-            is_pretokenized (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the text has been pretokenized.
             kwargs:
                 Keyword arguments to use for the tokenization.

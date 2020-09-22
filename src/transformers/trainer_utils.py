@@ -60,6 +60,12 @@ class TrainOutput(NamedTuple):
 PREFIX_CHECKPOINT_DIR = "checkpoint"
 
 
+class EvaluationStrategy(ExplicitEnum):
+    NO = "no"
+    STEPS = "steps"
+    EPOCH = "epoch"
+
+
 class BestRun(NamedTuple):
     """
     The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).

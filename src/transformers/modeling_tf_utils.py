@@ -85,20 +85,20 @@ def keras_serializable(cls):
 
     @functools.wraps(initializer)
     def wrapped_init(self, *args, **kwargs):
-        transformers_config = kwargs.pop("transformers_config", None)
-        config = args[0] if args and isinstance(args[0], PretrainedConfig) else kwargs.get("config", None)
-        if config is not None and transformers_config is not None:
-            raise ValueError("Must pass either `config` or `transformers_config`, not both")
-        elif config is not None:
-            # normal layer construction, call with unchanged args (config is already in there)
-            initializer(self, *args, **kwargs)
-        elif transformers_config is not None:
-            # Keras deserialization, convert dict to config
-            config = config_class.from_dict(transformers_config)
+        config = args[0] if args and isinstance(args[0], PretrainedConfig) else kwargs.pop("config", None)
+
+        if isinstance(config, dict):
+            config = config_class.from_dict(config)
             initializer(self, config, *args, **kwargs)
+        elif isinstance(config, PretrainedConfig):
+            if len(args) > 0:
+                initializer(self, *args, **kwargs)
+            else:
+                initializer(self, config, *args, **kwargs)
         else:
-            raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
-        self._transformers_config = config
+            raise ValueError("Must pass either `config` (PretrainedConfig) or `config` (dict)")
+
+        self._config = config
         self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
@@ -109,7 +109,7 @@ def keras_serializable(cls):
 
         def get_config(self):
             cfg = super(cls, self).get_config()
-            cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg["config"] = self._config.to_dict()
             cfg.update(self._kwargs)
             return cfg
 
