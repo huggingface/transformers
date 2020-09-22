@@ -413,21 +413,21 @@ class DataCollatorForNextSentencePrediction:
     nsp_probability: float = 0.5
     mlm_probability: float = 0.15
 
-    def __call__(self, examples: List[Union[List[List[int]], Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        if isinstance(examples[0], (dict, BatchEncoding)) and "input_ids" in examples[0]:
-            examples = [e["input_ids"] for e in examples]
+    def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        tokens_a = [e["tokens_a"] for e in examples]
+        tokens_b = [e["tokens_b"] for e in examples]
+        labels = [1 if e["tokens_b"] else 0 for e in examples]
 
         input_ids = []
         segment_ids = []
         attention_masks = []
-        nsp_labels = []
 
-        for example in examples:
-            input_id, attention_mask, segment_id, label = self.create_features_from_example(example)
+        assert len(tokens_a) == len(tokens_b)
+        for i in range(len(tokens_a)):
+            input_id, attention_mask, segment_id = self.create_features_from_example(tokens_a[i], tokens_b[i])
             input_ids.append(input_id)
             segment_ids.append(segment_id)
             attention_masks.append(attention_mask)
-            nsp_labels.append(label)
         if self.mlm:
             input_ids, mlm_labels = self.mask_tokens(self._tensorize_batch(input_ids))
         else:
@@ -438,7 +438,7 @@ class DataCollatorForNextSentencePrediction:
             "attention_mask": self._tensorize_batch(attention_masks),
             "token_type_ids": self._tensorize_batch(segment_ids),
             "masked_lm_labels": mlm_labels if self.mlm else None,
-            "next_sentence_label": torch.tensor(nsp_labels),
+            "next_sentence_label": torch.tensor(labels),
         }
 
     def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
@@ -454,12 +454,10 @@ class DataCollatorForNextSentencePrediction:
                 )
             return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
-    def create_features_from_example(self, example: Dict):
+    def create_features_from_example(self, tokens_a, tokens_b):
         """Creates examples for a single document."""
 
         max_num_tokens = self.block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
-        tokens_a = example["tokens_a"]
-        tokens_b = example["tokens_b"]
 
         tokens_a, tokens_b, _ = self.tokenizer.truncate_sequences(
             tokens_a,
@@ -482,9 +480,8 @@ class DataCollatorForNextSentencePrediction:
         input_id = torch.tensor(input_id)
         attention_mask = torch.tensor(attention_mask)
         segment_id = torch.tensor(segment_id)
-        label = torch.tensor(1 if example["is_random_next"] else 0)
 
-        return input_id, attention_mask, segment_id, label
+        return input_id, attention_mask, segment_id
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
