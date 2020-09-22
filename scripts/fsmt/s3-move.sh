@@ -37,7 +37,6 @@ stas_to_fb wmt19-ru-en
 stas_to_fb wmt19-en-de
 stas_to_fb wmt19-de-en
 
-stas_to_allenai wmt16-en-de-dist-12-1 --dryrun
 stas_to_allenai wmt16-en-de-dist-12-1
 stas_to_allenai wmt16-en-de-dist-6-1
 stas_to_allenai wmt16-en-de-6-1
