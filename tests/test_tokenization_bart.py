@@ -12,6 +12,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BartTokenizer
+    rust_tokenizer_class = BartTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()

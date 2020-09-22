@@ -19,7 +19,7 @@ import unittest
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import slow
-from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer
+from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -30,6 +30,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLMRobertaTokenizer
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
@@ -37,6 +38,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
+
+    def get_rust_tokenizer(self, **kwargs) -> XLMRobertaTokenizerFast:
+        return XLMRobertaTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_full_tokenizer(self):
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
@@ -117,6 +121,28 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @cached_property
     def big_tokenizer(self):
         return XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
 
     @slow
     def test_tokenization_base_easy_symbols(self):

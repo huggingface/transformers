@@ -32,6 +32,7 @@ from .test_tokenization_bert import BertTokenizationTest
 class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRContextEncoderTokenizer
+    test_rust_tokenizer = True
 
     def get_rust_tokenizer(self, **kwargs):
         return DPRContextEncoderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
@@ -40,6 +41,7 @@ class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRQuestionEncoderTokenizer
+    test_rust_tokenizer = True
 
     def get_rust_tokenizer(self, **kwargs):
         return DPRQuestionEncoderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
@@ -48,6 +50,7 @@ class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 class DPRReaderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRReaderTokenizer
+    test_rust_tokenizer = True
 
     def get_rust_tokenizer(self, **kwargs):
         return DPRReaderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)

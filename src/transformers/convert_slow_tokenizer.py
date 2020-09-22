@@ -10,6 +10,8 @@ from tokenizers.pre_tokenizers import Metaspace
 from tokenizers.pre_tokenizers import Sequence as PSequence
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from tokenizers.processors import TemplateProcessing
+
+# from transformers.tokenization_openai import OpenAIGPTTokenizer
 from transformers.utils import sentencepiece_model_pb2 as model
 
 
@@ -434,17 +436,46 @@ class T5Converter(SpmConverter):
         )
 
 
+class OpenAIGPTConverter(Converter):
+    def converted(self) -> Tokenizer:
+        save_directory = "./"
+        # self.original_tokenizer: OpenAIGPTTokenizer = self.original_tokenizer
+        vocab_file, merges_file = self.original_tokenizer.save_vocabulary(save_directory)
+
+        unk_token = self.original_tokenizer.unk_token
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab_file,
+                merges_file,
+                dropout=None,
+                unk_token=str(unk_token),
+                end_of_word_suffix="</w>",
+            )
+        )
+
+        if tokenizer.token_to_id(str(unk_token)) is not None:
+            tokenizer.add_special_tokens([str(unk_token)])
+
+        tokenizer.normalizer = normalizers.BertNormalizer(lowercase=True)
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+        tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
+
+        return tokenizer
+
+
 CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BertTokenizer": BertConverter,
     "CamembertTokenizer": CamembertConverter,
     "GPT2Tokenizer": GPT2Converter,
-    "XLMRobertaTokenizer": XLMRobertaConverter,
     "MBartTokenizer": MBartConverter,
-    "XLNetTokenizer": XLNetConverter,
-    "ReformerTokenizer": ReformerConverter,
+    "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
+    "ReformerTokenizer": ReformerConverter,
     "T5Tokenizer": T5Converter,
+    "XLMRobertaTokenizer": XLMRobertaConverter,
+    "XLNetTokenizer": XLNetConverter,
 }
 
 

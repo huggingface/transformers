@@ -56,6 +56,7 @@ def merge_model_tokenizer_mappings(
 class TokenizerTesterMixin:
 
     tokenizer_class = None
+    rust_tokenizer_class = None
     test_rust_tokenizer = False
 
     def setUp(self):
@@ -68,12 +69,15 @@ class TokenizerTesterMixin:
         input_txt = self.get_clean_sequence(tokenizer)[0]
         return input_txt, input_txt
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
         toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
         toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], add_special_tokens=False), toks))
         if max_length is not None and len(toks) > max_length:
             toks = toks[:max_length]
+        if min_length is not None and len(toks) < min_length and len(toks) > 0:
+            while len(toks) < min_length:
+                toks = toks + toks
         # toks_str = [t[1] for t in toks]
         toks_ids = [t[0] for t in toks]
 
@@ -99,7 +103,7 @@ class TokenizerTesterMixin:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        raise NotImplementedError
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     # def get_input_output_texts(self) -> Tuple[str, str]:
     #     """Feel free to overwrite"""
@@ -117,6 +121,29 @@ class TokenizerTesterMixin:
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence, _ = self.get_input_output_texts(tokenizer)
+
+        # We don't have an exact equivalence on `tokenize()` between Rust and Slow
+        # Slow tokenizer only split tokens, Rust tokenizers will replace with <unk>
+        # tokens = tokenizer.tokenize(sequence)
+        # rust_tokens = rust_tokenizer.tokenize(sequence)
+        # self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=True)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=True)
+        self.assertListEqual(ids, rust_ids)
 
     def test_tokenizers_common_properties(self):
         tokenizers = self.get_tokenizers()
@@ -390,11 +417,11 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
-                new_toks = ["[ABC]", "[DEF]"]  # TODO(thom) add this one back when Rust toks are ready: , "GHI IHG"]
+                # new_toks = ["[ABC]", "[DEF]"]  # TODO(thom) add this one back when Rust toks are ready: , "GHI IHG"]
+                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
                 tokenizer.add_tokens(new_toks)
                 input = "[ABC] [DEF] [ABC] [DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
                 encoded = tokenizer.encode(input, add_special_tokens=False)
-                print(encoded)
                 decoded = tokenizer.decode(encoded)
                 self.assertEqual(decoded, input)
 
@@ -448,7 +475,7 @@ class TokenizerTesterMixin:
                 sequence = tokenizer.encode(seq_0, add_special_tokens=False)
                 total_length = len(sequence)
 
-                assert total_length > 1, "Issue with the testing sequence, please update it it's too short"
+                assert total_length > 4, "Issue with the testing sequence, please update it it's too short"
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -759,7 +786,8 @@ class TokenizerTesterMixin:
                 sequence_masked_1 = "<mask> this sequence"
 
                 # Add tokens so that masked token isn't split
-                tokenizer.add_tokens(sequence.split())
+                tokens = [AddedToken(t, normalized=False) for t in sequence.split()]
+                tokenizer.add_tokens(tokens)
                 tokenizer.add_special_tokens({"mask_token": mask})
                 mask_ind = tokenizer.convert_tokens_to_ids(mask)
                 encoded = tokenizer.encode(sequence, add_special_tokens=False)
