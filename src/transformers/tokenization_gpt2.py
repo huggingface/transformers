@@ -17,6 +17,7 @@
 
 import json
 import os
+import warnings
 from functools import lru_cache
 
 import regex as re
@@ -121,7 +122,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
     .. note::
 
-        When used with ``is_pretokenized=True``, this tokenizer will add a space before each word (even the first one).
+        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first one).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -288,9 +289,16 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
+
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_pretokenized or add_prefix_space:
+        if is_split_into_words or add_prefix_space:
             text = " " + text
         return (text, kwargs)
 
@@ -317,7 +325,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
     .. note::
 
-        When used with ``is_pretokenized=True``, this tokenizer needs to be instantiated with
+        When used with ``is_split_into_words=True``, this tokenizer needs to be instantiated with
         ``add_prefix_space=True``.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
@@ -377,9 +385,15 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
 
-        is_pretokenized = kwargs.get("is_pretokenized", False)
-        assert self.add_prefix_space or not is_pretokenized, (
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        assert self.add_prefix_space or not is_split_into_words, (
             f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
             "to use it with pretokenized inputs."
         )
@@ -387,9 +401,15 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         return super()._batch_encode_plus(*args, **kwargs)
 
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
 
-        is_pretokenized = kwargs.get("is_pretokenized", False)
-        assert self.add_prefix_space or not is_pretokenized, (
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        assert self.add_prefix_space or not is_split_into_words, (
             f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
             "to use it with pretokenized inputs."
         )
