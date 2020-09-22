@@ -103,6 +103,8 @@ class TFTrainingArguments(TrainingArguments):
             The name of the TPU the process is running on.
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
+        xla (:obj:`bool`, `optional`):
+            Whether to activate the XLA compilation or not.
     """
 
     tpu_name: str = field(
