@@ -442,7 +442,7 @@ def main():
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(test_output.predictions, skip_special_tokens=True)
                 test_preds = lmap(str.strip, test_preds)
-                output_test_pred_file = os.path.join(training_args.output_dir, "test_predictions.txt")
+                output_test_pred_file = os.path.join(training_args.output_dir, "test_generations.txt")
                 with open(output_test_pred_file, "w") as f:
                     f.write("\n".join(test_preds))
 
