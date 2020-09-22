@@ -1,18 +1,12 @@
-.PHONY: quality style test test-examples docs
+.PHONY: style test test-examples docs
 
-# Check that source code meets quality standards
-
-quality:
-	black --check --line-length 119 --target-version py35 examples templates tests src utils
-	isort --check-only examples templates tests src utils
-	flake8 examples templates tests src utils
-	python utils/check_repo.py
-
-# Format source code automatically
+# Format source code automatically and check is there are any problems left that need manual fixing
 
 style:
 	black --line-length 119 --target-version py35 examples templates tests src utils
 	isort examples templates tests src utils
+	flake8 examples templates tests src utils
+	python utils/check_repo.py
 
 # Run tests for the library
 
