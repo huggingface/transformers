@@ -420,7 +420,7 @@ class DataCollatorForNextSentencePrediction:
             examples (:obj:`List[Dict]`): Each dictionary should have the following keys:
                       - ``tokens_a``: A sequence of tokens, which should appear before ``tokens_b`` in the text.
                       - ``tokens_b``: A sequence of tokens, which should appear after ``tokens_a`` in the text.
-                      - ``is_random_next``: 1 if this pair is generated randomly, else 0.
+                  - ``is_random_next``: 1 if this pair is generated randomly, else 0.
         """
 
         tokens_a = [e["tokens_a"] for e in examples]
