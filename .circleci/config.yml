@@ -86,7 +86,7 @@ jobs:
                     - '~/.cache/pip'
             - run:
                 no_output_timeout: 15m
-                command: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ --cov  | tee output.txt
+                command: python -m pytest -n 8 --max-worker-restart 0 --dist=loadfile -rA -s ./tests/ --cov  | tee output.txt
             - run: codecov
             - store_artifacts:
                   path: ~/transformers/output.txt
