@@ -283,12 +283,15 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         if self.evaluate_during_training is not None:
-            self.evaluation_strategy = EvaluationStrategy.STEPS if self.evaluate_during_training else EvaluationStrategy.NO
+            self.evaluation_strategy = (
+                EvaluationStrategy.STEPS if self.evaluate_during_training else EvaluationStrategy.NO
+            )
             warnings.warn(
                 "The `evaluate_during_training` argument is deprecated in favor of `evaluation_strategy` (which has more options)",
                 FutureWarning,
             )
-        self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
+        else:
+            self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
 
         if self.eval_steps is None:
             self.eval_steps = self.logging_steps
