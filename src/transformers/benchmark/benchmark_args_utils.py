@@ -78,7 +78,8 @@ class BenchmarkArguments:
     memory: bool = field(
         default=True,
         metadata={
-            "help": "Whether to perform memory measurements. Memory measurements can be disabled via --no-speed"
+            "help": "Whether to perform memory measurements. Memory measurements can be disabled via --no-memory"
+
         },
     )
     trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
@@ -86,9 +87,11 @@ class BenchmarkArguments:
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
     env_print: bool = field(default=False, metadata={"help": "Whether to print environment information"})
     multi_process: bool = field(
-        default=False,
+        default=True,
+
         metadata={
-            "help": "Whether to use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be used for debugging / testing and on TPU."
+            "help": "Whether to use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be disabled for debugging / testing and on TPU."
+
         },
     )
     inference_time_csv_file: str = field(
