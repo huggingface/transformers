@@ -90,17 +90,19 @@ class GenerativeQAModule(BaseTransformer):
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
-            retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path)
-            hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
             if args.prefix is not None:
                 config.generator.prefix = args.prefix
             config.label_smoothing = hparams.label_smoothing
+            hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
+            retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path, index_name="legacy")
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
+            prefix = config.question_encoder.prefix
         else:
             if args.prefix is not None:
                 config.prefix = args.prefix
             hparams, config = set_extra_model_params(extra_model_params, hparams, config)
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
+            prefix = config.prefix
 
         tokenizer = (
             RagTokenizer.from_pretrained(hparams.model_name_or_path)
@@ -121,7 +123,7 @@ class GenerativeQAModule(BaseTransformer):
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            prefix=config.generator.prefix if hasattr(config, "generator") else config.prefix or "",
+            prefix=prefix or "",
         )
         n_observations_per_split = {
             "train": self.hparams.n_train,

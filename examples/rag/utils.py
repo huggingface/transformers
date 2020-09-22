@@ -14,7 +14,7 @@ from transformers import BartTokenizer, RagTokenizer, T5Tokenizer
 
 
 def encode_line(tokenizer, line, max_length, padding_side, pad_to_max_length=True, return_tensors="pt"):
-    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
+    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) and not line.startswith(" ") else {}
     tokenizer.padding_side = padding_side
     return tokenizer(
         [line],
