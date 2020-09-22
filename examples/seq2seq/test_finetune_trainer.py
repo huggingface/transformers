@@ -50,6 +50,7 @@ def test_finetune_trainer():
         max_len,
         "--do_train",
         "--do_eval",
+        "--do_predict",
         "--num_train_epochs",
         str(num_train_epochs),
         "--per_device_train_batch_size",
@@ -88,10 +89,8 @@ def test_finetune_trainer():
     assert first_step_stats["eval_bleu"] < last_step_stats["eval_bleu"]  # model learned nothing
     assert isinstance(last_step_stats["eval_bleu"], float)
 
-    # TODO(SS): turn on args.do_predict when PL bug fixed.
-    # if args.do_predict:
-    #     contents = {os.path.basename(p) for p in contents}
-    #     assert "test_generations.txt" in contents
-    #     assert "test_results.txt" in contents
-    #     # assert len(metrics["val"]) ==  desired_n_evals
-    #     assert len(metrics["test"]) == 1
+    # test if do_predict saves generations and metrics
+    contents = os.listdir(output_dir)
+    contents = {os.path.basename(p) for p in contents}
+    assert "test_generations.txt" in contents
+    assert "test_results.json" in contents
