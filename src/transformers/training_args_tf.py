@@ -2,8 +2,6 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from tensorflow.python.keras.mixed_precision.experimental import policy
-
 from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
 from .utils import logging
@@ -112,10 +110,7 @@ class TFTrainingArguments(TrainingArguments):
         metadata={"help": "Name of TPU"},
     )
 
-    xla: bool = field(
-        default=False,
-        metadata={"help": "Whether to activate the XLA compilation or not"}
-    )
+    xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
     @tf_required
@@ -144,7 +139,7 @@ class TFTrainingArguments(TrainingArguments):
                 tpu = None
 
             if tpu:
-                # Set to bfloat16 in case of TPU 
+                # Set to bfloat16 in case of TPU
                 if self.fp16:
                     policy = tf.keras.mixed_precision.experimental.Policy("mixed_bfloat16")
                     tf.keras.mixed_precision.experimental.set_policy(policy)
@@ -153,7 +148,7 @@ class TFTrainingArguments(TrainingArguments):
                 tf.tpu.experimental.initialize_tpu_system(tpu)
 
                 strategy = tf.distribute.experimental.TPUStrategy(tpu)
-                
+
             elif len(gpus) == 0:
                 strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
             elif len(gpus) == 1:
