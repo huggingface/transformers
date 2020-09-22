@@ -89,7 +89,8 @@ class BenchmarkArguments:
         default=True,
 
         metadata={
-            "help": "Whether to use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be used for debugging / testing and on TPU."
+            "help": "Whether to use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be disabled for debugging / testing and on TPU."
+
         },
     )
     inference_time_csv_file: str = field(
