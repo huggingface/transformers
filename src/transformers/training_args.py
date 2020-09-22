@@ -3,9 +3,11 @@ import json
 import os
 import warnings
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from .trainer_utils import EvaluationStrategy
 from .utils import logging
 
 
@@ -51,7 +53,7 @@ class TrainingArguments:
             Whether to run evaluation on the dev set or not.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not.
-        evaluation_strategy(:obj:`str`, `optional`, defaults to :obj:`"no"`):
+        evaluation_strategy(:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
             The evaulation strategy to adopt during training. Possible values are:
 
                 * :obj:`"no"`: No evaluation is done during training.
@@ -163,7 +165,7 @@ class TrainingArguments:
         default=None,
         metadata={"help": "Run evaluation during training at each logging step."},
     )
-    evaluation_strategy: str = field(
+    evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
     )
@@ -286,6 +288,7 @@ class TrainingArguments:
                 "The `evaluate_during_training` argument is deprecated in favor of `evaluation_strategy` (which has more options)",
                 FutureWarning,
             )
+        self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
 
         if self.eval_steps is None:
             self.eval_steps = self.logging_steps
@@ -367,17 +370,27 @@ class TrainingArguments:
         """
         return self._setup_devices[1]
 
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support).
+        """
+        d = dataclasses.asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+        return d
+
     def to_json_string(self):
         """
         Serializes this instance to a JSON string.
         """
-        return json.dumps(dataclasses.asdict(self), indent=2)
+        return json.dumps(self.to_dict(), indent=2)
 
     def to_sanitized_dict(self) -> Dict[str, Any]:
         """
         Sanitized serialization to use with TensorBoard’s hparams
         """
-        d = dataclasses.asdict(self)
+        d = self.to_dict()
         d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
 
         valid_types = [bool, int, float, str]
