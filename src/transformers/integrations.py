@@ -37,7 +37,7 @@ except (ImportError):
     _has_ray = False
 
 
-## No ML framework or transformer imports above this point
+# No ML framework or transformer imports above this point
 
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # isort:skip
 from .utils import logging  # isort:skip
@@ -57,7 +57,7 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
-## Integration functions:
+# Integration functions:
 
 
 def is_wandb_available():
