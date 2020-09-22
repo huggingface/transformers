@@ -54,10 +54,10 @@ class TrainingArguments:
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not.
         evaluation_strategy(:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
-            The evaulation strategy to adopt during training. Possible values are:
+            The evaluation strategy to adopt during training. Possible values are:
 
                 * :obj:`"no"`: No evaluation is done during training.
-                * :obj:`"steps"`: Evaluation is done (and logged) ever :obj:`eval_steps`.
+                * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
                 * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
@@ -283,7 +283,7 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         if self.evaluate_during_training is not None:
-            self.evaluation_strategy = "steps" if self.evaluate_during_training else "no"
+            self.evaluation_strategy = EvaluationStrategy.STEPS if self.evaluate_during_training else EvaluationStrategy.NO
             warnings.warn(
                 "The `evaluate_during_training` argument is deprecated in favor of `evaluation_strategy` (which has more options)",
                 FutureWarning,
