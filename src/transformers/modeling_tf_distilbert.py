@@ -234,16 +234,16 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        q = tf.cast(q, dtype=tf.float64)
+        q = tf.divide(q, tf.math.sqrt(tf.cast(dim_per_head, dtype=tf.float64)))  # (bs, n_heads, qlen, dim_per_head)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))            # (bs, n_heads, q_length, k_length)
 
-        scores_dtype = scores.dtype
-        # calculate `scores` in `tf.float32` to avoid numeric overflow
-        scores = tf.cast(scores, dtype=tf.float32) - 1e30 * (1.0 - tf.cast(mask, dtype=tf.float32))
+        mask = tf.cast(mask, dtype=scores.dtype)
+        scores = scores - 1e30 * (1.0 - mask)
 
-        weights = tf.cast(tf.nn.softmax(scores, axis=-1), dtype=scores_dtype)  # (bs, n_heads, qlen, klen)
+        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
