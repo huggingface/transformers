@@ -32,11 +32,15 @@ class DPRConfig(BertConfig):
     :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
     `DPRModel`.
 
-    This is the configuration class to store the configuration of a `DPRContextEncoder`, `DPRQuestionEncoder`, or a `DPRReader`.
-    It is used to instantiate the components of the DPR model.
+    This is the configuration class to store the configuration of a :class:`~transformers.DPRContextEncoder`,
+    :class:`~transformers.DPRQuestionEncoder`, or a :class:`~transformers.DPRReader`. It is used to instantiate the
+    components of the DPR model.
+
+    This class is a subclass of :class:`~transformers.BertConfig`. Please check the
+    superclass for the documentation of all kwargs.
 
     Args:
-        projection_dim (:obj:`int`, optional, defaults to 0):
+        projection_dim (:obj:`int`, `optional`, defaults to 0):
             Dimension of the projection for the context and question encoders.
             If it is set to zero (default), then no projection is done.
     """
