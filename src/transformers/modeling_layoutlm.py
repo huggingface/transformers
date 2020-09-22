@@ -15,7 +15,7 @@
 """ PyTorch LayoutLM model. """
 
 
-import logging
+from .utils import logging
 import math
 
 import torch
