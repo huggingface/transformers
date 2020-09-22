@@ -415,7 +415,7 @@ class DataCollatorForNextSentencePrediction:
 
     def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
         """
-        The input should contain negative examples, `DataCollator` will not generate any negative examples.
+        The input should contain negative examples, :class:`~transformers.DataCollatorForNextSentencePrediction` will not generate any negative examples.
         Args:
             examples: A list of dict. In each dict, there are:
                       - ``tokens_a``: A sequence of tokens, which should appear before ``tokens_b`` in the text.
