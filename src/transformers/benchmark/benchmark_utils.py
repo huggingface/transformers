@@ -686,7 +686,7 @@ class Benchmark(ABC):
                             train_result_time[model_name]["result"][batch_size][sequence_length] = time
 
         if self.args.inference:
-            if not self.args.speed:
+            if self.args.speed:
                 self.print_fn("\n" + 20 * "=" + ("INFERENCE - SPEED - RESULT").center(40) + 20 * "=")
                 self.print_results(inference_result_time, type_label="Time in s")
                 self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)

@@ -234,7 +234,7 @@ class BenchmarkTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             benchmark_args = PyTorchBenchmarkArguments(
                 models=[MODEL_ID],
-                training=False,
+                training=True,
                 inference=True,
                 sequence_lengths=[8],
                 batch_sizes=[1],
