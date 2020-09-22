@@ -55,10 +55,11 @@ logger = logging.getLogger(__name__)
 
 
 class Seq2SeqDataCollator:
-    def __init__(self, tokenizer, data_args):
+    def __init__(self, tokenizer, data_args, tpu_num_cores=None):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
         self.data_args = data_args
+        self.tpu_num_cores = tpu_num_cores
         self.add_prefix_space = isinstance(tokenizer, BartTokenizer)
 
     def __call__(self, batch) -> Dict[str, torch.Tensor]:
@@ -114,6 +115,7 @@ class Seq2SeqDataCollator:
             tgt_lang=self.data_args.tgt_lang,
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
+            padding="max_length" if self.tpu_num_cores is not None else True,  # TPU hack
             return_tensors="pt",
             add_prefix_space=self.add_prefix_space,
         )
@@ -387,7 +389,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=Seq2SeqDataCollator(tokenizer, data_args),
+        data_collator=Seq2SeqDataCollator(tokenizer, data_args, training_args.tpu_num_cores),
         compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_with_generate else None,
     )
 
