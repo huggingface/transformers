@@ -20,7 +20,7 @@ from .utils import logging
 from .configuration_bert import BertConfig
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "layoutlm-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/layoutlm-base-uncased/config.json",
