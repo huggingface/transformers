@@ -2,6 +2,7 @@
 import math
 import os
 
+
 try:
     import comet_ml  # noqa: F401
 
@@ -38,8 +39,8 @@ except (ImportError):
 
 ## No ML framework or transformer imports above this point
 
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun # isort:skip
+from .utils import logging # isort:skip
 
 logger = logging.get_logger(__name__)
 

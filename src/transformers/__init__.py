@@ -19,7 +19,7 @@ else:
 
 # Integrations: this needs to come before other ml imports
 # in order to allow any 3rd-party code to initialize properly
-from .integrations import (
+from .integrations import (  # isort:skip
     is_comet_available,
     is_optuna_available,
     is_ray_available,
