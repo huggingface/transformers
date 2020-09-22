@@ -162,6 +162,9 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
     # XXX: warning for a possible deadlock when using `wait` with huge amounts of data in the pipe
     # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process.wait
+    #
+    # If it starts hanging, will need to switch s/wait/communicate/ - so perhaps for debug we will enable
+    # `wait` as it's easier to see in real time, but for normal runs use `communicate`
     return RunOutput(await p.wait(), out, err)
 
 
