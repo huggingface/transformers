@@ -1,4 +1,3 @@
-import random
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
@@ -402,8 +401,8 @@ class DataCollatorForPermutationLanguageModeling:
 @dataclass
 class DataCollatorForNextSentencePrediction:
     """
-    Data collator used for language modeling.
-    - collates batches of tensors, honoring their tokenizer's pad_token
+    Data collator used for next sentence prediction.
+    - collates examples which contains pre-generated negative examples
     - preprocesses batches for masked language modeling
     """
 
@@ -414,21 +413,30 @@ class DataCollatorForNextSentencePrediction:
     nsp_probability: float = 0.5
     mlm_probability: float = 0.15
 
-    def __call__(self, examples: List[Union[List[List[int]], Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
-            examples = [e["input_ids"] for e in examples]
+    def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        """
+        The input should contain negative examples, :class:`~transformers.DataCollatorForNextSentencePrediction` will not generate any negative examples.
+        Args:
+            examples (:obj:`List[Dict]`): Each dictionary should have the following keys:
+                  - ``tokens_a``: A sequence of tokens, which should appear before ``tokens_b`` in the text.
+                  - ``tokens_b``: A sequence of tokens, which should appear after ``tokens_a`` in the text.
+                  - ``is_random_next``: 1 if this pair is generated randomly, else 0.
+        """
+
+        tokens_a = [e["tokens_a"] for e in examples]
+        tokens_b = [e["tokens_b"] for e in examples]
+        nsp_labels = [1 if e["is_random_next"] else 0 for e in examples]
 
         input_ids = []
         segment_ids = []
         attention_masks = []
-        nsp_labels = []
 
-        for i, doc in enumerate(examples):
-            input_id, segment_id, attention_mask, label = self.create_examples_from_document(doc, i, examples)
-            input_ids.extend(input_id)
-            segment_ids.extend(segment_id)
-            attention_masks.extend(attention_mask)
-            nsp_labels.extend(label)
+        assert len(tokens_a) == len(tokens_b)
+        for i in range(len(tokens_a)):
+            input_id, attention_mask, segment_id = self.create_features_from_example(tokens_a[i], tokens_b[i])
+            input_ids.append(input_id)
+            segment_ids.append(segment_id)
+            attention_masks.append(attention_mask)
         if self.mlm:
             input_ids, mlm_labels = self.mask_tokens(self._tensorize_batch(input_ids))
         else:
@@ -438,6 +446,7 @@ class DataCollatorForNextSentencePrediction:
             "input_ids": input_ids,
             "attention_mask": self._tensorize_batch(attention_masks),
             "token_type_ids": self._tensorize_batch(segment_ids),
+            "masked_lm_labels": mlm_labels if self.mlm else None,
             "next_sentence_label": torch.tensor(nsp_labels),
         }
         if self.mlm:
@@ -457,111 +466,34 @@ class DataCollatorForNextSentencePrediction:
                 )
             return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
-    def create_examples_from_document(
-        self, document: List[List[int]], doc_index: int, examples: List[List[List[int]]]
-    ):
+    def create_features_from_example(self, tokens_a, tokens_b):
         """Creates examples for a single document."""
 
         max_num_tokens = self.block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
 
-        # We *usually* want to fill up the entire sequence since we are padding
-        # to `block_size` anyways, so short sequences are generally wasted
-        # computation. However, we *sometimes*
-        # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
-        # The `target_seq_length` is just a rough target however, whereas
-        # `block_size` is a hard limit.
-        target_seq_length = max_num_tokens
-        if random.random() < self.short_seq_probability:
-            target_seq_length = random.randint(2, max_num_tokens)
+        tokens_a, tokens_b, _ = self.tokenizer.truncate_sequences(
+            tokens_a,
+            tokens_b,
+            num_tokens_to_remove=len(tokens_a) + len(tokens_b) - max_num_tokens,
+            truncation_strategy="longest_first",
+        )
 
-        current_chunk = []  # a buffer stored current working segments
-        current_length = 0
-        i = 0
-        input_ids = []
-        segment_ids = []
-        attention_masks = []
-        labels = []
-        while i < len(document):
-            segment = document[i]
-            current_chunk.append(segment)
-            current_length += len(segment)
-            if i == len(document) - 1 or current_length >= target_seq_length:
-                if current_chunk:
-                    # `a_end` is how many segments from `current_chunk` go into the `A`
-                    # (first) sentence.
-                    a_end = 1
-                    if len(current_chunk) >= 2:
-                        a_end = random.randint(1, len(current_chunk) - 1)
+        input_id = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+        attention_mask = [1] * len(input_id)
+        segment_id = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
+        assert len(input_id) <= self.block_size
 
-                    tokens_a = []
-                    for j in range(a_end):
-                        tokens_a.extend(current_chunk[j])
+        # pad
+        while len(input_id) < self.block_size:
+            input_id.append(0)
+            attention_mask.append(0)
+            segment_id.append(0)
 
-                    tokens_b = []
+        input_id = torch.tensor(input_id)
+        attention_mask = torch.tensor(attention_mask)
+        segment_id = torch.tensor(segment_id)
 
-                    if len(current_chunk) == 1 or random.random() < self.nsp_probability:
-                        is_random_next = True
-                        target_b_length = target_seq_length - len(tokens_a)
-
-                        # This should rarely go for more than one iteration for large
-                        # corpora. However, just to be careful, we try to make sure that
-                        # the random document is not the same as the document
-                        # we're processing. Also check to make sure that the random document
-                        # is not empty.
-                        for _ in range(10):
-                            random_document_index = random.randint(0, len(examples) - 1)
-                            if random_document_index != doc_index and len(examples[random_document_index]) > 0:
-                                break
-
-                        random_document = examples[random_document_index]
-                        random_start = random.randint(0, len(random_document) - 1)
-                        for j in range(random_start, len(random_document)):
-                            tokens_b.extend(random_document[j])
-                            if len(tokens_b) >= target_b_length:
-                                break
-                        # We didn't actually use these segments so we "put them back" so
-                        # they don't go to waste.
-                        num_unused_segments = len(current_chunk) - a_end
-                        i -= num_unused_segments
-                    # Actual next
-                    else:
-                        is_random_next = False
-                        for j in range(a_end, len(current_chunk)):
-                            tokens_b.extend(current_chunk[j])
-
-                    assert len(tokens_a) >= 1
-                    assert len(tokens_b) >= 1
-
-                    tokens_a, tokens_b, _ = self.tokenizer.truncate_sequences(
-                        tokens_a,
-                        tokens_b,
-                        num_tokens_to_remove=len(tokens_a) + len(tokens_b) - max_num_tokens,
-                        truncation_strategy="longest_first",
-                    )
-
-                    input_id = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
-                    attention_mask = [1] * len(input_id)
-                    segment_id = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
-                    assert len(input_id) <= self.block_size
-
-                    # pad
-                    while len(input_id) < self.block_size:
-                        input_id.append(0)
-                        attention_mask.append(0)
-                        segment_id.append(0)
-
-                    input_ids.append(torch.tensor(input_id))
-                    segment_ids.append(torch.tensor(segment_id))
-                    attention_masks.append(torch.tensor(attention_mask))
-                    labels.append(torch.tensor(1 if is_random_next else 0))
-
-                current_chunk = []
-                current_length = 0
-
-            i += 1
-
-        return input_ids, segment_ids, attention_masks, labels
+        return input_id, attention_mask, segment_id
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
