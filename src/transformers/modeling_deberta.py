@@ -16,7 +16,7 @@
 
 import copy
 import json
-import logging
+from .utils import logging
 import math
 import os
 from collections import Sequence
@@ -30,21 +30,10 @@ from .configuration_deberta import DeBERTaConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel
+from torch import _softmax_backward_data as _softmax_backward_data
 
 
-if version.Version(torch.__version__) >= version.Version("1.0.0"):
-    from torch import _softmax_backward_data as _softmax_backward_data
-else:
-    from torch import softmax_backward_data as _softmax_backward_data
-
-__all__ = [
-    "DeBERTaModel",
-    "DeBERTaForSequenceClassification",
-    "DeBERTaPreTrainedModel",
-    "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-]
-
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DeBERTaConfig"
 _TOKENIZER_FOR_DOC = "DeBERTaTokenizer"
@@ -85,138 +74,11 @@ ACT2FN = {
 }
 
 
-def traceable(cls):
-    """Decorator over customer functions
-    There is an issue for tracing customer python torch Function, using this decorator to work around it.
-    e.g.
-    @traceable
-    class MyOp(torch.autograd.Function):
-    xxx
-    """
-
-    class _Function(object):
-        @staticmethod
-        def apply(*args):
-            jit_trace = os.getenv("JIT_TRACE", "False").lower() == "true"
-            if jit_trace:
-                return cls.forward(_Function, *args)
-            else:
-                return cls.apply(*args)
-
-        @staticmethod
-        def save_for_backward(*args):
-            pass
-
-    _Function.__name__ = cls.__name__
-    _Function.__doc__ = cls.__doc__
-    return _Function
-
-
-class AbsModelConfig(object):
-    def __init__(self):
-        pass
-
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `ModelConfig` from a Python dictionary of parameters."""
-        config = cls()
-        for key, value in json_object.items():
-            if isinstance(value, dict):
-                value = AbsModelConfig.from_dict(value)
-            config.__dict__[key] = value
-        return config
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `ModelConfig` from a json file of parameters."""
-        with open(json_file, "r", encoding="utf-8") as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-
-        def _json_default(obj):
-            if isinstance(obj, AbsModelConfig):
-                return obj.__dict__
-
-        return json.dumps(self.__dict__, indent=2, sort_keys=True, default=_json_default) + "\n"
-
-
-class PoolConfig(AbsModelConfig):
-    """Configuration class to store the configuration of `pool layer`.
-
-    Parameters:
-        config (:class:`~transformers.DeBERTaConfig`): The model config. The field of pool config will be initialized with the `pooling` field in model config.
-
-    Attributes:
-        hidden_size (int): Size of the encoder layers and the pooler layer, default: `768`.
-
-        dropout (float): The dropout rate applied on the output of `[CLS]` token,
-
-        hidden_act (:obj:`str`): The activation function of the projection layer, it can be one of ['gelu', 'tanh'].
-
-    Example::
-        # Here is the content of an example model config file in json format
-
-            {
-              "hidden_size": 768,
-              "num_hidden_layers" 12,
-              "num_attention_heads": 12,
-              "intermediate_size": 3072,
-              ...
-              "pooling": {
-                "hidden_size":  768,
-                "hidden_act": "gelu",
-                "dropout": 0.1
-              }
-            }
-
-    """
-
-    def __init__(self, config=None):
-        """Constructs PoolConfig.
-
-        Args:
-           `config`: the config of the model. The field of pool config will be initialized with the 'pooling' field in model config.
-        """
-
-        self.hidden_size = 768
-        self.dropout = 0
-        self.hidden_act = "gelu"
-        if config:
-            pool_config = getattr(config, "pooling", config)
-            if isinstance(pool_config, dict):
-                pool_config = AbsModelConfig.from_dict(pool_config)
-            self.hidden_size = getattr(pool_config, "hidden_size", config.hidden_size)
-            self.dropout = getattr(pool_config, "dropout", 0)
-            self.hidden_act = getattr(pool_config, "hidden_act", "gelu")
-
-
-class TraceMode:
-    """Trace context used when tracing modules contains customer operators/Functions"""
-
-    def __enter__(self):
-        os.environ["JIT_TRACE"] = "True"
-        return self
-
-    def __exit__(self, exp_value, exp_type, trace):
-        del os.environ["JIT_TRACE"]
-
-
 class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = StableDropout(config.dropout)
+        self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
+        self.dropout = StableDropout(config.pooler_dropout)
         self.config = config
 
     def forward(self, hidden_states, mask=None):
@@ -226,14 +88,13 @@ class ContextPooler(nn.Module):
         context_token = hidden_states[:, 0]
         context_token = self.dropout(context_token)
         pooled_output = self.dense(context_token)
-        pooled_output = ACT2FN[self.config.hidden_act](pooled_output)
+        pooled_output = ACT2FN[self.config.pooler_hidden_act](pooled_output)
         return pooled_output
 
     def output_dim(self):
         return self.config.hidden_size
 
 
-@traceable
 class XSoftmax(torch.autograd.Function):
     """Masked Softmax which is optimized for saving memory
 
@@ -302,7 +163,6 @@ def get_mask(input, local_context):
     return mask, dropout
 
 
-@traceable
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
 
@@ -1140,8 +1000,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         self.num_labels = num_labels
 
         self.bert = DeBERTaModel(config)
-        pool_config = PoolConfig(self.config)
-        self.pooler = ContextPooler(pool_config)
+        self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim()
 
         self.classifier = torch.nn.Linear(output_dim, num_labels)

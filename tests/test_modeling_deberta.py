@@ -51,9 +51,7 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_torchscript = False
     test_pruning = False
-    test_resize_embeddings = False
     test_head_masking = False
-    test_missing_keys = False
     is_encoder_decoder = False
 
     class DeBERTaModelTester(object):

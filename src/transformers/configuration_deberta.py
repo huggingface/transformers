@@ -14,14 +14,12 @@
 # limitations under the License.
 """ DeBERTa model configuration """
 
-import logging
+from .utils import logging
 
 from .configuration_utils import PretrainedConfig
 
 
-__all__ = ["DeBERTaConfig", "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"]
-
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/deberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-base/config.json",
@@ -98,6 +96,8 @@ class DeBERTaConfig(PretrainedConfig):
         pad_token_id=0,
         position_biased_input=True,
         pos_att_type="None",
+        pooler_dropout=0,
+        pooler_hidden_act='gelu',
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -119,3 +119,7 @@ class DeBERTaConfig(PretrainedConfig):
         self.pos_att_type = pos_att_type
         self.vocab_size = vocab_size
         self.layer_norm_eps = layer_norm_eps
+
+        self.pooler_hidden_size = kwargs.get('pooler_hidden_size', hidden_size)
+        self.pooler_dropout = pooler_dropout
+        self.pooler_hidden_act = pooler_hidden_act
