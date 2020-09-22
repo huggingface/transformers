@@ -201,7 +201,7 @@ class SummarizationModule(BaseTransformer):
         all_metrics['Time'] = get_date_str(seconds=True)
 
 
-        all_metrics['rank'] = getattr(self.train_dataloader(), 'rank', -1.)
+        #all_metrics['rank'] = getattr(self.train_dataloader(), 'rank', -1.)
 
         self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
