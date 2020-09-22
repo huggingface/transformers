@@ -401,8 +401,8 @@ class DataCollatorForPermutationLanguageModeling:
 @dataclass
 class DataCollatorForNextSentencePrediction:
     """
-    Data collator used for language modeling.
-    - collates batches of tensors, honoring their tokenizer's pad_token
+    Data collator used for next sentence prediction.
+    - collates examples which contains pre-generated negative examples
     - preprocesses batches for masked language modeling
     """
 
@@ -414,9 +414,18 @@ class DataCollatorForNextSentencePrediction:
     mlm_probability: float = 0.15
 
     def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        """
+        The input should contain negative examples, `DataCollator` will not generate any negative examples.
+        Args:
+            examples: A list of dict. In each dict, there are:
+                      - ``tokens_a``: A sequence of tokens, which should appear before ``tokens_b`` in the text.
+                      - ``tokens_b``: A sequence of tokens, which should appear after ``tokens_a`` in the text.
+                      - ``is_random_next``: 1 if this pair is generated randomly, else 0.
+        """
+
         tokens_a = [e["tokens_a"] for e in examples]
         tokens_b = [e["tokens_b"] for e in examples]
-        labels = [1 if e["tokens_b"] else 0 for e in examples]
+        labels = [1 if e["is_random_next"] else 0 for e in examples]
 
         input_ids = []
         segment_ids = []
