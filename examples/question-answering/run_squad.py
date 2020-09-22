@@ -18,6 +18,7 @@
 
 import argparse
 import glob
+import json
 import logging
 import os
 import random
@@ -394,8 +395,14 @@ def evaluate(args, model, tokenizer, prefix=""):
             tokenizer,
         )
 
+    # Get the answers probabilities from file saved by compute_predictions_logits
+    with open(output_nbest_file, "r") as file:
+        nbest_preds = json.load(file)
+        # change the answer probs to no answer probs
+        na_probs = {id: 1 - preds[0]["probability"] for id, preds in nbest_preds.items()}
+
     # Compute the F1 and exact scores.
-    results = squad_evaluate(examples, predictions)
+    results = squad_evaluate(examples, predictions, na_probs)
     return results
 
 
