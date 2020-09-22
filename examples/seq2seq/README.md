@@ -6,13 +6,12 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
 ### Supported Architectures
 
-- `T5ForConditionalGeneration`
 - `BartForConditionalGeneration` (and anything that inherits from it)
 - `MarianMTModel`
 - `PegasusForConditionalGeneration`
 - `MBartForConditionalGeneration`
-
-    
+- `FSMTForConditionalGeneration`
+- `T5ForConditionalGeneration`
     
 
 ## Datasets
