@@ -15,14 +15,13 @@
 """ PyTorch LayoutLM model. """
 
 
-from .utils import logging
 import math
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import ACT2FN
 from .configuration_layoutlm import LayoutLMConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, TokenClassifierOutput
@@ -32,6 +31,7 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -44,12 +44,6 @@ LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "layoutlm-large-uncased",
 ]
 
-
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 LayoutLMLayerNorm = torch.nn.LayerNorm
 
