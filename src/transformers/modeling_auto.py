@@ -27,6 +27,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    DPRConfig,
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
@@ -97,6 +98,7 @@ from .modeling_distilbert import (
     DistilBertForTokenClassification,
     DistilBertModel,
 )
+from .modeling_dpr import DPRQuestionEncoder
 from .modeling_electra import (
     ElectraForMaskedLM,
     ElectraForMultipleChoice,
@@ -148,6 +150,11 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
+    RagModel,
+    RagSequenceForGeneration,
+    RagTokenForGeneration,
+)
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -224,6 +231,7 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
+        (DPRConfig, DPRQuestionEncoder),
     ]
 )
 
@@ -411,7 +419,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMultipleChoice),
     ]
 )
-
 
 AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
