@@ -800,6 +800,7 @@ class DeBERTaPreTrainedModel(PreTrainedModel):
 
     config_class = DeBERTaConfig
     base_model_prefix = "deberta"
+    authorized_missing_keys = ['position_ids']
 
     def _init_weights(self, module):
         """ Initialize the weights """
