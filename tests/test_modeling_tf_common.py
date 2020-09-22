@@ -354,7 +354,6 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
-
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         tf_main_layer_classes = set(
@@ -388,14 +387,16 @@ class TFModelTesterMixin:
                 num_labels = self.model_tester.num_labels
             else:
                 num_labels = 2
-            
-            X = tf.data.Dataset.from_tensor_slices((inputs_dict, np.random.randint(0, num_labels, (self.model_tester.batch_size, 1)))).batch(1)
+
+            X = tf.data.Dataset.from_tensor_slices(
+                (inputs_dict, np.random.randint(0, num_labels, (self.model_tester.batch_size, 1)))
+            ).batch(1)
 
             hidden_states = main_layer(symbolic_inputs)[0]
             outputs = tf.keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
             model = tf.keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
 
-            model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['acc'])
+            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["acc"])
             model.fit(X, epochs=1)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
