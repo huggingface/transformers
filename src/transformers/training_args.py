@@ -122,6 +122,8 @@ class TrainingArguments:
         eval_steps (:obj:`int`, `optional`):
             Number of update steps between two evaluations if :obj:`evaluation_strategy="steps"`. Will default to the
             same value as :obj:`logging_steps` if not set.
+        dataloader_num_workers (:obj:`int`, `optional`, defaults to 0):
+            Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the main process.
         past_index (:obj:`int`, `optional`, defaults to -1):
             Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
@@ -259,6 +261,10 @@ class TrainingArguments:
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
     )
     eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    dataloader_num_workers: int = field(
+        default=0,
+        metadata={"help": "Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the main process."}
+    )
 
     past_index: int = field(
         default=-1,
