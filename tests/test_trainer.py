@@ -287,6 +287,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
+    @slow
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -301,6 +302,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
 
+    @slow
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
