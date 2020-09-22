@@ -8,7 +8,7 @@ tensorflow_datasets
 pytorch-lightning==0.9.0
 matplotlib
 git-python==1.0.3
-faiss
+faiss-cpu
 streamlit
 elasticsearch
 pandas

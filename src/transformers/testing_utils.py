@@ -10,7 +10,7 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 
-from .file_utils import _tf_available, _torch_available, _torch_tpu_available
+from .file_utils import _datasets_available, _faiss_available, _tf_available, _torch_available, _torch_tpu_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -159,6 +159,21 @@ def require_torch_and_cuda(test_case):
         return unittest.skip("test requires CUDA")
     else:
         return test_case
+
+
+def require_datasets(test_case):
+    """Decorator marking a test that requires datasets."""
+
+    if not _datasets_available:
+        test_case = unittest.skip("test requires Datasets")(test_case)
+    return test_case
+
+
+def require_faiss(test_case):
+    """Decorator marking a test that requires faiss."""
+    if not _faiss_available:
+        test_case = unittest.skip("test requires Faiss")(test_case)
+    return test_case
 
 
 def get_tests_dir():
