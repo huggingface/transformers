@@ -354,6 +354,69 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
+    def test_train_pipeline_custom_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        tf_main_layer_classes = set(
+            module_member
+            for model_class in self.all_model_classes
+            for module in (import_module(model_class.__module__),)
+            for module_member_name in dir(module)
+            if module_member_name.endswith("MainLayer")
+            for module_member in (getattr(module, module_member_name),)
+            if isinstance(module_member, type)
+            and tf.keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
+        )
+
+        for main_layer_class in tf_main_layer_classes:
+            # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
+            if "T5" in main_layer_class.__name__:
+                # Take the same values than in TFT5ModelTester for this shared layer
+                shared = TFSharedEmbeddings(self.model_tester.vocab_size, self.model_tester.hidden_size, name="shared")
+                config.use_cache = False
+                main_layer = main_layer_class(config, embed_tokens=shared)
+                del inputs_dict["use_cache"]
+            else:
+                main_layer = main_layer_class(config)
+
+            symbolic_inputs = {
+                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+            }
+
+            if hasattr(self.model_tester, "num_labels"):
+                num_labels = self.model_tester.num_labels
+            else:
+                num_labels = 2
+
+            X = tf.data.Dataset.from_tensor_slices(
+                (inputs_dict, np.random.randint(0, num_labels, (self.model_tester.batch_size, 1)))
+            ).batch(1)
+
+            hidden_states = main_layer(symbolic_inputs)[0]
+            outputs = tf.keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
+            model = tf.keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
+
+            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["acc"])
+            model.fit(X, epochs=1)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                filepath = os.path.join(tmpdirname, "keras_model.h5")
+                model.save(filepath)
+                if "T5" in main_layer_class.__name__:
+                    model = tf.keras.models.load_model(
+                        filepath,
+                        custom_objects={
+                            main_layer_class.__name__: main_layer_class,
+                            "TFSharedEmbeddings": TFSharedEmbeddings,
+                        },
+                    )
+                else:
+                    model = tf.keras.models.load_model(
+                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                    )
+                assert isinstance(model, tf.keras.Model)
+                model(inputs_dict)
+
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
