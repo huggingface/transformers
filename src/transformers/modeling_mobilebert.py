@@ -791,12 +791,14 @@ class MobileBertModel(MobileBertPreTrainedModel):
 
     authorized_missing_keys = [r"position_ids"]
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
         self.embeddings = MobileBertEmbeddings(config)
         self.encoder = MobileBertEncoder(config)
-        self.pooler = MobileBertPooler(config)
+
+        if add_pooling_layer:
+            self.pooler = MobileBertPooler(config)
 
         self.init_weights()
 
@@ -895,7 +897,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if hasattr(self, "pooler") else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1030,7 +1032,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.cls = MobileBertOnlyMLMHead(config)
         self.config = config
 
@@ -1323,7 +1325,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1509,7 +1511,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 

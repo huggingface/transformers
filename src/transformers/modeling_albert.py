@@ -521,14 +521,15 @@ class AlbertModel(AlbertPreTrainedModel):
     load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
 
         self.config = config
         self.embeddings = AlbertEmbeddings(config)
         self.encoder = AlbertTransformer(config)
-        self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pooler_activation = nn.Tanh()
+        if add_pooling_layer:
+            self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
+            self.pooler_activation = nn.Tanh()
 
         self.init_weights()
 
@@ -622,7 +623,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
         sequence_output = encoder_outputs[0]
 
-        pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
+        pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0])) if hasattr(self, "pooler") else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -796,7 +797,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.albert = AlbertModel(config)
+        self.albert = AlbertModel(config, add_pooling_layer=False)
         self.predictions = AlbertMLMHead(config)
 
         self.init_weights()
@@ -972,7 +973,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.albert = AlbertModel(config)
+        self.albert = AlbertModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
@@ -1056,7 +1057,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.albert = AlbertModel(config)
+        self.albert = AlbertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()

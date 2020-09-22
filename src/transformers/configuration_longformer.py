@@ -46,8 +46,6 @@ class LongformerConfig(RobertaConfig):
             Size of an attention window around each token. If :obj:`int`, use the same size for all layers.
             To specify a different window size for each layer, use a :obj:`List[int]` where
             ``len(attention_window) == num_hidden_layers``.
-        add_pooling_layer (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to add a pooling layer to :class:`~transformers.LongformerModel`. One might to disable this to allow for distributed training for models that do not require a pooling layer.
 
     Example::
 
@@ -64,9 +62,6 @@ class LongformerConfig(RobertaConfig):
     """
     model_type = "longformer"
 
-    def __init__(
-        self, attention_window: Union[List[int], int] = 512, sep_token_id: int = 2, add_pooling_layer=True, **kwargs
-    ):
+    def __init__(self, attention_window: Union[List[int], int] = 512, sep_token_id: int = 2, **kwargs):
         super().__init__(sep_token_id=sep_token_id, **kwargs)
         self.attention_window = attention_window
-        self.add_pooling_layer = add_pooling_layer

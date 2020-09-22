@@ -168,8 +168,8 @@ class RobertaModel(BertModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, add_pooling_layer=True):
+        super().__init__(config, add_pooling_layer=add_pooling_layer)
 
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
@@ -194,7 +194,7 @@ class RobertaForCausalLM(BertPreTrainedModel):
         if not config.is_decoder:
             logger.warning("If you want to use `RobertaLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.roberta = RobertaModel(config)
+        self.roberta = RobertaModel(config, add_pooling_layer=False)
         self.lm_head = RobertaLMHead(config)
 
         self.init_weights()
@@ -313,7 +313,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.roberta = RobertaModel(config)
+        self.roberta = RobertaModel(config, add_pooling_layer=False)
         self.lm_head = RobertaLMHead(config)
 
         self.init_weights()
@@ -433,7 +433,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = RobertaModel(config)
+        self.roberta = RobertaModel(config, add_pooling_layer=False)
         self.classifier = RobertaClassificationHead(config)
 
         self.init_weights()
@@ -607,7 +607,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = RobertaModel(config)
+        self.roberta = RobertaModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -715,7 +715,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = RobertaModel(config)
+        self.roberta = RobertaModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()

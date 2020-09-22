@@ -896,7 +896,7 @@ class LongformerModel(LongformerPreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -913,7 +913,7 @@ class LongformerModel(LongformerPreTrainedModel):
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = LongformerEncoder(config)
 
-        if config.add_pooling_layer:
+        if add_pooling_layer:
             self.pooler = BertPooler(config)
 
         self.init_weights()
@@ -1084,7 +1084,7 @@ class LongformerModel(LongformerPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.config.add_pooling_layer else None
+        pooled_output = self.pooler(sequence_output) if hasattr(self, "pooler") else None
 
         # undo padding
         if padding_len > 0:
@@ -1110,7 +1110,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.lm_head = RobertaLMHead(config)
 
         self.init_weights()
@@ -1216,7 +1216,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.classifier = LongformerClassificationHead(config)
 
         self.init_weights()
@@ -1324,7 +1324,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1454,7 +1454,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
