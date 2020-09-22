@@ -4,7 +4,7 @@ import datasets
 import numpy as np
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_torch
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 
 if is_torch_available():
