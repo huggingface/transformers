@@ -215,8 +215,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         k_length = shape_list(key)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
         # assert key.size() == value.size()
-
-        dim_per_head = self.dim // self.n_heads
+        dim_per_head = tf.math.divide(self.dim, self.n_heads)
+        dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
 
         mask_reshape = [bs, 1, 1, k_length]
 
@@ -234,6 +234,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         q = tf.cast(q, dtype=tf.float64)
         q = tf.divide(q, tf.math.sqrt(tf.cast(dim_per_head, dtype=tf.float64)))  # (bs, n_heads, qlen, dim_per_head)
+        k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))            # (bs, n_heads, q_length, k_length)
