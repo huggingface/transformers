@@ -16,8 +16,6 @@
 """
 
 
-import math
-
 import tensorflow as tf
 
 from .activations_tf import get_tf_activation
