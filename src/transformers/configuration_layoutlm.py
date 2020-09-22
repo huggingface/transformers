@@ -40,40 +40,40 @@ class LayoutLMConfig(BertConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, optional, defaults to 30522):
+        vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the LayoutLM model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.LayoutLMModel`.
-        hidden_size (:obj:`int`, optional, defaults to 768):
+        hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, optional, defaults to 12):
+        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, optional, defaults to 12):
+        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, optional, defaults to 3072):
+        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-            If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-        hidden_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, optional, defaults to 512):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`int`, optional, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed into :class:`~transformers.BertModel`.
-        initializer_range (:obj:`float`, optional, defaults to 0.02):
+        type_vocab_size (:obj:`int`, `optional`, defaults to 2):
+            The vocabulary size of the :obj:`token_type_ids` passed into :class:`~transformers.LayoutLMModel`.
+        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, optional, defaults to :obj:`False`):
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        max_2d_position_embeddings (:obj:`int`, optional, defaults to 1024):
+        max_2d_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
             The maximum value that the 2D position embedding might ever used.
             Typically set this to something large just in case (e.g., 1024).
 
-    Example::
+    Examples::
 
         >>> from transformers import LayoutLMModel, LayoutLMConfig
 

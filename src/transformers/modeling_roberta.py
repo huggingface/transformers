@@ -142,7 +142,7 @@ class RobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.modeling_bert.BertSelfAttention
+# Copied from transformers.modeling_bert.BertSelfAttention with Bert->Roberta
 class RobertaSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -197,7 +197,7 @@ class RobertaSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.

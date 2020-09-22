@@ -118,6 +118,7 @@ class LayoutLMEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.modeling_bert.BertSelfAttention with Bert->LayoutLM
 class LayoutLMSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -172,6 +173,7 @@ class LayoutLMSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in LayoutLMModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -195,6 +197,7 @@ class LayoutLMSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.modeling_bert.BertSelfOutput with Bert->LayoutLM
 class LayoutLMSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -209,6 +212,7 @@ class LayoutLMSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertAttention with Bert->LayoutLM
 class LayoutLMAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -256,6 +260,7 @@ class LayoutLMAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.modeling_bert.BertIntermediate
 class LayoutLMIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -271,6 +276,7 @@ class LayoutLMIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertOutput with Bert->LayoutLM
 class LayoutLMOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -285,6 +291,7 @@ class LayoutLMOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertLayer with Bert->LayoutLM
 class LayoutLMLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -344,6 +351,7 @@ class LayoutLMLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.modeling_bert.BertEncoder with Bert->LayoutLM
 class LayoutLMEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -408,6 +416,7 @@ class LayoutLMEncoder(nn.Module):
         )
 
 
+# Copied from transformers.modeling_bert.BertPooler
 class LayoutLMPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -423,6 +432,7 @@ class LayoutLMPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.modeling_bert.BertPredictionHeadTransform with Bert->LayoutLM
 class LayoutLMPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -440,6 +450,7 @@ class LayoutLMPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->LayoutLM
 class LayoutLMLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -460,6 +471,7 @@ class LayoutLMLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertOnlyMLMHead with Bert->LayoutLM
 class LayoutLMOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -468,28 +480,6 @@ class LayoutLMOnlyMLMHead(nn.Module):
     def forward(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
-
-
-class LayoutLMOnlyNSPHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, pooled_output):
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return seq_relationship_score
-
-
-class LayoutLMPreTrainingHeads(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = LayoutLMLMPredictionHead(config)
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, sequence_output, pooled_output):
-        prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
 
 
 class LayoutLMPreTrainedModel(PreTrainedModel):
