@@ -647,12 +647,14 @@ class DialoguePipelineTests(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs)
 
     @require_torch
+    @slow
     def test_torch_conversation(self):
         for model_name in DIALOGUE_FINETUNED_MODELS:
             nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name)
             self._test_conversation_pipeline(nlp)
 
     @require_tf
+    @slow
     def test_tf_conversation(self):
         for model_name in DIALOGUE_FINETUNED_MODELS:
             nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name, framework="tf")
