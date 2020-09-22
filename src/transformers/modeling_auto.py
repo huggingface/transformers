@@ -258,6 +258,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (MarianConfig, MarianMTModel),
+        (FSMTConfig, FSMTForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
