@@ -168,7 +168,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         truncation: bool = True,
         padding: str = "longest",
         return_tensors: str = "pt",
-        add_prefix_space: bool=False, # ignored
+        add_prefix_space: bool = False,  # ignored
         **kwargs,
     ) -> BatchEncoding:
         """Prepare a batch that can be passed directly to an instance of MBartModel.
