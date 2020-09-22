@@ -3,7 +3,7 @@
 # Check that source code meets quality standards
 
 quality:
-	black --check --line-length 119 --target-version py35 examples templates tests src utils
+	black --check examples templates tests src utils
 	isort --check-only examples templates tests src utils
 	flake8 examples templates tests src utils
 	python utils/check_repo.py
@@ -11,7 +11,7 @@ quality:
 # Format source code automatically
 
 style:
-	black --line-length 119 --target-version py35 examples templates tests src utils
+	black examples templates tests src utils
 	isort examples templates tests src utils
 
 # Run tests for the library
