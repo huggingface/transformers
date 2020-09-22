@@ -497,9 +497,12 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         tensor = self.dropout(tensor, training=training)
         tensor = tensor * mask[..., tf.newaxis]
 
+        # hidden_states and attentions cannot be None in graph mode.
+        hidden_states = ()
+        attentions = ()
+
         # transformer layers
-        hidden_states = ()  # if output_hidden_states else None
-        attentions = ()  # if output_attentions else None
+
         for i in range(self.n_layers):
             # LayerDrop
             dropout_probability = tf.random.uniform([1], 0, 1)
@@ -559,8 +562,12 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
 
+        # Set to None here if the output booleans are at False
+        hidden_states = hidden_states if output_hidden_states else None
+        attentions = attentions if output_attentions else None
+
         if not return_dict:
-            return tuple(v for v in [tensor, hidden_states, attentions] if v)
+            return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
 
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
