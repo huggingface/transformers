@@ -425,7 +425,7 @@ class DataCollatorForNextSentencePrediction:
 
         tokens_a = [e["tokens_a"] for e in examples]
         tokens_b = [e["tokens_b"] for e in examples]
-        labels = [1 if e["is_random_next"] else 0 for e in examples]
+        nsp_labels = [1 if e["is_random_next"] else 0 for e in examples]
 
         input_ids = []
         segment_ids = []
@@ -447,7 +447,7 @@ class DataCollatorForNextSentencePrediction:
             "attention_mask": self._tensorize_batch(attention_masks),
             "token_type_ids": self._tensorize_batch(segment_ids),
             "masked_lm_labels": mlm_labels if self.mlm else None,
-            "next_sentence_label": torch.tensor(labels),
+            "next_sentence_label": torch.tensor(nsp_labels),
         }
         if self.mlm:
             result["masked_lm_labels"] = mlm_labels
