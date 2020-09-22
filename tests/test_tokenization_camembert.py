@@ -32,6 +32,7 @@ FRAMEWORK = "pt" if _torch_available else "tf"
 class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CamembertTokenizer
+    rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True
 
     def setUp(self):
@@ -40,9 +41,6 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         tokenizer = CamembertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
-
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return CamembertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:

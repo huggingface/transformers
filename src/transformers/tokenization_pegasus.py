@@ -147,48 +147,9 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
     vocab_files_names = {"vocab_file": "spiece.model"}
     slow_tokenizer_class = PegasusTokenizer
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Dont use reserved words added_token_encoder, added_tokens_decoder because of
-        # AssertionError: Non-consecutive added token '1' found. in from_pretrained
-        assert len(self.added_tokens_decoder) == 0
-        self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
-        # entries 2-104 are only used for pretraining and called unk_2, ...unk_104
-        self.encoder.update({i: f"unk_{i}" for i in range(2, self.offset + 2)})
-        self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
-
-    def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token (str) in an id using the vocab. """
-        if token in self.decoder:
-            return self.decoder[token]
-        elif token in self.added_tokens_decoder:
-            return self.added_tokens_decoder[token]
-        sp_id = self.sp_model.piece_to_id(token)
-        return sp_id + self.offset
-
-    def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.encoder:
-            return self.encoder[index]
-        elif index in self.added_tokens_encoder:
-            return self.added_tokens_encoder[index]
-        else:
-            # assert index > self.offset, f"cannot decode ids between 2 and {self.offset}. Got {index}"
-            token = self.sp_model.IdToPiece(index - self.offset)
-        return token
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.sp_model) + self.offset
-
-    def get_vocab(self) -> Dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def num_special_tokens_to_add(self, pair=False):
-        """Just EOS"""
-        return 1
+    # def num_special_tokens_to_add(self, pair=False):
+    #     """Just EOS"""
+    #     return 1
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp

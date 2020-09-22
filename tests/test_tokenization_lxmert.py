@@ -26,6 +26,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = LxmertTokenizer
+    rust_tokenizer_class = LxmertTokenizerFast
     test_rust_tokenizer = True
 
     def setUp(self):
@@ -49,12 +50,6 @@ class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-
-    def get_tokenizer(self, **kwargs):
-        return LxmertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_rust_tokenizer(self, **kwargs) -> LxmertTokenizerFast:
-        return LxmertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"

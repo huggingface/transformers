@@ -77,7 +77,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     slow_tokenizer_class: PreTrainedTokenizer = None
 
     def __init__(self, *args, **kwargs):
-        slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
+        # We instantiate fast tokenizers based on a slow tokenizer for now
+        # In the future we'll also use a direct way based on saving/instantiating
+        # tokenizer's Tokenizer directly from it's serialization JSON
+        if '__slow_tokenizer' in kwargs and kwargs["__slow_tokenizer"]:
+            slow_tokenizer = kwargs.pop("__slow_tokenizer")
+        else:
+            slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
         self._tokenizer = convert_slow_tokenizer(slow_tokenizer)
 
         kwargs = slow_tokenizer.init_kwargs

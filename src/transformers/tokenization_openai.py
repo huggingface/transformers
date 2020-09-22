@@ -262,3 +262,6 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
     slow_tokenizer_class = OpenAIGPTTokenizer
+
+    def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
+        super().__init__(vocab_file, merges_file, unk_token=unk_token, **kwargs)

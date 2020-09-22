@@ -778,6 +778,9 @@ class SpecialTokensMixin:
 
         return self._add_tokens(new_tokens, special_tokens=special_tokens)
 
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        raise NotImplementedError
+
     @property
     def bos_token(self) -> str:
         """
@@ -1290,6 +1293,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     max_model_input_sizes: Dict[str, Optional[int]] = {}
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
     padding_side: str = "right"
+    slow_tokenizer_class = None
 
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
@@ -1557,6 +1561,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
 
+        # Convert AddedTokens serialized as dict to class instances
+        def convert_added_tokens(obj: Union[AddedToken, Any]):
+            if isinstance(obj, dict) and '__type' in obj and obj['__type'] == 'AddedToken':
+                obj.pop('__type')
+                return AddedToken(**obj)
+            elif isinstance(obj, (list, tuple)):
+                return list(convert_added_tokens(o) for o in obj)
+            elif isinstance(obj, dict):
+                return {k: convert_added_tokens(v) for k, v in obj.items()}
+            return obj
+
+        init_kwargs = convert_added_tokens(init_kwargs)
+
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
@@ -1571,6 +1588,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
 
+        # We instantiate fast tokenizers based on a slow tokenizer for now
+        # In the future we can also use a direct way based on saving/instantiating
+        # tokenizer's Tokenizer directly from it's serialization JSON
+        if cls.slow_tokenizer_class is not None:
+            init_kwargs['__slow_tokenizer'] = cls.slow_tokenizer_class._from_pretrained(resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs)
+
         # Instantiate tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -1581,8 +1604,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
 
         # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
-        tokenizer.init_inputs = init_inputs
-        tokenizer.init_kwargs = init_kwargs
+        # Removed: Now done at the base class level
+        # tokenizer.init_inputs = init_inputs
+        # tokenizer.init_kwargs = init_kwargs
 
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
@@ -1590,11 +1614,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
 
+            special_tokens_map = convert_added_tokens(special_tokens_map)
             for key, value in special_tokens_map.items():
-                if isinstance(value, dict):
-                    value = AddedToken(**value)
-                elif isinstance(value, list):
-                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
@@ -1660,20 +1681,25 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
+        # Sanitize AddedTokens
+        def convert_added_tokens(obj: Union[AddedToken, Any]):
+            if isinstance(obj, AddedToken):
+                out = obj.__getstate__()
+                out['__type'] = 'AddedToken'
+                return out
+            elif isinstance(obj, (list, tuple)):
+                return list(convert_added_tokens(o) for o in obj)
+            elif isinstance(obj, dict):
+                return {k: convert_added_tokens(v) for k, v in obj.items()}
+            return obj
+
+        tokenizer_config = convert_added_tokens(tokenizer_config)
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
 
+        # Sanitize AddedTokens in special_tokens_map
+        write_dict = convert_added_tokens(self.special_tokens_map_extended)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            write_dict = {}
-            for key, value in self.special_tokens_map_extended.items():
-                if isinstance(value, AddedToken):
-                    write_dict[key] = value.__getstate__()
-                elif isinstance(value, list):
-                    write_dict[key] = [
-                        token.__getstate__() if isinstance(token, AddedToken) else token for token in value
-                    ]
-                else:
-                    write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
 
         file_names = (tokenizer_config_file, special_tokens_map_file)

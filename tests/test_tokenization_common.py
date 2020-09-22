@@ -1202,12 +1202,13 @@ class TokenizerTesterMixin:
     def test_added_token_serializable(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
-            new_token = AddedToken("new_token", lstrip=True)
-            tokenizer.add_special_tokens({"additional_special_tokens": [new_token]})
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                new_token = AddedToken("new_token", lstrip=True)
+                tokenizer.add_special_tokens({"additional_special_tokens": [new_token]})
 
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                tokenizer.save_pretrained(tmp_dir_name)
-                tokenizer.from_pretrained(tmp_dir_name)
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    tokenizer.save_pretrained(tmp_dir_name)
+                    tokenizer.from_pretrained(tmp_dir_name)
 
     def test_batch_encode_plus_padding(self):
         # Test that padded sequences are equivalent between batch_encode_plus and encode_plus
@@ -1271,6 +1272,9 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)  # , add_prefix_space=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+
+                if hasattr(tokenizer, "add_prefix_space") and not tokenizer.add_prefix_space:
+                    continue
 
                 # Prepare a sequence from our tokenizer vocabulary
                 sequence, ids = self.get_clean_sequence(tokenizer, with_prefix_space=True, max_length=20)

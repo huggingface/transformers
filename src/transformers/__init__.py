@@ -142,7 +142,7 @@ from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
-from .tokenization_camembert import CamembertTokenizer
+from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import (
@@ -158,11 +158,11 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
-from .tokenization_mbart import MBartTokenizer
+from .tokenization_mbart import MBartTokenizer, MBartTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from .tokenization_pegasus import PegasusTokenizer
-from .tokenization_reformer import ReformerTokenizer
+from .tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
+from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer, T5TokenizerFast
@@ -178,7 +178,7 @@ from .tokenization_utils_base import (
 )
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 # Trainer

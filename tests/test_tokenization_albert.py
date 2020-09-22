@@ -29,6 +29,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = AlbertTokenizer
+    rust_tokenizer_class = AlbertTokenizerFast
     test_rust_tokenizer = True
 
     def setUp(self):
@@ -37,9 +38,6 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         tokenizer = AlbertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
-
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return AlbertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"

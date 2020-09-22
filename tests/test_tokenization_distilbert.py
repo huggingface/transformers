@@ -23,10 +23,8 @@ from .test_tokenization_bert import BertTokenizationTest
 class DistilBertTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DistilBertTokenizer
+    rust_tokenizer_class = DistilBertTokenizerFast
     test_rust_tokenizer = True
-
-    def get_rust_tokenizer(self, **kwargs):
-        return DistilBertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     @slow
     def test_sequence_builders(self):

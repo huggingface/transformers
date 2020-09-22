@@ -30,6 +30,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = ReformerTokenizer
+    rust_tokenizer_class = ReformerTokenizerFast
     test_rust_tokenizer = True
 
     def setUp(self):
@@ -37,9 +38,6 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer = ReformerTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
-
-    def get_rust_tokenizer(self, **kwargs) -> ReformerTokenizerFast:
-        return ReformerTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:

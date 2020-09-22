@@ -127,19 +127,37 @@ class GPT2Converter(Converter):
             )
         )
 
-        # Check for Unicode normalization first (before everything else)
-        tokenizer_normalizers = []
-
-        # Create the normalizer structure
-        if len(tokenizer_normalizers) > 0:
-            if len(tokenizer_normalizers) > 1:
-                tokenizer.normalizer = normalizers.Sequence(tokenizer_normalizers)
-            else:
-                tokenizer.normalizer = tokenizer_normalizers[0]
-
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
+
+class RobertaConverter(Converter):
+    def converted(self) -> Tokenizer:
+        save_directory = "./"
+        ot = self.original_tokenizer
+        vocab_file, merges_file = ot.save_vocabulary(save_directory)
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab_file,
+                merges_file,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(ot.sep_token, ot.sep_token_id),
+            cls=(ot.cls_token, ot.cls_token_id),
+            add_prefix_space=ot.add_prefix_space,
+            trim_offsets=True,  # True by default on Roberta (historical)
+        )
 
         return tokenizer
 
@@ -473,6 +491,7 @@ CONVERTERS = {
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "ReformerTokenizer": ReformerConverter,
+    "RobertaTokenizer": RobertaConverter,
     "T5Tokenizer": T5Converter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

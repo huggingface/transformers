@@ -385,9 +385,8 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
 
         is_pretokenized = kwargs.get("is_pretokenized", False)
-        assert self.add_prefix_space or not is_pretokenized, (
-            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
-            "to use it with pretokenized inputs."
-        )
+        if is_pretokenized and not self.add_prefix_space:
+            raise ValueError(f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs.")
 
         return super()._encode_plus(*args, **kwargs)

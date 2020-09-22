@@ -308,17 +308,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.sp_model_size = len(self.sp_model)
-        self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
-        }
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.cur_lang_code = self.lang_code_to_id["en_XX"]
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
-
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self.additional_special_tokens = list(self.lang_code_to_id.keys())
+        self.cur_lang_code = self.convert_tokens_to_ids("en_XX")
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
 
     def get_special_tokens_mask(
@@ -490,12 +480,12 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. Prefix [tgt_lang_code], suffix =[eos]."""
-        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.cur_lang_code = self.convert_tokens_to_ids(lang)
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
