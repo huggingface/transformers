@@ -84,7 +84,9 @@ jobs:
                 key: v0.3-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ --cov  | tee output.txt
+            - run:
+                no_output_timeout: 15m
+                command: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ --cov  | tee output.txt
             - run: codecov
             - store_artifacts:
                   path: ~/transformers/output.txt
