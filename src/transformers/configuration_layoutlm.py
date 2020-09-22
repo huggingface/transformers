@@ -42,7 +42,7 @@ class LayoutLMConfig(BertConfig):
 
     Args:
         vocab_size (:obj:`int`, optional, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the different tokens that
+            Vocabulary size of the LayoutLM model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.LayoutLMModel`.
         hidden_size (:obj:`int`, optional, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
