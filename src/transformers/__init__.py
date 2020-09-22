@@ -22,6 +22,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_bert_generation import BertGenerationConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -29,8 +30,10 @@ from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
+from .configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from .configuration_marian import MarianConfig
@@ -82,7 +85,7 @@ from .file_utils import (
     add_start_docstrings,
     cached_path,
     is_apex_available,
-    is_nlp_available,
+    is_datasets_available,
     is_psutil_available,
     is_py3nvml_available,
     is_tf_available,
@@ -142,7 +145,9 @@ from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
+from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -156,14 +161,17 @@ from .tokenization_dpr import (
 )
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
+from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_layoutlm import LayoutLMTokenizer, LayoutLMTokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_pegasus import PegasusTokenizer
+from .tokenization_phobert import PhobertTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -207,6 +215,7 @@ if is_torch_available():
         DataCollatorForLanguageModeling,
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorForSOP,
         DataCollatorWithPadding,
         default_data_collator,
     )
@@ -214,6 +223,7 @@ if is_torch_available():
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
+        LineByLineWithSOPTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
         TextDataset,
@@ -277,6 +287,11 @@ if is_torch_available():
         BertPreTrainedModel,
         load_tf_weights_in_bert,
     )
+    from .modeling_bert_generation import (
+        BertGenerationDecoder,
+        BertGenerationEncoder,
+        load_tf_weights_in_bert_generation,
+    )
     from .modeling_camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -329,6 +344,7 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
+    from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
     from .modeling_funnel import (
         FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
         FunnelBaseModel,
@@ -348,6 +364,12 @@ if is_torch_available():
         GPT2Model,
         GPT2PreTrainedModel,
         load_tf_weights_in_gpt2,
+    )
+    from .modeling_layoutlm import (
+        LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LayoutLMForMaskedLM,
+        LayoutLMForTokenClassification,
+        LayoutLMModel,
     )
     from .modeling_longformer import (
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -582,6 +604,17 @@ if is_tf_available():
         TFFlaubertForTokenClassification,
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
+    )
+    from .modeling_tf_funnel import (
+        TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFFunnelBaseModel,
+        TFFunnelForMaskedLM,
+        TFFunnelForMultipleChoice,
+        TFFunnelForPreTraining,
+        TFFunnelForQuestionAnswering,
+        TFFunnelForSequenceClassification,
+        TFFunnelForTokenClassification,
+        TFFunnelModel,
     )
     from .modeling_tf_gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,

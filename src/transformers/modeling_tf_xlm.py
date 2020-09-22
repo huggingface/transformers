@@ -25,6 +25,7 @@ from typing import Optional, Tuple
 import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_xlm import XLMConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -80,17 +81,6 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out[:, 0::2] = tf.constant(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = tf.constant(np.cos(position_enc[:, 1::2]))
-
-
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    Original Implementation of the gelu activation function in Google Bert repo when initially created.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
-    return x * cdf
 
 
 def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
@@ -216,7 +206,7 @@ class TFTransformerFFN(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
         self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
-        self.act = tf.keras.layers.Activation(gelu) if config.gelu_activation else tf.keras.activations.relu
+        self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def call(self, input, training=False):

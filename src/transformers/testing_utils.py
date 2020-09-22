@@ -122,6 +122,20 @@ def require_multigpu(test_case):
     return test_case
 
 
+def require_non_multigpu(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
+    """
+    if not _torch_available:
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() > 1:
+        return unittest.skip("test requires 0 or 1 GPU")(test_case)
+    return test_case
+
+
 def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
@@ -283,15 +297,15 @@ class CaptureLogger:
 
     Example:
 
-    from transformers import logging
-    from transformers.testing_utils import CaptureLogger
+    >>> from transformers import logging
+    >>> from transformers.testing_utils import CaptureLogger
 
-    msg = "Testing 1, 2, 3"
-    logging.set_verbosity_info()
-    logger = logging.get_logger("transformers.tokenization_bart")
-    with CaptureLogger(logger) as cl:
-        logger.info(msg)
-    assert cl.out, msg+"\n"
+    >>> msg = "Testing 1, 2, 3"
+    >>> logging.set_verbosity_info()
+    >>> logger = logging.get_logger("transformers.tokenization_bart")
+    >>> with CaptureLogger(logger) as cl:
+    ...     logger.info(msg)
+    >>> assert cl.out, msg+"\n"
     """
 
     def __init__(self, logger):

@@ -134,6 +134,18 @@ Follow these steps to start contributing:
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.)
 
+   To run the full test suite, you might need the additional dependency on `datasets` which requires a separate source
+   install:
+
+   ```bash
+   $ git clone https://github.com/huggingface/datasets
+   $ cd datasets
+   $ pip install -e .
+   ```
+
+   If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
+   library.
+
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite

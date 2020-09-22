@@ -15,7 +15,7 @@
 
 from typing import List, Optional
 
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
@@ -156,7 +156,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -225,11 +225,9 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
             - **input_ids** -- List of token ids to be fed to the encoder.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
-            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
-                This does not include causal mask, which is built by the model.
+            - **labels** -- List of token ids for tgt_texts
 
-            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
+            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  labels]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
 
         """
