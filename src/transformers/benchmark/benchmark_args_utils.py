@@ -78,7 +78,8 @@ class BenchmarkArguments:
     memory: bool = field(
         default=True,
         metadata={
-            "help": "Whether to perform memory measurements. Memory measurements can be disabled via --no-speed"
+            "help": "Whether to perform memory measurements. Memory measurements can be disabled via --no-memory"
+
         },
     )
     trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
