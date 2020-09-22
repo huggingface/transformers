@@ -19,7 +19,7 @@ Splitting a text in smaller chunks is a task that's harder than it looks, and th
 instance, let's look at the sentence "Don't you love 🤗 Transformers? We sure do." A first simple way of tokenizing
 this text is just to split it by spaces, which would give:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ["Don't", "you", "love", "🤗", "Transformers?", "We", "sure", "do."]
 
@@ -27,7 +27,7 @@ This is a nice first step, but if we look at the tokens "Transformers?" or "do."
 will be different than the tokens "Transformers" and "do" for our model, so we should probably take the punctuation
 into account. This would give:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ["Don", "'", "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
@@ -40,7 +40,7 @@ perform properly if you don't use the exact same rules as the persons who pretra
 `spaCy <https://spacy.io/>`__ and `Moses <http://www.statmt.org/moses/?n=Development.GetStarted>`__ are two popular
 rule-based tokenizers. On the text above, they'd output something like:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ["Do", "n't", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
@@ -118,13 +118,13 @@ vocabulary until it has learned a vocabulary of the desired size (this is a hype
 Let's say that after the pre-tokenization we have the following words (the number indicating the frequency of each
 word):
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ('hug', 10), ('pug', 5), ('pun', 12), ('bun', 4), ('hugs', 5)
 
 Then the base vocabulary is ['b', 'g', 'h', 'n', 'p', 's', 'u'] and all our words are first split by character:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ('h' 'u' 'g', 10), ('p' 'u' 'g', 5), ('p' 'u' 'n', 12), ('b' 'u' 'n', 4), ('h' 'u' 'g' 's', 5)
 
@@ -133,7 +133,7 @@ times in the 10 occurrences of 'hug', 5 times in the 5 occurrences of 'hugs'). T
 `10 + 5 + 5 = 20` times in total. So the first merge rule the tokenizer learns is to group all 'u' and 'g' together
 then it adds 'ug' to the vocabulary. Our corpus then becomes
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ('h' 'ug', 10), ('p' 'ug', 5), ('p' 'u' 'n', 12), ('b' 'u' 'n', 4), ('h' 'ug' 's', 5)
 
@@ -144,7 +144,7 @@ to the vocabulary.
 At this stage, the vocabulary is ``['b', 'g', 'h', 'n', 'p', 's', 'u', 'ug', 'un', 'hug']`` and our corpus is
 represented as
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ('hug', 10), ('p' 'ug', 5), ('p' 'un', 12), ('b' 'un', 4), ('hug' 's', 5)
 
@@ -207,7 +207,7 @@ Contrary to BPE and WordPiece that work out rules in a certain order that you ca
 tokenizing new text, Unigram will have several ways of tokenizing a new text. For instance, if it ends up with the
 vocabulary
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     ['b', 'g', 'h', 'n', 'p', 's', 'u', 'ug', 'un', 'hug']
 

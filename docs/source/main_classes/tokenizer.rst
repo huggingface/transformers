@@ -36,7 +36,7 @@ alignment methods which can be used to map between the original string (characte
 getting the index of the token comprising a given character or the span of characters corresponding to a given token).
 
 
-``PreTrainedTokenizer``
+PreTrainedTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizer
@@ -44,7 +44,7 @@ getting the index of the token comprising a given character or the span of chara
     :members:
 
 
-``PreTrainedTokenizerFast``
+PreTrainedTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizerFast
@@ -52,7 +52,7 @@ getting the index of the token comprising a given character or the span of chara
     :members:
 
 
-``BatchEncoding``
+BatchEncoding
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BatchEncoding

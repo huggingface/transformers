@@ -17,28 +17,28 @@ for text generation, :class:`~transformers.generation_utils.GenerationMixin` (fo
 :class:`~transformers.generation_tf_utils.TFGenerationMixin` (for the TensorFlow models)
 
 
-``PreTrainedModel``
+PreTrainedModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedModel
     :members:
 
 
-``ModuleUtilsMixin``
+ModuleUtilsMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_utils.ModuleUtilsMixin
     :members:
 
 
-``TFPreTrainedModel``
+TFPreTrainedModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFPreTrainedModel
     :members:
 
 
-``TFModelUtilsMixin``
+TFModelUtilsMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_utils.TFModelUtilsMixin

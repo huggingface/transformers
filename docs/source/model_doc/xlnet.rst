@@ -4,11 +4,11 @@ XLNet
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The XLNet model was proposed in `XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_
-by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method
-to learn bidirectional contexts by maximizing the expected likelihood over all permutations
-of the input sequence factorization order.
+The XLNet model was proposed in `XLNet: Generalized Autoregressive Pretraining for Language Understanding
+<https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
+Quoc V. Le. XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method to learn
+bidirectional contexts by maximizing the expected likelihood over all permutations of the input sequence factorization
+order.
 
 The abstract from the paper is the following:
 
@@ -24,15 +24,15 @@ a large margin, including question answering, natural language inference, sentim
 
 Tips:
 
-- The specific attention pattern can be controlled at training and test time using the `perm_mask` input.
-- Due to the difficulty of training a fully auto-regressive model over various factorization order,
-  XLNet is pretrained using only a sub-set of the output tokens as target which are selected
-  with the `target_mapping` input.
-- To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the `perm_mask` and
-  `target_mapping` inputs to control the attention span and outputs (see examples in `examples/text-generation/run_generation.py`)
+- The specific attention pattern can be controlled at training and test time using the :obj:`perm_mask` input.
+- Due to the difficulty of training a fully auto-regressive model over various factorization order, XLNet is pretrained
+  using only a sub-set of the output tokens as target which are selected with the :obj:`target_mapping` input.
+- To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the :obj:`perm_mask` and
+  :obj:`target_mapping` inputs to control the attention span and outputs (see examples in
+  `examples/text-generation/run_generation.py`)
 - XLNet is one of the few models that has no sequence length limit.
 
-The original code can be found `here <https://github.com/zihangdai/xlnet/>`_.
+The original code can be found `here <https://github.com/zihangdai/xlnet/>`__.
 
 
 XLNetConfig
@@ -97,88 +97,88 @@ XLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetModel
-    :members:
+    :members: forward
 
 
 XLNetLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetLMHeadModel
-    :members:
+    :members: forward
 
 
 XLNetForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForSequenceClassification
-    :members:
+    :members: forward
 
 
 XLNetForMultipleChoice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForMultipleChoice
-    :members:
+    :members: forward
 
 
 XLNetForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForTokenClassification
-    :members:
+    :members: forward
 
 
 XLNetForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForQuestionAnsweringSimple
-    :members:
+    :members: forward
 
 
 XLNetForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForQuestionAnswering
-    :members:
+    :members: forward
 
 
 TFXLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetModel
-    :members:
+    :members: call
 
 
 TFXLNetLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetLMHeadModel
-    :members:
+    :members: call
 
 
 TFXLNetForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForSequenceClassification
-    :members:
+    :members: call
 
 
 TFLNetForMultipleChoice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForMultipleChoice
-    :members:
+    :members: call
 
 
 TFXLNetForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForTokenClassification
-    :members:
+    :members: call
 
 
 TFXLNetForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForQuestionAnsweringSimple
-    :members:
+    :members: call

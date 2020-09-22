@@ -7,18 +7,18 @@ The ``.optimization`` module provides:
 - several schedules in the form of schedule objects that inherit from ``_LRSchedule``:
 - a gradient accumulation class to accumulate the gradients of multiple batches
 
-``AdamW`` (PyTorch)
+AdamW (PyTorch)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AdamW
     :members:
 
-``AdaFactor`` (PyTorch)
+AdaFactor (PyTorch)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.Adafactor
 
-``AdamWeightDecay`` (TensorFlow)
+AdamWeightDecay (TensorFlow)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AdamWeightDecay
@@ -62,7 +62,7 @@ Learning Rate Schedules (Pytorch)
     :target: /imgs/warmup_linear_schedule.png
     :alt:
 
-``Warmup`` (TensorFlow)
+Warmup (TensorFlow)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.WarmUp
@@ -71,7 +71,7 @@ Learning Rate Schedules (Pytorch)
 Gradient Strategies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``GradientAccumulator`` (TensorFlow)
+GradientAccumulator (TensorFlow)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.GradientAccumulator

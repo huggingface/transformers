@@ -4,12 +4,11 @@ Transformer XL
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Transformer-XL model was proposed in
-`Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`__
-by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-It's a causal (uni-directional) transformer with relative positioning (sinusoïdal) embeddings which can reuse
-previously computed hidden-states to attend to longer context (memory).
-This model also uses adaptive softmax inputs and outputs (tied).
+The Transformer-XL model was proposed in `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context
+<https://arxiv.org/abs/1901.02860>`__ by Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan
+Salakhutdinov. It's a causal (uni-directional) transformer with relative positioning (sinusoïdal) embeddings which can
+reuse previously computed hidden-states to attend to longer context (memory). This model also uses adaptive softmax
+inputs and outputs (tied).
 
 The abstract from the paper is the following:
 
@@ -30,7 +29,7 @@ Tips:
   The original implementation trains on SQuAD with padding on the left, therefore the padding defaults are set to left.
 - Transformer-XL is one of the few models that has no sequence length limit.
 
-The original code can be found `here <https://github.com/kimiyoung/transformer-xl>`_.
+The original code can be found `here <https://github.com/kimiyoung/transformer-xl>`__.
 
 
 TransfoXLConfig
@@ -74,25 +73,25 @@ TransfoXLModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLModel
-    :members:
+    :members: forward
 
 
 TransfoXLLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLLMHeadModel
-    :members:
+    :members: forward
 
 
 TFTransfoXLModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTransfoXLModel
-    :members:
+    :members: call
 
 
 TFTransfoXLLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTransfoXLLMHeadModel
-    :members:
+    :members: call

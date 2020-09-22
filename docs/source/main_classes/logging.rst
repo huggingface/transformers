@@ -5,14 +5,16 @@ Logging
 
 Currently the default verbosity of the library is ``WARNING``.
 
-To change the level of verbosity, just use one of the direct setters. For instance, here is how to change the verbosity to the INFO level.
+To change the level of verbosity, just use one of the direct setters. For instance, here is how to change the verbosity
+to the INFO level.
 
 .. code-block:: python
 
     import transformers
     transformers.logging.set_verbosity_info()
 
-You can also use the environment variable ``TRANSFORMERS_VERBOSITY`` to override the default verbosity. You can set it to one of the following: ``debug``, ``info``, ``warning``, ``error``, ``critical``. For example:
+You can also use the environment variable ``TRANSFORMERS_VERBOSITY`` to override the default verbosity. You can set it
+to one of the following: ``debug``, ``info``, ``warning``, ``error``, ``critical``. For example:
 
 .. code-block:: bash
                

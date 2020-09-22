@@ -6,7 +6,7 @@ This page lists all the custom layers used by the library, as well as the utilit
 Most of those are only useful if you are studying the code of the models in the library.
 
 
-``Pytorch custom modules``
+Pytorch custom modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_utils.Conv1D
@@ -29,7 +29,7 @@ Most of those are only useful if you are studying the code of the models in the 
     :members: forward
 
 
-``PyTorch Helper Functions``
+PyTorch Helper Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.apply_chunking_to_forward
@@ -42,7 +42,7 @@ Most of those are only useful if you are studying the code of the models in the 
 
 .. autofunction:: transformers.modeling_utils.prune_linear_layer
 
-``TensorFlow custom layers``
+TensorFlow custom layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_utils.TFConv1D
@@ -54,7 +54,7 @@ Most of those are only useful if you are studying the code of the models in the 
     :members: call
 
 
-``TensorFlow loss functions``
+TensorFlow loss functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_utils.TFCausalLanguageModelingLoss
@@ -76,7 +76,7 @@ Most of those are only useful if you are studying the code of the models in the 
     :members:
 
 
-``TensorFlow Helper Functions``
+TensorFlow Helper Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.modeling_tf_utils.cast_bool_to_primitive

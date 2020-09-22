@@ -27,27 +27,27 @@ Basic steps
 First, pick a directory with the name you want your model to have on the model hub (its full name will then be
 `username/awesome-name-you-picked` or `organization/awesome-name-you-picked`) and create it with either
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     mkdir path/to/awesome-name-you-picked
 
 or in python
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     import os
     os.makedirs("path/to/awesome-name-you-picked")
 
 then you can save your model and tokenizer with:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     model.save_pretrained("path/to/awesome-name-you-picked")
     tokenizer.save_pretrained("path/to/awesome-name-you-picked")
 
 Or, if you're using the Trainer API
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     trainer.save_model("path/to/awesome-name-you-picked")
     tokenizer.save_pretrained("path/to/awesome-name-you-picked")
@@ -70,14 +70,14 @@ First check that your model class exists in the other framework, that is try to 
 or removing TF. For instance, if you trained a :class:`~transformers.DistilBertForSequenceClassification`, try to
 type
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     from transformers import TFDistilBertForSequenceClassification
 
 and if you trained a :class:`~transformers.TFDistilBertForSequenceClassification`, try to
 type
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     from transformers import DistilBertForSequenceClassification
 
@@ -87,7 +87,7 @@ since we're aiming for full parity between the two frameworks). In this case, sk
 Now, if you trained your model in PyTorch and have to create a TensorFlow version, adapt the following code to your
 model class:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
     tf_model.save_pretrained("path/to/awesome-name-you-picked")
@@ -95,7 +95,7 @@ model class:
 and if you trained your model in TensorFlow and have to create a PyTorch version, adapt the following code to your
 model class:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
     pt_model.save_pretrained("path/to/awesome-name-you-picked")
@@ -124,13 +124,13 @@ Upload your model with the CLI
 Now go in a terminal and run the following command. It should be in the virtual enviromnent where you installed 🤗
 Transformers, since that command :obj:`transformers-cli` comes from the library.
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli login
 
 Then log in using the same credentials as on huggingface.co. To upload your model, just type
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli upload path/to/awesome-name-you-picked/
 
@@ -138,7 +138,7 @@ This will upload the folder containing the weights, tokenizer and configuration 
 
 By default you will be prompted to confirm that you want these files to be uploaded. If you are uploading multiple models and need to script that process, you can add `-y` to bypass the prompt. For example:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli upload -y path/to/awesome-name-you-picked/
 
@@ -146,13 +146,13 @@ By default you will be prompted to confirm that you want these files to be uploa
 If you want to upload a single file (a new version of your model, or the other framework checkpoint you want to add),
 just type:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli upload path/to/awesome-name-you-picked/that-file 
 
 or
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
    transformers-cli upload path/to/awesome-name-you-picked/that-file --filename awesome-name-you-picked/new_name
 
@@ -161,13 +161,13 @@ if you want to change its filename.
 This uploads the model to your personal account. If you want your model to be namespaced by your organization name
 rather than your username, add the following flag to any command:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     --organization organization_name
 
 so for instance:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli upload path/to/awesome-name-you-picked/ --organization organization_name
 
@@ -202,7 +202,7 @@ Your model now has a page on huggingface.co/models 🔥
 
 Anyone can load it from code:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     tokenizer = AutoTokenizer.from_pretrained("namespace/awesome-name-you-picked")
     model = AutoModel.from_pretrained("namespace/awesome-name-you-picked")
@@ -212,13 +212,13 @@ Additional commands
 
 You can list all the files you uploaded on the hub like this:
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli s3 ls
 
 You can also delete unneeded files with
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+.. code-block::
 
     transformers-cli s3 rm awesome-name-you-picked/filename
 

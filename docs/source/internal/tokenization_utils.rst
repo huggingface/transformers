@@ -8,7 +8,7 @@ This page lists all the utility functions used by the tokenizers, mainly the cla
 
 Most of those are only useful if you are studying the code of the tokenizers in the library.
 
-``PreTrainedTokenizerBase``
+PreTrainedTokenizerBase
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.tokenization_utils_base.PreTrainedTokenizerBase
@@ -16,7 +16,7 @@ Most of those are only useful if you are studying the code of the tokenizers in 
     :members:
 
 
-``SpecialTokensMixin``
+SpecialTokensMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.tokenization_utils_base.SpecialTokensMixin

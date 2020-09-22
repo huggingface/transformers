@@ -403,14 +403,14 @@ This is handy when you want to run different tasks on different GPUs.
     
 And we have these decorators that require the condition described by the marker.
 
-```````````````````````````````````````````````````````````````````````````````````````````````````````````````````````
+``
 @require_torch
 @require_tf
 @require_multigpu
 @require_non_multigpu
 @require_torch_tpu
 @require_torch_and_cuda
-```````````````````````````````````````````````````````````````````````````````````````````````````````````````````````
+``
 
 This section will be expanded soon once our work in progress on those decorators is finished.
 
