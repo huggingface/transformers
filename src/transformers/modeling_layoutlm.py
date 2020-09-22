@@ -34,7 +34,7 @@ from .modeling_utils import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LayoutLMConfig"
 _TOKENIZER_FOR_DOC = "LayoutLMTokenizer"
