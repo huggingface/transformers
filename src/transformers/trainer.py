@@ -352,6 +352,7 @@ class Trainer:
             sampler=train_sampler,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
@@ -391,6 +392,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
