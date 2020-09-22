@@ -1,5 +1,5 @@
 Logging
--------
+-----------------------------------------------------------------------------------------------------------------------
 
 🤗 Transformers has a centralized logging system, so that you can setup the verbosity of the library easily.
 
@@ -32,7 +32,7 @@ verbose to the most verbose), those levels (with their corresponding int values 
 - :obj:`transformers.logging.DEBUG` (int value, 10): report all information.
 
 Base setters
-~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.logging.set_verbosity_error
 
@@ -43,7 +43,7 @@ Base setters
 .. autofunction:: transformers.logging.set_verbosity_debug
 
 Other functions
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.logging.get_verbosity
 

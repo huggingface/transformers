@@ -1,5 +1,5 @@
 Preprocessing data
-==================
+=======================================================================================================================
 
 In this tutorial, we'll explore how to preprocess your data using 🤗 Transformers. The main tool for this is what we
 
@@ -26,7 +26,7 @@ To automatically download the vocab used during pretraining or fine-tuning a giv
     tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
 
 Base use
-~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A :class:`~transformers.PreTrainedTokenizer` has many methods, but the only one you need to remember for preprocessing
 is its ``__call__``: you just need to feed your sentence to your tokenizer object.
@@ -125,7 +125,7 @@ can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer 
 .. _sentence-pairs:
 
 Preprocessing pairs of sentences
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Sometimes you need to feed pair of sentences to your model. For instance, if you want to classify if two sentences in a
 pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input is
@@ -202,7 +202,7 @@ length the model can accept and return tensors directly with the following:
     batch = tokenizer(batch_sentences, batch_of_second_sentences, padding=True, truncation=True, return_tensors="tf")
 
 Everything you always wanted to know about padding and truncation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We have seen the commands that will work for most cases (pad your batch to the length of the maximum sentence and
 
@@ -278,7 +278,7 @@ any of the following examples, you can replace :obj:`truncation=True` by a :obj:
 +--------------------------------------+-----------------------------------+---------------------------------------------------------------------------------------------+
 
 Pre-tokenized inputs
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The tokenizer also accept pre-tokenized inputs. This is particularly useful when you want to compute labels and extract
 predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Named-entity_recognition>`__ or

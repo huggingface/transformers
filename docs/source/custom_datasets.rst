@@ -1,5 +1,5 @@
 Fine-tuning with custom datasets
-================================
+=======================================================================================================================
 
 .. note::
 
@@ -24,7 +24,7 @@ We include several examples, each of which demonstrates a different type of comm
 .. _seq_imdb:
 
 Sequence Classification with IMDb Reviews
------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. note::
 
@@ -139,7 +139,7 @@ Now that our datasets our ready, we can fine-tune a model either with the 🤗
 .. _ft_trainer:
 
 Fine-tuning with Trainer
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The steps above prepared the datasets in the way that the trainer is expected. Now all we need to do is create a
 model to fine-tune, define the :class:`~transformers.TrainingArguments`/:class:`~transformers.TFTrainingArguments`
@@ -200,7 +200,7 @@ and instantiate a :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer
 .. _ft_native:
 
 Fine-tuning with native PyTorch/TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We can also train use native PyTorch or TensorFlow:
 
@@ -244,7 +244,7 @@ We can also train use native PyTorch or TensorFlow:
 .. _tok_ner:
 
 Token Classification with W-NUT Emerging Entities
--------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. note::
 
@@ -443,7 +443,7 @@ sequence classification example above.
 .. _qa_squad:
 
 Question Answering with SQuAD 2.0
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. note::
 
@@ -655,7 +655,7 @@ multiple model outputs.
 .. _resources:
 
 Additional Resources
---------------------
+-----------------------------------------------------------------------------------------------------------------------
 
   - `How to train a new language model from scratch using Transformers and Tokenizers
     <https://huggingface.co/blog/how-to-train>`_. Blog post showing the steps to load in Esperanto data and train a
@@ -666,7 +666,7 @@ Additional Resources
 .. _nlplib:
 
 Using the 🤗 NLP Datasets & Metrics library
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This tutorial demonstrates how to read in datasets from various raw text formats and prepare them for training with
 🤗 Transformers so that you can do the same thing with your own custom datasets. However, we recommend users use the

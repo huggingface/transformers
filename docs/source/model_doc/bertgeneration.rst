@@ -2,7 +2,7 @@ BertGeneration
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
-~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using
 :class:`~transformers.EncoderDecoderModel` as proposed in `Leveraging Pre-trained Checkpoints for Sequence Generation

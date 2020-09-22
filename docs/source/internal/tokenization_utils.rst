@@ -1,5 +1,5 @@
 Utilities for Tokenizers
-------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 This page lists all the utility functions used by the tokenizers, mainly the class
 :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase` that implements the common methods between
@@ -9,7 +9,7 @@ This page lists all the utility functions used by the tokenizers, mainly the cla
 Most of those are only useful if you are studying the code of the tokenizers in the library.
 
 ``PreTrainedTokenizerBase``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.tokenization_utils_base.PreTrainedTokenizerBase
     :special-members: __call__
@@ -17,14 +17,14 @@ Most of those are only useful if you are studying the code of the tokenizers in 
 
 
 ``SpecialTokensMixin``
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.tokenization_utils_base.SpecialTokensMixin
     :members:
 
 
 Enums and namedtuples
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: transformers.tokenization_utils_base.ExplicitEnum
 
 .. autoclass:: transformers.tokenization_utils_base.PaddingStrategy
