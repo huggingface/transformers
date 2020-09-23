@@ -814,8 +814,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         self.embeddings = MobileBertEmbeddings(config)
         self.encoder = MobileBertEncoder(config)
 
-        if add_pooling_layer:
-            self.pooler = MobileBertPooler(config)
+        self.pooler = MobileBertPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -914,7 +913,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if hasattr(self, "pooler") else None
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]

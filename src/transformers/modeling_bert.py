@@ -743,8 +743,7 @@ class BertModel(BertPreTrainedModel):
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
 
-        if add_pooling_layer:
-            self.pooler = BertPooler(config)
+        self.pooler = BertPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -853,7 +852,7 @@ class BertModel(BertPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if hasattr(self, "pooler") else None
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]

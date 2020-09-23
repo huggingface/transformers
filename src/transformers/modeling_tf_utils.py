@@ -234,6 +234,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     """
     config_class = None
     base_model_prefix = ""
+    authorized_missing_keys = None
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:

@@ -543,6 +543,9 @@ class AlbertModel(AlbertPreTrainedModel):
         if add_pooling_layer:
             self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
             self.pooler_activation = nn.Tanh()
+        else:
+            self.pooler = None
+            self.pooler_activation = None
 
         self.init_weights()
 
@@ -636,7 +639,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
         sequence_output = encoder_outputs[0]
 
-        pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0])) if hasattr(self, "pooler") else None
+        pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0])) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]

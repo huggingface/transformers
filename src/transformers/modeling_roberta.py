@@ -580,8 +580,7 @@ class RobertaModel(RobertaPreTrainedModel):
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = RobertaEncoder(config)
 
-        if add_pooling_layer:
-            self.pooler = RobertaPooler(config)
+        self.pooler = RobertaPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -689,7 +688,7 @@ class RobertaModel(RobertaPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]

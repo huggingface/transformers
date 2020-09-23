@@ -398,6 +398,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     config_class = None
     base_model_prefix = ""
     authorized_missing_keys = None
+    authorized_unexpected_keys = None
     keys_to_never_save = None
 
     @property
