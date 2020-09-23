@@ -176,8 +176,13 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/w
 
 FSMT_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matters related to general usage and behavior.
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
 
     Parameters:
         config (:class:`~transformers.FSMTConfig`): Model configuration class with all the parameters of the model.
@@ -207,39 +212,52 @@ FSMT_GENERATION_EXAMPLE = r"""
 FSMT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-               Indices of input sequence tokens in the vocabulary. Use FSMTTokenizer.encode to produce them.
-            Padding will be ignored by default should you provide it.
-            Indices can be obtained using :class:`transformers.FSMTTokenizer.encode(text)`.
+            Indices of input sequence tokens in the vocabulary.
+
+            IIndices can be obtained using :class:`~transformers.FSTMTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices in input_ids.
+            Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
-            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the encoder.
-            Used in the cross-attention of the decoder.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        encoder_outputs (:obj:`Tuple(torch.FloatTensor)`, `optional`):
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
+            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-            If you want to change padding behavior, you should read :func:`~transformers.modeling_fairseqtranslator._prepare_decoder_inputs` and modify.
+            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+            also be used by default.
+            If you want to change padding behavior, you should read
+            :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains pre-computed key and value hidden-states of the attention blocks.
+        past_key_values (:obj:`Tuple(torch.FloatTensor)` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
-            If ``past_key_values`` are used, the user can optionally input only the last
-            ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past_key_values` are used, the user can optionally input only the last
+            :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of shape
+            :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids` of shape
+            :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
-            ``past_key_values``).
+            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
+            decoding (see ``past_key_values``).
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 
@@ -397,24 +415,18 @@ class FSMTEncoder(nn.Module):
 
     def __init__(self, config: FSMTConfig, embed_tokens):
         super().__init__()
-
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-
+        self.padding_idx = embed_tokens.padding_idx
+        self.embed_tokens = embed_tokens
         embed_dim = embed_tokens.embedding_dim
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-        self.padding_idx = embed_tokens.padding_idx
-        self.max_source_positions = config.max_position_embeddings
-
-        self.embed_tokens = embed_tokens
-        # print(config.max_position_embeddings, embed_dim, self.padding_idx)
-        num_embeddings = config.src_vocab_size
         self.embed_positions = SinusoidalPositionalEmbedding(
-            embed_dim,
-            self.padding_idx,
-            init_size=num_embeddings + self.padding_idx + 1,  # removed: config.max_position_embeddings
+            config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [EncoderLayer(config) for _ in range(config.encoder_layers)]
+        )  # type: List[EncoderLayer]
 
     def forward(
         self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
@@ -570,15 +582,11 @@ class FSMTDecoder(nn.Module):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
-        self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.embed_tokens = embed_tokens
         embed_dim = embed_tokens.embedding_dim
-        num_embeddings = config.tgt_vocab_size
         self.embed_positions = SinusoidalPositionalEmbedding(
-            embed_dim,
-            self.padding_idx,
-            init_size=num_embeddings + self.padding_idx + 1,
+            config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
@@ -1003,6 +1011,14 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
+    authorized_missing_keys = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
+    keys_to_never_save = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -1137,36 +1153,35 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         return self.model.decoder.embed_tokens
 
 
-def make_positions(tensor, padding_idx: int):
-    """Replace non-padding symbols with their position numbers.
-
-    Position numbers begin at padding_idx+1. Padding symbols are ignored.
+class SinusoidalPositionalEmbedding(nn.Embedding):
     """
-    # The series of casts and type-conversions here are carefully
-    # balanced to both work with ONNX export and XLA. In particular XLA
-    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
-    # how to handle the dtype kwarg in cumsum.
-    mask = tensor.ne(padding_idx).int()
-    return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+    This module produces sinusoidal positional embeddings of any length.
 
-
-class SinusoidalPositionalEmbedding(nn.Module):
-    """This module produces sinusoidal positional embeddings of any length.
+    We don't want to save the weight of this embedding since it's not trained
+    (deterministic) and it can be huge.
 
     Padding symbols are ignored.
+
+    These embeddings get automatically extended in forward if more positions is needed.
     """
 
-    def __init__(self, embedding_dim, padding_idx, init_size=1024):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-        self.padding_idx = padding_idx
-        self.weights = SinusoidalPositionalEmbedding.get_embedding(init_size, embedding_dim, padding_idx)
-        self.register_buffer("_float_tensor", torch.zeros(1))  # used for getting the right device
-        self.max_positions = int(1e5)
+    def __init__(self, num_positions, embedding_dim, padding_idx):
+        self.make_weight(num_positions, embedding_dim, padding_idx)
 
-    # XXX: bart uses s/num_embeddings/num_positions/, s/weights/weight/ - could make those match
+    def make_weight(self, num_positions, embedding_dim, padding_idx):
+        weight = self.get_embedding(num_positions, embedding_dim, padding_idx)
+        if not hasattr(self, "weight"):
+            # in ___init__
+            super().__init__(num_positions, embedding_dim, padding_idx, _weight=weight)
+        else:
+            # in forward
+            weight = weight.to(self.weight.device)
+            self.weight = nn.Parameter(weight)
+        self.weight.detach_()
+        self.weight.requires_grad = False
+
     @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def get_embedding(num_embeddings, embedding_dim, padding_idx):
         """Build sinusoidal embeddings.
 
         This matches the implementation in tensor2tensor, but differs slightly
@@ -1184,28 +1199,30 @@ class SinusoidalPositionalEmbedding(nn.Module):
             emb[padding_idx, :] = 0
         return emb
 
+    @staticmethod
+    def make_positions(tensor, padding_idx: int):
+        """Replace non-padding symbols with their position numbers.
+
+        Position numbers begin at padding_idx+1. Padding symbols are ignored.
+        """
+        # The series of casts and type-conversions here are carefully
+        # balanced to both work with ONNX export and XLA. In particular XLA
+        # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
+        # how to handle the dtype kwarg in cumsum.
+        mask = tensor.ne(padding_idx).int()
+        return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+
     def forward(
         self,
         input,
         incremental_state: Optional[Any] = None,
         timestep: Optional[Tensor] = None,
-        positions: Optional[Any] = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
-        # bspair = torch.onnx.operators.shape_as_tensor(input)
-        # bsz, seq_len = bspair[0], bspair[1]
         bsz, seq_len = input.shape[:2]
         max_pos = self.padding_idx + 1 + seq_len
-        if self.weights is None or max_pos > self.weights.size(0):
-            # recompute/expand embeddings if needed
-            self.weights = SinusoidalPositionalEmbedding.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
-        self.weights = self.weights.to(self._float_tensor)
-
-        if incremental_state is not None:
-            # positions is the same for every token when decoding a single step
-            pos = timestep.view(-1)[0] + 1 if timestep is not None else seq_len
-            return self.weights[self.padding_idx + pos, :].expand(bsz, 1, -1)
-
-        positions = make_positions(input, self.padding_idx)
-
-        return self.weights.index_select(0, positions.view(-1)).view(bsz, seq_len, -1).detach()
+        if max_pos > self.weight.size(0):
+            # expand embeddings if needed
+            self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
+        positions = self.make_positions(input, self.padding_idx)
+        return super().forward(positions)

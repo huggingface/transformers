@@ -1,5 +1,5 @@
 Transformers
-================================================================================================================================================
+=======================================================================================================================
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
@@ -11,7 +11,7 @@ TensorFlow 2.0 and PyTorch.
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
 Features
----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
@@ -36,7 +36,7 @@ Choose the right framework for every part of a model's lifetime:
 - Seamlessly pick the right framework for training, evaluation, production
 
 Contents
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 The documentation is organized in five parts:
 
@@ -139,7 +139,10 @@ conversion utilities for the following models:
     <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
 28. `Blenderbot <https://github.com/facebookresearch/ParlAI>`_ (from Facebook AI Research) released with the paper `Recipes for building an open-domain chatbot
     <https://arxiv.org/abs/2004.13637>`_ by Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu, Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston
-29. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+29. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with the paper
+    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+    <https://arxiv.org/abs/1912.13318>`_ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
+30. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 .. toctree::
     :maxdepth: 2
@@ -229,6 +232,8 @@ conversion utilities for the following models:
     model_doc/funnel
     model_doc/lxmert
     model_doc/bertgeneration
+    model_doc/layoutlm
+    model_doc/rag
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

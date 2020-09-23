@@ -1220,28 +1220,33 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
 
 LONGFORMER_START_DOCSTRING = r"""
-    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
-    Use it as a regular TF 2.0 Keras Model and
-    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
+
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
 
     .. note::
 
         TF 2.0 models accepts two formats as inputs:
 
-            - having all inputs as keyword arguments (like PyTorch models), or
-            - having all inputs as a list, tuple or dict in the first positional arguments.
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.LongformerConfig`): Model configuration class with all the parameters of the model.
@@ -1252,53 +1257,61 @@ LONGFORMER_START_DOCSTRING = r"""
 
 LONGFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`tf.Tensor` of shape :obj:`{0}`):
+        input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.LonmgformerTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.LongformerTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` and
+            :func:`transformers.PreTrainedTokenizer.encode` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
+        attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-
-        global_attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
+        global_attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to decide the attention given on each token, local attention or global attenion.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also have
             global attention. Please refer to the `Longformer paper <https://arxiv.org/abs/2004.05150>`__ for more details.
             Mask values selected in ``[0, 1]``:
-            ``0`` for local attention (a sliding window attention),
-            ``1`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
-        token_type_ids (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+
+        token_type_ids (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Indices are selected in ``[0, 1]``:
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`):
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`__
+        position_ids (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            `What are position IDs? <../glossary.html#position-ids>`__
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -1308,13 +1321,15 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 )
 class TFLongformerModel(TFLongformerPreTrainedModel):
     """
-    This class copies code from :class:`~transformers.RobertaModel` and overwrites standard self-attention with longformer self-attention to provide the ability to process
+
+    This class copies code from :class:`~transformers.TFRobertaModel` and overwrites standard self-attention with
+    longformer self-attention to provide the ability to process
     long sequences following the self-attention approach described in `Longformer: the Long-Document Transformer
     <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer self-attention
     combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
     memory and compute.
 
-    The self-attention module :obj:`LongformerSelfAttention` implemented here supports the combination of local and
+    The self-attention module :obj:`TFLongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
     and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
@@ -1326,7 +1341,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.longformer = TFLongformerMainLayer(config, name="longformer")
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(self, inputs, **kwargs):
         outputs = self.longformer(inputs, **kwargs)
         return outputs
@@ -1346,7 +1361,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",
@@ -1413,8 +1428,8 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
 
 
 @add_start_docstrings(
-    """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD / TriviaQA (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD /
+    TriviaQA (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
@@ -1429,7 +1444,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             name="qa_outputs",
         )
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-large-4096-finetuned-triviaqa",

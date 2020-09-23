@@ -1,12 +1,12 @@
 Pegasus
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 **DISCLAIMER:** If you see something strange,
 file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__ and assign
 @sshleifer.
 
 
 Overview
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The Pegasus model was proposed in `PEGASUS: Pre-training with Extracted Gap-sentences for
 Abstractive Summarization <https://arxiv.org/pdf/1912.08777.pdf>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
@@ -19,7 +19,7 @@ The Authors' code can be found `here <https://github.com/google-research/pegasus
 
 
 Checkpoints
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 All the `checkpoints <https://huggingface.co/models?search=pegasus>`_ are finetuned for summarization, besides ``pegasus-large``, whence the other checkpoints are finetuned.
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
 - FP16 is not supported (help/ideas on this appreciated!).
@@ -29,7 +29,7 @@ The gap is likely because of different alpha/length_penalty implementations in b
 
 
 Implementation Notes
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - All models are transformer encoder-decoders with 16 layers in each component.
 - The implementation is completely inherited from ``BartForConditionalGeneration``
@@ -43,7 +43,7 @@ Implementation Notes
 
 
 Usage Example
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -63,7 +63,7 @@ Usage Example
     assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
 
 PegasusForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
 Available models are listed at `Model List <https://huggingface.co/models?search=pegasus>`__
@@ -73,7 +73,7 @@ Available models are listed at `Model List <https://huggingface.co/models?search
 
 
 PegasusConfig
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 This config fully inherits from ``BartConfig``, but pegasus uses different default values:
 Up to date parameter values can be seen in `S3 <https://s3.amazonaws.com/models.huggingface.co/bert/google/pegasus-xsum/config.json>`_.
 As of Aug 10, 2020, they are:
@@ -107,7 +107,7 @@ As of Aug 10, 2020, they are:
 
 
 PegasusTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer
