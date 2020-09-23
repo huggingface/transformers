@@ -34,6 +34,14 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
+    def __init__(self, **kwargs):
+        for deprecated_arg in ["no_inference", "no_cuda", "no_tpu", "no_speed", "no_memory", "no_env_print", "no_multi_process"]:
+            if deprecated_arg in kwargs:
+                positive_arg = deprecated_arg[3:]
+                kwargs[positive_arg] = not kwargs.pop(deprecated_arg)
+                logger.warning(f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or {positive_arg}={kwargs[positive_arg]}")
+        super().__init__(**kwargs)
+
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
     torch_xla_tpu_print_metrics: bool = field(default=False, metadata={"help": "Print Xla/PyTorch tpu metrics"})
     fp16_opt_level: str = field(
