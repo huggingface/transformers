@@ -575,14 +575,16 @@ class RobertaModel(RobertaPreTrainedModel):
 
     # Copied from transformers.modeling_bert.BertModel.__init__ with Bert->Roberta
     def __init__(self, config):
-        super().__init__(config)
-        self.config = config
+    super().__init__(config)
+    self.config = config
 
-        self.embeddings = RobertaEmbeddings(config)
-        self.encoder = RobertaEncoder(config)
+    self.embeddings = RobertaEmbeddings(config)
+    self.encoder = RobertaEncoder(config)
+
+    if add_pooling_layer:
         self.pooler = RobertaPooler(config)
 
-        self.init_weights()
+    self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
