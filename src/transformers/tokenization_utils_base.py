@@ -1216,12 +1216,13 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
+        Prepare model inputs for translation. For best performance, translate one sentence at a time.
 
         Arguments:
-            src_texts: (:obj:`list`):
-                list of documents to summarize or source language texts
-            tgt_texts: (:obj:`list`, `optional`):
-                list of tgt language texts or summaries.
+            src_texts (:obj:`List[str]`):
+                List of documents to summarize or source language texts.
+            tgt_texts (:obj:`list`, `optional`):
+                List of summaries or target language texts.
             max_length (:obj:`int`, `optional`):
                 Controls the maximum length for encoder inputs (documents to summarize or source language texts)
                 If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
@@ -1260,6 +1261,8 @@ PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
+            **kwargs:
+                Additional keyword arguments passed along to :obj:`self.__call__`.
 
         Return:
             :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:

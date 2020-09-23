@@ -75,20 +75,21 @@ def text_standardize(text):
 
 class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
-    BPE tokenizer. Peculiarities:
+    Construct a GPT Tokenizer. Based on Byte-Pair-Encoding with the following peculiarities:
 
-    - lower case all inputs
-    - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
+    - lowercases all inputs,
+    - uses :obj:`SpaCy` tokenizer and :obj:`ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
+      :obj:`BasicTokenizer` if not.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """
@@ -206,7 +207,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         Save the vocabulary and special tokens file to a directory.
 
         Args:
-            save_directory (:obj:`str`):
+            vocab_path (:obj:`str`):
                 The directory in which to save the vocabulary.
 
         Returns:
@@ -239,22 +240,22 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
 
 class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "Fast" BPE tokenizer for OpenAI GPT (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" GPT Tokenizer (backed by HuggingFace's `tokenizers` library). Based on Byte-Pair-Encoding with
+    the following peculiarities:
 
-    Peculiarities:
+    - lowercases all inputs,
+    - uses :obj:`SpaCy` tokenizer and :obj:`ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
+      :obj:`BasicTokenizer` if not.
 
-    - lower case all inputs
-    - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """

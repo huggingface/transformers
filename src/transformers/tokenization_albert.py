@@ -56,21 +56,21 @@ SPIECE_UNDERLINE = "▁"
 
 class AlbertTokenizer(PreTrainedTokenizer):
     """
-    Constructs an ALBERT tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__
+    Construct an ALBERT tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to lowercase the input when tokenizing.
+            Whether or not to lowercase the input when tokenizing.
         remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to strip the text when tokenizing (removing excess spaces before and after the string).
+            Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to keep accents when tokenizing.
+            Whether or not to keep accents when tokenizing.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 

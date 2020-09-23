@@ -147,7 +147,7 @@ ReformerTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ReformerTokenizer
-    :members: 
+    :members: save_vocabulary
 
 
 ReformerModel
