@@ -107,7 +107,7 @@ ElectraForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForSequenceClassification
-    :members:
+    :members: forward
 
 
 ElectraForMultipleChoice
