@@ -80,16 +80,16 @@ class XxxTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a XXX tokenizer. Based on XXX.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             File containing the vocabulary.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to lowercase the input when tokenizing.
+            Whether or not to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to do basic tokenization before WordPiece.
+            Whether ot not to do basic tokenization before WordPiece.
         never_split (:obj:`Iterable`, `optional`):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
@@ -194,19 +194,19 @@ class XxxTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A BERT sequence has the following format:
+        A XXX sequence has the following format:
 
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
+                List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -218,16 +218,16 @@ class XxxTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True if the token list is already formatted with special tokens for the model
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -249,7 +249,7 @@ class XxxTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
         A BERT sequence pair mask has the following format:
 
         ::
@@ -257,11 +257,11 @@ class XxxTokenizer(PreTrainedTokenizer):
             0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
             | first sequence    | second sequence |
 
-        if token_ids_1 is None, only returns the first portion of the mask (0's).
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
@@ -277,7 +277,7 @@ class XxxTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, vocab_path):
         """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+        Save the vocabulary (copy original file) and special tokens file to a directory.
 
         Args:
             vocab_path (:obj:`str`):
