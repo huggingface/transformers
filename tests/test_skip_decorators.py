@@ -23,49 +23,53 @@
 # the following 4 should be run. But since we have different CI jobs running
 # different configs, all combinations should get covered
 #
-# USE_CUDA=1 RUN_SLOW=1 pyt -sv -rA tests/test_skip.py
-# USE_CUDA=0 RUN_SLOW=1 pyt -sv -rA tests/test_skip.py
-# USE_CUDA=0 RUN_SLOW=0 pyt -sv -rA tests/test_skip.py
-# USE_CUDA=1 RUN_SLOW=0 pyt -sv -rA tests/test_skip.py
+# USE_CUDA=1 RUN_SLOW=1 pytest -rA tests/test_skip_decorators.py
+# USE_CUDA=0 RUN_SLOW=1 pytest -rA tests/test_skip_decorators.py
+# USE_CUDA=0 RUN_SLOW=0 pytest -rA tests/test_skip_decorators.py
+# USE_CUDA=1 RUN_SLOW=0 pytest -rA tests/test_skip_decorators.py
 
 import os
 import unittest
+
+import pytest
 
 from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_torch_and_cuda, slow, torch_device
 
 
+# skipping in unittest tests
+
 params = [(1,)]
+
+# test that we can stack our skip decorators with 3rd party decorators
+def check_slow():
+    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    if run_slow:
+        assert True
+    else:
+        assert False, "should have been skipped"
+
+
+# test that we can stack our skip decorators
+def check_slow_torch_cuda():
+    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    if run_slow and torch_device == "cuda":
+        assert True
+    else:
+        assert False, "should have been skipped"
 
 
 @require_torch
 class SkipTester(unittest.TestCase):
-
-    # test that we can stack our skip decorators
-    def check_slow_torch_cuda(self):
-        run_slow = bool(os.getenv("RUN_SLOW", 0))
-        if run_slow and torch_device == "cuda":
-            assert True
-        else:
-            assert False, "should have been skipped"
-
     @slow
     @require_torch_and_cuda
     def test_2_skips_slow_first(self):
-        self.check_slow_torch_cuda()
+        check_slow_torch_cuda()
 
     @require_torch_and_cuda
     @slow
     def test_2_skips_slow_last(self):
-        self.check_slow_torch_cuda()
-
-    # test that we can stack our skip decorators with 3rd party decorators
-    def check_slow(self):
-        run_slow = bool(os.getenv("RUN_SLOW", 0))
-        if run_slow:
-            assert True
-        else:
-            assert False, "should have been skipped"
+        check_slow_torch_cuda()
 
     # The combination of any skip decorator, followed by parameterized fails to skip the tests
     # 1. @slow manages to correctly skip `test_param_slow_first`
@@ -76,7 +80,7 @@ class SkipTester(unittest.TestCase):
     # @slow
     # @parameterized.expand(params)
     # def test_param_slow_first(self, param=None):
-    #     self.check_slow()
+    #     check_slow()
 
     # This works as expected:
     # 1. `parameterized` creates new tests with unique names
@@ -84,30 +88,32 @@ class SkipTester(unittest.TestCase):
     @parameterized.expand(params)
     @slow
     def test_param_slow_last(self, param=None):
-        self.check_slow()
+        check_slow()
 
 
 # skipping in non-unittest tests
+# no problem at all here
 
-# Note: skip decorators use unittest API so the below tests fail even the collect stage. so if we want to have some non-unittest tests (which we have) to use these decorators, we would need to either add some magic to them to call the correct `(unittest|pytest).skip()` depending on the context or have another set of skip decorators
 
-# @slow
-# @require_torch_and_cuda
-# def test_pyt_2_skips_slow_first():
-#     assert False, "should have been skipped"
+@slow
+@require_torch_and_cuda
+def test_pytest_2_skips_slow_first():
+    check_slow_torch_cuda()
 
-# @require_torch_and_cuda
-# @slow
-# def test_pyt_2_skips_slow_last():
-#     assert False, "should have been skipped"
 
-#
-# @slow
-# @parameterized.expand(params)
-# def test_pyt_param_slow_first(param):
-#     assert False, "should have been skipped"
-#
-# @parameterized.expand(params)
-# @slow
-# def test_pyt_param_slow_last(param):
-#     assert False, "should have been skipped"
+@require_torch_and_cuda
+@slow
+def test_pytest_2_skips_slow_last():
+    check_slow_torch_cuda()
+
+
+@slow
+@pytest.mark.parametrize("param", [1])
+def test_pytest_param_slow_first(param):
+    check_slow()
+
+
+@pytest.mark.parametrize("param", [1])
+@slow
+def test_pytest_param_slow_last(param):
+    check_slow()

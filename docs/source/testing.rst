@@ -419,8 +419,6 @@ Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_
     @parameterized.expand(...)
     @require_multigpu
     def test_integration_foo():
-
-Also, these decorators use ``unittest`` API, therefore they must be used inside `unittest` classes. If you try to use any of these outside of ``unittest`` classes, they will break.
     
 This section will be expanded soon once our work in progress on those decorators is finished.
 
