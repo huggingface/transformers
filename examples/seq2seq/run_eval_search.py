@@ -4,11 +4,7 @@ import operator
 import sys
 from collections import OrderedDict
 
-
-try:
-    from .run_eval import datetime_now, run_generate
-except ImportError:
-    from run_eval import datetime_now, run_generate
+from run_eval import datetime_now, run_generate
 
 
 # A table of supported tasks and the list of scores in the order of importance to be sorted by.

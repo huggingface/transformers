@@ -340,12 +340,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
         pretokenized_input_pair = "This is a sample pair".split()
 
         # Test encode for pretokenized inputs
-        output_r = tokenizer_r.encode(pretokenized_input_simple, is_pretokenized=True)
-        output_p = tokenizer_p.encode(pretokenized_input_simple, is_pretokenized=True)
+        output_r = tokenizer_r.encode(pretokenized_input_simple, is_split_into_words=True)
+        output_p = tokenizer_p.encode(pretokenized_input_simple, is_split_into_words=True)
         self.assertEqual(output_p, output_r)
 
         kwargs = {
-            "is_pretokenized": True,
+            "is_split_into_words": True,
             "return_token_type_ids": True,
             "return_attention_mask": True,
             "return_overflowing_tokens": False,
@@ -353,7 +353,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             "return_offsets_mapping": False,  # Not implemented in python tokenizers
         }
         batch_kwargs = {
-            "is_pretokenized": True,
+            "is_split_into_words": True,
             "return_token_type_ids": True,
             "return_attention_mask": True,  # we have an 's' here
             "return_overflowing_tokens": False,
@@ -374,8 +374,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
             self.assertEqual(output_p[key], output_r[key])
 
         # Test encode for pretokenized inputs pairs
-        output_r = tokenizer_r.encode(pretokenized_input_simple, pretokenized_input_pair, is_pretokenized=True)
-        output_p = tokenizer_p.encode(pretokenized_input_simple, pretokenized_input_pair, is_pretokenized=True)
+        output_r = tokenizer_r.encode(pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True)
+        output_p = tokenizer_p.encode(pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True)
         self.assertEqual(output_p, output_r)
 
         # Test encode_plus for pretokenized inputs

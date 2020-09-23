@@ -1,14 +1,13 @@
 OpenAI GPT2
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Overview
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-OpenAI GPT-2 model was proposed in
-`Language Models are Unsupervised Multitask Learners <https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf>`_
-by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
-It's a causal (unidirectional) transformer pre-trained using  language modeling on a very large
-corpus of ~40 GB of text data.
+OpenAI GPT-2 model was proposed in `Language Models are Unsupervised Multitask Learners
+<https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf>`_
+by Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei and Ilya Sutskever. It's a causal (unidirectional)
+transformer pretrained using  language modeling on a very large corpus of ~40 GB of text data.
 
 The abstract from the paper is the following:
 
@@ -27,39 +26,39 @@ Tips:
   it can be observed in the `run_generation.py` example script.
 - The PyTorch models can take the `past` as input, which is the previously computed key/value attention pairs. Using
   this `past` value prevents the model from re-computing pre-computed values in the context of text generation.
-  See `reusing the past in generative models <../quickstart.html#using-the-past>`_ for more information on the usage
+  See `reusing the past in generative models <../quickstart.html#using-the-past>`__ for more information on the usage
   of this argument.
 
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt2-large>`__ is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
-different sizes: small, medium, large, xl and a distilled version of the small checkpoint: distilgpt-2.
+different sizes: small, medium, large, xl and a distilled version of the small checkpoint: `distilgpt-2`.
 
-The original code can be found `here <https://openai.com/blog/better-language-models/>`_.
+The original code can be found `here <https://openai.com/blog/better-language-models/>`__.
 
 
 GPT2Config
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Config
     :members:
 
 
 GPT2Tokenizer
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Tokenizer
     :members: save_vocabulary
 
 
 GPT2TokenizerFast
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2TokenizerFast
     :members:
 
 
 GPT2 specific outputs
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_gpt2.GPT2DoubleHeadsModelOutput
     :members:
@@ -69,42 +68,42 @@ GPT2 specific outputs
 
 
 GPT2Model
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Model
-    :members:
+    :members: forward
 
 
 GPT2LMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2LMHeadModel
-    :members:
+    :members: forward
 
 
 GPT2DoubleHeadsModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2DoubleHeadsModel
-    :members:
+    :members: forward
 
 
 TFGPT2Model
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFGPT2Model
-    :members:
+    :members: call
 
 
 TFGPT2LMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFGPT2LMHeadModel
-    :members:
+    :members: call
 
 
 TFGPT2DoubleHeadsModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFGPT2DoubleHeadsModel
-    :members:
+    :members: call

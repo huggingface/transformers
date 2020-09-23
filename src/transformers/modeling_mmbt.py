@@ -76,20 +76,20 @@ class ModalEmbeddings(nn.Module):
         return embeddings
 
 
-MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
-    `Supervised Multimodal Bitransformers for Classifying Images and Text`_
+MMBT_START_DOCSTRING = r"""
+    MMBT model was proposed in
+    `Supervised Multimodal Bitransformers for Classifying Images and Text <https://github.com/facebookresearch/mmbt>`__
     by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
     It's a supervised multimodal bitransformer model that fuses information from text and other image encoders,
     and obtain state-of-the-art performance on various multimodal classification benchmark tasks.
 
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
 
-    .. _`Supervised Multimodal Bitransformers for Classifying Images and Text`:
-        https://github.com/facebookresearch/mmbt
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
 
     Parameters:
         config (:class:`~transformers.MMBTConfig`): Model configuration class with all the parameters of the model.
@@ -100,55 +100,83 @@ MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
             It should take in a batch of modal inputs and return k, n dimension embeddings.
 """
 
-MMBT_INPUTS_DOCSTRING = r"""    Inputs:
+MMBT_INPUTS_DOCSTRING = r"""
+    Args:
         input_modal (``torch.FloatTensor`` of shape ``(batch_size, ***)``):
             The other modality data. It will be the shape that the encoder for that type expects.
             e.g. With an Image Encoder, the shape would be (batch_size, channels, height, width)
         input_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``):
             Indices of input sequence tokens in the vocabulary.
             It does not expect [CLS] token to be added as it's appended to the end of other modality embeddings.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
         modal_start_tokens (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-            Optional start token to be added to Other Modality Embedding. [CLS] Most commonly used for Classification tasks.
+            Optional start token to be added to Other Modality Embedding. [CLS] Most commonly used for classification
+            tasks.
         modal_end_tokens (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Optional end token to be added to Other Modality Embedding. [SEP] Most commonly used.
         attention_mask (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Segment token indices to indicate different portions of the inputs.
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
         modal_token_type_ids (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
             Segment token indices to indicate different portions of the non-text modality.
             The embeddings from these tokens will be summed with the respective token embeddings for the non-text modality.
         position_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`__
         modal_position_ids (``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings for the non-text modality.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`__
         head_mask (``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
         inputs_embeds (``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``, `optional`):
-            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         encoder_hidden_states (``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
-            is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
+
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 

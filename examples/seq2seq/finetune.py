@@ -12,49 +12,27 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
+from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
+from utils import (
+    ROUGE_KEYS,
+    LegacySeq2SeqDataset,
+    Seq2SeqDataset,
+    assert_all_frozen,
+    calculate_bleu,
+    calculate_rouge,
+    flatten_list,
+    freeze_params,
+    get_git_info,
+    label_smoothed_nll_loss,
+    lmap,
+    pickle_save,
+    save_git_info,
+    use_task_specific_params,
+)
 
-
-try:
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-    from .utils import (
-        ROUGE_KEYS,
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        flatten_list,
-        freeze_params,
-        get_git_info,
-        label_smoothed_nll_loss,
-        lmap,
-        pickle_save,
-        save_git_info,
-        save_json,
-        use_task_specific_params,
-    )
-except ImportError:
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-    from utils import (
-        ROUGE_KEYS,
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        flatten_list,
-        freeze_params,
-        get_git_info,
-        label_smoothed_nll_loss,
-        lmap,
-        pickle_save,
-        save_git_info,
-        save_json,
-        use_task_specific_params,
-    )
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +60,8 @@ class SummarizationModule(BaseTransformer):
         pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = 0
         self.metrics = defaultdict(list)
+        self.model_type = self.config.model_type
+        self.vocab_size = self.config.tgt_vocab_size if self.model_type == "fsmt" else self.config.vocab_size
 
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
@@ -127,14 +107,18 @@ class SummarizationModule(BaseTransformer):
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        try:
-            freeze_params(self.model.model.shared)
+        if self.model_type == "t5":
+            freeze_params(self.model.shared)
+            for d in [self.model.encoder, self.model.decoder]:
+                freeze_params(d.embed_tokens)
+        elif self.model_type == "fsmt":
             for d in [self.model.model.encoder, self.model.model.decoder]:
                 freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
-        except AttributeError:
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
+        else:
+            freeze_params(self.model.model.shared)
+            for d in [self.model.model.encoder, self.model.model.decoder]:
+                freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
 
     def forward(self, input_ids, **kwargs):
@@ -161,7 +145,7 @@ class SummarizationModule(BaseTransformer):
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
 
-            assert lm_logits.shape[-1] == self.model.config.vocab_size
+            assert lm_logits.shape[-1] == self.vocab_size
             loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
@@ -204,7 +188,7 @@ class SummarizationModule(BaseTransformer):
         losses.update(generative_metrics)
         all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         all_metrics["step_count"] = self.step_count
-        self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
+        self.metrics[prefix].append(all_metrics)  # callback writes this to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
         return {
             "log": all_metrics,
@@ -212,10 +196,6 @@ class SummarizationModule(BaseTransformer):
             f"{prefix}_loss": loss,
             f"{prefix}_{self.val_metric}": metric_tensor,
         }
-
-    def save_metrics(self, latest_metrics, type_path) -> None:
-        self.metrics[type_path].append(latest_metrics)
-        save_json(self.metrics, self.metrics_save_path)
 
     def calc_generative_metrics(self, preds, target) -> Dict:
         return calculate_rouge(preds, target)
