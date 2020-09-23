@@ -58,7 +58,7 @@ class CreateStudentTester(unittest.TestCase):
         try:
             # check if model and tokenizer is saved
             model = AutoModelForSeq2SeqLM.from_pretrained(output_dir)
-            tok = AutoTokenizer.from_pretrained(output_dir)
+            AutoTokenizer.from_pretrained(output_dir)
 
             self.assertEqual(model.config.encoder_layers, 1)
             self.assertEqual(model.config.decoder_layers, 1)
