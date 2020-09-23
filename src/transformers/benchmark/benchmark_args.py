@@ -34,12 +34,32 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
+
+    deprecated_args = [
+        "no_inference",
+        "no_cuda",
+        "no_tpu",
+        "no_speed",
+        "no_memory",
+        "no_env_print",
+        "no_multi_process",
+    ]
+
     def __init__(self, **kwargs):
-        for deprecated_arg in ["no_inference", "no_cuda", "no_tpu", "no_speed", "no_memory", "no_env_print", "no_multi_process"]:
+        """This __init__ is there for legacy code. When removing
+        deprecated args completely, the class can simply be deleted
+        """
+        for deprecated_arg in self.deprecated_args:
             if deprecated_arg in kwargs:
                 positive_arg = deprecated_arg[3:]
-                kwargs[positive_arg] = not kwargs.pop(deprecated_arg)
-                logger.warning(f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or {positive_arg}={kwargs[positive_arg]}")
+                setattr(self, positive_arg, not kwargs.pop(deprecated_arg))
+                logger.warning(
+                    f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or {positive_arg}={kwargs[positive_arg]}"
+                )
+
+        self.torchscript = kwargs.pop("torchscript", self.torchscript)
+        self.torch_xla_tpu_print_metrics = kwargs.pop("torch_xla_tpu_print_metrics", self.torch_xla_tpu_print_metrics)
+        self.fp16_opt_level = kwargs.pop("fp16_opt_level", self.fp16_opt_level)
         super().__init__(**kwargs)
 
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
