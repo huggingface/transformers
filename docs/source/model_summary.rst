@@ -1,5 +1,5 @@
 Summary of the models
-================================================
+=======================================================================================================================
 
 This is a summary of the models available in 🤗 Transformers. It assumes you’re familiar with the original
 `transformer model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer
@@ -43,13 +43,13 @@ Multimodal models mix text inputs with other kinds (e.g. images) and are more sp
 .. _autoregressive-models:
 
 Autoregressive models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models rely on the decoder part of the original transformer and use an attention mask so
 that at each position, the model can only look at the tokens before the attention heads.
 
 Original GPT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -69,7 +69,7 @@ The library provides versions of the model for language modeling and multitask l
 classification.
 
 GPT-2
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -90,7 +90,7 @@ The library provides versions of the model for language modeling and multitask l
 classification.
 
 CTRL
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -111,7 +111,7 @@ wikipedia article, a book or a movie review.
 The library provides a version of the model for language modeling only.
 
 Transformer-XL
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -142,7 +142,7 @@ The library provides a version of the model for language modeling only.
 .. _reformer:
 
 Reformer
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -177,7 +177,7 @@ pretraining yet, though.
 The library provides a version of the model for language modeling only.
 
 XLNet
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -204,13 +204,13 @@ multiple choice classification and question answering.
 .. _autoencoding-models:
 
 Autoencoding models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models rely on the encoder part of the original transformer and use no mask so the model can
 look at all the tokens in the attention heads. For pretraining, targets are the original sentences and inputs are their corrupted versions.
 
 BERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -239,7 +239,7 @@ The library provides a version of the model for language modeling (traditional o
 token classification, sentence classification, multiple choice classification and question answering.
 
 ALBERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -268,7 +268,7 @@ The library provides a version of the model for masked language modeling, token 
 classification, multiple choice classification and question answering.
 
 RoBERTa
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -294,7 +294,7 @@ The library provides a version of the model for masked language modeling, token 
 classification, multiple choice classification and question answering.
 
 DistilBERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -319,7 +319,7 @@ The library provides a version of the model for masked language modeling, token 
 and question answering.
 
 XLM
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -353,7 +353,7 @@ The library provides a version of the model for language modeling, token classif
 question answering.
 
 XLM-RoBERTa
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -375,7 +375,7 @@ The library provides a version of the model for masked language modeling, token 
 classification, multiple choice classification and question answering.
 
 FlauBERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -393,7 +393,7 @@ Like RoBERTa, without the sentence ordering prediction (so just trained on the M
 The library provides a version of the model for language modeling and sentence classification.
 
 ELECTRA
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -417,7 +417,7 @@ The library provides a version of the model for masked language modeling, token 
 classification.
 
 Funnel Transformer
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -451,7 +451,7 @@ classification, multiple choice classification and question answering.
 .. _longformer:
 
 Longformer
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -480,12 +480,12 @@ classification, multiple choice classification and question answering.
 .. _seq-to-seq-models:
 
 Sequence-to-sequence models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models keep both the encoder and the decoder of the original transformer.
 
 BART
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -512,7 +512,7 @@ pretraining tasks, a composition of the following transformations are applied:
 The library provides a version of this model for conditional generation and sequence classification.
 
 Pegasus
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -537,7 +537,7 @@ The library provides a version of this model for conditional generation, which s
 
 
 MarianMT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -555,7 +555,7 @@ A framework for translation models, using the same models as BART
 The library provides a version of this model for conditional generation.
 
 T5
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -586,7 +586,7 @@ input becomes “My <x> very <y> .” and the target input becomes “<x> dog is
 The library provides a version of this model for conditional generation.
 
 MBart
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -613,13 +613,13 @@ The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ check
 .. _multimodal-models:
 
 Multimodal models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 There is one multimodal model in the library which has not been pretrained in the self-supervised fashion like the
 others.
 
 MMBT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 `Supervised Multimodal Bitransformers for Classifying Images and Text <https://arxiv.org/abs/1909.02950>`_, Douwe Kiela
 et al.
@@ -641,13 +641,13 @@ The pretrained model only works for classification.
 .. _retrieval-based-models:
 
 Retrieval-based models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Some models use documents retrieval during (pre)training and inference for open-domain question answering, for example.
 
 
 DPR
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -673,7 +673,7 @@ DPR consists in three models:
 DPR's pipeline (not implemented yet) uses a retrieval step to find the top k contexts given a certain question, and then it calls the reader with the question and the retrieved documents to get the answer.
 
 RAG
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -694,10 +694,10 @@ The retriever and seq2seq modules are initialized from pretrained models, and fi
 The two models RAG-Token and RAG-Sequence are available for generation.
 
 More technical aspects
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Full vs sparse attention
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Most transformer models use full attention in the sense that the attention matrix is square. It can be a big
 computational bottleneck when you have long texts. Longformer and reformer are models that try to be more efficient and
@@ -735,7 +735,7 @@ Using those attention matrices with less parameters then allows the model to hav
 length.
 
 Other tricks
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. _axial-pos-encoding:
 
