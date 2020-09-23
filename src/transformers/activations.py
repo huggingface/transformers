@@ -40,6 +40,10 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
+def mish(x):
+    return x * torch.tanh(torch.nn.functional.softplus(x))
+
+
 ACT2FN = {
     "relu": F.relu,
     "swish": swish,
@@ -47,6 +51,7 @@ ACT2FN = {
     "tanh": torch.tanh,
     "gelu_new": gelu_new,
     "gelu_fast": gelu_fast,
+    "mish": mish,
 }
 
 

@@ -63,9 +63,6 @@ FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
 ]
 
-
-FunnelLayerNorm = nn.LayerNorm
-
 INF = 1e6
 
 
@@ -163,7 +160,7 @@ class FunnelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.layer_norm = FunnelLayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(self, input_ids=None, inputs_embeds=None):
@@ -457,7 +454,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         self.seg_embed = nn.Parameter(torch.zeros([2, n_head, d_head]))
 
         self.post_proj = nn.Linear(n_head * d_head, d_model)
-        self.layer_norm = FunnelLayerNorm(d_model, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
         self.scale = 1.0 / (d_head ** 0.5)
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
@@ -581,7 +578,7 @@ class FunnelPositionwiseFFN(nn.Module):
         self.activation_dropout = nn.Dropout(config.activation_dropout)
         self.linear_2 = nn.Linear(config.d_inner, config.d_model)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = FunnelLayerNorm(config.d_model, config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
 
     def forward(self, hidden):
         h = self.linear_1(hidden)
