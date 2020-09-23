@@ -464,12 +464,13 @@ GPT2_INPUTS_DOCSTRING = r"""
             If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
             decoding (see ``past_key_values``).
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 

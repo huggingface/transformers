@@ -927,7 +927,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to rturn the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
@@ -1682,8 +1682,8 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)

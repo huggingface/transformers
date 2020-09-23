@@ -73,7 +73,8 @@ class BaseModelOutputWithPast(ModelOutput):
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape
+            :obj:`(batch_size, 1, hidden_size)` is output.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).

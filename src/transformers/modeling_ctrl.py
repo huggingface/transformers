@@ -255,7 +255,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
 
-            If ``past_key_values`` is used, only input_ids that do not have their past calculated should be passed as
+            If ``past_key_values`` is used, only input IDs that do not have their past calculated should be passed as
             ``input_ids``.
 
             Indices can be obtained using :class:`~transformers.CTRLTokenizer`.
@@ -300,11 +300,14 @@ CTRL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
+            decoding (see ``past_key_values``).
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to rturn the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
