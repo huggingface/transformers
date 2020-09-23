@@ -160,6 +160,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
+            elif tf_model.authorized_missing_keys is not None:
+                # authorized missing keys don't have to be loaded
+                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                    continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
 
