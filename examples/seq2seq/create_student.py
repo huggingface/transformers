@@ -5,47 +5,18 @@ from typing import List
 
 from torch import nn
 
-from transformers import AutoModelForSeq2SeqLM
 
+try:
+    from .distillation import LAYERS_TO_COPY
+except ImportError:
+    from distillation import LAYERS_TO_COPY
 
-LAYERS_TO_COPY = {
-    # maps  num layers in student -> which teacher layers to copy.
-    # 12: bart, 16: pegasus, 6: marian/Helsinki-NLP
-    12: {
-        1: [0],
-        2: [0, 6],
-        3: [0, 6, 11],
-        4: [0, 4, 8, 11],
-        6: [0, 2, 4, 7, 9, 11],
-        9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
-        12: list(range(12)),
-    },
-    16: {  # maps  num layers in student -> which teacher layers to copy
-        1: [0],
-        2: [0, 8],
-        3: [0, 8, 15],
-        4: [0, 5, 10, 15],
-        6: [0, 3, 6, 9, 12, 15],
-        8: [0, 2, 4, 6, 8, 10, 12, 15],
-        9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
-        12: [0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 13, 15],
-        16: list(range(16)),
-    },
-    6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))},
-}
-
-LAYERS_TO_SUPERVISE = {
-    12: {1: [11], 2: [5, 11], 3: [3, 7, 11], 6: [1, 3, 5, 8, 10, 11]},
-    16: {1: [15], 4: [4, 9, 12, 15], 8: [1, 3, 5, 7, 9, 11, 13, 15]},
-    6: {1: [5], 2: [3, 5], 3: [1, 4, 5], 4: [1, 2, 4, 5]},
-    2: {1: [1], 2: [0, 1]},
-}
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 
 def get_layers_to_copy(n_student, n_teacher):
     try:
         val = LAYERS_TO_COPY[n_teacher][n_student]
-        # assert len(LAYERS_TO_SUPERVISE[n_teacher][n_student]) == len(val) == n_student
         return val
     except KeyError:
         if n_student != n_teacher:
@@ -84,7 +55,17 @@ def copy_layers(teacher_layers: nn.ModuleList, student_layers: nn.ModuleList, la
 
 
 def create_student(teacher, student_encoder_layers, student_decoder_layers):
+    assert (
+        student_encoder_layers is not None or student_decoder_layers is not None
+    ), "student_encoder_layers and student_decoder_layers both cannot be None, please specify at least one of them."
+
     teacher = AutoModelForSeq2SeqLM.from_pretrained(teacher).eval()
+    student_encoder_layers = (
+        student_encoder_layers if student_encoder_layers is not None else teacher.config.encoder_layers
+    )
+    student_decoder_layers = (
+        student_decoder_layers if student_decoder_layers is not None else teacher.config.decoder_layers
+    )
     student_updates = {
         "decoder_layers": student_decoder_layers,
         "encoder_layers": student_encoder_layers,
@@ -105,19 +86,23 @@ def create_student(teacher, student_encoder_layers, student_decoder_layers):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Creat BART student model for sequence classification.")
+    parser = argparse.ArgumentParser(description="Creat student model for distilation.")
     parser.add_argument("--teacher_model_name_or_path", type=str, required=True)
-    parser.add_argument("--student_encoder_layers", type=int, required=True, help="# encoder layers for student")
-    parser.add_argument("--student_decoder_layers", type=int, required=True, help="# decoder layers for student")
+    parser.add_argument(
+        "--student_encoder_layers", type=int, required=True, default=None, help="# encoder layers for student"
+    )
+    parser.add_argument(
+        "--student_decoder_layers", type=int, required=True, default=None, help="# decoder layers for student"
+    )
     parser.add_argument("--save_path", type=str, required=True, help="Where to save student model")
 
     args = parser.parse_args()
 
     student = create_student(args.teacher_model_name_or_path, args.student_encoder_layers, args.student_decoder_layers)
-
-    if not os.path.exists(args.save_path):
-        os.mkdir(args.save_path)
     student.save_pretrained(args.save_path)
+    # save tokenizer as well
+    tokenizer = AutoTokenizer.from_pretrained(args.teacher_model_name_or_path)
+    tokenizer.save_pretrained(args.save_path)
 
 
 if __name__ == "__main__":
