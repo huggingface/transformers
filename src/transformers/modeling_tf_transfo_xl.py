@@ -772,8 +772,8 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
 
-            - ``1`` indicates the head is **not masked**,
-            - ``0`` indicates the head is **masked**.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated

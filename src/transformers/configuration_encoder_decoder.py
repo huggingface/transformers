@@ -36,10 +36,11 @@ class EncoderDecoderConfig(PretrainedConfig):
     Args:
         kwargs (`optional`):
             Dictionary of keyword arguments. Notably:
-                encoder (:class:`PretrainedConfig`, `optional`):
-                    An instance of a configuration object that defines the encoder config.
-                decoder (:class:`PretrainedConfig`, `optional`):
-                    An instance of a configuration object that defines the decoder config.
+
+                - **encoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                  object that defines the encoder config.
+                - **decoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                  object that defines the decoder config.
 
     Examples::
 

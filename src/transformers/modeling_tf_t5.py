@@ -911,8 +911,8 @@ T5_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
 
-            - ``1`` for tokens that are **not masked**,
-            - ``0`` for tokens that are **maked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         encoder_outputs (:obj:`tuple(tuple(tf.FloatTensor)`, `optional`):
@@ -949,8 +949,8 @@ T5_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
 
-            - ``1`` indicates the head is **not masked**,
-            - ``0`` indicates the head is **masked**.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
