@@ -420,6 +420,8 @@ Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_
     @require_multigpu
     def test_integration_foo():
     
+There is no problem whatsoever with ``@pytest.mark.parametrize`` (but it only works with non-unittests) - can use it in any order.
+
 This section will be expanded soon once our work in progress on those decorators is finished.
 
 Inside tests:
