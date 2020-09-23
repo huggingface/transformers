@@ -17,6 +17,16 @@ else:
     absl.logging.set_stderrthreshold("info")
     absl.logging._warn_preinit_stderr = False
 
+# Integrations: this needs to come before other ml imports
+# in order to allow any 3rd-party code to initialize properly
+from .integrations import (  # isort:skip
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
+
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
@@ -95,15 +105,6 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
-
-# Integrations
-from .integrations import (
-    is_comet_available,
-    is_optuna_available,
-    is_ray_available,
-    is_tensorboard_available,
-    is_wandb_available,
-)
 
 # Model Cards
 from .modelcard import ModelCard
