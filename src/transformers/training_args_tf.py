@@ -119,7 +119,7 @@ class TFTrainingArguments(TrainingArguments):
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
 
-        if self.args.xla:
+        if self.xla:
             tf.config.optimizer.set_jit(True)
 
         gpus = tf.config.list_physical_devices("GPU")
