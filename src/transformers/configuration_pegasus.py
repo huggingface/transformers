@@ -49,7 +49,7 @@ DEFAULTS = dict(
 # Config values that vary between checkpoints: for testing and conversion
 task_specific_params = {
     # These are task specific params for pegasus-large and normal params for finetuned checkpoints
-    "summarization_xsum": {"length_penalty": 0.8, "max_length": 64, "max_position_embeddings": 512},
+    "summarization_xsum": {"length_penalty": 0.6, "max_length": 64, "max_position_embeddings": 512},
     "summarization_cnn_dailymail": {"length_penalty": 0.8, "max_length": 128, "max_position_embeddings": 1024},
     "summarization_newsroom": {"length_penalty": 0.8, "max_length": 128, "max_position_embeddings": 512},
     "summarization_wikihow": {"length_penalty": 0.6, "max_length": 256, "max_position_embeddings": 512},

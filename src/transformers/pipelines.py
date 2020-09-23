@@ -965,7 +965,7 @@ class TextClassificationPipeline(Pipeline):
 
         Args:
             args (:obj:`str` or :obj:`List[str]`):
-                One or several textts (or one list of prompts) to classify.
+                One or several texts (or one list of prompts) to classify.
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
@@ -2661,18 +2661,18 @@ def pipeline(
 
     Examples::
 
-        from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
+        >>> from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 
-        # Sentiment analysis pipeline
-        pipeline('sentiment-analysis')
+        >>> # Sentiment analysis pipeline
+        >>> pipeline('sentiment-analysis')
 
-        # Question answering pipeline, specifying the checkpoint identifier
-        pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
+        >>> # Question answering pipeline, specifying the checkpoint identifier
+        >>> pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
 
-        # Named entity recognition pipeline, passing in a specific model and tokenizer
-        model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        pipeline('ner', model=model, tokenizer=tokenizer)
+        >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
+        >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:

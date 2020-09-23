@@ -20,7 +20,7 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import is_nlp_available, is_torch_tpu_available
+from .file_utils import is_datasets_available, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
     is_comet_available,
@@ -31,6 +31,7 @@ from .integrations import (
     run_hp_search_optuna,
     run_hp_search_ray,
 )
+from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -38,6 +39,7 @@ from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     BestRun,
     EvalPrediction,
+    EvaluationStrategy,
     HPSearchBackend,
     PredictionOutput,
     TrainOutput,
@@ -45,6 +47,9 @@ from .trainer_utils import (
     default_hp_space,
     distributed_broadcast_scalars,
     distributed_concat,
+    nested_concat,
+    nested_numpify,
+    nested_xla_mesh_reduce,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -56,7 +61,7 @@ _use_apex = False
 
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
-    from transformers.file_utils import is_apex_available
+    from .file_utils import is_apex_available
 
     if is_apex_available():
         from apex import amp
@@ -65,8 +70,8 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
-if is_nlp_available():
-    import nlp
+if is_datasets_available():
+    import datasets
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -179,10 +184,10 @@ class Trainer:
             :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
             provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+            The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-             The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+             The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
@@ -280,10 +285,10 @@ class Trainer:
                 FutureWarning,
             )
 
-        if is_nlp_available():
-            if isinstance(train_dataset, nlp.Dataset):
+        if is_datasets_available():
+            if isinstance(train_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.train_dataset, description="training")
-            if isinstance(eval_dataset, nlp.Dataset):
+            if isinstance(eval_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
         self.global_step = None
@@ -293,8 +298,14 @@ class Trainer:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
+        if self.args.label_names is None:
+            self.args.label_names = (
+                ["start_positions, end_positions"]
+                if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
+                else ["labels"]
+            )
 
-    def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
             return
         # Inspect model forward signature to keep only the arguments it accepts.
@@ -341,6 +352,7 @@ class Trainer:
             sampler=train_sampler,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
@@ -364,12 +376,12 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`, columns not
+                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
                 accepted by the ``model.forward()`` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif eval_dataset is not None and is_nlp_available() and isinstance(eval_dataset, nlp.Dataset):
+        elif eval_dataset is not None and is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
@@ -380,6 +392,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -393,10 +406,10 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                The test dataset to use. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed.
         """
-        if is_nlp_available() and isinstance(test_dataset, nlp.Dataset):
+        if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             self._remove_unused_columns(test_dataset, description="test")
         test_sampler = self._get_eval_sampler(test_dataset)
 
@@ -606,13 +619,15 @@ class Trainer:
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
+        num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
+        num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
-            num_train_epochs = (
-                self.args.max_steps // (len(train_dataloader) // self.args.gradient_accumulation_steps) + 1
+            num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
+                self.args.max_steps % num_update_steps_per_epoch > 0
             )
         else:
-            t_total = int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
+            t_total = int(num_update_steps_per_epoch * self.args.num_train_epochs)
             num_train_epochs = self.args.num_train_epochs
             self.args.max_steps = t_total
 
@@ -682,10 +697,8 @@ class Trainer:
                 self.global_step = int(model_path.split("-")[-1].split(os.path.sep)[0])
                 self.total_flos = getattr(model.config, "total_flos", 0)
 
-                epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
-                steps_trained_in_current_epoch = self.global_step % (
-                    len(train_dataloader) // self.args.gradient_accumulation_steps
-                )
+                epochs_trained = self.global_step // num_update_steps_per_epoch
+                steps_trained_in_current_epoch = self.global_step % (num_update_steps_per_epoch)
 
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
                 logger.info("  Continuing training from epoch %d", epochs_trained)
@@ -772,7 +785,10 @@ class Trainer:
 
                         self.log(logs)
 
-                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                    if (
+                        self.args.evaluation_strategy == EvaluationStrategy.STEPS
+                        and self.global_step % self.args.eval_steps == 0
+                    ):
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
 
@@ -810,6 +826,9 @@ class Trainer:
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
                 epoch_pbar.update(1)
+                if self.args.evaluation_strategy == EvaluationStrategy.EPOCH:
+                    metrics = self.evaluate()
+                    self._report_to_hp_search(trial, epoch, metrics)
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                     break
             epoch_pbar.close()
@@ -1024,15 +1043,9 @@ class Trainer:
 
         if self.args.fp16 and _use_native_amp:
             with autocast():
-                outputs = model(**inputs)
-                loss = outputs[0]
+                loss = self.compute_loss(model, inputs)
         else:
-            outputs = model(**inputs)
-            # We don't use .loss here since the model may return tuples instead of ModelOutput.
-            loss = outputs[0]
-
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
+            loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -1049,6 +1062,19 @@ class Trainer:
             loss.backward()
 
         return loss.detach()
+
+    def compute_loss(self, model, inputs):
+        """
+        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+
+        Subclass and override for custom behavior.
+        """
+        outputs = model(**inputs)
+        # Save past state if it exists
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+        # We don't use .loss here since the model may return tuples instead of ModelOutput.
+        return outputs[0]
 
     def is_local_master(self) -> bool:
         """
@@ -1200,7 +1226,7 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`,
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
                 columns not accepted by the ``model.forward()`` method are automatically removed.
 
         Returns:
@@ -1227,7 +1253,7 @@ class Trainer:
 
         Args:
             test_dataset (:obj:`Dataset`):
-                Dataset to run the predictions on. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed.
 
         Returns:
@@ -1262,6 +1288,13 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
+        assert not getattr(
+            self.model.config, "output_attentions", False
+        ), "The prediction loop does not work with `output_attentions=True`."
+        assert not getattr(
+            self.model.config, "output_hidden_states", False
+        ), "The prediction loop does not work with `output_hidden_states=True`."
+
         model = self.model
         # multi-gpu eval
         if self.args.n_gpu > 1:
@@ -1293,9 +1326,9 @@ class Trainer:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
-                preds = logits if preds is None else torch.cat((preds, logits), dim=0)
+                preds = logits if preds is None else nested_concat(preds, logits, dim=0)
             if labels is not None:
-                label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
+                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -1310,17 +1343,17 @@ class Trainer:
         elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
-                preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
+                preds = nested_xla_mesh_reduce(preds, "eval_preds")
             if label_ids is not None:
-                label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+                label_ids = nested_xla_mesh_reduce(label_ids, "eval_label_ids")
             if eval_losses is not None:
                 eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
-            preds = preds.cpu().numpy()
+            preds = nested_numpify(preds)
         if label_ids is not None:
-            label_ids = label_ids.cpu().numpy()
+            label_ids = nested_numpify(label_ids)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -1366,28 +1399,37 @@ class Trainer:
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
-        has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
-
+        has_labels = all(inputs.get(k) is not None for k in self.args.label_names)
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
             outputs = model(**inputs)
             if has_labels:
-                loss, logits = outputs[:2]
-                loss = loss.mean().item()
+                # The .mean() is to reduce in case of distributed training
+                loss = outputs[0].mean().item()
+                logits = outputs[1:]
             else:
                 loss = None
-                logits = outputs[0]
+                # Slicing so we get a tuple even if `outputs` is a `ModelOutput`.
+                logits = outputs[:]
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)
 
-        labels = inputs.get("labels")
-        if labels is not None:
-            labels = labels.detach()
-        return (loss, logits.detach(), labels)
+        logits = tuple(logit.detach() for logit in logits)
+        if len(logits) == 1:
+            logits = logits[0]
+
+        if has_labels:
+            labels = tuple(inputs.get(name).detach() for name in self.args.label_names)
+            if len(labels) == 1:
+                labels = labels[0]
+        else:
+            labels = None
+
+        return (loss, logits, labels)
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """

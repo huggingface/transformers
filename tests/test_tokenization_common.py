@@ -156,7 +156,7 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                self.assertNotEqual(tokenizer.max_len, 42)
+                self.assertNotEqual(tokenizer.model_max_length, 42)
 
         # Now let's start the test
         tokenizers = self.get_tokenizers()
@@ -743,7 +743,7 @@ class TokenizerTesterMixin:
     #             formatted_input = tokenizer.encode(sequence, add_special_tokens=True, add_prefix_space=False)
 
     #             self.assertEqual(
-    #                 tokenizer.encode(tokens, is_pretokenized=True, add_special_tokens=True), formatted_input
+    #                 tokenizer.encode(tokens, is_split_into_words=True, add_special_tokens=True), formatted_input
     #             )
     #             # This is not supported with the Rust tokenizers
     #             # self.assertEqual(tokenizer.encode(input_ids, add_special_tokens=True), formatted_input)
@@ -1250,20 +1250,20 @@ class TokenizerTesterMixin:
                 # sequence_no_prefix_space = sequence.strip()
 
                 # Test encode for pretokenized inputs
-                output = tokenizer.encode(token_sequence, is_pretokenized=True, add_special_tokens=False)
+                output = tokenizer.encode(token_sequence, is_split_into_words=True, add_special_tokens=False)
                 output_sequence = tokenizer.encode(sequence, add_special_tokens=False)
                 self.assertEqual(output, output_sequence)
 
-                output = tokenizer.encode(token_sequence, is_pretokenized=True, add_special_tokens=True)
+                output = tokenizer.encode(token_sequence, is_split_into_words=True, add_special_tokens=True)
                 output_sequence = tokenizer.encode(sequence, add_special_tokens=True)
                 self.assertEqual(output, output_sequence)
 
                 # Test encode_plus for pretokenized inputs
-                output = tokenizer.encode_plus(token_sequence, is_pretokenized=True, add_special_tokens=False)
+                output = tokenizer.encode_plus(token_sequence, is_split_into_words=True, add_special_tokens=False)
                 output_sequence = tokenizer.encode_plus(sequence, add_special_tokens=False)
                 for key in output.keys():
                     self.assertEqual(output[key], output_sequence[key])
-                output = tokenizer.encode_plus(token_sequence, is_pretokenized=True, add_special_tokens=True)
+                output = tokenizer.encode_plus(token_sequence, is_split_into_words=True, add_special_tokens=True)
                 output_sequence = tokenizer.encode_plus(sequence, add_special_tokens=True)
                 for key in output.keys():
                     self.assertEqual(output[key], output_sequence[key])
@@ -1274,7 +1274,7 @@ class TokenizerTesterMixin:
                 sequence_batch_cleaned_up_spaces = [" " + " ".join(s) for s in token_sequence_batch]
 
                 output = tokenizer.batch_encode_plus(
-                    token_sequence_batch, is_pretokenized=True, add_special_tokens=False
+                    token_sequence_batch, is_split_into_words=True, add_special_tokens=False
                 )
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_batch_cleaned_up_spaces, add_special_tokens=False
@@ -1282,7 +1282,7 @@ class TokenizerTesterMixin:
                 for key in output.keys():
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.batch_encode_plus(
-                    token_sequence_batch, is_pretokenized=True, add_special_tokens=True
+                    token_sequence_batch, is_split_into_words=True, add_special_tokens=True
                 )
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_batch_cleaned_up_spaces, add_special_tokens=True
@@ -1292,25 +1292,25 @@ class TokenizerTesterMixin:
 
                 # Test encode for pretokenized inputs pairs
                 output = tokenizer.encode(
-                    token_sequence, token_sequence, is_pretokenized=True, add_special_tokens=False
+                    token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=False
                 )
                 output_sequence = tokenizer.encode(sequence, sequence, add_special_tokens=False)
                 self.assertEqual(output, output_sequence)
                 output = tokenizer.encode(
-                    token_sequence, token_sequence, is_pretokenized=True, add_special_tokens=True
+                    token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=True
                 )
                 output_sequence = tokenizer.encode(sequence, sequence, add_special_tokens=True)
                 self.assertEqual(output, output_sequence)
 
                 # Test encode_plus for pretokenized inputs pairs
                 output = tokenizer.encode_plus(
-                    token_sequence, token_sequence, is_pretokenized=True, add_special_tokens=False
+                    token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=False
                 )
                 output_sequence = tokenizer.encode_plus(sequence, sequence, add_special_tokens=False)
                 for key in output.keys():
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.encode_plus(
-                    token_sequence, token_sequence, is_pretokenized=True, add_special_tokens=True
+                    token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=True
                 )
                 output_sequence = tokenizer.encode_plus(sequence, sequence, add_special_tokens=True)
                 for key in output.keys():
@@ -1326,7 +1326,7 @@ class TokenizerTesterMixin:
                 ]
 
                 output = tokenizer.batch_encode_plus(
-                    token_sequence_pair_batch, is_pretokenized=True, add_special_tokens=False
+                    token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=False
                 )
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_pair_batch_cleaned_up_spaces, add_special_tokens=False
@@ -1334,7 +1334,7 @@ class TokenizerTesterMixin:
                 for key in output.keys():
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.batch_encode_plus(
-                    token_sequence_pair_batch, is_pretokenized=True, add_special_tokens=True
+                    token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=True
                 )
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_pair_batch_cleaned_up_spaces, add_special_tokens=True
@@ -1351,6 +1351,18 @@ class TokenizerTesterMixin:
             prepared_input_dict = tokenizer.prepare_for_model(ids)
 
             self.assertEqual(input_dict, prepared_input_dict)
+
+    def test_batch_encode_plus_overflowing_tokens(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            string_sequences = ["Testing the prepare_for_model method.", "Test"]
+
+            if tokenizer.pad_token is None:
+                tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+            tokenizer.batch_encode_plus(
+                string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
+            )
 
     @require_torch
     @require_tf
@@ -1554,14 +1566,17 @@ class TokenizerTesterMixin:
             'pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu '
             "vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
         ]
-        batch = tokenizer.prepare_seq2seq_batch(
-            src_texts=src_text,
-            tgt_texts=tgt_text,
-            max_length=3,
-            max_target_length=10,
-            return_tensors="pt",
-            src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
-        )
+        try:
+            batch = tokenizer.prepare_seq2seq_batch(
+                src_texts=src_text,
+                tgt_texts=tgt_text,
+                max_length=3,
+                max_target_length=10,
+                return_tensors="pt",
+                src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
+            )
+        except NotImplementedError:
+            return
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.labels.shape[1], 10)
         # max_target_length will default to max_length if not specified

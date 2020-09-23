@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 
@@ -33,12 +33,12 @@ class MarianTokenizer(PreTrainedTokenizer):
         >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
         >>> batch_enc: BatchEncoding = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts)
-        >>> # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
+        >>> # keys  [input_ids, attention_mask, labels].
         >>> # model(**batch) should work
     """
 
     vocab_files_names = vocab_files_names
-    model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
+    model_input_names = ["attention_mask"]
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
@@ -125,7 +125,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -153,9 +153,6 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         if tgt_texts is None:
             return model_inputs
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
 
