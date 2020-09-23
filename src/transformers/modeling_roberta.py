@@ -463,7 +463,6 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
     config_class = RobertaConfig
     base_model_prefix = "roberta"
-    authorized_missing_keys = [r"position_ids"]
 
     # Copied from transformers.modeling_bert.BertPreTrainedModel._init_weights with Bert->Roberta
     def _init_weights(self, module):
@@ -570,7 +569,7 @@ class RobertaModel(RobertaPreTrainedModel):
         https://arxiv.org/abs/1706.03762
 
     """
-    config_class = RobertaConfig
+
     base_model_prefix = "roberta"
     authorized_missing_keys = [r"position_ids"]
 
@@ -706,8 +705,6 @@ class RobertaModel(RobertaPreTrainedModel):
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning. """, ROBERTA_START_DOCSTRING
 )
 class RobertaForCausalLM(RobertaPreTrainedModel):
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
     authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
     authorized_unexpected_keys = [r"pooler"]
 
@@ -827,8 +824,6 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class RobertaForMaskedLM(RobertaPreTrainedModel):
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
     authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
     authorized_unexpected_keys = [r"pooler"]
 
@@ -954,9 +949,6 @@ class RobertaLMHead(nn.Module):
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
-
     authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
@@ -1039,9 +1031,6 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
-
     authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
@@ -1132,9 +1121,6 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForTokenClassification(RobertaPreTrainedModel):
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
-
     authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"position_ids"]
 
@@ -1243,9 +1229,6 @@ class RobertaClassificationHead(nn.Module):
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForQuestionAnswering(RobertaPreTrainedModel):
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
-
     authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"position_ids"]
 

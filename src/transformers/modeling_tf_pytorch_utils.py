@@ -194,6 +194,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     unexpected_keys = list(all_pytorch_weights)
 
+    if tf_model.authorized_missing_keys is not None:
+        for pat in tf_model.authorized_missing_keys:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
     if len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the PyTorch model were not used when "
