@@ -215,9 +215,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
+    def __len__(self):
+        """
+        Overload PreTrainedTokenizer.__len__()
+        Size of the full vocabulary with the added tokens.
+        """
+        return max(self.tokenizer.fairseq_ids_to_tokens.keys()) + 1
+
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
-        overload PreTrainedTokenizer._add_tokens() to enbale add_tokens for mbart tokenizer
+        Overload PreTrainedTokenizer._add_tokens() to enbale add_tokens for mbart tokenizer
 
         Args:
             new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
@@ -232,7 +239,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         """
         new_tokens = [str(tok) for tok in new_tokens]
 
-        vocab_size = max(self.fairseq_ids_to_tokens.keys()) + 1
+        vocab_size = len(self)
         new_tokens_to_ids = {tok: vocab_size + i for i, tok in enumerate(new_tokens)}
         self.fairseq_tokens_to_ids.update(new_tokens_to_ids)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.tokenizer.fairseq_tokens_to_ids.items()}
