@@ -69,6 +69,7 @@ try:
     import datasets  # noqa: F401
 
     _datasets_available = True
+    logger.debug(f"Succesfully imported datasets version {datasets.__version__}")
 
 except ImportError:
     _datasets_available = False
@@ -118,6 +119,16 @@ try:
     _has_apex = True
 except ImportError:
     _has_apex = False
+
+
+try:
+    import faiss  # noqa: F401
+
+    _faiss_available = True
+    logger.debug(f"Succesfully imported faiss version {faiss.__version__}")
+except ImportError:
+    _faiss_available = False
+
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
@@ -173,6 +184,10 @@ def is_py3nvml_available():
 
 def is_apex_available():
     return _has_apex
+
+
+def is_faiss_available():
+    return _faiss_available
 
 
 def add_start_docstrings(*docstr):
