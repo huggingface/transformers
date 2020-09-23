@@ -1,10 +1,18 @@
 ## Sequence to Sequence
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
-Summarization support is more mature than translation support.
 Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
 For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
+### Supported Architectures
+
+- `BartForConditionalGeneration` (and anything that inherits from it)
+- `MarianMTModel`
+- `PegasusForConditionalGeneration`
+- `MBartForConditionalGeneration`
+- `FSMTForConditionalGeneration`
+- `T5ForConditionalGeneration`
+    
 
 ## Datasets
 
