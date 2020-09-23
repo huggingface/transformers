@@ -1,5 +1,5 @@
 Testing
-==========
+=======================================================================================================================
 
 
 Let's take a look at how 🤗 Transformer models are tested and how you can write new tests and improve the existing ones.
@@ -10,7 +10,7 @@ There are 2 test suites in the repository:
 2. ``examples`` -- tests primarily for various applications that aren't part of the API
 
 How transformers are tested
----------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 1. Once a PR is submitted it gets tested with 9 CircleCi jobs. Every new commit to that PR gets retested. These jobs are defined in this `config file <https://github.com/huggingface/transformers/blob/master/.circleci/config.yml>`__, so that if needed you can reproduce the same environment on your machine.
    
@@ -34,14 +34,14 @@ How transformers are tested
 
 
 Running tests
--------------
+-----------------------------------------------------------------------------------------------------------------------
 
 
 
 
 
 Choosing which tests to run
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This document goes into many details of how tests can be run. If after reading everything, you need even more details you will find them `here <https://docs.pytest.org/en/latest/usage.html>`__.
 
@@ -75,7 +75,7 @@ which tells pytest to:
 
 
 Getting the list of all tests
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All tests of the test suite:
 
@@ -92,7 +92,7 @@ All tests of a given test file:
 
    
 Run a specific test module
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To run an individual test module:
 
@@ -102,7 +102,7 @@ To run an individual test module:
    
 
 Run specific tests
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Since unittest is used inside most of the tests, to run specific subtests you need to know the name of the unittest class containing those tests. For example, it could be:
 
@@ -156,7 +156,7 @@ And you can combine the two patterns in one:
 
 
 Run only modified tests
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can run the tests related to the unstaged files or the current branch (according to Git) by using `pytest-picked <https://github.com/anapaulagomes/pytest-picked>`__. This is a great way of quickly testing your changes didn't break anything, since it won't run the tests related to files you didn't touch.
 
@@ -172,7 +172,7 @@ All tests will be run from files and folders which are modified, but not
 yet committed.
 
 Automatically rerun failed tests on source modification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 `pytest-xdist <https://github.com/pytest-dev/pytest-xdist>`__ provides a
 very useful feature of detecting all failed tests, and then waiting for
@@ -212,7 +212,7 @@ alternative implementation of this functionality.
 
 
 Skip a test module
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you want to run all test modules, except a few you can exclude them by giving an explicit list of tests to run. For example, to run all except ``test_modeling_*.py`` tests:
 
@@ -222,7 +222,7 @@ If you want to run all test modules, except a few you can exclude them by giving
 
 
 Clearing state
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 CI builds and when isolation is important (against speed), cache should
 be cleared:
@@ -232,7 +232,7 @@ be cleared:
     pytest --cache-clear tests
 
 Running tests in parallel
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As mentioned earlier ``make test`` runs tests in parallel via ``pytest-xdist`` plugin (``-n X`` argument, e.g. ``-n 2`` to run 2 parallel jobs).
 
@@ -246,7 +246,7 @@ tests in the same order, which should help with then somehow reducing
 that failing sequence to a minimum.
 
 Test order and repetition
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 It's good to repeat the tests several times, in sequence, randomly, or
 in sets, to detect any potential inter-dependency and state-related bugs
@@ -255,7 +255,7 @@ detect some problems that get uncovered by randomness of DL.
 
 
 Repeat tests
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * `pytest-flakefinder <https://github.com/dropbox/pytest-flakefinder>`__:
 
@@ -277,7 +277,7 @@ And then run every test multiple times (50 by default):
 
 
 Run tests in a random order
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
@@ -333,10 +333,10 @@ details please see its `documentation <https://github.com/jbasko/pytest-random-o
 Another randomization alternative is: ``pytest-randomly`` <https://github.com/pytest-dev/pytest-randomly>`__. This module has a very similar functionality/interface, but it doesn't have the bucket modes available in ``pytest-random-order``. It has the same problem of imposing itself once installed.
 
 Look and feel variations
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 pytest-sugar
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 `pytest-sugar <https://github.com/Frozenball/pytest-sugar>`__ is a
 plugin that improves the look-n-feel, adds a progressbar, and show tests
@@ -358,7 +358,7 @@ or uninstall it.
 
 
 Report each sub-test name and its progress
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For a single or a group of tests via ``pytest`` (after
 ``pip install pytest-pspec``):
@@ -370,7 +370,7 @@ For a single or a group of tests via ``pytest`` (after
 
 
 Instantly shows failed tests
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 `pytest-instafail <https://github.com/pytest-dev/pytest-instafail>`__
 shows failures and errors instantly instead of waiting until the end of
@@ -385,7 +385,7 @@ test session.
     pytest --instafail
 
 To GPU or not to GPU
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 On a GPU-enabled setup, to test in CPU-only mode add ``CUDA_VISIBLE_DEVICES=""``:
 
@@ -403,14 +403,14 @@ This is handy when you want to run different tasks on different GPUs.
     
 And we have these decorators that require the condition described by the marker.
 
-```
+``
 @require_torch
 @require_tf
 @require_multigpu
 @require_non_multigpu
 @require_torch_tpu
 @require_torch_and_cuda
-```
+``
 
 Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed last for them to work correctly. Here is an example of the correct usage:
 
@@ -437,7 +437,7 @@ Inside tests:
 
 
 Output capture
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 During test execution any output sent to ``stdout`` and ``stderr`` is
 captured. If a test or a setup method fails, its according captured
@@ -458,7 +458,7 @@ To send test results to JUnit format output:
 
 
 Color control
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To have no color (e.g., yellow on white background is not readable):
 
@@ -469,7 +469,7 @@ To have no color (e.g., yellow on white background is not readable):
 
 
 Sending test report to online pastebin service
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Creating a URL for each test failure:
 
@@ -490,7 +490,7 @@ Creating a URL for a whole test session log:
 
 
 Writing tests
--------------
+-----------------------------------------------------------------------------------------------------------------------
 
 🤗 transformers tests are based on ``unittest``, but run by ``pytest``, so most of the time features from both systems can be used.
 
@@ -498,7 +498,7 @@ You can read `here <https://docs.pytest.org/en/stable/unittest.html>`__ which fe
 
 
 Parametrization
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Often, there is a need to run the same test multiple times, but with different arguments. It could be done from within the test, but then there is no way of running that test for just one set of arguments.
 
@@ -596,7 +596,7 @@ as in the previous example.
     
 
 Temporary files and directories
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite each other's data. Also we want to get the temp files and directories removed at the end of each test that created them. Therefore, using packages like ``tempfile``, which address these needs is essential.
 
@@ -646,7 +646,7 @@ In this and all the following scenarios the temporary directory will be auto-rem
 
 
 Skipping tests
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This is useful when a bug is found and a new test is written, yet the
 bug is not fixed yet. In order to be able to commit it to the main
@@ -673,7 +673,7 @@ causes some bad state that will affect other tests, do not use
 ``xfail``.
 
 Implementation
-^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Here is how to skip whole test unconditionally:
 
@@ -749,7 +749,7 @@ or skip the whole module:
 More details, example and ways are `here <https://docs.pytest.org/en/latest/skipping.html>`__.
 
 Custom markers
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Slow tests
 
@@ -776,7 +776,7 @@ Some decorators like ``@parametrized`` rewrite test names, therefore ``@slow`` a
     def test_integration_foo():
 
 Testing the stdout/stderr output
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to test functions that write to ``stdout`` and/or ``stderr``,
 the test can access those streams using the ``pytest``'s `capsys
@@ -885,7 +885,7 @@ If you need to capture both streams at once, use the parent
 
 
 Capturing logger stream
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you need to validate the output of a logger, you can use :obj:`CaptureLogger`:
 
@@ -903,7 +903,7 @@ If you need to validate the output of a logger, you can use :obj:`CaptureLogger`
 
 
 Testing with environment variables
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you want to test the impact of environment variables for a specific test you can use a helper decorator ``transformers.testing_utils.mockenv``
 
@@ -917,7 +917,7 @@ If you want to test the impact of environment variables for a specific test you 
 
 
 Getting reproducible results
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In some situations you may want to remove randomness for your tests. To
 get identical reproducable results set, you will need to fix the seed:
@@ -944,7 +944,7 @@ get identical reproducable results set, you will need to fix the seed:
     tf.random.set_seed(seed)
 
 Debugging tests
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To start a debugger at the point of the warning, do this:
 

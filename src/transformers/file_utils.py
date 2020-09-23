@@ -471,6 +471,7 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
 TF_MASKED_LM_SAMPLE = r"""
     Example::
+
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import tensorflow as tf
 

@@ -137,7 +137,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         padding="longest",
         **unused,
     ) -> BatchEncoding:
-        """Prepare model inputs for translation. For best performance, translate one sentence at a time."""
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
         self.current_spm = self.spm_source

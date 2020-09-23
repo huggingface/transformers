@@ -77,7 +77,8 @@ class TFBaseModelOutputWithPast(ModelOutput):
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape
+            :obj:`(batch_size, 1, hidden_size)` is output.
         past_key_values (:obj:`List[tf.Tensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`tf.Tensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
@@ -476,9 +477,9 @@ class TFQuestionAnsweringModelOutput(ModelOutput):
     Args:
         loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        start_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+        start_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Span-start scores (before SoftMax).
-        end_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+        end_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
@@ -508,9 +509,9 @@ class TFSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     Args:
         loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        start_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+        start_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Span-start scores (before SoftMax).
-        end_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+        end_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
         past_key_values (:obj:`List[tf.Tensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`tf.Tensor` of length :obj:`config.n_layers`,  with each tensor of shape
