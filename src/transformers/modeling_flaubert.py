@@ -71,9 +71,9 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.FlaubertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.FlaubertTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -385,8 +385,7 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
 
 @add_start_docstrings(
     """Flaubert Model with a beam-search span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute :obj:`span start logits` and
-    :obj:`span end logits`). """,
+    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
