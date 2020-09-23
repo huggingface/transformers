@@ -62,7 +62,7 @@ _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mobilebert-uncased",
+    "google/mobilebert-uncased",
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
 
