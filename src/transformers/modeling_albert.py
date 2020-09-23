@@ -485,16 +485,16 @@ ALBERT_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
 
-            - ``1`` for tokens that are **not masked**,
-            - ``0`` for tokens that are **maked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``:
 
-            - ``0`` corresponds to a `sentence A` token,
-            - ``1`` corresponds to a `sentence B` token.
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
@@ -506,8 +506,8 @@ ALBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
 
-            - ``1`` indicates the head is **not masked**,
-            - ``0`` indicates the head is **masked**.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
@@ -687,18 +687,18 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         **kwargs,
     ):
         r"""
-            labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
-                Labels for computing the masked language modeling loss.
-                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-                in ``[0, ..., config.vocab_size]``
-            sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
-                Indices should be in ``[0, 1]``.
-                ``0`` indicates original order (sequence A, then sequence B),
-                ``1`` indicates switched order (sequence B, then sequence A).
-            kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-                Used to hide legacy arguments that have been deprecated.
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+        sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
+            Indices should be in ``[0, 1]``.
+            ``0`` indicates original order (sequence A, then sequence B),
+            ``1`` indicates switched order (sequence B, then sequence A).
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
         Returns:
 
