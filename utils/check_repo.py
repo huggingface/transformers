@@ -286,7 +286,7 @@ def check_decorator_order(filename):
         search = _re_decorator.search(line)
         if search is not None:
             decorator_name = search.groups()[0]
-            if decorator_before is not None and decorator_name.startswith("parametrized"):
+            if decorator_before is not None and decorator_name.startswith("parameterized"):
                 errors.append(i)
             decorator_before = decorator_name
         elif decorator_before is not None:
@@ -305,7 +305,7 @@ def check_all_decorator_order():
     if len(errors) > 0:
         msg = "\n".join(errors)
         raise ValueError(
-            f"The parametrized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
+            f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
         )
 
 
