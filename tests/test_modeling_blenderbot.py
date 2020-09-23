@@ -273,7 +273,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     def test_tokenization_same_as_parlai(self):
         assert self.tokenizer("sam").input_ids == [1384]
 
-    @unittest.skip('This does not pass')
+    @unittest.skip("This does not pass")
     def test_forward_90M_same_as_parlai(self):
         torch.manual_seed(0)
         config = BlenderbotConfig(
