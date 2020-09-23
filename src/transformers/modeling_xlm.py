@@ -271,7 +271,8 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
+            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+            losses.
         start_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the top config.start_n_top start token possibilities (beam-search).
         start_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
@@ -307,7 +308,11 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
 XLM_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
@@ -319,63 +324,74 @@ XLM_START_DOCSTRING = r"""
 
 XLM_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.BertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.XLMTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        langs (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        langs (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are languages ids which can be obtained from the language names by using two conversion mappings
             provided in the configuration of the model (only provided for multilingual models).
-            More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
-            the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
+            More precisely, the `language name to language id` mapping is in :obj:`model.config.lang2id` (which is a
+            dictionary strring to int) and the `language id to language name` mapping is in :obj:`model.config.id2lang`
+            (dictionary int to string).
 
-            See usage examples detailed in the `multilingual documentation <https://huggingface.co/transformers/multilingual.html>`__.
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Indices are selected in ``[0, 1]``:
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`__
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
+            `What are position IDs? <../glossary.html#position-ids>`__
         lengths (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Length of each sentence that can be used to avoid performing attention on padding token indices.
             You can also use `attention_mask` for the same result (see above), kept here for compatbility.
-            Indices selected in ``[0, ..., input_ids.size(-1)]``:
+            Indices selected in ``[0, ..., input_ids.size(-1)]``.
         cache (:obj:`Dict[str, torch.FloatTensor]`, `optional`):
-            dictionary with ``torch.FloatTensor`` that contains pre-computed
-            hidden-states (key and values in the attention blocks) as computed by the model
-            (see `cache` output below). Can be used to speed up sequential decoding.
-            The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
+            Dictionary string to ``torch.FloatTensor`` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see :obj:`cache` output below). Can be used to speed up
+            sequential decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 
@@ -469,7 +485,7 @@ class XLMModel(XLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -684,7 +700,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             langs = None
         return {"input_ids": input_ids, "langs": langs}
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -761,7 +777,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -847,7 +863,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -874,11 +890,11 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -949,7 +965,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=XLMForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -972,21 +988,21 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         return_dict=None,
     ):
         r"""
-            start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-                Labels for position (index) of the start of the labelled span for computing the token classification loss.
-                Positions are clamped to the length of the sequence (`sequence_length`).
-                Position outside of the sequence are not taken into account for computing the loss.
-            end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-                Labels for position (index) of the end of the labelled span for computing the token classification loss.
-                Positions are clamped to the length of the sequence (`sequence_length`).
-                Position outside of the sequence are not taken into account for computing the loss.
-            is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-                Labels whether a question has an answer or no answer (SQuAD 2.0)
-            cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-                Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
-            p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
-                Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
-                1.0 means token should be masked. 0.0 mean token is not masked.
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
+            Labels whether a question has an answer or no answer (SQuAD 2.0)
+        cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
+            Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
+        p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
+            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
+            1.0 means token should be masked. 0.0 mean token is not masked.
 
         Returns:
 
@@ -1065,7 +1081,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1156,7 +1172,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, num_choicec, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1180,10 +1196,10 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

@@ -1,5 +1,5 @@
 Transformers
-================================================================================================================================================
+=======================================================================================================================
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
@@ -11,7 +11,7 @@ TensorFlow 2.0 and PyTorch.
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
 Features
----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
@@ -36,7 +36,7 @@ Choose the right framework for every part of a model's lifetime:
 - Seamlessly pick the right framework for training, evaluation, production
 
 Contents
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 The documentation is organized in five parts:
 

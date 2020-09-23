@@ -1,5 +1,5 @@
 Quick tour
-==========
+=======================================================================================================================
 
 Let's have a quick look at the 🤗 Transformers library features. The library downloads pretrained models for
 Natural Language Understanding (NLU) tasks, such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
@@ -14,7 +14,7 @@ will dig a little bit more and see how the library gives you access to those mod
     not, the code is expected to work for both backends without any change needed.
 
 Getting started on a task with a pipeline
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The easiest way to use a pretrained model on a given task is to use :func:`~transformers.pipeline`. 🤗 Transformers
 provides the following tasks out of the box:
@@ -123,7 +123,7 @@ to share your fine-tuned model on the hub with the community, using :doc:`this t
 .. _pretrained-model:
 
 Under the hood: pretrained models
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Let's now see what happens beneath the hood when using those pipelines. As we saw, the model and tokenizer are created
 using the :obj:`from_pretrained` method:
@@ -142,7 +142,7 @@ using the :obj:`from_pretrained` method:
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 Using the tokenizer
-^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
@@ -210,7 +210,7 @@ padding token the model was pretrained with. The attention mask is also adapted 
 You can learn more about tokenizers :doc:`here <preprocessing>`.
 
 Using the model
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Once your input has been preprocessed by the tokenizer, you can send it directly to the model. As we mentioned, it will
 contain all the relevant information the model needs. If you're using a TensorFlow model, you can pass the
@@ -330,7 +330,7 @@ Lastly, you can also ask the model to return all hidden states and all attention
     >>> all_hidden_states, all_attentions = tf_outputs[-2:]
 
 Accessing the code
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :obj:`AutoModel` and :obj:`AutoTokenizer` classes are just shortcuts that will automatically work with any
 pretrained model. Behind the scenes, the library has one model class per combination of architecture plus class, so the
@@ -358,7 +358,7 @@ without the auto magic:
     >>> tokenizer = DistilBertTokenizer.from_pretrained(model_name)
 
 Customizing the model
-^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you want to change how the model itself is built, you can define your custom configuration class. Each architecture
 comes with its own relevant configuration (in the case of DistilBERT, :class:`~transformers.DistilBertConfig`) which
