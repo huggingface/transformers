@@ -70,6 +70,7 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFMobileBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
 
         if isinstance(config.hidden_act, str):

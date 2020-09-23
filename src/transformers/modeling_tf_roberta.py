@@ -71,6 +71,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
+
         self.padding_idx = 1
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
@@ -103,6 +104,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
                 shape=[self.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
+
         super().build(input_shape)
 
     def create_position_ids_from_input_ids(self, x):
@@ -114,6 +116,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
         incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
+
         return incremental_indicies + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
@@ -123,8 +126,8 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         :return tf.Tensor:
         """
         seq_length = shape_list(inputs_embeds)[1]
-
         position_ids = tf.range(self.padding_idx + 1, seq_length + self.padding_idx + 1, dtype=tf.int32)[tf.newaxis, :]
+
         return position_ids
 
     def call(
@@ -207,9 +210,11 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
+# Copied from transformers.modeling_tf_bert.TFBertPooler
 class TFRobertaPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -226,6 +231,7 @@ class TFRobertaPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
+# Copied from transformers.modeling_tf_bert.TFBertSelfAttention
 class TFRobertaSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -297,9 +303,11 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.modeling_tf_bert.TFBertSelfOutput
 class TFRobertaSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -314,9 +322,11 @@ class TFRobertaSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.modeling_tf_bert.TFBertAttention with Bert->Roberta
 class TFRobertaAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.self_attention = TFRobertaSelfAttention(config, name="self")
         self.dense_output = TFRobertaSelfOutput(config, name="output")
 
@@ -333,9 +343,11 @@ class TFRobertaAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.modeling_tf_bert.TFBertIntermediate
 class TFRobertaIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -352,9 +364,11 @@ class TFRobertaIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.modeling_tf_bert.TFBertOutput
 class TFRobertaOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -369,9 +383,11 @@ class TFRobertaOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.modeling_tf_bert.TFBertLayer with Bert->Roberta
 class TFRobertaLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.attention = TFRobertaAttention(config, name="attention")
         self.intermediate = TFRobertaIntermediate(config, name="intermediate")
         self.bert_output = TFRobertaOutput(config, name="output")
@@ -388,9 +404,11 @@ class TFRobertaLayer(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.modeling_tf_bert.TFBertEncoder with Bert->Roberta
 class TFRobertaEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.layer = [TFRobertaLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
@@ -424,6 +442,7 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -435,6 +454,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.num_hidden_layers = config.num_hidden_layers
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
@@ -442,15 +462,19 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.encoder = TFRobertaEncoder(config, name="encoder")
         self.pooler = TFRobertaPooler(config, name="pooler")
+        # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
+    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
 
+    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = value.shape[0]
 
+    # Copied from transformers.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
         heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -458,6 +482,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
         inputs,
@@ -511,6 +536,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.fill(input_shape, 1)
+
         if token_type_ids is None:
             token_type_ids = tf.fill(input_shape, 0)
 
@@ -528,7 +554,6 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-
         extended_attention_mask = tf.cast(extended_attention_mask, embedding_output.dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
@@ -683,6 +708,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
@@ -696,6 +722,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def call(self, features):
