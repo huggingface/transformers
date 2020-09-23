@@ -108,6 +108,12 @@ class Seq2SeqDataCollator:
         return shifted_input_ids
 
     def _encode(self, batch) -> Dict[str, torch.Tensor]:
+        extra_kwargs = {
+            "padding": "max_length" if self.tpu_num_cores is not None else True,  # TPU hack
+        }
+        if not isinstance(self.tokenizer, MBartTokenizer):
+            extra_kwargs["add_prefix_space"] = self.add_prefix_space
+
         batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.data_args.src_lang,
@@ -115,9 +121,8 @@ class Seq2SeqDataCollator:
             tgt_lang=self.data_args.tgt_lang,
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
-            padding="max_length" if self.tpu_num_cores is not None else True,  # TPU hack
             return_tensors="pt",
-            add_prefix_space=self.add_prefix_space,
+            **extra_kwargs,
         )
         return batch_encoding.data
 
