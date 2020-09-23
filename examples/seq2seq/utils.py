@@ -4,6 +4,7 @@ import linecache
 import math
 import os
 import pickle
+import socket
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Union
@@ -372,6 +373,7 @@ def get_git_info():
         "repo_id": str(repo),
         "repo_sha": str(repo.head.object.hexsha),
         "repo_branch": str(repo.active_branch),
+        "hostname": str(socket.gethostname()),
     }
     return repo_infos
 

@@ -1,5 +1,5 @@
 Trainer
-----------
+-----------------------------------------------------------------------------------------------------------------------
 
 The :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` classes provide an API for feature-complete
 training in most standard use cases. It's used in most of the :doc:`example scripts <../examples>`.
@@ -41,32 +41,32 @@ Here is an example of how to customize :class:`~transformers.Trainer` using a cu
             return my_custom_loss(logits, labels)
 
 
-``Trainer`` 
-~~~~~~~~~~~
+Trainer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.Trainer
     :members:
 
-``TFTrainer`` 
-~~~~~~~~~~~~~
+TFTrainer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTrainer
     :members:
 
-``TrainingArguments``
-~~~~~~~~~~~~~~~~~~~~~
+TrainingArguments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TrainingArguments
     :members:
 
-``TFTrainingArguments``
-~~~~~~~~~~~~~~~~~~~~~~~
+TFTrainingArguments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTrainingArguments
     :members:
 
 Utilities
-~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.EvalPrediction
 

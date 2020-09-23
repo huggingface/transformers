@@ -1,5 +1,5 @@
 Training and fine-tuning
-========================
+=======================================================================================================================
 
 Model classes in 🤗 Transformers are designed to be compatible with native
 PyTorch and TensorFlow 2 and can be used seemlessly with either. In this
@@ -24,7 +24,7 @@ Sections:
 .. _pytorch:
 
 Fine-tuning in native PyTorch
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Model classes in 🤗 Transformers that don't begin with ``TF`` are
 `PyTorch Modules <https://pytorch.org/docs/master/generated/torch.nn.Module.html>`_,
@@ -141,7 +141,7 @@ with features like mixed precision and easy tensorboard logging.
 
 
 Freezing the encoder
---------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 In some cases, you might be interested in keeping the weights of the
 pre-trained encoder frozen and optimizing only the weights of the head
@@ -158,7 +158,7 @@ submodule on any task-specific model in the library:
 .. _tensorflow:
 
 Fine-tuning in native TensorFlow 2
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Models can also be trained natively in TensorFlow 2. Just as with PyTorch,
 TensorFlow models can be instantiated with
@@ -210,7 +210,7 @@ can even save the model and then reload it as a PyTorch model (or vice-versa):
 .. _trainer:
 
 Trainer
-^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We also provide a simple but feature-complete training and evaluation
 interface through :func:`~transformers.Trainer` and
@@ -303,7 +303,7 @@ launching tensorboard in your specified ``logging_dir`` directory.
 .. _additional-resources:
 
 Additional resources
-^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - `A lightweight colab demo <https://colab.research.google.com/drive/1-JIJlao4dI-Ilww_NnTc0rxtp-ymgDgM?usp=sharing>`_
   which uses ``Trainer`` for IMDb sentiment classification.

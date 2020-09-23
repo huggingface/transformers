@@ -40,6 +40,9 @@ def eval_data_dir(
     task="summarization",
     local_rank=None,
     num_return_sequences=1,
+    src_lang=None,
+    tgt_lang=None,
+    prefix="",
     **generate_kwargs,
 ) -> Dict:
     """Run evaluation on part of the data for one gpu and save to {save_dir}/rank_{rank}_output.json"""
@@ -64,6 +67,8 @@ def eval_data_dir(
 
     if max_source_length is None:
         max_source_length = tokenizer.model_max_length
+    if prefix is None:
+        prefix = prefix or getattr(model.config, "prefix", "") or ""
     ds = Seq2SeqDataset(
         tokenizer,
         data_dir,
@@ -71,7 +76,9 @@ def eval_data_dir(
         max_target_length=1024,
         type_path=type_path,
         n_obs=n_obs,
-        prefix=model.config.prefix,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang,
+        prefix=prefix,
     )
     # I set shuffle=True for a more accurate progress bar.
     # If all the longest samples are first, the prog bar estimate is too high at the beginning.
@@ -89,8 +96,7 @@ def eval_data_dir(
         preds = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         ids = batch["ids"]
         if num_return_sequences > 1:
-            preds = chunks(preds, num_return_sequences)
-        # assert len(preds) == len(ids)
+            preds = chunks(preds, num_return_sequences)  # batch size chunks, each of size num_return_seq
         for i, pred in enumerate(preds):
             results.append(dict(pred=pred, id=ids[i].item()))
     save_json(results, save_path)
@@ -132,6 +138,11 @@ def run_generate():
         required=False,
         help="How long should master process wait for other processes to finish.",
     )
+    parser.add_argument("--src_lang", type=str, default=None, required=False)
+    parser.add_argument("--tgt_lang", type=str, default=None, required=False)
+    parser.add_argument(
+        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+    )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--debug", action="store_true")
     start_time = time.time()
@@ -159,6 +170,9 @@ def run_generate():
         n_obs=args.n_obs,
         max_source_length=args.max_source_length,
         num_return_sequences=args.num_return_sequences,
+        prefix=args.prefix,
+        src_lang=args.src_lang,
+        tgt_lang=args.tgt_lang,
         **generate_kwargs,
     )
 

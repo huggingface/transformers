@@ -11,6 +11,7 @@ __pycache__/
 # tests and logs
 tests/fixtures
 logs/
+lightning_logs/
 
 # Distribution / packaging
 .Python
@@ -139,6 +140,7 @@ runs
 /wandb
 /examples/runs
 /examples/**/*.args
+/examples/rag/sweep
 
 # data
 /data
