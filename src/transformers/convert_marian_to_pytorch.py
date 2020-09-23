@@ -75,6 +75,7 @@ def check_if_models_are_dominated(old_repo_path="OPUS-MT-train/models", new_repo
 
 def get_released_df(new_repo_path, old_repo_path):
     import pandas as pd
+
     released_cols = [
         "url_base",
         "pair",  # (ISO639-3/ISO639-5 codes),
@@ -326,43 +327,42 @@ def get_clean_model_id_mapping(multiling_model_ids):
     return {x: convert_opus_name_to_hf_name(x) for x in multiling_model_ids}
 
 
-
 def expand_group_to_two_letter_codes(grp_name):
     raise NotImplementedError()
 
+
 def get_two_letter_code(three_letter_code):
     raise NotImplementedError()
-    return two_letter_code
+    # return two_letter_code
+
 
 def get_tags(code, ref_name):
     if len(code) == 2:
-        assert 'languages' not in ref_name, f'{code}: {ref_name}'
+        assert "languages" not in ref_name, f"{code}: {ref_name}"
         return [code], False
-    elif 'languages' in ref_name:
-            group = expand_group_to_two_letter_codes(code)
-            group.append(code)
-            return group, True
+    elif "languages" in ref_name:
+        group = expand_group_to_two_letter_codes(code)
+        group.append(code)
+        return group, True
     else:  # zho-> zh
-        raise ValueError(f'Three letter monolingual code: {code}')
+        raise ValueError(f"Three letter monolingual code: {code}")
 
 
 def resolve_lang_code(r):
     """R is a row in ported"""
     short_pair = r.short_pair
-    src, tgt = short_pair.split('-')
+    src, tgt = short_pair.split("-")
     src_tags, src_multilingual = get_tags(src, r.src_name)
     assert isinstance(src_tags, list)
     tgt_tags, tgt_multilingual = get_tags(src, r.tgt_name)
     assert isinstance(tgt_tags, list)
     if src_multilingual:
-        src_tags.append('multilingual_src')
+        src_tags.append("multilingual_src")
     if tgt_multilingual:
-        tgt_tags.append('multilingual_tgt')
+        tgt_tags.append("multilingual_tgt")
     return src_tags + tgt_tags
 
-
     # process target
-
 
 
 def make_registry(repo_path="Opus-MT-train/models"):
