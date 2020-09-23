@@ -180,7 +180,7 @@ TFBertForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFBertForTokenClassification
-    :members:
+    :members: call
 
 
 TFBertForQuestionAnswering
@@ -188,4 +188,3 @@ TFBertForQuestionAnswering
 
 .. autoclass:: transformers.TFBertForQuestionAnswering
     :members: call
-
