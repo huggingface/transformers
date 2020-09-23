@@ -385,6 +385,9 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationLoss):
+
+    authorized_missing_keys = [r"pooler"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
