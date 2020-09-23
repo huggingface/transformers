@@ -412,6 +412,16 @@ And we have these decorators that require the condition described by the marker.
 @require_torch_and_cuda
 ```
 
+Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed last for them to work correctly. Here is an example of the correct usage:
+
+.. code-block:: python
+
+    @parameterized.expand(...)
+    @require_multigpu
+    def test_integration_foo():
+    
+There is no problem whatsoever with ``@pytest.mark.parametrize`` (but it only works with non-unittests) - can use it in any order.
+
 This section will be expanded soon once our work in progress on those decorators is finished.
 
 Inside tests:
@@ -757,7 +767,7 @@ To run such tests set ``RUN_SLOW=1`` env var, e.g.:
 
     RUN_SLOW=1 pytest tests
     
-It's important that the decorator ``@slow`` appears last in the stack of decorators, as some decorators like ``parametrized`` may interfere with its normal functioning. Here is an example of the correct usage:
+Some decorators like ``@parametrized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
