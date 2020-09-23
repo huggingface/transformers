@@ -826,13 +826,15 @@ class Trainer:
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
                 epoch_pbar.update(1)
-                if self.args.evaluation_strategy == EvaluationStrategy.EPOCH:
-                    metrics = self.evaluate()
-                    self._report_to_hp_search(trial, epoch, metrics)
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                     break
             epoch_pbar.close()
             train_pbar.update(1)
+
+            if self.args.evaluation_strategy == EvaluationStrategy.EPOCH:
+                metrics = self.evaluate()
+                self._report_to_hp_search(trial, epoch, metrics)
+
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
