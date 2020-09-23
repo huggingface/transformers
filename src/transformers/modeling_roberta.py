@@ -570,21 +570,20 @@ class RobertaModel(RobertaPreTrainedModel):
 
     """
 
-    base_model_prefix = "roberta"
     authorized_missing_keys = [r"position_ids"]
 
     # Copied from transformers.modeling_bert.BertModel.__init__ with Bert->Roberta
-    def __init__(self, config):
-    super().__init__(config)
-    self.config = config
+    def __init__(self, config, add_pooling_layer=True):
+        super().__init__(config)
+        self.config = config
 
-    self.embeddings = RobertaEmbeddings(config)
-    self.encoder = RobertaEncoder(config)
+        self.embeddings = RobertaEmbeddings(config)
+        self.encoder = RobertaEncoder(config)
 
-    if add_pooling_layer:
-        self.pooler = RobertaPooler(config)
+        if add_pooling_layer:
+            self.pooler = RobertaPooler(config)
 
-    self.init_weights()
+        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
