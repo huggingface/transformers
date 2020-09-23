@@ -217,7 +217,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         # assert key.size() == value.size()
         dim_per_head = tf.math.divide(self.dim, self.n_heads)
         dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
-
         mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
@@ -231,9 +230,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
-
-        q = tf.cast(q, dtype=tf.float64)
-        q = tf.divide(q, tf.math.sqrt(tf.cast(dim_per_head, dtype=tf.float64)))  # (bs, n_heads, qlen, dim_per_head)
+        q = tf.cast(q, dtype=tf.float32)
+        q = tf.multiply(q, tf.math.rsqrt(tf.cast(dim_per_head, dtype=tf.float32)))
         k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
@@ -241,7 +239,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
-
         weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
