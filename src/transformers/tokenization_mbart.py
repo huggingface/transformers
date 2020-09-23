@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding
@@ -214,3 +214,28 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.cur_lang_code = self.lang_code_to_id[lang]
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        """
+        overload PreTrainedTokenizer._add_tokens() to enbale add_tokens for mbart tokenizer
+
+        Args:
+            new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
+                Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
+                checking if the tokenizer assign the index of the ``unk_token`` to them).
+            special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the tokens should be added as special tokens.
+                **Not used!!** Suppose all new tokens as special tokens.
+
+        Returns:
+            :obj:`int`: The number of tokens actually added to the vocabulary.
+        """
+        new_tokens = [str(tok) for tok in new_tokens]
+
+        vocab_size = max(self.fairseq_ids_to_tokens.keys()) + 1
+        new_tokens_to_ids = {tok: vocab_size + i for i, tok in enumerate(new_tokens)}
+        self.fairseq_tokens_to_ids.update(new_tokens_to_ids)
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.tokenizer.fairseq_tokens_to_ids.items()}
+        self.unique_no_split_tokens.extend(new_tokens)
+
+        return len(new_tokens)
