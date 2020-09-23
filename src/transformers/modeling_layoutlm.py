@@ -519,7 +519,7 @@ LAYOUTLM_START_DOCSTRING = r"""    The LayoutLM model was proposed in
 """
 
 LAYOUTLM_INPUTS_DOCSTRING = r"""
-    Inputs:
+    Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
