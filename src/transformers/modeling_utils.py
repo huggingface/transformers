@@ -1003,6 +1003,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 for pat in cls.authorized_missing_keys:
                     missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
+            if cls.authorized_unexpected_keys is not None:
+                for pat in cls.authorized_unexpected_keys:
+                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
             if len(unexpected_keys) > 0:
                 logger.warning(
                     f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "

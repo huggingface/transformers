@@ -167,6 +167,7 @@ class RobertaModel(BertModel):
 
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config, add_pooling_layer=add_pooling_layer)
@@ -187,6 +188,8 @@ class RobertaModel(BertModel):
 class RobertaForCausalLM(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -303,6 +306,8 @@ class RobertaForCausalLM(BertPreTrainedModel):
 class RobertaForMaskedLM(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -429,6 +434,8 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
+    authorized_missing_keys = [r"position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -511,6 +518,8 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 class RobertaForMultipleChoice(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+
+    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -602,6 +611,9 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 class RobertaForTokenClassification(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+
+    authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -710,6 +722,9 @@ class RobertaClassificationHead(nn.Module):
 class RobertaForQuestionAnswering(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+
+    authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
