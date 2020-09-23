@@ -244,7 +244,7 @@ jobs:
                   key: v0.3-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: black --check --line-length 119 --target-version py35 examples templates tests src utils
+            - run: black --check examples templates tests src utils
             - run: isort --check-only examples templates tests src utils
             - run: flake8 examples templates tests src utils
             - run: python utils/check_copies.py
