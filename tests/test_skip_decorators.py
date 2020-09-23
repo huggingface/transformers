@@ -37,9 +37,6 @@ from transformers.testing_utils import require_torch, require_torch_and_cuda, sl
 
 params = [(1,)]
 
-### unittest ###
-
-
 @require_torch
 class SkipTester(unittest.TestCase):
 
@@ -89,7 +86,7 @@ class SkipTester(unittest.TestCase):
         self.check_slow()
 
 
-### pytest ###
+# skipping in non-unittest tests
 
 # Note: skip decorators use unittest API so the below tests fail even the collect stage. so if we want to have some non-unittest tests (which we have) to use these decorators, we would need to either add some magic to them to call the correct `(unittest|pytest).skip()` depending on the context or have another set of skip decorators
 
