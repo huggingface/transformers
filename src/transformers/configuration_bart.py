@@ -99,6 +99,14 @@ BART_CONFIG_ARGS_DOC = r"""
 """
 
 
+MODELTYPE_TO_LAYERNORM_VARIANT = {
+    'bart': 'bart',
+    'pegasus': 'prelayernorm',
+    'mbart': 'prelayernorm',
+    'marian': 'prelayernorm',
+}
+
+
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
     r"""
@@ -137,7 +145,7 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
-        variant="bart",
+        variant=None,
         force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
@@ -175,7 +183,10 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-        self.variant = variant
+        if variant is not None:
+            self.variant = variant
+        else:
+            self.variant =MODELTYPE_TO_LAYERNORM_VARIANT[self.model_type]
 
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
