@@ -39,6 +39,7 @@ from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     BestRun,
     EvalPrediction,
+    EvaluationStrategy,
     HPSearchBackend,
     PredictionOutput,
     TrainOutput,
@@ -351,6 +352,7 @@ class Trainer:
             sampler=train_sampler,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
@@ -390,6 +392,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -782,7 +785,10 @@ class Trainer:
 
                         self.log(logs)
 
-                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                    if (
+                        self.args.evaluation_strategy == EvaluationStrategy.STEPS
+                        and self.global_step % self.args.eval_steps == 0
+                    ):
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
 
@@ -806,6 +812,7 @@ class Trainer:
                             checkpoint_folder += f"-run-{run_id}"
                         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
+                        self.store_flos()
                         self.save_model(output_dir)
 
                         if self.is_world_process_zero():
@@ -824,6 +831,11 @@ class Trainer:
                     break
             epoch_pbar.close()
             train_pbar.update(1)
+
+            if self.args.evaluation_strategy == EvaluationStrategy.EPOCH:
+                metrics = self.evaluate()
+                self._report_to_hp_search(trial, epoch, metrics)
+
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -1140,7 +1152,6 @@ class Trainer:
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
 
         xm.rendezvous("saving_checkpoint")
-        self._store_flos()
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1153,7 +1164,6 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
-        self._store_flos()
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1164,7 +1174,7 @@ class Trainer:
             self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"), indent=2, ensure_ascii=False
         )
 
-    def _store_flos(self):
+    def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self.total_flos is not None:
             if self.args.local_rank != -1:
@@ -1334,9 +1344,9 @@ class Trainer:
         elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
-                preds = nested_xla_mesh_reduce("eval_preds", preds)
+                preds = nested_xla_mesh_reduce(preds, "eval_preds")
             if label_ids is not None:
-                label_ids = nested_xla_mesh_reduce("eval_label_ids", label_ids, torch.cat)
+                label_ids = nested_xla_mesh_reduce(label_ids, "eval_label_ids")
             if eval_losses is not None:
                 eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
 

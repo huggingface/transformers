@@ -17,7 +17,6 @@
 
 
 import itertools
-import math
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -114,13 +113,12 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
     return mask, attn_mask
 
 
-class TFMultiHeadAttention(tf.keras.layers.Layer):
-
+class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config, **kwargs):
         super().__init__(**kwargs)
-        self.layer_id = next(TFMultiHeadAttention.NEW_ID)
+        self.layer_id = next(TFXLMMultiHeadAttention.NEW_ID)
         self.dim = dim
         self.n_heads = n_heads
         self.output_attentions = config.output_attentions
@@ -143,13 +141,15 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = shape_list(input)
+
         if kv is None:
             klen = qlen if cache is None else cache["slen"] + qlen
         else:
             klen = shape_list(kv)[1]
+
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
-        n_heads = self.n_heads
-        dim_per_head = self.dim // n_heads
+        dim_per_head = tf.math.divide(self.dim, self.n_heads)
+        dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
         mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
 
         def shape(x):
@@ -161,6 +161,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.n_heads * dim_per_head))
 
         q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
+
         if kv is None:
             k = shape(self.k_lin(input))  # (bs, n_heads, qlen, dim_per_head)
             v = shape(self.v_lin(input))  # (bs, n_heads, qlen, dim_per_head)
@@ -177,14 +178,17 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
                     v = tf.concat([v_, v], axis=2)  # (bs, n_heads, klen, dim_per_head)
                 else:
                     k, v = cache[self.layer_id]
+
             cache[self.layer_id] = (k, v)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        q = tf.cast(q, dtype=tf.float32)
+        q = tf.multiply(q, tf.math.rsqrt(tf.cast(dim_per_head, dtype=tf.float32)))  # (bs, n_heads, qlen, dim_per_head)
+        k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
+        mask = tf.cast(mask, dtype=scores.dtype)
         scores = scores - 1e30 * (1.0 - mask)
-
         weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
@@ -194,16 +198,18 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
         context = tf.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
         context = unshape(context)  # (bs, qlen, dim)
-
         outputs = (self.out_lin(context),)
+
         if output_attentions:
             outputs = outputs + (weights,)
+
         return outputs
 
 
-class TFTransformerFFN(tf.keras.layers.Layer):
+class TFXLMTransformerFFN(tf.keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super().__init__(**kwargs)
+
         self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
         self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
@@ -214,6 +220,7 @@ class TFTransformerFFN(tf.keras.layers.Layer):
         x = self.act(x)
         x = self.lin2(x)
         x = self.dropout(x, training=training)
+
         return x
 
 
@@ -223,6 +230,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.return_dict = config.use_return_dict
@@ -230,8 +238,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # encoder / decoder, output layer
         self.is_encoder = config.is_encoder
         self.is_decoder = not config.is_encoder
+
         if self.is_decoder:
             raise NotImplementedError("Currently XLM can only be used as an encoder")
+
         # self.with_output = with_output
         self.causal = config.causal
 
@@ -257,16 +267,17 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # embeddings
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.attention_dropout = tf.keras.layers.Dropout(config.attention_dropout)
-
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             self.dim,
             embeddings_initializer=get_initializer(config.embed_init_std),
             name="position_embeddings",
         )
+
         if config.sinusoidal_embeddings:
             raise NotImplementedError
             # create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
+
         if config.n_langs > 1 and config.use_lang_emb:
             self.lang_embeddings = tf.keras.layers.Embedding(
                 self.n_langs,
@@ -274,6 +285,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                 embeddings_initializer=get_initializer(config.embed_init_std),
                 name="lang_embeddings",
             )
+
         self.embeddings = TFSharedEmbeddings(
             self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
         )  # padding_idx=self.pad_index)
@@ -290,7 +302,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         for i in range(self.n_layers):
             self.attentions.append(
-                TFMultiHeadAttention(self.n_heads, self.dim, config=config, name="attentions_._{}".format(i))
+                TFXLMMultiHeadAttention(self.n_heads, self.dim, config=config, name="attentions_._{}".format(i))
             )
             self.layer_norm1.append(
                 tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1_._{}".format(i))
@@ -299,7 +311,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
             self.ffns.append(
-                TFTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name="ffns_._{}".format(i))
+                TFXLMTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name="ffns_._{}".format(i))
             )
             self.layer_norm2.append(
                 tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2_._{}".format(i))
@@ -308,6 +320,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         if hasattr(config, "pruned_heads"):
             pruned_heads = config.pruned_heads.copy().items()
             config.pruned_heads = {}
+
             for layer, heads in pruned_heads:
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
@@ -398,7 +411,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        tf.debugging.assert_equal(shape_list(lengths)[0], bs)
+        tf.debugging.assert_equal(
+            shape_list(lengths)[0], bs
+        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -416,13 +431,17 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             position_ids = tf.expand_dims(tf.range(slen), axis=0)
         else:
             # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen])
+            tf.debugging.assert_equal(
+                shape_list(position_ids), [bs, slen]
+            ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
             # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(shape_list(langs), [bs, slen])
+            tf.debugging.assert_equal(
+                shape_list(langs), [bs, slen]
+            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
@@ -455,6 +474,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
+
         tensor = self.layer_norm_emb(tensor)
         tensor = self.dropout(tensor, training=training)
         tensor = tensor * mask[..., tf.newaxis]
@@ -462,6 +482,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # transformer layers
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
+
         for i in range(self.n_layers):
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
@@ -471,8 +492,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                 tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training
             )
             attn = attn_outputs[0]
+
             if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
+
             attn = self.dropout(attn, training=training)
             tensor = tensor + attn
             tensor = self.layer_norm1[i](tensor)
@@ -502,6 +525,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
+
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
@@ -554,24 +578,32 @@ class TFXLMWithLMHeadModelOutput(ModelOutput):
 
 XLM_START_DOCSTRING = r"""
 
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
+
     .. note::
 
         TF 2.0 models accepts two formats as inputs:
 
-            - having all inputs as keyword arguments (like PyTorch models), or
-            - having all inputs as a list, tuple or dict in the first positional arguments.
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.XLMConfig`): Model configuration class with all the parameters of the model.
@@ -581,63 +613,77 @@ XLM_START_DOCSTRING = r"""
 
 XLM_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.BertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` and
+            :func:`transformers.PreTrainedTokenizer.encode` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        langs (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        langs (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`({0})`, `optional`):
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are languages ids which can be obtained from the language names by using two conversion mappings
             provided in the configuration of the model (only provided for multilingual models).
-            More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
-            the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
+            More precisely, the `language name to language id` mapping is in :obj:`model.config.lang2id` (which is a
+            dictionary strring to int) and the `language id to language name` mapping is in :obj:`model.config.id2lang`
+            (dictionary int to string).
 
-            See usage examples detailed in the `multilingual documentation <https://huggingface.co/transformers/multilingual.html>`__.
-        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
+        ttoken_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Indices are selected in ``[0, 1]``:
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`__
+        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
+            `What are position IDs? <../glossary.html#position-ids>`__
         lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`):
             Length of each sentence that can be used to avoid performing attention on padding token indices.
             You can also use `attention_mask` for the same result (see above), kept here for compatbility.
-            Indices selected in ``[0, ..., input_ids.size(-1)]``:
+            Indices selected in ``[0, ..., input_ids.size(-1)]``.
         cache (:obj:`Dict[str, tf.Tensor]`, `optional`):
-            dictionary with ``tf.Tensor`` that contains pre-computed
-            hidden-states (key and values in the attention blocks) as computed by the model
-            (see `cache` output below). Can be used to speed up sequential decoding.
-            The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
-        head_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Dictionary string to ``torch.FloatTensor`` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see :obj:`cache` output below). Can be used to speed up
+            sequential decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
+        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -650,7 +696,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -669,9 +715,11 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.asm = config.asm
         self.n_words = config.n_words
         self.pad_index = config.pad_index
+
         if config.asm is False:
             self.input_embeddings = input_embeddings
         else:
@@ -687,11 +735,13 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
     def build(self, input_shape):
         # The output weights are the same as the input embeddings, but there is an output-only bias for each token.
         self.bias = self.add_weight(shape=(self.n_words,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
+
         return hidden_states
 
 
@@ -723,7 +773,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             langs = None
         return {"inputs": inputs, "langs": langs}
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -759,7 +809,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -858,7 +908,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
         }
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -885,8 +935,8 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -998,7 +1048,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1071,7 +1121,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
 
 
 @add_start_docstrings(
-    """XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    """XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     XLM_START_DOCSTRING,
 )
@@ -1083,7 +1133,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1111,11 +1161,11 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict

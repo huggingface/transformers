@@ -1,5 +1,5 @@
 Pretrained models
-================================================
+=======================================================================================================================
 
 Here is the full list of the currently provided pretrained models together with a short presentation of each model.
 
@@ -407,4 +407,12 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                    | ``funnel-transformer/xlarge-base``                         | | 30 layers: 3 blocks of 10 layers (no decoder), 1024-hidden, 12-heads, 440M parameters                                               |
 |                    |                                                            |                                                                                                                                       |
 |                    |                                                            | (see `details <https://github.com/laiguokun/Funnel-Transformer>`__)                                                                   |
++--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| LayoutLM           | ``microsoft/layoutlm-base-uncased``                        | | 12 layers, 768-hidden, 12-heads, 113M parameters                                                                                    |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/unilm/tree/master/layoutlm>`__)                                                           |
++                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``microsoft/layoutlm-large-uncased``                       | | 24 layers, 1024-hidden, 16-heads, 343M parameters                                                                                   |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/unilm/tree/master/layoutlm>`__)                                                           |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+

@@ -366,6 +366,8 @@ def generic_train(
     if args.gpus > 1:
         train_params["distributed_backend"] = "ddp"
 
+    train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
+
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,

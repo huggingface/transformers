@@ -57,10 +57,10 @@ PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case":
 
 class FunnelTokenizer(BertTokenizer):
     r"""
-    Tokenizer for the Funnel Transformer models.
+    Construct a Funnel Transformer tokenizer.
 
     :class:`~transformers.FunnelTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
@@ -110,19 +110,19 @@ class FunnelTokenizer(BertTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        Funnel Transformer expects a sequence pair mask that has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A Funnel Transformer sequence pair mask has the following format:
 
         ::
 
             2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
             | first sequence    | second sequence |
 
-        if token_ids_1 is None, only returns the first portion of the mask (0's).
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
@@ -139,10 +139,10 @@ class FunnelTokenizer(BertTokenizer):
 
 class FunnelTokenizerFast(BertTokenizerFast):
     r"""
-    "Fast" tokenizer for the Funnel Transformer models (backed by HuggingFace's :obj:`tokenizers` library).
+    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's `tokenizers` library).
 
     :class:`~transformers.FunnelTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting + wordpiece.
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
@@ -192,19 +192,19 @@ class FunnelTokenizerFast(BertTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        Funnel Transformer expects a sequence pair mask that has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A Funnel Transformer sequence pair mask has the following format:
 
         ::
 
             2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
             | first sequence    | second sequence |
 
-        if token_ids_1 is None, only returns the first portion of the mask (0's).
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 

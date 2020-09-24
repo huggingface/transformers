@@ -442,7 +442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
     def set_input_embeddings(self, value: nn.Module):
         """
-        Set model's input embeddings
+        Set model's input embeddings.
 
         Args:
             value (:obj:`nn.Module`): A module mapping vocabulary to hidden states.
