@@ -367,7 +367,6 @@ class FunnelAttentionStructure(nn.Module):
         # Stride is applied on the second-to-last dimension.
         stride = (stride, 1)
 
-        tensor = tensor.float()
         if mode == "mean":
             tensor = F.avg_pool2d(tensor, stride, stride=stride, ceil_mode=True)
         elif mode == "max":
