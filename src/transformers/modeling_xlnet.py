@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from .activations import gelu_new, swish
+from .activations import ACT2FN
 from .configuration_xlnet import XLNetConfig
 from .file_utils import (
     ModelOutput,
@@ -207,12 +207,6 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
     return model
 
 
-ACT2FN = {"gelu": gelu_new, "relu": torch.nn.functional.relu, "swish": swish}
-
-
-XLNetLayerNorm = nn.LayerNorm
-
-
 class XLNetRelativeAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -239,7 +233,7 @@ class XLNetRelativeAttention(nn.Module):
         self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
         self.seg_embed = nn.Parameter(torch.FloatTensor(2, self.n_head, self.d_head))
 
-        self.layer_norm = XLNetLayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
 
     def prune_heads(self, heads):
@@ -476,7 +470,7 @@ class XLNetRelativeAttention(nn.Module):
 class XLNetFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = XLNetLayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.layer_1 = nn.Linear(config.d_model, config.d_inner)
         self.layer_2 = nn.Linear(config.d_inner, config.d_model)
         self.dropout = nn.Dropout(config.dropout)
@@ -563,7 +557,7 @@ class XLNetPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, XLNetLayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, XLNetRelativeAttention):
