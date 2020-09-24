@@ -39,6 +39,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         - transpose: boolean indicating weither TF2.0 and PyTorch weights matrices are transposed with regards to each other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
+    tf_name = tf_name.replace("self/attention/", "")
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
     )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
@@ -176,6 +177,13 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             array = numpy.squeeze(array)
         elif len(symbolic_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
+        
+        if list(symbolic_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, symbolic_weight.shape)
+            except AssertionError as e:
+                e.args += (symbolic_weight.shape, array.shape)
+                raise e
 
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
@@ -331,6 +339,13 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             array = numpy.squeeze(array)
         elif len(pt_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
+        
+        if list(pt_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, pt_weight.shape)
+            except AssertionError as e:
+                e.args += (pt_weight.shape, array.shape)
+                raise e
 
         try:
             assert list(pt_weight.shape) == list(array.shape)
