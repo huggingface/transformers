@@ -680,11 +680,15 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
+        token_type_ids = kwargs.get("token_type_ids")
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
         return {
             "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
             "past_key_values": past,
             "use_cache": kwargs.get("use_cache"),
         }
