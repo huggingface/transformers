@@ -273,9 +273,46 @@ def check_all_models_are_documented():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+_re_decorator = re.compile(r"^\s*@(\S+)\s+$")
+
+
+def check_decorator_order(filename):
+    """ Check that in the test file `filename` the slow decorator is always last."""
+    with open(filename, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    decorator_before = None
+    errors = []
+    for i, line in enumerate(lines):
+        search = _re_decorator.search(line)
+        if search is not None:
+            decorator_name = search.groups()[0]
+            if decorator_before is not None and decorator_name.startswith("parameterized"):
+                errors.append(i)
+            decorator_before = decorator_name
+        elif decorator_before is not None:
+            decorator_before = None
+    return errors
+
+
+def check_all_decorator_order():
+    """ Check that in all test files, the slow decorator is always last."""
+    errors = []
+    for fname in os.listdir(PATH_TO_TESTS):
+        if fname.endswith(".py"):
+            filename = os.path.join(PATH_TO_TESTS, fname)
+            new_errors = check_decorator_order(filename)
+            errors += [f"- {filename}, line {i}" for i in new_errors]
+    if len(errors) > 0:
+        msg = "\n".join(errors)
+        raise ValueError(
+            f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
+        )
+
+
 def check_repo_quality():
     """ Check all models are properly tested and documented."""
     print("Checking all models are properly tested.")
+    check_all_decorator_order()
     check_all_models_are_tested()
     print("Checking all models are properly documented.")
     check_all_models_are_documented()
