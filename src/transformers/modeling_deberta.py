@@ -16,13 +16,13 @@
 
 import copy
 import json
-from .utils import logging
 import math
 import os
 from collections import Sequence
 
 import torch
 from packaging import version
+from torch import _softmax_backward_data as _softmax_backward_data
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -30,7 +30,7 @@ from .configuration_deberta import DeBERTaConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel
-from torch import _softmax_backward_data as _softmax_backward_data
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -800,7 +800,7 @@ class DeBERTaPreTrainedModel(PreTrainedModel):
 
     config_class = DeBERTaConfig
     base_model_prefix = "deberta"
-    authorized_missing_keys = ['position_ids']
+    authorized_missing_keys = ["position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -1000,7 +1000,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         num_labels = getattr(config, "num_labels", 2)
         self.num_labels = num_labels
 
-        self.bert = DeBERTaModel(config)
+        self.deberta = DeBERTaModel(config)
         self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim()
 
@@ -1012,10 +1012,10 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.get_input_embeddings()
+        return self.deberta.get_input_embeddings()
 
     def set_input_embeddings(self, new_embeddings):
-        self.bert.set_input_embeddings(new_embeddings)
+        self.deberta.set_input_embeddings(new_embeddings)
 
     @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -1045,7 +1045,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.deberta(
             input_ids,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,

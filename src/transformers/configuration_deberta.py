@@ -14,9 +14,8 @@
 # limitations under the License.
 """ DeBERTa model configuration """
 
-from .utils import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -97,7 +96,7 @@ class DeBERTaConfig(PretrainedConfig):
         position_biased_input=True,
         pos_att_type="None",
         pooler_dropout=0,
-        pooler_hidden_act='gelu',
+        pooler_hidden_act="gelu",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -120,6 +119,6 @@ class DeBERTaConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.layer_norm_eps = layer_norm_eps
 
-        self.pooler_hidden_size = kwargs.get('pooler_hidden_size', hidden_size)
+        self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
