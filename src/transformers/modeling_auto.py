@@ -585,7 +585,9 @@ class AutoModel:
             )
 
         if type(config) in MODEL_MAPPING.keys():
-            return MODEL_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -677,7 +679,9 @@ class AutoModelForPreTraining:
             )
 
         if type(config) in MODEL_FOR_PRETRAINING_MAPPING.keys():
-            return MODEL_FOR_PRETRAINING_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_PRETRAINING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -787,7 +791,9 @@ class AutoModelWithLMHead:
             )
 
         if type(config) in MODEL_WITH_LM_HEAD_MAPPING.keys():
-            return MODEL_WITH_LM_HEAD_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_WITH_LM_HEAD_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -879,7 +885,9 @@ class AutoModelForCausalLM:
             )
 
         if type(config) in MODEL_FOR_CAUSAL_LM_MAPPING.keys():
-            return MODEL_FOR_CAUSAL_LM_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -971,7 +979,9 @@ class AutoModelForMaskedLM:
             )
 
         if type(config) in MODEL_FOR_MASKED_LM_MAPPING.keys():
-            return MODEL_FOR_MASKED_LM_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_MASKED_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1065,7 +1075,9 @@ class AutoModelForSeq2SeqLM:
             )
 
         if type(config) in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
-            return MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1161,7 +1173,9 @@ class AutoModelForSequenceClassification:
             )
 
         if type(config) in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
-            return MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1257,7 +1271,9 @@ class AutoModelForQuestionAnswering:
             )
 
         if type(config) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
-            return MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
 
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1354,7 +1370,9 @@ class AutoModelForTokenClassification:
             )
 
         if type(config) in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
-            return MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
 
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1452,7 +1470,9 @@ class AutoModelForMultipleChoice:
             )
 
         if type(config) in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
-            return MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
 
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"

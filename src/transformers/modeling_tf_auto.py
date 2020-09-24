@@ -494,7 +494,9 @@ class TFAutoModel(object):
             )
 
         if type(config) in TF_MODEL_MAPPING.keys():
-            return TF_MODEL_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -586,7 +588,9 @@ class TFAutoModelForPreTraining(object):
             )
 
         if type(config) in TF_MODEL_FOR_PRETRAINING_MAPPING.keys():
-            return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -697,7 +701,9 @@ class TFAutoModelWithLMHead(object):
             )
 
         if type(config) in TF_MODEL_WITH_LM_HEAD_MAPPING.keys():
-            return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -789,7 +795,9 @@ class TFAutoModelForCausalLM:
             )
 
         if type(config) in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -881,7 +889,9 @@ class TFAutoModelForMaskedLM:
             )
 
         if type(config) in TF_MODEL_FOR_MASKED_LM_MAPPING.keys():
-            return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -975,7 +985,9 @@ class TFAutoModelForSeq2SeqLM:
             )
 
         if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1071,7 +1083,9 @@ class TFAutoModelForSequenceClassification(object):
             )
 
         if type(config) in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
-            return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1166,7 +1180,9 @@ class TFAutoModelForQuestionAnswering(object):
             )
 
         if type(config) in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
-            return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1261,7 +1277,9 @@ class TFAutoModelForTokenClassification:
             )
 
         if type(config) in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
-            return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1357,7 +1375,9 @@ class TFAutoModelForMultipleChoice:
             )
 
         if type(config) in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
-            return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+            return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
