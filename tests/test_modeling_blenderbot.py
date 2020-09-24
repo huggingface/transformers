@@ -154,7 +154,6 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
             normalize_embedding=True,
             max_position_embeddings=50,
             activation_function="gelu",
-            normalize_before=False,
             static_position_embeddings=True,
             dropout=0.1,
         )
@@ -292,7 +291,6 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             normalize_embedding=True,
             max_position_embeddings=50,
             activation_function="gelu",
-            normalize_before=False,
             static_position_embeddings=False,
             dropout=0.1,
         )
@@ -376,7 +374,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
        i'm going to throw up.\nand why is that?"
         ]
-        #tgt_text = "i ' m not sure . i just feel like i ' m going to throw up ."
+        # tgt_text = "i ' m not sure . i just feel like i ' m going to throw up ."
         tgt_text = "i don't know. i just feel like i'm going to throw up. it's not fun."
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)

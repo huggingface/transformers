@@ -228,7 +228,6 @@ class EncoderLayer(nn.Module):
         self.embed_dim = config.d_model
         self.variant = config.variant
         self.self_attn = Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout)
-        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -414,7 +413,7 @@ class DecoderLayer(nn.Module):
         if layer_state is None:
             layer_state = {}
         if self.variant == "prelayernorm":
-            x = self.self_attn_layer_norm(x)  # norm1 in parlai
+            x = self.self_attn_layer_norm(x)
         # Self Attention
 
         x, self_attn_weights = self.self_attn(
@@ -823,7 +822,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
         self.offset = offset
         assert padding_idx is not None
         num_embeddings += offset
-        # TODO(SS): Do we need padding_idx?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input_ids, use_cache=False):

@@ -40,6 +40,9 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         assert inputs.input_ids.shape == (2, 421)
         translated_tokens = self.model.generate(**inputs)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        import ipdb
+
+        ipdb.set_trace()
         assert self.tgt_text == decoded
 
         if "cuda" not in torch_device:
