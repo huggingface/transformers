@@ -15,14 +15,12 @@
 """ PyTorch DeBERTa model. """
 
 import copy
-import json
 import math
-import os
 from collections import Sequence
 
 import torch
 from packaging import version
-from torch import _softmax_backward_data as _softmax_backward_data
+from torch import _softmax_backward_data
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
