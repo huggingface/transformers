@@ -814,6 +814,7 @@ class Trainer:
                             checkpoint_folder += f"-run-{run_id}"
                         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
+                        self._store_flos()
                         self.save_model(output_dir)
 
                         if self.is_world_process_zero():
@@ -1071,7 +1072,6 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
-        print(torch.distributed.get_rank(), {key: value.size() for key, value in inputs.items()})
         outputs = model(**inputs)
         # Save past state if it exists
         if self.args.past_index >= 0:
@@ -1152,7 +1152,6 @@ class Trainer:
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
 
         xm.rendezvous("saving_checkpoint")
-        self._store_flos()
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
