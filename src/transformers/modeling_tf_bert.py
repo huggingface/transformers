@@ -93,6 +93,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         self.initializer_range = config.initializer_range
@@ -124,6 +125,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 shape=[self.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
+
         super().build(input_shape)
 
     def call(
@@ -273,6 +275,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -290,6 +293,7 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
 class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.self_attention = TFBertSelfAttention(config, name="self")
         self.dense_output = TFBertSelfOutput(config, name="output")
 
@@ -309,6 +313,7 @@ class TFBertAttention(tf.keras.layers.Layer):
 class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -328,6 +333,7 @@ class TFBertIntermediate(tf.keras.layers.Layer):
 class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -345,6 +351,7 @@ class TFBertOutput(tf.keras.layers.Layer):
 class TFBertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.attention = TFBertAttention(config, name="attention")
         self.intermediate = TFBertIntermediate(config, name="intermediate")
         self.bert_output = TFBertOutput(config, name="output")
@@ -364,6 +371,7 @@ class TFBertLayer(tf.keras.layers.Layer):
 class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
@@ -397,6 +405,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -405,6 +414,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
 class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -424,6 +434,7 @@ class TFBertPooler(tf.keras.layers.Layer):
 class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -446,6 +457,7 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
 class TFBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
         self.transform = TFBertPredictionHeadTransform(config, name="transform")
 
@@ -455,6 +467,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def call(self, hidden_states):
@@ -468,6 +481,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 class TFBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
 
     def call(self, sequence_output):
@@ -479,6 +493,7 @@ class TFBertMLMHead(tf.keras.layers.Layer):
 class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.seq_relationship = tf.keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="seq_relationship"
         )
@@ -495,6 +510,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.num_hidden_layers = config.num_hidden_layers
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
@@ -571,6 +587,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.fill(input_shape, 1)
+
         if token_type_ids is None:
             token_type_ids = tf.fill(input_shape, 0)
 
@@ -588,7 +605,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-
         extended_attention_mask = tf.cast(extended_attention_mask, embedding_output.dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
@@ -767,6 +783,7 @@ BERT_INPUTS_DOCSTRING = r"""
 class TFBertModel(TFBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+
         self.bert = TFBertMainLayer(config, name="bert")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -778,6 +795,7 @@ class TFBertModel(TFBertPreTrainedModel):
     )
     def call(self, inputs, **kwargs):
         outputs = self.bert(inputs, **kwargs)
+
         return outputs
 
 
@@ -818,7 +836,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(inputs, **kwargs)
-
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
         seq_relationship_score = self.nsp(pooled_output)
@@ -880,6 +897,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
+
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -902,7 +920,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=training)
-
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
         if not return_dict:
@@ -956,6 +973,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             Indices should be in ``[0, ..., config.vocab_size - 1]``.
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
+
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -978,8 +996,8 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
         sequence_output = outputs[0]
         logits = self.mlm(sequence_output, training=training)
-
         loss = None
+
         if labels is not None:
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
@@ -1033,7 +1051,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(inputs, **kwargs)
-
         pooled_output = outputs[1]
         seq_relationship_score = self.nsp(pooled_output)
 
@@ -1055,8 +1072,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
 
+        self.num_labels = config.num_labels
         self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
@@ -1092,6 +1109,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
+
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -1113,10 +1131,8 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         )
 
         pooled_output = outputs[1]
-
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
-
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
@@ -1208,6 +1224,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
+
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
         if input_ids is not None:
@@ -1242,7 +1259,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
         if not return_dict:
@@ -1265,8 +1281,8 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
 
+        self.num_labels = config.num_labels
         self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
@@ -1300,6 +1316,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
+
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -1319,12 +1336,9 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return_dict=return_dict,
             training=training,
         )
-
         sequence_output = outputs[0]
-
         sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
-
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
@@ -1347,8 +1361,8 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
 
+        self.num_labels = config.num_labels
         self.bert = TFBertMainLayer(config, name="bert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
@@ -1387,6 +1401,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
+
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[9] if len(inputs) > 9 else start_positions
             end_positions = inputs[10] if len(inputs) > 10 else end_positions
@@ -1408,15 +1423,13 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             return_dict=return_dict,
             training=training,
         )
-
         sequence_output = outputs[0]
-
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
-
         loss = None
+
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
