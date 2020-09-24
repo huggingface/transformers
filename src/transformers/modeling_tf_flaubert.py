@@ -166,7 +166,7 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare XLM Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare Flaubert Model transformer outputing raw hidden-states without any specific head on top.",
     FLAUBERT_START_DOCSTRING,
 )
 class TFFlaubertModel(TFFlaubertPreTrainedModel):
