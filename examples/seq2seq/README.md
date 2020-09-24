@@ -200,7 +200,7 @@ To see all the possible command line options, run:
 
 **At the moment, `Seq2SeqTrainer` does not support *with teacher* distillation.**
 
-All `Seq2SeqTrainer` based fine-tuning scripts included in the `builtin_trainer` directory.
+All `Seq2SeqTrainer` based fine-tuning scripts are included in the `builtin_trainer` directory.
 
 #### TPU Training
 `Seq2SeqTrainer` supports TPU training with few caveats
