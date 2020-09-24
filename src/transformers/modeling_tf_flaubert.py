@@ -625,7 +625,7 @@ class TFFlaubertPredLayer(tf.keras.layers.Layer):
 @dataclass
 class TFFlaubertWithLMHeadModelOutput(ModelOutput):
     """
-    Base class for :class:`~transformers.TFXLMWithLMHeadModel` outputs.
+    Base class for :class:`~transformers.TFFlaubertWithLMHeadModel` outputs.
 
     Args:
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
