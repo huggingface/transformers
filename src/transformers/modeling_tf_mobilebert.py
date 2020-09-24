@@ -31,7 +31,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import TFBertIntermediate
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -63,9 +62,27 @@ _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mobilebert-uncased",
+    "google/mobilebert-uncased",
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
+
+
+class TFMobileBertIntermediate(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
+
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+
+        return hidden_states
 
 
 class TFLayerNorm(tf.keras.layers.LayerNormalization):
@@ -351,12 +368,6 @@ class TFMobileBertAttention(tf.keras.layers.Layer):
         attention_output = self.mobilebert_output(self_outputs[0], layer_input, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
-
-
-class TFMobileBertIntermediate(TFBertIntermediate):
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
-        self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
 
 
 class TFOutputBottleneck(tf.keras.layers.Layer):
