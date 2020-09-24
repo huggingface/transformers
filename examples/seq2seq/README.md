@@ -92,7 +92,7 @@ All finetuning bash scripts call finetune.py (or distillation.py) with reasonabl
 To see all the possible command line options, run:
 
 ```bash
- ./finetune --help 
+ ./finetune.py --help 
 ```
 
 ### Finetuning Training Params
