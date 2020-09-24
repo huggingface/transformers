@@ -740,6 +740,8 @@ class Trainer:
                     epoch_pbar.update(1)
                     continue
 
+                # print(inputs)
+
                 tr_loss += self.training_step(model, inputs)
                 self.total_flos += self.floating_point_ops(inputs)
 
@@ -1069,6 +1071,7 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
+        print(torch.distributed.get_rank(), {key: value.size for key, value in inputs.items()})
         outputs = model(**inputs)
         # Save past state if it exists
         if self.args.past_index >= 0:
