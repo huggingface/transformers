@@ -213,6 +213,15 @@ def enable_propagation() -> None:
 
 
 def enable_explicit_format() -> None:
+    """
+    Enable explicit formatting for every HuggingFace Transformers's logger. The explicit formatter is as follows:
+
+    ::
+
+        [LEVELNAME|FILENAME|LINE NUMBER] TIME >> MESSAGE
+
+    All handlers currently bound to the root logger are affected by this method.
+    """
     handlers = _get_library_root_logger().handlers
 
     for handler in handlers:
@@ -221,6 +230,11 @@ def enable_explicit_format() -> None:
 
 
 def reset_format() -> None:
+    """
+    Resets the formatting for HuggingFace Transformers's loggers.
+
+    All handlers currently bound to the root logger are affected by this method.
+    """
     handlers = _get_library_root_logger().handlers
 
     for handler in handlers:
