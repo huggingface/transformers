@@ -1419,8 +1419,8 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    @slow
     @require_torch
+    @slow
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
@@ -1470,8 +1470,8 @@ class TokenizerTesterMixin:
         #     model(**encoded_sequence_fast)
         #     model(**batch_encoded_sequence_fast)
 
-    @slow
     @require_tf
+    @slow
     def test_tf_encode_plus_sent_to_model(self):
         from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
 
@@ -1505,8 +1505,8 @@ class TokenizerTesterMixin:
                 model(batch_encoded_sequence)
 
     # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
-    @slow
     @require_torch
+    @slow
     def test_np_encode_plus_sent_to_model(self):
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
