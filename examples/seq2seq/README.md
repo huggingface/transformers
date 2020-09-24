@@ -100,7 +100,7 @@ All finetuning bash scripts call finetune.py (or distillation.py) with reasonabl
 To see all the possible command line options, run:
 
 ```bash
-./finetune.sh --help  # this calls python finetune.py --help
+ ./finetune.py --help 
 ```
 
 ### Finetuning Training Params
@@ -197,7 +197,7 @@ If 'translation' is in your task name, the computed metric will be BLEU. Otherwi
 For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
 export DATA_DIR=wmt_en_ro
-python run_eval.py t5-base \
+./run_eval.py t5-base \
     $DATA_DIR/val.source t5_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \
@@ -211,7 +211,7 @@ python run_eval.py t5-base \
 This command works for MBART, although the BLEU score is suspiciously low.
 ```bash
 export DATA_DIR=wmt_en_ro
-python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
+./run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \
     --task translation \
@@ -224,7 +224,7 @@ python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_gen
 Summarization (xsum will be very similar):
 ```bash
 export DATA_DIR=cnn_dm
-python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
+./run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path cnn_rouge.json \
     --task summarization \
@@ -238,7 +238,7 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
 ### Multi-GPU Evalulation
 here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
 because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
-`{type_path}.source` and `{type_path}.target`. Run `python run_distributed_eval.py --help` for all clargs.
+`{type_path}.source` and `{type_path}.target`. Run `./run_distributed_eval.py --help` for all clargs.
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=8  run_distributed_eval.py \
@@ -371,11 +371,11 @@ This feature can only be used:
 - with fairseq installed
 - on 1 GPU
 - without sortish sampler
-- after calling `python save_len_file.py $tok $data_dir`
+- after calling `./save_len_file.py $tok $data_dir`
 
 For example, 
 ```bash
-python save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
+./save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
 ./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
 ```
 splits `wmt_en_ro/train` into 11,197 uneven lengthed batches and can finish 1 epoch in 8 minutes on a v100.
