@@ -226,7 +226,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         )
 
         decoder_inputs = torch.LongTensor([1]).expand(1, 1).to(torch_device)
-        logits = model(input_ids, decoder_input_ids=decoder_inputs)["logits"]
+        logits = model(input_ids, decoder_input_ids=decoder_inputs, return_dict=True)["logits"]
         assert torch.allclose(expected_logits, logits, atol=1e-4)
 
     @unittest.skip("This fails.")
