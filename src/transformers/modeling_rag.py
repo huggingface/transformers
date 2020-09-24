@@ -814,7 +814,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        input_ids,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         context_input_ids=None,
         do_deduplication=None,  # defaults to True
         num_return_sequences=None,  # defaults to 1
@@ -859,7 +860,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         # TODO(patrick) - clean up generate here
         if self.retriever is not None and context_input_ids is None:
-            question_hidden_states = self.question_encoder(input_ids)[0]
+            question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             context_input_ids = self.retriever(
                 input_ids,
                 question_hidden_states.cpu().detach().to(torch.float32).numpy(),
@@ -1180,6 +1181,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
         doc_scores=None,
@@ -1293,7 +1295,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         # retrieve docs
         if self.retriever is not None and context_input_ids is None:
-            question_hidden_states = self.question_encoder(input_ids)[0]
+            question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             out = self.retriever(
                 input_ids,
                 question_hidden_states.cpu().detach().to(torch.float32).numpy(),
