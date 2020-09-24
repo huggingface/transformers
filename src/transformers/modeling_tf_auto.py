@@ -454,7 +454,7 @@ class TFAutoModel(object):
             >>> model = TFAutoModel.from_config(config)
         """
         for config_class, model_class in TF_MODEL_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -495,7 +495,7 @@ class TFAutoModel(object):
             )
 
         for config_class, model_class in TF_MODEL_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -548,7 +548,7 @@ class TFAutoModelForPreTraining(object):
             >>> model = TFAutoModelForPreTraining.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -589,7 +589,7 @@ class TFAutoModelForPreTraining(object):
             )
 
         for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -654,7 +654,7 @@ class TFAutoModelWithLMHead(object):
             FutureWarning,
         )
         for config_class, model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -756,7 +756,7 @@ class TFAutoModelForCausalLM:
             >>> model = TFAutoModelForCausalLM.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -797,7 +797,7 @@ class TFAutoModelForCausalLM:
             )
 
         for config_class, model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -850,7 +850,7 @@ class TFAutoModelForMaskedLM:
             >>> model = TFAutoModelForMaskedLM.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -891,7 +891,7 @@ class TFAutoModelForMaskedLM:
             )
 
         for config_class, model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -944,7 +944,7 @@ class TFAutoModelForSeq2SeqLM:
             >>> model = TFAutoModelForSeq2SeqLM.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -987,7 +987,7 @@ class TFAutoModelForSeq2SeqLM:
             )
 
         for config_class, model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1042,7 +1042,7 @@ class TFAutoModelForSequenceClassification(object):
             >>> model = TFAutoModelForSequenceClassification.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1085,7 +1085,7 @@ class TFAutoModelForSequenceClassification(object):
             )
 
         for config_class, model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1139,7 +1139,7 @@ class TFAutoModelForQuestionAnswering(object):
             >>> model = TFAutoModelForQuestionAnswering.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1182,7 +1182,7 @@ class TFAutoModelForQuestionAnswering(object):
             )
 
         for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1236,7 +1236,7 @@ class TFAutoModelForTokenClassification:
             >>> model = TFAutoModelForTokenClassification.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1279,7 +1279,7 @@ class TFAutoModelForTokenClassification:
             )
 
         for config_class, model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1334,7 +1334,7 @@ class TFAutoModelForMultipleChoice:
             >>> model = TFAutoModelForMultipleChoice.from_config(config)
         """
         for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
@@ -1377,7 +1377,7 @@ class TFAutoModelForMultipleChoice:
             )
 
         for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"

@@ -545,7 +545,7 @@ class AutoModel:
             >>> model = AutoModel.from_config(config)
         """
         for config_class, model_class in MODEL_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -586,7 +586,7 @@ class AutoModel:
             )
 
         for config_class, model_class in MODEL_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -639,7 +639,7 @@ class AutoModelForPreTraining:
             >>> model = AutoModelForPreTraining.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_PRETRAINING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -680,7 +680,7 @@ class AutoModelForPreTraining:
             )
 
         for config_class, model_class in MODEL_FOR_PRETRAINING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -745,7 +745,7 @@ class AutoModelWithLMHead:
             FutureWarning,
         )
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -792,7 +792,7 @@ class AutoModelWithLMHead:
             )
 
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -845,7 +845,7 @@ class AutoModelForCausalLM:
             >>> model = AutoModelForCausalLM.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -886,7 +886,7 @@ class AutoModelForCausalLM:
             )
 
         for config_class, model_class in MODEL_FOR_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -939,7 +939,7 @@ class AutoModelForMaskedLM:
             >>> model = AutoModelForMaskedLM.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -980,7 +980,7 @@ class AutoModelForMaskedLM:
             )
 
         for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1033,7 +1033,7 @@ class AutoModelForSeq2SeqLM:
             >>> model = AutoModelForSeq2SeqLM.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1076,7 +1076,7 @@ class AutoModelForSeq2SeqLM:
             )
 
         for config_class, model_class in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1131,7 +1131,7 @@ class AutoModelForSequenceClassification:
             >>> model = AutoModelForSequenceClassification.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1174,7 +1174,7 @@ class AutoModelForSequenceClassification:
             )
 
         for config_class, model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
@@ -1228,7 +1228,7 @@ class AutoModelForQuestionAnswering:
             >>> model = AutoModelForQuestionAnswering.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
 
         raise ValueError(
@@ -1272,7 +1272,7 @@ class AutoModelForQuestionAnswering:
             )
 
         for config_class, model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
 
         raise ValueError(
@@ -1327,7 +1327,7 @@ class AutoModelForTokenClassification:
             >>> model = AutoModelForTokenClassification.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
 
         raise ValueError(
@@ -1371,7 +1371,7 @@ class AutoModelForTokenClassification:
             )
 
         for config_class, model_class in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
 
         raise ValueError(
@@ -1427,7 +1427,7 @@ class AutoModelForMultipleChoice:
             >>> model = AutoModelForMultipleChoice.from_config(config)
         """
         for config_class, model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class(config)
 
         raise ValueError(
@@ -1471,7 +1471,7 @@ class AutoModelForMultipleChoice:
             )
 
         for config_class, model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) == config_class:
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
 
         raise ValueError(
