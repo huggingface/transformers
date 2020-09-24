@@ -8,6 +8,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import numpy as np
 import torch
 
+from seq2seq_trainer import Seq2SeqTrainer
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -21,34 +22,17 @@ from transformers import (
     set_seed,
 )
 from transformers.modeling_bart import shift_tokens_right
-
-
-try:
-    from .seq2seq_trainer import Seq2SeqTrainer
-    from .utils import (
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        freeze_params,
-        lmap,
-        trim_batch,
-        use_task_specific_params,
-    )
-except ImportError:
-    from seq2seq_trainer import Seq2SeqTrainer
-    from utils import (
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        freeze_params,
-        lmap,
-        trim_batch,
-        use_task_specific_params,
-    )
+from utils import (
+    LegacySeq2SeqDataset,
+    Seq2SeqDataset,
+    assert_all_frozen,
+    calculate_bleu,
+    calculate_rouge,
+    freeze_params,
+    lmap,
+    trim_batch,
+    use_task_specific_params,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -108,12 +92,6 @@ class Seq2SeqDataCollator:
         return shifted_input_ids
 
     def _encode(self, batch) -> Dict[str, torch.Tensor]:
-        extra_kwargs = {
-            "padding": "max_length" if self.tpu_num_cores is not None else True,  # TPU hack
-        }
-        if not isinstance(self.tokenizer, MBartTokenizer):
-            extra_kwargs["add_prefix_space"] = self.add_prefix_space
-
         batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.data_args.src_lang,
@@ -121,8 +99,9 @@ class Seq2SeqDataCollator:
             tgt_lang=self.data_args.tgt_lang,
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
+            padding="max_length" if self.tpu_num_cores is not None else True,  # TPU hack
             return_tensors="pt",
-            **extra_kwargs,
+            add_prefix_space=self.add_prefix_space,
         )
         return batch_encoding.data
 
@@ -294,14 +273,14 @@ def main():
     # set max length for generation
     model.config.max_generate_length = data_args.val_max_target_length
 
-    # set decoder_start_token_id for MBart, TODO(@sshleifer): use_task_specific_params for this
+    # set decoder_start_token_id for MBart
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
         decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
         model.config.decoder_start_token_id = decoder_start_token_id
 
     def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
         def non_pad_len(tokens: np.ndarray) -> int:
-            return np.count_nonzero(tokens != tokenizer.pad_token_type_id)
+            return np.count_nonzero(tokens != tokenizer.pad_token_id)
 
         def decode_pred(pred: EvalPrediction) -> Tuple[List[str], List[str]]:
             pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
@@ -313,7 +292,7 @@ def main():
         def summarization_metrics(pred: EvalPrediction) -> Dict:
             pred_str, label_str = decode_pred(pred)
             rouge: Dict = calculate_rouge(pred_str, label_str)
-            summ_len = np.mean(lmap(len, pred.predictions))
+            summ_len = np.mean(lmap(non_pad_len, pred.predictions))
             rouge.update({"gen_len": summ_len})
             return rouge
 
@@ -324,7 +303,7 @@ def main():
             bleu.update({"gen_len": gen_len})
             return bleu
 
-        compute_metrics_fn = summarization_metrics if task_name == "summarization" else translation_metrics
+        compute_metrics_fn = summarization_metrics if "summarization" in task_name else translation_metrics
         return compute_metrics_fn
 
     def freeze_embeds(model: torch.nn.Module):
