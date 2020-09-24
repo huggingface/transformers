@@ -4,11 +4,14 @@ RAG
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-Retrieval-augmented generation ("RAG") models combine the powers of pretrained dense retrieval (DPR) and Seq2Seq models.
-RAG models retrieve docs, pass them to a seq2seq model, then marginalize to generate outputs.
-The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing both retrieval and generation to adapt to downstream tasks.
+Retrieval-augmented generation ("RAG") models combine the powers of pretrained dense retrieval (DPR) and
+sequence-to-sequence models. RAG models retrieve documents, pass them to a seq2seq model, then marginalize to generate
+outputs. The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing
+both retrieval and generation to adapt to downstream tasks.
 
-It is based on the paper `Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks <https://arxiv.org/abs/2005.11401>`__ by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
+It is based on the paper `Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+<https://arxiv.org/abs/2005.11401>`__ by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
+Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
 
 The abstract from the paper is the following:
 
@@ -47,7 +50,7 @@ RagTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagTokenizer
-    :members:
+    :members: prepare_seq2seq_batch
 
 
 Rag specific outputs
