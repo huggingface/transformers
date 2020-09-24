@@ -20,8 +20,7 @@ from collections import Sequence
 
 import torch
 from packaging import version
-from torch import _softmax_backward_data
-from torch import nn
+from torch import _softmax_backward_data, nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_deberta import DeBERTaConfig
