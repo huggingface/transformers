@@ -1071,7 +1071,7 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
-        print(torch.distributed.get_rank(), {key: value.size for key, value in inputs.items()})
+        print(torch.distributed.get_rank(), {key: value.size() for key, value in inputs.items()})
         outputs = model(**inputs)
         # Save past state if it exists
         if self.args.past_index >= 0:
