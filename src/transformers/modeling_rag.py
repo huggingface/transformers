@@ -410,14 +410,12 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`)
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, n_docs * sequence_length, hidden_size)` is a sequence
-            of hidden states at the output of the last layer of the encoder.
+            Tuple consists of (:obj:`generator_enc_last_hidden_state`, `optional`: :obj:`generator_enc_hidden_states`,
+            `optional`: :obj:`generator_enc_attentions`). :obj:`generator_enc_last_hidden_state` of shape
+            :obj:`(batch_size, n_docs * sequence_length, hidden_size)` is a sequence of hidden-states at the output of
+            the last layer of the generator's encoder.
 
-            :obj:`doc_scores` of shape :obj:`(batch_size, n_docs)` store retrieval scores of documents retrieved for
-            each input in the batch.
-
-            Used by the (:class:`~transformers.RagTokenForGeneration`) model during decoding.
+            Used by the (:class:`~transformers.RagModel`) model during decoding.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for generation tasks. `None` by default, constuct as per instructions for the generator model
             you're using with your RAG instance.
