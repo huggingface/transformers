@@ -378,7 +378,7 @@ def get_git_info():
     return repo_infos
 
 
-ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
+ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
 
 def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
