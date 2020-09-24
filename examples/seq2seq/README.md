@@ -209,7 +209,7 @@ All `Seq2SeqTrainer` based fine-tuning scripts included in the `builtin_trainer`
 
 We provide a very simple launcher script named `xla_spawn.py` that lets you run our example scripts on multiple TPU cores without any boilerplate. Just pass a --num_cores flag to this script, then your regular training script with its arguments (this is similar to the torch.distributed.launch helper for torch.distributed).
 
-`builtin_trainer/finetune_tpu.sh` scripts provides minimal arguments needed for TPU training.
+`builtin_trainer/finetune_tpu.sh` script provides minimal arguments needed for TPU training.
 
 Following command fine-tunes `sshleifer/student_marian_en_ro_6_3` on TPU V3-8 and should complete one epoch in ~5-6 mins.
 
