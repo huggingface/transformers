@@ -399,12 +399,14 @@ class RagRetriever:
                 The number of docs retrieved per query.
 
         Return:
-            retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
-                The retrieval embeddings of the retrieved docs per query.
-            doc_ids (:obj:`np.ndarray` of shape :obj:`batch_size, n_docs`)
-                The ids of the documents in the index
-            doc_dicts (:obj:`List[dict]`):
-                The retrieved_doc_embeds examples per query.
+            :obj:`Tuple[np.ndarray, np.ndarray, List[dict]]`:
+            A tuple with the following objects:
+
+            - **retrieved_doc_embeds** (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`) -- The
+              retrieval embeddings of the retrieved docs per query.
+            - **doc_ids** (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`) -- The ids of the documents in the
+              index
+            - **doc_dicts** (:obj:`List[dict]`): The :obj:`retrieved_doc_embeds` examples per query.
         """
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
