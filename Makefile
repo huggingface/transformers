@@ -1,13 +1,23 @@
-.PHONY: style test test-examples docs
+.PHONY: style_checks quality style test test-examples docs
+
+# Check that source code meets quality standards
+
+style_checks:
+	flake8 examples templates tests src utils
+	python utils/check_copies.py
+	python utils/check_repo.py
+
+quality:
+	black --check examples templates tests src utils
+	isort --check-only examples templates tests src utils
+	${MAKE} style_checks
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
 style:
 	black examples templates tests src utils
 	isort examples templates tests src utils
-	flake8 examples templates tests src utils
-	python utils/check_copies.py
-	python utils/check_repo.py
+	${MAKE} style_checks
 
 # Make marked copies of snippets of codes conform to the original
 
