@@ -190,17 +190,17 @@ model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ```
 
 ### Fine-tuning using Seq2SeqTrainer
-To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclassed `Trainer` to extend it for seq2seq training. Except the comman  `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument if to calculate BLEU and ROUGE metrics.
+To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer` releated `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument to calculate BLEU and ROUGE metrics.
 
 To see all the possible command line options, run:
 
 ```bash
-./finetune_trainer.sh --help # This calls python finetune_trainer.py --help
+./builtin_trainer/finetune.sh --help # This calls python finetune_trainer.py --help
 ```
 
 **At the moment, `Seq2SeqTrainer` does not support *with teacher* distillation.**
 
-All `Seq2SeqTrainer` based fine-tuning scripts included here end with  `_trainer.sh` .
+All `Seq2SeqTrainer` based fine-tuning scripts included in the `builtin_trainer` directory.
 
 #### TPU Training
 `Seq2SeqTrainer` supports TPU training with few caveats
@@ -209,12 +209,12 @@ All `Seq2SeqTrainer` based fine-tuning scripts included here end with  `_trainer
 
 We provide a very simple launcher script named `xla_spawn.py` that lets you run our example scripts on multiple TPU cores without any boilerplate. Just pass a --num_cores flag to this script, then your regular training script with its arguments (this is similar to the torch.distributed.launch helper for torch.distributed).
 
-`finetune_trainer_tpu.sh` scripts provides minimal arguments needed for TPU training.
+`builtin_trainer/finetune_tpu.sh` scripts provides minimal arguments needed for TPU training.
 
 Following command fine-tunes `sshleifer/student_marian_en_ro_6_3` on TPU V3-8 and should complete one epoch in ~5-6 mins.
 
 ```bash
-./train_distil_marian_enro_tpu.sh
+./builtin_trainer/train_distil_marian_enro_tpu.sh
 ```
 
 ### Evaluation Commands

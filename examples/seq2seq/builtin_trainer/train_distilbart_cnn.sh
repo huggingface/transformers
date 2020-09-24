@@ -1,4 +1,3 @@
-export PYTHONPATH="../":"${PYTHONPATH}"
 export WANDB_PROJECT=distilbart-cnn
 export BS=32
 export GAS=1
