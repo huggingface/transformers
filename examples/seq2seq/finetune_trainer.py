@@ -99,7 +99,7 @@ class Seq2SeqDataCollator:
             tgt_lang=self.data_args.tgt_lang,
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
-            padding="max_length" if self.tpu_num_cores is not None else True,  # TPU hack
+            padding="max_length" if self.tpu_num_cores is not None else "longest",  # TPU hack
             return_tensors="pt",
             add_prefix_space=self.add_prefix_space,
         )
