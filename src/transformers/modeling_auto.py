@@ -28,12 +28,14 @@ from .configuration_auto import (
     CTRLConfig,
     DeBERTaConfig,
     DistilBertConfig,
+    DPRConfig,
     ElectraConfig,
     EncoderDecoderConfig,
     FlaubertConfig,
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    LayoutLMConfig,
     LongformerConfig,
     LxmertConfig,
     MBartConfig,
@@ -98,6 +100,7 @@ from .modeling_distilbert import (
     DistilBertForTokenClassification,
     DistilBertModel,
 )
+from .modeling_dpr import DPRQuestionEncoder
 from .modeling_electra import (
     ElectraForMaskedLM,
     ElectraForMultipleChoice,
@@ -126,6 +129,7 @@ from .modeling_funnel import (
     FunnelModel,
 )
 from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
+from .modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
 from .modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForMultipleChoice,
@@ -148,6 +152,11 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
+    RagModel,
+    RagSequenceForGeneration,
+    RagTokenForGeneration,
+)
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -208,6 +217,7 @@ MODEL_MAPPING = OrderedDict(
         (BartConfig, BartModel),
         (LongformerConfig, LongformerModel),
         (RobertaConfig, RobertaModel),
+        (LayoutLMConfig, LayoutLMModel),
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
         (GPT2Config, GPT2Model),
@@ -224,11 +234,13 @@ MODEL_MAPPING = OrderedDict(
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
         (DeBERTaConfig, DeBERTaModel),
+        (DPRConfig, DPRQuestionEncoder),
     ]
 )
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -255,12 +267,14 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (MarianConfig, MarianMTModel),
+        (FSMTConfig, FSMTForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
@@ -302,6 +316,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
+        (LayoutLMConfig, LayoutLMForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
@@ -373,6 +388,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
@@ -407,7 +423,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMultipleChoice),
     ]
 )
-
 
 AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 

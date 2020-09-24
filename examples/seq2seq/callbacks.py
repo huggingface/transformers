@@ -8,6 +8,8 @@ import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.utilities import rank_zero_only
 
+from utils import save_json
+
 
 def count_trainable_parameters(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -72,7 +74,14 @@ class Seq2SeqLoggingCallback(pl.Callback):
 
     @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+        save_json(pl_module.metrics, pl_module.metrics_save_path)
         return self._write_logs(trainer, pl_module, "test")
+
+    @rank_zero_only
+    def on_validation_end(self, trainer: pl.Trainer, pl_module):
+        save_json(pl_module.metrics, pl_module.metrics_save_path)
+        # Uncommenting this will save val generations
+        # return self._write_logs(trainer, pl_module, "valid")
 
 
 def get_checkpoint_callback(output_dir, metric, save_top_k=1, lower_is_better=False):

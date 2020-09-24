@@ -45,7 +45,7 @@ python run_squad.py \
 ```
 ### SQuAD-FR Evaluation
 ```shell
-{"f1": 59.54, "exact_match": 80.61}
+{"f1": 80.61, "exact_match": 59.54}
 ```
 
 ## Usage

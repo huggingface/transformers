@@ -1,5 +1,5 @@
 Preprocessing data
-==================
+=======================================================================================================================
 
 In this tutorial, we'll explore how to preprocess your data using 🤗 Transformers. The main tool for this is what we
 
@@ -26,7 +26,7 @@ To automatically download the vocab used during pretraining or fine-tuning a giv
     tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
 
 Base use
-~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A :class:`~transformers.PreTrainedTokenizer` has many methods, but the only one you need to remember for preprocessing
 is its ``__call__``: you just need to feed your sentence to your tokenizer object.
@@ -125,7 +125,7 @@ can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer 
 .. _sentence-pairs:
 
 Preprocessing pairs of sentences
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Sometimes you need to feed pair of sentences to your model. For instance, if you want to classify if two sentences in a
 pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input is
@@ -202,7 +202,7 @@ length the model can accept and return tensors directly with the following:
     batch = tokenizer(batch_sentences, batch_of_second_sentences, padding=True, truncation=True, return_tensors="tf")
 
 Everything you always wanted to know about padding and truncation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We have seen the commands that will work for most cases (pad your batch to the length of the maximum sentence and
 
@@ -278,7 +278,7 @@ any of the following examples, you can replace :obj:`truncation=True` by a :obj:
 +--------------------------------------+-----------------------------------+---------------------------------------------------------------------------------------------+
 
 Pre-tokenized inputs
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The tokenizer also accept pre-tokenized inputs. This is particularly useful when you want to compute labels and extract
 predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Named-entity_recognition>`__ or
@@ -290,12 +290,12 @@ predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Na
     if that was the case) but just split into words (which is often the first step in subword tokenization algorithms
     like BPE).
 
-If you want to use pre-tokenized inputs, just set :obj:`is_pretokenized=True` when passing your inputs to the
+If you want to use pre-tokenized inputs, just set :obj:`is_split_into_words=True` when passing your inputs to the
 tokenizer. For instance, we have:
 
 .. code-block::
 
-    >>> encoded_input = tokenizer(["Hello", "I'm", "a", "single", "sentence"], is_pretokenized=True)
+    >>> encoded_input = tokenizer(["Hello", "I'm", "a", "single", "sentence"], is_split_into_words=True)
     >>> print(encoded_input)
     {'input_ids': [101, 8667, 146, 112, 182, 170, 1423, 5650, 102],
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0], 
@@ -312,7 +312,7 @@ like this:
     batch_sentences = [["Hello", "I'm", "a", "single", "sentence"],
                        ["And", "another", "sentence"],
                        ["And", "the", "very", "very", "last", "one"]]
-    encoded_inputs = tokenizer(batch_sentences, is_pretokenized=True)
+    encoded_inputs = tokenizer(batch_sentences, is_split_into_words=True)
 
 or a batch of pair sentences like this:
 
@@ -321,7 +321,7 @@ or a batch of pair sentences like this:
     batch_of_second_sentences = [["I'm", "a", "sentence", "that", "goes", "with", "the", "first", "sentence"],
                                  ["And", "I", "should", "be", "encoded", "with", "the", "second", "sentence"],
                                  ["And", "I", "go", "with", "the", "very", "last", "one"]]
-    encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences, is_pretokenized=True)
+    encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences, is_split_into_words=True)
 
 And you can add padding, truncation as well as directly return tensors like before:
 
@@ -330,14 +330,14 @@ And you can add padding, truncation as well as directly return tensors like befo
     ## PYTORCH CODE
     batch = tokenizer(batch_sentences,
                       batch_of_second_sentences,
-                      is_pretokenized=True,
+                      is_split_into_words=True,
                       padding=True,
                       truncation=True,
                       return_tensors="pt")
     ## TENSORFLOW CODE
     batch = tokenizer(batch_sentences,
                       batch_of_second_sentences,
-                      is_pretokenized=True,
+                      is_split_into_words=True,
                       padding=True,
                       truncation=True,
                       return_tensors="tf")
