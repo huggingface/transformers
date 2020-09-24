@@ -19,9 +19,9 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 
-from .activations_tf import get_tf_activation
 from .configuration_bert import BertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -88,12 +88,49 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def gelu(x):
+    """Gaussian Error Linear Unit.
+    Original Implementation of the gelu activation function in Google Bert repo when initially created.
+        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+        Also see https://arxiv.org/abs/1606.08415
+    """
+    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
+
+    return x * cdf
+
+
+def gelu_new(x):
+    """Gaussian Error Linear Unit.
+    This is a smoother version of the RELU.
+    Original paper: https://arxiv.org/abs/1606.08415
+    Args:
+        x: float Tensor to perform activation.
+    Returns:
+        `x` with the GELU activation applied.
+    """
+    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
+
+    return x * cdf
+
+
+def swish(x):
+    return x * tf.sigmoid(x)
+
+
+ACT2FN = {
+    "gelu": tf.keras.layers.Activation(gelu),
+    "relu": tf.keras.activations.relu,
+    "swish": tf.keras.layers.Activation(swish),
+    "gelu_new": tf.keras.layers.Activation(gelu_new),
+}
+
+
 class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         self.initializer_range = config.initializer_range
@@ -125,7 +162,6 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 shape=[self.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
-
         super().build(input_shape)
 
     def call(
@@ -215,14 +251,62 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.query = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+        self._num_heads = config.num_attention_heads
+        self._key_size = self.attention_head_size
+        self._value_size = self.attention_head_size
+        self._use_bias = True
+
+        self._query_dense = tf.keras.layers.experimental.EinsumDense(
+            equation='abc,cde->abde', 
+            output_shape=(None, self._num_heads, self._key_size),
+            bias_axes='de',
+            kernel_initializer=None,
+            bias_initializer=None,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            name="query",
         )
-        self.key = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+        self._key_dense = tf.keras.layers.experimental.EinsumDense(
+            equation='abc,cde->abde', 
+            output_shape=(None, self._num_heads, self._key_size),
+            bias_axes='de',
+            kernel_initializer=None,
+            bias_initializer=None,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            name="key",
         )
-        self.value = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+        self._value_dense = tf.keras.layers.experimental.EinsumDense(
+            equation='abc,cde->abde', 
+            output_shape=(None, self._num_heads, self._value_size),
+            bias_axes='de',
+            kernel_initializer=None,
+            bias_initializer=None,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            name="value",
+        )
+        self._output_dense = tf.keras.layers.experimental.EinsumDense(
+            equation='abcd,cde->abe',
+            output_shape=(None, self.all_head_size),
+            bias_axes='e',
+            kernel_initializer=None,
+            bias_initializer=None,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            name="attention/output/dense",
         )
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
@@ -233,18 +317,19 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         batch_size = shape_list(hidden_states)[0]
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
-        query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
-        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
+        query_tensor = self._query_dense(hidden_states)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = tf.matmul(
-            query_layer, key_layer, transpose_b=True
-        )  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(shape_list(key_layer)[-1], attention_scores.dtype)  # scale attention_scores
+        # `key_tensor` = [B, S, N, H]
+        key_tensor = self._key_dense(hidden_states)
+
+        # `value_tensor` = [B, S, N, H]
+        value_tensor = self._value_dense(hidden_states)
+
+        # Take the dot product between "query" and "key" to get the raw
+        # attention scores.
+        attention_scores = tf.einsum("BSNH,BTNH->BNTS", key_tensor, query_tensor)
+
+        dk = tf.cast(self._key_size, tf.float32)  # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -262,11 +347,8 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = tf.matmul(attention_probs, value_layer)
-        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(
-            context_layer, (batch_size, -1, self.all_head_size)
-        )  # (batch_size, seq_len_q, all_head_size)
+        attention_output = tf.einsum("BNTS,BSNH->BTNH", attention_probs, value_tensor)
+        context_layer = self._output_dense(attention_output)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
@@ -276,14 +358,10 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
 
@@ -293,7 +371,6 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
 class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.self_attention = TFBertSelfAttention(config, name="self")
         self.dense_output = TFBertSelfOutput(config, name="output")
 
@@ -313,18 +390,28 @@ class TFBertAttention(tf.keras.layers.Layer):
 class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        self._intermediate_size = config.intermediate_size
+        self._intermediate_dense = tf.keras.layers.experimental.EinsumDense(
+            equation='abc,cd->abd',
+            output_shape=(None, self._intermediate_size),
+            bias_axes='d',
+            kernel_initializer=None,
+            bias_initializer=None,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            name="dense",
         )
 
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
 
     def call(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
+        hidden_states = self._intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
@@ -333,15 +420,24 @@ class TFBertIntermediate(tf.keras.layers.Layer):
 class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        self._output_dense = tf.keras.layers.experimental.EinsumDense(
+            equation='abc,cd->abd',
+            bias_axes='d',
+            output_shape=(None, config.hidden_size),
+            kernel_initializer=None,
+            bias_initializer=None,
+            kernel_regularizer=None,
+            bias_regularizer=None,
+            activity_regularizer=None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
+        hidden_states = self._output_dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
 
@@ -351,7 +447,6 @@ class TFBertOutput(tf.keras.layers.Layer):
 class TFBertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.attention = TFBertAttention(config, name="attention")
         self.intermediate = TFBertIntermediate(config, name="intermediate")
         self.bert_output = TFBertOutput(config, name="output")
@@ -371,7 +466,6 @@ class TFBertLayer(tf.keras.layers.Layer):
 class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
@@ -405,7 +499,6 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -414,7 +507,6 @@ class TFBertEncoder(tf.keras.layers.Layer):
 class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.dense = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -434,13 +526,12 @@ class TFBertPooler(tf.keras.layers.Layer):
 class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = get_tf_activation(config.hidden_act)
+            self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
 
@@ -457,7 +548,6 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
 class TFBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-
         self.vocab_size = config.vocab_size
         self.transform = TFBertPredictionHeadTransform(config, name="transform")
 
@@ -467,7 +557,6 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-
         super().build(input_shape)
 
     def call(self, hidden_states):
@@ -481,7 +570,6 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 class TFBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-
         self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
 
     def call(self, sequence_output):
@@ -493,7 +581,6 @@ class TFBertMLMHead(tf.keras.layers.Layer):
 class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.seq_relationship = tf.keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="seq_relationship"
         )
@@ -510,7 +597,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
         self.num_hidden_layers = config.num_hidden_layers
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
@@ -587,7 +673,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.fill(input_shape, 1)
-
         if token_type_ids is None:
             token_type_ids = tf.fill(input_shape, 0)
 
@@ -605,6 +690,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
+
         extended_attention_mask = tf.cast(extended_attention_mask, embedding_output.dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
@@ -686,35 +772,30 @@ class TFBertForPreTrainingOutput(ModelOutput):
 
 
 BERT_START_DOCSTRING = r"""
-
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
-
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
+    Use it as a regular TF 2.0 Keras Model and
+    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
     .. note::
 
         TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
-    Args:
+    Parameters:
         config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
@@ -722,57 +803,49 @@ BERT_START_DOCSTRING = r"""
 
 BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` and
-            :func:`transformers.PreTrainedTokenizer.encode` for details.
+            Indices can be obtained using :class:`transformers.BertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
-
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        inputs_embeds (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, embedding_dim)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
+            Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
+            (if set to :obj:`False`) for evaluation.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -783,10 +856,9 @@ BERT_INPUTS_DOCSTRING = r"""
 class TFBertModel(TFBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-
         self.bert = TFBertMainLayer(config, name="bert")
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -795,7 +867,6 @@ class TFBertModel(TFBertPreTrainedModel):
     )
     def call(self, inputs, **kwargs):
         outputs = self.bert(inputs, **kwargs)
-
         return outputs
 
 
@@ -815,7 +886,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
@@ -823,19 +894,20 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 
         Examples::
 
-            >>> import tensorflow as tf
-            >>> from transformers import BertTokenizer, TFBertForPreTraining
+            import tensorflow as tf
+            from transformers import BertTokenizer, TFBertForPreTraining
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
-            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-            >>> outputs = model(input_ids)
-            >>> prediction_scores, seq_relationship_scores = outputs[:2]
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
+            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+            outputs = model(input_ids)
+            prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(inputs, **kwargs)
+
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
         seq_relationship_score = self.nsp(pooled_output)
@@ -872,7 +944,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -894,14 +966,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -924,6 +995,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=training)
+
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
         if not return_dict:
@@ -976,12 +1048,11 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the cross entropy classification loss.
             Indices should be in ``[0, ..., config.vocab_size - 1]``.
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -1004,8 +1075,8 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
         sequence_output = outputs[0]
         logits = self.mlm(sequence_output, training=training)
-        loss = None
 
+        loss = None
         if labels is not None:
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
@@ -1035,7 +1106,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name="bert")
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
@@ -1043,22 +1114,23 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 
         Examples::
 
-            >>> import tensorflow as tf
-            >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
+            import tensorflow as tf
+            from transformers import BertTokenizer, TFBertForNextSentencePrediction
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
-            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+            prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+            next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+            encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
-            >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-            >>> assert logits[0][0] < logits[0][1] # the next sentence was random
+            logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+            assert logits[0][0] < logits[0][1] # the next sentence was random
         """
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(inputs, **kwargs)
+
         pooled_output = outputs[1]
         seq_relationship_score = self.nsp(pooled_output)
 
@@ -1080,15 +1152,15 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-
         self.num_labels = config.num_labels
+
         self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1110,14 +1182,13 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -1139,8 +1210,10 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         )
 
         pooled_output = outputs[1]
+
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
+
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
@@ -1179,7 +1252,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1201,10 +1274,10 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1232,7 +1305,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
-
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
         if input_ids is not None:
@@ -1267,6 +1339,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
+
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
         if not return_dict:
@@ -1293,15 +1366,15 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-
         self.num_labels = config.num_labels
+
         self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1323,12 +1396,11 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
             if len(inputs) > 9:
@@ -1348,9 +1420,12 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return_dict=return_dict,
             training=training,
         )
+
         sequence_output = outputs[0]
+
         sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
+
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
@@ -1366,8 +1441,8 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 
 
 @add_start_docstrings(
-    """Bert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """Bert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
     BERT_START_DOCSTRING,
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
@@ -1377,14 +1452,14 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-
         self.num_labels = config.num_labels
+
         self.bert = TFBertMainLayer(config, name="bert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1407,17 +1482,16 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         training=False,
     ):
         r"""
-        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
+            Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
+            Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[9] if len(inputs) > 9 else start_positions
             end_positions = inputs[10] if len(inputs) > 10 else end_positions
@@ -1439,13 +1513,15 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             return_dict=return_dict,
             training=training,
         )
+
         sequence_output = outputs[0]
+
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
-        loss = None
 
+        loss = None
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
