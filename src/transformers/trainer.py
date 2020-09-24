@@ -740,8 +740,6 @@ class Trainer:
                     epoch_pbar.update(1)
                     continue
 
-                # print(inputs)
-
                 tr_loss += self.training_step(model, inputs)
                 self.total_flos += self.floating_point_ops(inputs)
 
