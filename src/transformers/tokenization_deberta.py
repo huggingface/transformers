@@ -634,9 +634,9 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", False)
-        if is_pretokenized or add_prefix_space:
+        if is_split_into_words or add_prefix_space:
             text = " " + text
         return (text, kwargs)
 
