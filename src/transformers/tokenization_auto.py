@@ -243,12 +243,12 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
-            if type(config) is config_class:
-                if tokenizer_class_fast and use_fast:
-                    return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                else:
-                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        if type(config) in TOKENIZER_MAPPING.keys():
+            tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
+            if tokenizer_class_fast and use_fast:
+                return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            else:
+                return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
             "Unrecognized configuration class {} to build an AutoTokenizer.\n"
