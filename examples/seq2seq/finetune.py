@@ -1,7 +1,10 @@
+#!/usr/bin/env python
+
 import argparse
 import glob
 import logging
 import os
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -13,7 +16,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 from utils import (
@@ -30,9 +32,13 @@ from utils import (
     lmap,
     pickle_save,
     save_git_info,
-    save_json,
     use_task_specific_params,
 )
+
+
+# need the parent dir module
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 
 
 logger = logging.getLogger(__name__)
@@ -190,20 +196,7 @@ class SummarizationModule(BaseTransformer):
         losses.update(generative_metrics)
         all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         all_metrics["step_count"] = self.step_count
-
-        def get_date_str(seconds=True) -> str:
-            """Returns 2019-09-25-10:02:07, for example."""
-            if seconds:
-                return time.strftime('%Y-%m-%d-%H:%M:%S')
-            else:
-                return time.strftime('%Y-%m-%d-%H:%M')
-
-        all_metrics['Time'] = get_date_str(seconds=True)
-
-
-        #all_metrics['rank'] = getattr(self.train_dataloader(), 'rank', -1.)
-
-        self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
+        self.metrics[prefix].append(all_metrics)  # callback writes this to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
         return {
             "log": all_metrics,
@@ -211,10 +204,6 @@ class SummarizationModule(BaseTransformer):
             f"{prefix}_loss": loss,
             f"{prefix}_{self.val_metric}": metric_tensor,
         }
-
-    def save_metrics(self, latest_metrics, type_path) -> None:
-        self.metrics[type_path].append(latest_metrics)
-        save_json(self.metrics, self.metrics_save_path)
 
     def calc_generative_metrics(self, preds, target) -> Dict:
         return calculate_rouge(preds, target)

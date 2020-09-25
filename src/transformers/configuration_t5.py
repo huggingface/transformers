@@ -31,33 +31,44 @@ T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class T5Config(PretrainedConfig):
     r"""
-    :class:`~transformers.T5Config` is the configuration class to store the configuration of a
-    `T5Model`.
+    This is the configuration class to store the configuration of a :class:`~transformers.T5Model` or a
+    :class:`~transformers.TFT5Model`. It is used to instantiate a T5 model according to the specified
+    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
+    configuration to that of the T5 `t5-small <https://huggingface.co/t5-small>`__ architecture.
 
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
     Arguments:
-        vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `T5Model`.
-        d_model: Size of the encoder layers and the pooler layer. `d_model` can also accesed via the property `hidden_size`.
-        num_layers: Number of hidden layers in the Transformer encoder. `num_layers` can also be accessed via the property `num_hidden_layers`.
-        d_kv: Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model // num_heads`.
-        d_ff: Size of the intermediate feed forward layer in each `T5Block`.
-        num_heads: Number of attention heads for each attention layer in
-            the Transformer encoder. `num_heads` can also be accessed via the property `num_attention_heads`.
-        intermediate_size: The size of the "intermediate" (i.e., feed-forward)
-            layer in the Transformer encoder.
-        hidden_act: The non-linear activation function (function or string) in the
-            encoder and pooler. If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-        hidden_dropout_prob: The dropout probabilitiy for all fully connected
-            layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob: The dropout ratio for the attention
-            probabilities.
-        n_positions: The maximum sequence length that this model might
-            ever be used with. Typically set this to something large just in case
-            (e.g., 512 or 1024 or 2048). `n_positions` can also be accessed via the property `max_position_embeddings`.
-        type_vocab_size: The vocabulary size of the `token_type_ids` passed into
-            `T5Model`.
-        initializer_factor: A factor for initializing all weight matrices (should be kept to 1.0, used for initialization testing).
-        layer_norm_eps: The epsilon used by LayerNorm.
+        vocab_size (:obj:`int`, `optional`, defaults to 32128):
+            Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or
+            :class:`~transformers.TFT5Model`.
+        n_positions (:obj:`int`, `optional`, defaults to 512):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        d_model (:obj:`int`, `optional`, defaults to 512):
+            Size of the encoder layers and the pooler layer.
+        d_kv (:obj:`int`, `optional`, defaults to 64):
+            Size of the key, query, value projections per attention head. :obj:`d_kv` has to be equal to
+            :obj:`d_model // num_heads`.
+        d_ff (:obj:`int`, `optional`, defaults to 2048):
+            Size of the intermediate feed forward layer in each :obj:`T5Block`.
+        num_layers (:obj:`int`, `optional`, defaults to 6):
+            Number of hidden layers in the Transformer encoder.
+        num_heads (:obj:`int`, `optional`, defaults to 8):
+            Number of attention heads for each attention layer in
+            the Transformer encoder.
+        relative_attention_num_buckets (:obj:`int`, `optional`, defaults to 32):
+            The number of buckets to use for each attention layer.
+        dropout_rate (:obj:`float`, `optional`, defaults to 0.1):
+            The ratio for all dropout layers.
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
+        initializer_factor (:obj:`float`, `optional`, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
     """
     model_type = "t5"
 

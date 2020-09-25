@@ -1,6 +1,9 @@
+#!/usr/bin/env python
+
 import argparse
 import gc
 import os
+import sys
 import warnings
 from pathlib import Path
 from typing import List
@@ -23,6 +26,11 @@ from utils import (
     label_smoothed_nll_loss,
     use_task_specific_params,
 )
+
+
+# need the parent dir module
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+from lightning_base import generic_train  # noqa
 
 
 class BartSummarizationDistiller(SummarizationModule):

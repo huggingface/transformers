@@ -42,6 +42,12 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 class LongformerTokenizer(RobertaTokenizer):
+    r"""
+    Construct a Longformer tokenizer.
+
+    :class:`~transformers.LongformerTokenizer` is identical to :class:`~transformers.RobertaTokenizer`. Refer to
+    the superclass for usage examples and documentation concerning parameters.
+    """
     # merges and vocab same as Roberta
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = {
@@ -51,6 +57,12 @@ class LongformerTokenizer(RobertaTokenizer):
 
 
 class LongformerTokenizerFast(RobertaTokenizerFast):
+    r"""
+    Construct a "fast" Longformer tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.LongformerTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer
+    to the superclass for usage examples and documentation concerning parameters.
+    """
     # merges and vocab same as Roberta
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = {

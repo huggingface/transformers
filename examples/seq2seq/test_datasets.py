@@ -6,14 +6,13 @@ import numpy as np
 import pytest
 from torch.utils.data import DataLoader
 
+from pack_dataset import pack_data_dir
+from save_len_file import save_len_file
+from test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
 from transformers.testing_utils import slow
-
-from .pack_dataset import pack_data_dir
-from .save_len_file import save_len_file
-from .test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
-from .utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
+from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
 
 BERT_BASE_CASED = "bert-base-cased"

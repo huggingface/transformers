@@ -265,6 +265,7 @@ class GenerativeQAModule(BaseTransformer):
         start_time = time.time()
         generated_ids = self.model.generate(
             batch["input_ids"],
+            attention_mask=batch["attention_mask"],
             do_deduplication=False,  # rag specific parameter
             use_cache=True,
             min_length=1,

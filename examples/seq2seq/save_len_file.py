@@ -1,14 +1,11 @@
+#!/usr/bin/env python
+
 import fire
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers import AutoTokenizer
-
-
-try:
-    from .utils import Seq2SeqDataset, pickle_save
-except ImportError:
-    from utils import Seq2SeqDataset, pickle_save
+from utils import Seq2SeqDataset, pickle_save
 
 
 def save_len_file(

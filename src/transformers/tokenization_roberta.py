@@ -62,7 +62,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class RobertaTokenizer(GPT2Tokenizer):
     """
-    Constructs a RoBERTa BPE tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
+    Constructs a RoBERTa tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
@@ -83,47 +83,50 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first one).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        errors (:obj:`str`, `optional`, defaults to "replace"):
+        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
             <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
-        bos_token (:obj:`string`, `optional`, defaults to "<s>"):
-            The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the beginning
                 of sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the end
                 of sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`string`, `optional`, defaults to "</s>"):
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
             for sequence classification or for a text and a question for question answering.
             It is also used as the last token of a sequence built with special tokens.
-        cls_token (:obj:`string`, `optional`, defaults to "<s>"):
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole
             sequence instead of per-token classification). It is the first token of the sequence when built with
             special tokens.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`string`, `optional`, defaults to "<mask>"):
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -184,12 +187,12 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
+                List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -201,16 +204,16 @@ class RobertaTokenizer(GPT2Tokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True if the token list is already formatted with special tokens for the model
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -231,18 +234,17 @@ class RobertaTokenizer(GPT2Tokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
         RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
-
+            :obj:`List[int]`:  List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -267,7 +269,7 @@ class RobertaTokenizer(GPT2Tokenizer):
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
     """
-    Constructs a "Fast" RoBERTa BPE tokenizer (backed by HuggingFace's `tokenizers` library), derived from the GPT-2
+    Construct a "fast" RoBERTa tokenizer (backed by HuggingFace's `tokenizers` library), derived from the GPT-2
     tokenizer, using byte-level Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
@@ -290,29 +292,51 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         When used with ``is_split_into_words=True``, this tokenizer needs to be instantiated with
         ``add_prefix_space=True``.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        errors (:obj:`str`, `optional`, defaults to "replace"):
+        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
             <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
-        unk_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the beginning
+                of sequence. The token used is the :obj:`cls_token`.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the end
+                of sequence. The token used is the :obj:`sep_token`.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
-            The beginning of sequence token.
-        eos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
-            The end of sequence token.
-        add_prefix_space (:obj:`bool`, `optional`, defaults to `False`):
-            Whether to add a leading space to the first word.
-            This allows to treat the leading word just as any other word.
-            (GPT2 tokenizer detect beginning of words by the preceeding space)
-        trim_offsets (:obj:`bool`, `optional`, defaults to `True`):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
+        trim_offsets (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
     """
 
@@ -377,18 +401,17 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
         RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
+                List of IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
-
+            :obj:`List[int]`:  List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
