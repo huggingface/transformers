@@ -7,8 +7,8 @@ import numpy as np
 from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
-from ...tokenization_bert import whitespace_tokenize
 from ...tokenization_bart import BartTokenizer
+from ...tokenization_bert import whitespace_tokenize
 from ...tokenization_longformer import LongformerTokenizer
 from ...tokenization_roberta import RobertaTokenizer
 from ...tokenization_utils_base import TruncationStrategy
