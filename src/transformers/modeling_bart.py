@@ -307,7 +307,7 @@ class BartEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
-        self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(
         self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
@@ -590,10 +590,12 @@ class BartDecoder(nn.Module):
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers) - 1):  # if config.add_final_layer_norm (mBART)
-                x = self.layer_norm(x)
+
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
+
+        if self.layer_norm:  # if config.add_final_layer_norm (mBART)
+            x = self.layer_norm(x)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
