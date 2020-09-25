@@ -1,4 +1,4 @@
-.PHONY: quality_checks quality style test test-examples docs
+.PHONY: quality_checks quality style fixup test test-examples docs
 
 # Check that source code meets quality standards
 
@@ -17,7 +17,8 @@ quality:
 style:
 	black examples templates tests src utils
 	isort examples templates tests src utils
-	${MAKE} quality_checks
+
+fixup: style quality_checks
 
 # Make marked copies of snippets of codes conform to the original
 
