@@ -648,7 +648,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         # Expected outputs as given by model at integration time.
         EXPECTED_OUTPUT_TEXT_1 = "\"She's My Kind of Girl"
         EXPECTED_OUTPUT_TEXT_2 = '"How many pages is invisible man'
-        EXPECTED_OUTPUT_TEXT_3 = "Otis the Aardvark"
+        EXPECTED_OUTPUT_TEXT_3 = "Aardvark is said to"
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
@@ -704,7 +704,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         # Expected outputs as given by model at integration time.
         EXPECTED_OUTPUT_TEXT_1 = 'Björn Ulvaeus,'
         EXPECTED_OUTPUT_TEXT_2 = 'Warhol produced several unbound portfolios,'
-        EXPECTED_OUTPUT_TEXT_3 = "Otis the Aardvark"
+        EXPECTED_OUTPUT_TEXT_3 = "Otis the Aardvark,"
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
@@ -745,8 +745,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         # Expected outputs as given by model at integration time.
         EXPECTED_OUTPUT_TEXT_1 = """\"She's My Kind of Girl\" was released through Epic Records in Japan in March 1972, giving the duo a Top 10 hit. Two more singles were released in Japan, \"En Carousel\" and \"Love Has Its Ways\" Ulvaeus and Andersson persevered with their songwriting and experimented with new sounds and vocal arrangements."""
         EXPECTED_OUTPUT_TEXT_2 = """In September 2018, Björn Ulvaeus revealed that the two new songs, \"I Still Have Faith In You\" and \"Don't Shut Me Down\", would be released no earlier than March 2019. The two new tracks will feature in a TV special set to air later in the year."""
-        open("test-rag-sequence-generate-beam-1.txt", "w").write(output_text_1)
-        open("test-rag-sequence-generate-beam-2.txt", "w").write(output_text_2)
+
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
