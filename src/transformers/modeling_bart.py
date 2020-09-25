@@ -219,12 +219,6 @@ def make_padding_mask(input_ids, padding_idx=1):
     return padding_mask
 
 
-def log_stats(t):
-    return t.abs().max()
-
-def log_tensor(msg, t):
-    print(f' {msg}: absmax: {t.abs().max()}, shape: {t.shape}')
-
 # Helper Modules
 
 
