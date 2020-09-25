@@ -194,8 +194,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                         self.__dict__[key] = value
             elif vocab_file is not None:
                 self.build_vocab()
-            else:
-                raise ValueError("Unable to find a pretrained vocab file or a file to parse to create the vocabulary")
+
         except Exception:
             raise ValueError(
                 "Unable to parse file {}. Unknown format. "
