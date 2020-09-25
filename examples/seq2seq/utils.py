@@ -381,12 +381,21 @@ def get_git_info():
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
+def calculate_rouge(
+    output_lns: List[str], reference_lns: List[str], cleaned_up_tokenization_spaces=False, use_stemmer=True
+) -> Dict:
     scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
 
+    split_txt = ". " if cleaned_up_tokenization_spaces else " . "
+
     for reference_ln, output_ln in zip(reference_lns, output_lns):
-        scores = scorer.score(reference_ln, output_ln)
+
+        # rouge_score expects \n separated sentences within a summary
+        reference_ln_formatted = " . \n".join(reference_ln.split(". "))
+        output_ln_formatted = " . \n".join(output_ln.split(split_txt))
+
+        scores = scorer.score(reference_ln_formatted, output_ln_formatted)
         aggregator.add_scores(scores)
 
     result = aggregator.aggregate()
