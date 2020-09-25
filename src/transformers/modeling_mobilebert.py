@@ -676,6 +676,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -812,8 +813,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
     """
     https://arxiv.org/pdf/2004.02984.pdf
     """
-
-    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)

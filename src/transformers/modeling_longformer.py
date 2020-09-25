@@ -1288,6 +1288,8 @@ class LongformerModel(LongformerPreTrainedModel):
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top. """, LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(LongformerPreTrainedModel):
 
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1390,6 +1392,8 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1496,6 +1500,8 @@ class LongformerClassificationHead(nn.Module):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1626,6 +1632,8 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 )
 class LongformerForTokenClassification(LongformerPreTrainedModel):
 
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1712,7 +1720,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForMultipleChoice(LongformerPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 

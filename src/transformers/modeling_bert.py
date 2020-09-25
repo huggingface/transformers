@@ -587,6 +587,7 @@ class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -724,8 +725,6 @@ class BertModel(BertPreTrainedModel):
     :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -861,9 +860,6 @@ class BertModel(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForPreTraining(BertPreTrainedModel):
-
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1207,9 +1203,6 @@ class BertForMaskedLM(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForNextSentencePrediction(BertPreTrainedModel):
-
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1300,9 +1293,6 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1387,9 +1377,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForMultipleChoice(BertPreTrainedModel):
-
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1481,7 +1468,6 @@ class BertForMultipleChoice(BertPreTrainedModel):
 class BertForTokenClassification(BertPreTrainedModel):
 
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1571,7 +1557,6 @@ class BertForTokenClassification(BertPreTrainedModel):
 class BertForQuestionAnswering(BertPreTrainedModel):
 
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
