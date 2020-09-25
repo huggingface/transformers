@@ -1,5 +1,7 @@
 .PHONY: modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
+dirs := examples templates tests src utils
+
 # get modified files since the branch was made
 fork_point_sha := $(shell git merge-base --fork-point master)
 modified_files := $(shell git diff --name-only $(fork_point_sha) | egrep '^(examples|templates|tests|src|utils)')
@@ -23,16 +25,16 @@ extra_quality_checks:
 
 # this target runs checks on all files
 quality:
-	black --check examples templates tests src utils
-	isort --check-only examples templates tests src utils
-	flake8 examples templates tests src utils
+	black --check $(dirs)
+	isort --check-only $(dirs)
+	flake8 $(dirs)
 	${MAKE} extra_quality_checks
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
 style:
-	black examples templates tests src utils
-	isort examples templates tests src utils
+	black $(dirs)
+	isort $(dirs)
 
 # Super fast fix and check target that only works on relevant modified files since the branch was made
 
