@@ -189,6 +189,7 @@ def is_apex_available():
 def is_faiss_available():
     return _faiss_available
 
+
 def require_torch(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -200,6 +201,7 @@ def require_torch(fn):
             return fn(*args, **kwargs)
 
     return wrapper
+
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
