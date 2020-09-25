@@ -386,7 +386,9 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
         is_pretokenized = kwargs.get("is_pretokenized", False)
         if is_pretokenized and not self.add_prefix_space:
-            raise ValueError(f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
-            "to use it with pretokenized inputs.")
+            raise ValueError(
+                f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+                "to use it with pretokenized inputs."
+            )
 
         return super()._encode_plus(*args, **kwargs)

@@ -19,7 +19,6 @@ import unittest
 
 from transformers.testing_utils import _torch_available
 from transformers.tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
-from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

@@ -1546,6 +1546,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def _from_pretrained(
         cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
     ):
+        # We instantiate fast tokenizers based on a slow tokenizer for now
+        # In the future we can also use a direct way based on saving/instantiating
+        # tokenizer's Tokenizer directly from it's serialization JSON
+        if cls.slow_tokenizer_class is not None:
+            slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(
+                resolved_vocab_files.copy(),
+                pretrained_model_name_or_path,
+                init_configuration.copy(),
+                *init_inputs,
+                **(kwargs.copy()),
+            )
+        else:
+            slow_tokenizer = None
+
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
@@ -1563,8 +1577,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Convert AddedTokens serialized as dict to class instances
         def convert_added_tokens(obj: Union[AddedToken, Any]):
-            if isinstance(obj, dict) and '__type' in obj and obj['__type'] == 'AddedToken':
-                obj.pop('__type')
+            if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
+                obj.pop("__type")
                 return AddedToken(**obj)
             elif isinstance(obj, (list, tuple)):
                 return list(convert_added_tokens(o) for o in obj)
@@ -1588,11 +1602,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
 
-        # We instantiate fast tokenizers based on a slow tokenizer for now
-        # In the future we can also use a direct way based on saving/instantiating
-        # tokenizer's Tokenizer directly from it's serialization JSON
-        if cls.slow_tokenizer_class is not None:
-            init_kwargs['__slow_tokenizer'] = cls.slow_tokenizer_class._from_pretrained(resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs)
+        if slow_tokenizer is not None:
+            init_kwargs["__slow_tokenizer"] = slow_tokenizer
 
         # Instantiate tokenizer.
         try:
@@ -1685,7 +1696,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         def convert_added_tokens(obj: Union[AddedToken, Any]):
             if isinstance(obj, AddedToken):
                 out = obj.__getstate__()
-                out['__type'] = 'AddedToken'
+                out["__type"] = "AddedToken"
                 return out
             elif isinstance(obj, (list, tuple)):
                 return list(convert_added_tokens(o) for o in obj)

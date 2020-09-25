@@ -781,30 +781,37 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 mask = "<mask>"
-                sequence = "Encode this sequence"
+                sequence_0 = "Encode t sequence"
                 sequence_masked_0 = "Encode <mask> sequence"
+
+                sequence_1 = "t this sequence"
                 sequence_masked_1 = "<mask> this sequence"
 
                 # Add tokens so that masked token isn't split
-                tokens = [AddedToken(t, normalized=False) for t in sequence.split()]
-                tokenizer.add_tokens(tokens)
-                tokenizer.add_special_tokens({"mask_token": mask})
+                # tokens = [AddedToken(t, lstrip=True, normalized=False) for t in sequence.split()]
+                # tokenizer.add_tokens(tokens)
+                tokenizer.add_special_tokens(
+                    {"mask_token": AddedToken(mask, lstrip=True, normalized=False)}
+                )  # Eat left space on Byte-level BPE tokenizers
                 mask_ind = tokenizer.convert_tokens_to_ids(mask)
-                encoded = tokenizer.encode(sequence, add_special_tokens=False)
 
                 # Test first masked sequence
+                encoded_0 = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_masked = tokenizer.encode(sequence_masked_0, add_special_tokens=False)
+                assert len(encoded_masked) == len(encoded_0)
                 mask_loc = encoded_masked.index(mask_ind)
-                encoded_masked[mask_loc] = encoded[mask_loc]
+                encoded_masked[mask_loc] = encoded_0[mask_loc]
 
-                self.assertEqual(encoded_masked, encoded)
+                self.assertEqual(encoded_masked, encoded_0)
 
                 # Test second masked sequence
+                encoded_1 = tokenizer.encode(sequence_1, add_special_tokens=False)
                 encoded_masked = tokenizer.encode(sequence_masked_1, add_special_tokens=False)
+                assert len(encoded_masked) == len(encoded_1)
                 mask_loc = encoded_masked.index(mask_ind)
-                encoded_masked[mask_loc] = encoded[mask_loc]
+                encoded_masked[mask_loc] = encoded_1[mask_loc]
 
-                self.assertEqual(encoded_masked, encoded)
+                self.assertEqual(encoded_masked, encoded_1)
 
     def test_special_tokens_mask(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

@@ -16,6 +16,7 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
+import copy
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -80,13 +81,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # We instantiate fast tokenizers based on a slow tokenizer for now
         # In the future we'll also use a direct way based on saving/instantiating
         # tokenizer's Tokenizer directly from it's serialization JSON
-        if '__slow_tokenizer' in kwargs and kwargs["__slow_tokenizer"]:
+        if "__slow_tokenizer" in kwargs and kwargs["__slow_tokenizer"]:
             slow_tokenizer = kwargs.pop("__slow_tokenizer")
         else:
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
         self._tokenizer = convert_slow_tokenizer(slow_tokenizer)
 
-        kwargs = slow_tokenizer.init_kwargs
+        kwargs = copy.deepcopy(slow_tokenizer.init_kwargs)
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)

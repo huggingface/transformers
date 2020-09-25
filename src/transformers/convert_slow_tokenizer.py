@@ -1,5 +1,3 @@
-import json
-import os
 from typing import Dict, List, Tuple
 
 from sentencepiece import SentencePieceProcessor
@@ -64,9 +62,8 @@ class Converter:
 
 class BertConverter(Converter):
     def converted(self) -> Tokenizer:
-        vocab_path = "vocab.txt"
-        self.original_tokenizer.save_vocabulary(vocab_path)
-        tokenizer = Tokenizer(WordPiece(vocab_path, unk_token=str(self.original_tokenizer.unk_token)))
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
 
         # Let the tokenizer know about special tokens if they are part of the vocab
         if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
@@ -112,18 +109,46 @@ class BertConverter(Converter):
         return tokenizer
 
 
-class GPT2Converter(Converter):
+class OpenAIGPTConverter(Converter):
     def converted(self) -> Tokenizer:
-        save_directory = "./"
-        vocab_file, merges_file = self.original_tokenizer.save_vocabulary(save_directory)
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+        unk_token = self.original_tokenizer.unk_token
 
         tokenizer = Tokenizer(
             BPE(
-                vocab_file,
-                merges_file,
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                unk_token=str(unk_token),
+                end_of_word_suffix="</w>",
+                fuse_unk=False,
+            )
+        )
+
+        if tokenizer.token_to_id(str(unk_token)) is not None:
+            tokenizer.add_special_tokens([str(unk_token)])
+
+        tokenizer.normalizer = normalizers.BertNormalizer(lowercase=True)
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+        tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
+
+        return tokenizer
+
+
+class GPT2Converter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
+                fuse_unk=False,
             )
         )
 
@@ -136,17 +161,18 @@ class GPT2Converter(Converter):
 
 class RobertaConverter(Converter):
     def converted(self) -> Tokenizer:
-        save_directory = "./"
         ot = self.original_tokenizer
-        vocab_file, merges_file = ot.save_vocabulary(save_directory)
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
 
         tokenizer = Tokenizer(
             BPE(
-                vocab_file,
-                merges_file,
+                vocab=vocab,
+                merges=merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
+                fuse_unk=False,
             )
         )
 
@@ -177,42 +203,19 @@ class SpmConverter(Converter):
         model_type = proto.trainer_spec.model_type
         vocab = self.vocab(proto)
         unk_id = self.unk_id(proto)
-        filename = self.original_tokenizer.vocab_file
 
         if model_type == 1:
-            data = {"unk_id": unk_id, "vocab": vocab}
-
-            out_vocab_filename = f"{filename}.json"
-            try:
-                with open(out_vocab_filename, "w") as f:
-                    json.dump(data, f, indent=4)
-
-                tokenizer = Tokenizer(Unigram(out_vocab_filename))
-            finally:
-                os.remove(out_vocab_filename)
+            tokenizer = Tokenizer(Unigram(vocab, unk_id))
         elif model_type == 2:
             vocab, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
-            # Open output files and let's extract model information
-            out_vocab_filename = f"{filename}.vocab"
-            out_merge_filename = f"{filename}.merge"
-            try:
-                with open(out_vocab_filename, "w") as vocab_f:
-                    json.dump(vocab, vocab_f)
-                try:
-                    with open(out_merge_filename, "w") as merges_f:
-                        # Save content
-                        merges_f.writelines(map(lambda x: f"{x[0]} {x[1]}{os.linesep}", merges))
-                    tokenizer = Tokenizer(
-                        BPE(
-                            out_vocab_filename,
-                            out_merge_filename,
-                            unk_token=proto.trainer_spec.unk_piece,
-                        )
-                    )
-                finally:
-                    os.remove(out_merge_filename)
-            finally:
-                os.remove(out_vocab_filename)
+            tokenizer = Tokenizer(
+                BPE(
+                    vocab,
+                    merges,
+                    unk_token=proto.trainer_spec.unk_piece,
+                    fuse_unk=True,
+                )
+            )
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
@@ -452,34 +455,6 @@ class T5Converter(SpmConverter):
                 ("</s>", tokenizer.get_vocab()["</s>"]),
             ],
         )
-
-
-class OpenAIGPTConverter(Converter):
-    def converted(self) -> Tokenizer:
-        save_directory = "./"
-        # self.original_tokenizer: OpenAIGPTTokenizer = self.original_tokenizer
-        vocab_file, merges_file = self.original_tokenizer.save_vocabulary(save_directory)
-
-        unk_token = self.original_tokenizer.unk_token
-
-        tokenizer = Tokenizer(
-            BPE(
-                vocab_file,
-                merges_file,
-                dropout=None,
-                unk_token=str(unk_token),
-                end_of_word_suffix="</w>",
-            )
-        )
-
-        if tokenizer.token_to_id(str(unk_token)) is not None:
-            tokenizer.add_special_tokens([str(unk_token)])
-
-        tokenizer.normalizer = normalizers.BertNormalizer(lowercase=True)
-        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
-        tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
-
-        return tokenizer
 
 
 CONVERTERS = {

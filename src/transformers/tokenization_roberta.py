@@ -17,8 +17,6 @@
 
 from typing import List, Optional
 
-from tokenizers.processors import RobertaProcessing
-
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_utils import AddedToken
 from .utils import logging
@@ -342,7 +340,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
-            **kwargs
+            **kwargs,
         )
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):

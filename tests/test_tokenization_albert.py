@@ -18,7 +18,6 @@ import os
 import unittest
 
 from transformers.tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
-from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
