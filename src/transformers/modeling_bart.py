@@ -356,8 +356,10 @@ class BartEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-        if self.variant == "prelayernorm":
+        if self.variant == "prelayernorm":  # just mbart/bbot. This is nn.Identity for pegasus
             x = self.layernorm_embedding(x)
+        if self.layer_norm:
+            x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
             # T x B x C -> B x T x C
