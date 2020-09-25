@@ -245,7 +245,7 @@ class SpmConverter(Converter):
             ]
         )
         tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
-        post_processor = self.post_processor(tokenizer)
+        post_processor = self.post_processor()
         if post_processor:
             tokenizer.post_processor = post_processor
 
@@ -271,13 +271,13 @@ class AlbertConverter(SpmConverter):
         normalizers.append(Precompiled(precompiled_charsmap))
         return Sequence(normalizers)
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return TemplateProcessing(
             seq_a=["[CLS]", "$0", "[SEP]"],
             seq_b=["$1", "[SEP]"],
             special_tokens=[
-                ("[CLS]", tokenizer.get_vocab()["[CLS]"]),
-                ("[SEP]", tokenizer.get_vocab()["[SEP]"]),
+                ("[CLS]", self.original_tokenizer.get_vocab()["[CLS]"]),
+                ("[SEP]", self.original_tokenizer.get_vocab()["[SEP]"]),
             ],
         )
 
@@ -297,13 +297,13 @@ class CamembertConverter(SpmConverter):
         # See vocab unk position
         return 3
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return TemplateProcessing(
             seq_a=["<s>", "$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[
-                ("<s>", tokenizer.get_vocab()["<s>"]),
-                ("</s>", tokenizer.get_vocab()["</s>"]),
+                ("<s>", self.original_tokenizer.get_vocab()["<s>"]),
+                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
             ],
         )
 
@@ -349,13 +349,13 @@ class MBartConverter(SpmConverter):
     def unk_id(self, proto):
         return 3
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return TemplateProcessing(
             seq_a=["$0", "</s>", "en_XX"],
             seq_b=["$1", "</s>"],
             special_tokens=[
-                ("en_XX", tokenizer.get_vocab()["en_XX"]),
-                ("</s>", tokenizer.get_vocab()["</s>"]),
+                ("en_XX", self.original_tokenizer.get_vocab()["en_XX"]),
+                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
             ],
         )
 
@@ -375,13 +375,13 @@ class XLMRobertaConverter(SpmConverter):
         unk_id = 3
         return unk_id
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return TemplateProcessing(
             seq_a=["<s>", "$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[
-                ("<s>", tokenizer.get_vocab()["<s>"]),
-                ("</s>", tokenizer.get_vocab()["</s>"]),
+                ("<s>", self.original_tokenizer.get_vocab()["<s>"]),
+                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
             ],
         )
 
@@ -405,13 +405,13 @@ class XLNetConverter(SpmConverter):
         normalizers.append(Precompiled(precompiled_charsmap))
         return Sequence(normalizers)
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return TemplateProcessing(
             seq_a=["$0", "<sep>", "<cls>"],
             seq_b=["$1", "<sep>"],
             special_tokens=[
-                ("<sep>", tokenizer.get_vocab()["<sep>"]),
-                ("<cls>", tokenizer.get_vocab()["<cls>"]),
+                ("<sep>", self.original_tokenizer.get_vocab()["<sep>"]),
+                ("<cls>", self.original_tokenizer.get_vocab()["<cls>"]),
             ],
         )
 

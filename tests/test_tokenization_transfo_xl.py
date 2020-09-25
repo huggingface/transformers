@@ -17,20 +17,16 @@
 import os
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer, TransfoXLTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if is_torch_available():
-    from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
-
-
-@require_torch
 class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
+    tokenizer_class = TransfoXLTokenizer
+    rust_tokenizer_class = TransfoXLTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
@@ -55,6 +51,10 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         kwargs["lower_case"] = True
         return TransfoXLTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+
+    def get_rust_tokenizer(self, **kwargs):
+        kwargs["lower_case"] = True
+        return TransfoXLTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "<unk> UNwanted , running"

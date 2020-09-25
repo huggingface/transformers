@@ -30,6 +30,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLMRobertaTokenizer
+    rust_tokenizer_class = XLMRobertaTokenizerFast
     test_rust_tokenizer = True
 
     def setUp(self):
@@ -38,9 +39,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
-
-    def get_rust_tokenizer(self, **kwargs) -> XLMRobertaTokenizerFast:
-        return XLMRobertaTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_full_tokenizer(self):
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
