@@ -1,4 +1,4 @@
-.PHONY: extra_quality_checks quality style fixup test test-examples docs
+.PHONY: modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
 # get modified files since the branch was made
 fork_point_sha := $(shell git merge-base --fork-point master)
