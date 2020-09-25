@@ -396,8 +396,9 @@ class RagRetriever:
             )
             ids_batched.extend(ids)
             vectors_batched.extend(vectors)
-        return np.array(ids_batched), np.array(
-            vectors_batched
+        return (
+            np.array(ids_batched),
+            np.array(vectors_batched),
         )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
     def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
