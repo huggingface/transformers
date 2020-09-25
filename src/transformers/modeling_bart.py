@@ -863,7 +863,7 @@ class BartModel(PretrainedBartModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
-        output_type=BaseModelOutputWithPast,
+        output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
