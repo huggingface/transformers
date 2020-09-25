@@ -590,7 +590,6 @@ class BartDecoder(nn.Module):
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
 
-
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
