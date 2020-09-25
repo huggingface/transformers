@@ -1,5 +1,5 @@
 Summary of the tasks
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different
 configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage
@@ -38,7 +38,7 @@ Both approaches are showcased here.
     This would produce random output.
 
 Sequence Classification
---------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Sequence classification is the task of classifying sequences according to a given number of classes. An example
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
@@ -152,7 +152,7 @@ of each other. The process is the following:
     is paraphrase: 6%
 
 Extractive Question Answering
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
@@ -297,7 +297,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
 
 
 Language Modeling
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Language modeling is the task of fitting a model to a corpus, which can be domain specific. All popular transformer-based
 models are trained using a variant of language modeling, e.g. BERT with masked language modeling, GPT-2 with
@@ -308,7 +308,7 @@ domain-specific: using a language model trained over a very large corpus, and th
 or on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
 
 Masked Language Modeling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
@@ -421,7 +421,7 @@ This prints five sequences, with the top 5 tokens predicted by the model:
 
 
 Causal Language Modeling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
@@ -493,7 +493,7 @@ This outputs a (hopefully) coherent next token following the original sequence, 
 In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
 
 Text Generation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`__ for example).
 
@@ -576,7 +576,7 @@ For more information on how to apply different decoding strategies for text gene
 
 
 Named Entity Recognition
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a
 token as a person, an organisation or a location.
@@ -723,7 +723,7 @@ following array should be the output:
     [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
 
 Summarization
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Summarization is the task of summarizing a document or an article into a shorter text.
 
@@ -798,7 +798,7 @@ In this example we use Google`s T5 model. Even though it was pre-trained only on
     >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
 
 Translation
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Translation is the task of translating a text from one language to another.
 

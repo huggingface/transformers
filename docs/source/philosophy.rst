@@ -1,5 +1,5 @@
 Philosophy
-==========
+=======================================================================================================================
 
 🤗 Transformers is an opinionated library built for:
 
@@ -48,7 +48,7 @@ A few other goals:
 - Switch easily between PyTorch and TensorFlow 2.0, allowing training using one framework and inference using another.
 
 Main concepts
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The library is built around three types of classes for each model:
 

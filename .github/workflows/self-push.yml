@@ -46,7 +46,7 @@ jobs:
         pip install --upgrade pip
         pip install torch!=1.6.0
         pip install .[sklearn,testing,onnxruntime]
-        pip install git+https://github.com/huggingface/nlp
+        pip install git+https://github.com/huggingface/datasets
 
     - name: Are GPUs recognized by our DL frameworks
       run: |

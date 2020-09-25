@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 import tensorflow as tf
 
 from . import MobileBertConfig
+from .activations_tf import get_tf_activation
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -30,7 +31,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_bert import TFBertIntermediate, gelu, gelu_new, swish
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -62,13 +62,27 @@ _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mobilebert-uncased",
+    "google/mobilebert-uncased",
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
 
 
-def mish(x):
-    return x * tf.tanh(tf.math.softplus(x))
+class TFMobileBertIntermediate(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
+
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+
+        return hidden_states
 
 
 class TFLayerNorm(tf.keras.layers.LayerNormalization):
@@ -89,12 +103,6 @@ class TFNoNorm(tf.keras.layers.Layer):
         return inputs * self.weight + self.bias
 
 
-ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-    "gelu_new": tf.keras.layers.Activation(gelu_new),
-}
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
@@ -362,12 +370,6 @@ class TFMobileBertAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFMobileBertIntermediate(TFBertIntermediate):
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
-        self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
-
-
 class TFOutputBottleneck(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -621,7 +623,7 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
+            self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -852,28 +854,33 @@ class TFMobileBertForPreTrainingOutput(ModelOutput):
 
 
 MOBILEBERT_START_DOCSTRING = r"""
-    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
-    Use it as a regular TF 2.0 Keras Model and
-    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
+
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
 
     .. note::
 
         TF 2.0 models accepts two formats as inputs:
 
-            - having all inputs as keyword arguments (like PyTorch models), or
-            - having all inputs as a list, tuple or dict in the first positional arguments.
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.MobileBertConfig`): Model configuration class with all the parameters of the model.
@@ -883,49 +890,57 @@ MOBILEBERT_START_DOCSTRING = r"""
 
 MOBILEBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`{0}`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.MobileBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.MobileBertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` and
+            :func:`transformers.PreTrainedTokenizer.encode` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Indices are selected in ``[0, 1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, embedding_dim)`, `optional`, defaults to :obj:`None`):
-            Optionally, instead of passing :obj:`input_ids` you can  to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
-            Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
-            (if set to :obj:`False`) for evaluation.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -938,7 +953,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -965,7 +980,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.mobilebert.embeddings
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
@@ -1013,7 +1028,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     def get_output_embeddings(self):
         return self.mobilebert.embeddings
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1035,7 +1050,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -1099,7 +1114,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
         self.cls = TFMobileBertOnlyNSPHead(config, name="seq_relationship___cls")
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
@@ -1152,7 +1167,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1174,7 +1189,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
@@ -1235,7 +1250,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1258,13 +1273,13 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         training=False,
     ):
         r"""
-        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.mobilebert.return_dict
@@ -1340,7 +1355,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1362,10 +1377,10 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1458,7 +1473,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1480,7 +1495,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """

@@ -17,8 +17,9 @@
 import inspect
 import os
 import re
+import warnings
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -44,7 +45,6 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
 
 try:
     from torch.nn import Identity
@@ -90,20 +90,6 @@ class ModuleUtilsMixin:
     """
     A few utilities for :obj:`torch.nn.Modules`, to be used as a mixin.
     """
-
-    def num_parameters(self, only_trainable: bool = False) -> int:
-        """
-        Get the number of (optionally, trainable) parameters in the model.
-
-        Args:
-            only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return only the number of trainable parameters
-
-        Returns:
-            :obj:`int`: The number of parameters.
-        """
-        params = filter(lambda x: x.requires_grad, self.parameters()) if only_trainable else self.parameters()
-        return sum(p.numel() for p in params)
 
     @staticmethod
     def _hook_rss_memory_pre_forward(module, *args, **kwargs):
@@ -307,8 +293,76 @@ class ModuleUtilsMixin:
         elif head_mask.dim() == 2:
             head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
+        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
         return head_mask
+
+    def num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
+        """
+        Get number of (optionally, trainable or non-embeddings) parameters in the module.
+
+        Args:
+            only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return only the number of trainable parameters
+
+            exclude_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return only the number of non-embeddings parameters
+
+        Returns:
+            :obj:`int`: The number of parameters.
+        """
+
+        def parameter_filter(x):
+            return (x.requires_grad or not only_trainable) and not (
+                isinstance(x, torch.nn.Embedding) and exclude_embeddings
+            )
+
+        params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
+        return sum(p.numel() for p in params)
+
+    def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
+        """
+        Helper function to estimate the total number of tokens from the model inputs.
+
+        Args:
+            inputs (:obj:`dict`): The model inputs.
+
+        Returns:
+            :obj:`int`: The total number of tokens.
+        """
+        token_inputs = [tensor for key, tensor in input_dict.items() if "input" in key]
+        if token_inputs:
+            return sum([token_input.numel() for token_input in token_inputs])
+        else:
+            warnings.warn(
+                "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
+            )
+            return 0
+
+    def floating_point_ops(
+        self, input_dict: Dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
+    ) -> int:
+        """
+        Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
+        batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
+        tokens (valid if :obj:`12 * d_model << sequence_length`) as laid out in `this paper <https://arxiv.org/pdf/2001.08361.pdf>`__ section
+        2.1. Should be  overriden for transformers with parameter re-use e.g. Albert or Universal Transformers, or
+        if doing long-range modeling with very high sequence lengths.
+
+        Args:
+            batch_size (:obj:`int`):
+                The batch size for the forward pass.
+
+            sequence_length (:obj:`int`):
+                The number of tokens in each line of the batch.
+
+            exclude_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to count embedding and softmax operations.
+
+        Returns:
+            :obj:`int`: The number of floating-point operations.
+        """
+
+        return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
@@ -337,10 +391,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
           derived classes of the same architecture adding modules on top of the base model.
         - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
           when loading the model (and avoid unnecessary warnings).
+        - **keys_to_never_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore
+          when saving the model (useful for keys that aren't trained, but which are deterministic)
+
     """
     config_class = None
     base_model_prefix = ""
     authorized_missing_keys = None
+    keys_to_never_save = None
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -384,7 +442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
     def set_input_embeddings(self, value: nn.Module):
         """
-        Set model's input embeddings
+        Set model's input embeddings.
 
         Args:
             value (:obj:`nn.Module`): A module mapping vocabulary to hidden states.
@@ -634,6 +692,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
+        state_dict = model_to_save.state_dict()
+
+        # Handle the case where some state_dict keys shouldn't be saved
+        if self.keys_to_never_save is not None:
+            state_dict = {k: v for k, v in state_dict.items() if k not in self.keys_to_never_save}
+
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
@@ -644,10 +708,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 # Save configuration file
                 model_to_save.config.save_pretrained(save_directory)
             # xm.save takes care of saving only from master
-            xm.save(model_to_save.state_dict(), output_model_file)
+            xm.save(state_dict, output_model_file)
         else:
             model_to_save.config.save_pretrained(save_directory)
-            torch.save(model_to_save.state_dict(), output_model_file)
+            torch.save(state_dict, output_model_file)
 
         logger.info("Model weights saved in {}".format(output_model_file))
 
@@ -730,6 +794,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+                Mirror source to accelerate downloads in China. If you are from China and have an accessibility problem,
+                you can set this option to resolve it. Note that we do not guarantee the timeliness or safety. Please
+                refer to the mirror site for more information.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -746,17 +814,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         Examples::
 
-            from transformers import BertConfig, BertModel
-            # Download model and configuration from S3 and cache.
-            model = BertModel.from_pretrained('bert-base-uncased')
-            # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
-            model = BertModel.from_pretrained('./test/saved_model/')
-            # Update configuration during loading.
-            model = BertModel.from_pretrained('bert-base-uncased', output_attentions=True)
-            assert model.config.output_attentions == True
-            # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
-            config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
-            model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            >>> from transformers import BertConfig, BertModel
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = BertModel.from_pretrained('bert-base-uncased')
+            >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
+            >>> model = BertModel.from_pretrained('./test/saved_model/')
+            >>> # Update configuration during loading.
+            >>> model = BertModel.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> assert model.config.output_attentions == True
+            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
+            >>> config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
+            >>> model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
@@ -768,6 +836,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
+        mirror = kwargs.pop("mirror", None)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -819,6 +888,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     pretrained_model_name_or_path,
                     filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
                     use_cdn=use_cdn,
+                    mirror=mirror,
                 )
 
             try:
@@ -871,7 +941,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             else:
                 # Load from our TensorFlow 2.0 checkpoints
                 try:
-                    from transformers import load_tf2_checkpoint_in_pytorch_model
+                    from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
                     model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
                 except ImportError:

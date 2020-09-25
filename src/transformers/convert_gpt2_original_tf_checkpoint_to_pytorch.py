@@ -20,8 +20,7 @@ import argparse
 import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Config, GPT2Model, load_tf_weights_in_gpt2
-
-from .utils import logging
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()
