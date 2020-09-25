@@ -254,6 +254,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_ids = self.model.generate(**model_inputs, min_length=15, early_stopping=True, num_beams=1)[0]
         reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         assert "I'm not sure, but I do know that social anxiety disorder is a mental disorder." == reply
+        # 9/24: __start__ I have social anxiety. I feel like I'm going to throw up and I'm sweating and blushing.__end__
 
 
 @require_torch

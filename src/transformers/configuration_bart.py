@@ -187,7 +187,7 @@ class BartConfig(PretrainedConfig):
         else:
             self.variant = MODELTYPE_TO_LN_VARIANT[self.model_type]
         # True for bart, mbart. Irrelevant for marian, pegasus. False for Blenderbot-3B, blenderbot-90M
-        self.norm_embed_before: bool = (self.variant == "bart") or (self.model_type == "mbart")
+        self.norm_embed_before: bool = (self.variant != "prelayernorm") or (self.model_type == "mbart")
 
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
