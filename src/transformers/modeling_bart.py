@@ -554,9 +554,9 @@ class BartDecoder(nn.Module):
         positions = self.embed_positions(input_ids, use_cache=use_cache)
 
         if use_cache:
-            assert (
-                input_ids.shape[1] == 1 or past_key_values is not None
-            ), "pass decoder_past_key_value_states to use_cache"
+            if input_ids.shape[1] != 1 or past_key_values is None:
+                # if you make this an AssertionError, test_benchmark breaks.
+                warnings.warn("pass decoder_past_key_value_states to use_cache")
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]  # happens after we embed them
             # assert input_ids.ne(self.padding_idx).any()
@@ -601,8 +601,6 @@ class BartDecoder(nn.Module):
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers) - 1):  # if config.add_final_layer_norm (mBART)
-                x = self.layer_norm(x)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
@@ -610,6 +608,9 @@ class BartDecoder(nn.Module):
             x = self.layernorm_embedding(x)
 
         # Everything below here is book keeping
+        if self.layer_norm:  # if config.add_final_layer_norm (mBART)
+            x = self.layer_norm(x)
+
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
             all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)

@@ -86,8 +86,7 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
         batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(self.src_text).to(torch_device)
         translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
-        self.assertEqual(self.tgt_text[0], decoded[0])
-        self.assertEqual(self.tgt_text[1], decoded[1])
+        assert self.tgt_text == decoded
 
     def test_mbart_enro_config(self):
         mbart_models = ["facebook/mbart-large-en-ro"]
