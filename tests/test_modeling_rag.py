@@ -519,7 +519,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]]).to(torch_device)
         _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)
 
-        expected_loss = torch.tensor([38.7446]).to(torch_device)
+        expected_loss = torch.tensor([36.7368]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
     @slow
@@ -558,7 +558,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_doc_scores = torch.tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]]).to(torch_device)
         _assert_tensors_equal(expected_doc_scores, output.doc_scores, atol=TOLERANCE)
 
-        expected_loss = torch.tensor([38.7045]).to(torch_device)
+        expected_loss = torch.tensor([36.3557]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
     @slow
@@ -594,8 +594,8 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = "The songwriting credits are credited to ABBA"
-        EXPECTED_OUTPUT_TEXT_2 = 'The songwriting credits are credited to "B'
+        EXPECTED_OUTPUT_TEXT_1 = '"She\'s My Kind of Girl'
+        EXPECTED_OUTPUT_TEXT_2 = '"She\'s My Kind of Love'
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
@@ -646,7 +646,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_3 = rag_decoder_tokenizer.decode(output_ids[2], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = '"People Need Love" is the'
+        EXPECTED_OUTPUT_TEXT_1 = '"She\'s My Kind of Girl'
         EXPECTED_OUTPUT_TEXT_2 = '"How many pages is invisible man'
         EXPECTED_OUTPUT_TEXT_3 = "Otis the Aardvark"
 
@@ -702,8 +702,8 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_3 = rag_decoder_tokenizer.decode(output_ids[2], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = '"I Know Him So Well"'
-        EXPECTED_OUTPUT_TEXT_2 = '"Howl" chronicles the'
+        EXPECTED_OUTPUT_TEXT_1 = 'Björn Ulvaeus,'
+        EXPECTED_OUTPUT_TEXT_2 = 'Warhol produced several unbound portfolios,'
         EXPECTED_OUTPUT_TEXT_3 = "Otis the Aardvark"
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
@@ -743,9 +743,10 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = """ ABBA / small label like Playboy Records did not have the distribution resources to meet the demand for the single from retailers and radio programmers. The foursome decided to record their first album together in late 1972, and sessions began on 26 September 1972. The women shared lead vocals on "Nina, Pretty Ballerina" that day."""
-        EXPECTED_OUTPUT_TEXT_2 = """ ABBA / small label like Playboy Records did not have the distribution resources to meet the demand for the single from retailers and radio programmers. The foursome decided to record their first album together in late 1972, and sessions began on 26 September 1972. The women shared lead vocals on "Nina, Pretty Ballerina" (a top ten hit in Austria)"""
-
+        EXPECTED_OUTPUT_TEXT_1 = """\"She's My Kind of Girl\" was released through Epic Records in Japan in March 1972, giving the duo a Top 10 hit. Two more singles were released in Japan, \"En Carousel\" and \"Love Has Its Ways\" Ulvaeus and Andersson persevered with their songwriting and experimented with new sounds and vocal arrangements."""
+        EXPECTED_OUTPUT_TEXT_2 = """In September 2018, Björn Ulvaeus revealed that the two new songs, \"I Still Have Faith In You\" and \"Don't Shut Me Down\", would be released no earlier than March 2019. The two new tracks will feature in a TV special set to air later in the year."""
+        open("test-rag-sequence-generate-beam-1.txt", "w").write(output_text_1)
+        open("test-rag-sequence-generate-beam-2.txt", "w").write(output_text_2)
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
