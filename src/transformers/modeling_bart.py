@@ -551,7 +551,7 @@ class BartDecoder(nn.Module):
 
         if use_cache:
             input_ids = input_ids[:, -1:]
-            positions = positions[:, -1:]  # happens after we embed them
+            positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
