@@ -18,7 +18,6 @@
 import copy
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings_to_callable
 from .utils import logging
 
 
@@ -27,33 +26,54 @@ logger = logging.get_logger(__name__)
 FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-FSMT_CONFIG_ARGS_DOC = r"""
+class DecoderConfig(PretrainedConfig):
+    r"""
+    Configuration class for FSMT's decoder specific things.
+    note: this is a private helper class
+    """
+    model_type = "fsmt_decoder"
+
+    def __init__(self, vocab_size=0, bos_token_id=0):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.bos_token_id = bos_token_id
+
+
+class FSMTConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a :class:`~transformers.FSMTModel`. It is used to
+    instantiate a FSMT model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
+
     Args:
         langs (:obj:`List[str]`):
-            source language, target_language (e.g. ['en', 'ru'])
+            A list with source language and target_language (e.g., ['en', 'ru']).
         src_vocab_size (:obj:`int`):
-            defines the different tokens that can be represented by `inputs_ids` passed to the forward
-            method in the encoder.
+            Vocabulary size of the encoder. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed to the forward method in the encoder.
         tgt_vocab_size (:obj:`int`):
-            defines the different tokens that can be represented by `inputs_ids` passed to the forward
-            method in the decoder.
+            Vocabulary size of the decoder. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed to the forward method in the decoder.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of encoder layers, 16 for pegasus, 6 for bart-base and marian
+            Number of encoder layers.
         decoder_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of decoder layers, 16 for pegasus, 6 for bart-base and marian
+            Number of decoder layers.
         encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
-        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to "relu"):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        activation_function (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-            If string, "gelu", "relu", "swish" and "gelu_new" are supported.
+            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -74,7 +94,7 @@ FSMT_CONFIG_ARGS_DOC = r"""
         eos_token_id (:obj:`int`, `optional`, defaults to 2)
             End of stream token id.
         decoder_start_token_id (:obj:`int`, `optional`):
-            This model starts decoding with `eos_token_id`
+            This model starts decoding with :obj:`eos_token_id`
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
@@ -92,26 +112,14 @@ FSMT_CONFIG_ARGS_DOC = r"""
         early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Flag that will be used by default in the :obj:`generate` method of the model. Whether to stop
             the beam search when at least ``num_beams`` sentences are finished per batch or not.
-"""
 
+        Examples::
 
-class DecoderConfig(PretrainedConfig):
-    r"""
-    Configuration class for FSMT's decoder specific things.
-    note: this is a private helper class
-    """
-    model_type = "fsmt_decoder"
+            >>> from transformers import FSMTConfig, FSMTModel
 
-    def __init__(self, vocab_size=0, bos_token_id=0):
-        super().__init__()
-        self.vocab_size = vocab_size
-        self.bos_token_id = bos_token_id
+            >>> config = FSMTConfig.from_pretrained('facebook/wmt19-en-ru')
+            >>> model = FSMTModel(config)
 
-
-@add_start_docstrings_to_callable(FSMT_CONFIG_ARGS_DOC)
-class FSMTConfig(PretrainedConfig):
-    r"""
-    Configuration class for FSMT.
     """
     model_type = "fsmt"
 
@@ -149,17 +157,6 @@ class FSMTConfig(PretrainedConfig):
         early_stopping=False,
         **common_kwargs
     ):
-        r"""
-        :class:`~transformers.FSMTConfig` is the configuration class for `FSMTModel`.
-
-        Examples::
-
-            >>> from transformers import FSMTConfig, FSMTModel
-
-            >>> config = FSMTConfig.from_pretrained('facebook/wmt19-en-ru')
-            >>> model = FSMTModel(config)
-
-        """
         if "hidden_size" in common_kwargs:
             raise ValueError("hidden size is called d_model")
         super().__init__(

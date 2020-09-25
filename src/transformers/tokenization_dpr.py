@@ -68,10 +68,10 @@ READER_PRETRAINED_INIT_CONFIGURATION = {
 
 class DPRContextEncoderTokenizer(BertTokenizer):
     r"""
-    Constructs a  DPRContextEncoderTokenizer.
+    Construct a DPRContextEncoder tokenizer.
 
-    :class:`~transformers.DPRContextEncoderTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DPRContextEncoderTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
@@ -85,10 +85,10 @@ class DPRContextEncoderTokenizer(BertTokenizer):
 
 class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" DPRContextEncoderTokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DPRContextEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DPRContextEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
+    runs end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
@@ -102,10 +102,10 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
-    Constructs a  DPRQuestionEncoderTokenizer.
+    Constructs a DPRQuestionEncoder tokenizer.
 
-    :class:`~transformers.DPRQuestionEncoderTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DPRQuestionEncoderTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
@@ -119,10 +119,10 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
 
 class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" DPRQuestionEncoderTokenizer (backed by HuggingFace's `tokenizers` library).
+    Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DPRQuestionEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DPRQuestionEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
+    runs end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
@@ -142,59 +142,71 @@ DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "en
 
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
-    Return a dictionary with the token ids of the input strings and other information to give to :obj:`.decode_best_spans`.
-    It converts the strings of a question and different passages (title + text) in a sequence of ids (integer), using the tokenizer and vocabulary.
-    The resulting `input_ids` is a matrix of size :obj:`(n_passages, sequence_length)` with the format:
+    Return a dictionary with the token ids of the input strings and other information to give to
+    :obj:`.decode_best_spans`.
+    It converts the strings of a question and different passages (title and text) in a sequence of IDs (integers),
+    using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of size
+    :obj:`(n_passages, sequence_length)` with the format:
 
         [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
-    Inputs:
-        questions (:obj:`str`, :obj:`List[str]`):
+    Args:
+        questions (:obj:`str` or :obj:`List[str]`):
             The questions to be encoded.
-            You can specify one question for many passages. In this case, the question will be duplicated like :obj:`[questions] * n_passages`.
+            You can specify one question for many passages. In this case, the question will be duplicated like
+            :obj:`[questions] * n_passages`.
             Otherwise you have to specify as many questions as in :obj:`titles` or :obj:`texts`.
-        titles (:obj:`str`, :obj:`List[str]`):
-            The passages titles to be encoded. This can be a string, a list of strings if there are several passages.
-        texts (:obj:`str`, :obj:`List[str]`):
-            The passages texts to be encoded. This can be a string, a list of strings if there are several passages.
-        padding (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
-            Activate and control padding. Accepts the following values:
+        titles (:obj:`str` or :obj:`List[str]`):
+            The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
+        texts (:obj:`str` or :obj:`List[str]`):
+            The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            Activates and controls padding. Accepts the following values:
 
-            * `True` or `'longest'`: pad to the longest sequence in the batch (or no padding if only a single sequence if provided),
-            * `'max_length'`: pad to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`)
-            * `False` or `'do_not_pad'` (default): No padding (i.e. can output batch with sequences of uneven lengths)
-        truncation (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
-            Activate and control truncation. Accepts the following values:
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+              single sequence if provided).
+            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided.
+            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+              different lengths).
+        truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
+            Activates and controls truncation. Accepts the following values:
 
-            * `True` or `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`).
-            * `False` or `'do_not_truncate'` (default): No truncation (i.e. can output batch with sequences length greater than the model max admissible input size)
-        max_length (:obj:`Union[int, None]`, `optional`):
-            Control the length for padding/truncation. Accepts the following values
+            * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
+              :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
+              provided. This will truncate token by token, removing a token from the longest sequence in the pair
+              if a pair of sequences (or a batch of pairs) is provided.
+            * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+              the maximum acceptable input length for the model if that argument is not provided. This will only
+              truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+            * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+              to the maximum acceptable input length for the model if that argument is not provided. This will only
+              truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+            * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
+              sequence lengths greater than the model maximum admissible input size).
+        max_length (:obj:`int`, `optional`):
+                Controls the maximum length to use by one of the truncation/padding parameters.
 
-            * `None` (default): This will use the predefined model max length if required by one of the truncation/padding parameters. If the model has no specific max input length (e.g. XLNet) truncation/padding to max length is deactivated.
-            * `any integer value` (e.g. `42`): Use this specific maximum length value if required by one of the truncation/padding parameters.
-        return_tensors (:obj:`str`, `optional`):
-            Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
-            PyTorch :obj:`torch.Tensor` or Numpy :obj: `np.ndarray` instead of a list of python integers.
-        return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`none`):
-            Whether to return the attention mask. If left to the default, will return the attention mask according
-            to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
+                length is required by one of the truncation/padding parameters. If the model has no specific maximum
+                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+        return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+        return_attention_mask (:obj:`bool`, `optional`):
+            Whether or not to return the attention mask. If not set, will return the attention mask according to the
+            specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
 
     Return:
-        A Dictionary of shape::
+        :obj:`Dict[str, List[List[int]]]`: A dictionary with the following keys:
 
-            {
-                input_ids: list[list[int]],
-                attention_mask: list[int] if return_attention_mask is True (default)
-            }
-
-        With the fields:
-
-        - ``input_ids``: list of token ids to be fed to a model
-        - ``attention_mask``: list of indices specifying which tokens should be attended to by the model
-
+        - ``input_ids``: List of token ids to be fed to a model.
+        - ``attention_mask``: List of indices specifying which tokens should be attended to by the model.
         """
 
 
@@ -369,16 +381,14 @@ class CustomDPRReaderTokenizerMixin:
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
 class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
     r"""
-    Constructs a  DPRReaderTokenizer.
+    Construct a DPRReader tokenizer.
 
-    :class:`~transformers.DPRReaderTokenizer` is alsmost identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
-
-    What is different is that is has three inputs strings: question, titles and texts that are combined to feed into the DPRReader model.
+    :class:`~transformers.DPRReaderTokenizer` is almost identical to :class:`~transformers.BertTokenizer` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece. The difference is that is has three inputs strings:
+    question, titles and texts that are combined to be fed to the :class:`~transformers.DPRReader` model.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
-
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -391,14 +401,13 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
 class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     r"""
-    Constructs a  DPRReaderTokenizerFast.
+    Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DPRReaderTokenizerFast` is almost identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DPRReaderTokenizerFast` is almost identical to :class:`~transformers.BertTokenizerFast` and
+    runs end-to-end tokenization: punctuation splitting and wordpiece. The difference is that is has three inputs
+    strings: question, titles and texts that are combined to be fed to the :class:`~transformers.DPRReader` model.
 
-    What is different is that is has three inputs strings: question, titles and texts that are combined to feed into the DPRReader model.
-
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
 
     """

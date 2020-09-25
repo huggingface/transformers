@@ -531,10 +531,6 @@ class TFTrainer:
 
             tf.summary.experimental.set_step(self.global_step)
 
-            if self.args.fp16:
-                policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-                tf.keras.mixed_precision.experimental.set_policy(policy)
-
             with self.tb_writer.as_default():
                 tf.summary.text("args", self.args.to_json_string())
 

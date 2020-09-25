@@ -1,10 +1,18 @@
 ## Sequence to Sequence
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
-Summarization support is more mature than translation support.
 Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
 For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
+### Supported Architectures
+
+- `BartForConditionalGeneration` (and anything that inherits from it)
+- `MarianMTModel`
+- `PegasusForConditionalGeneration`
+- `MBartForConditionalGeneration`
+- `FSMTForConditionalGeneration`
+- `T5ForConditionalGeneration`
+    
 
 ## Datasets
 
@@ -92,7 +100,7 @@ All finetuning bash scripts call finetune.py (or distillation.py) with reasonabl
 To see all the possible command line options, run:
 
 ```bash
-./finetune.sh --help  # this calls python finetune.py --help
+ ./finetune.py --help 
 ```
 
 ### Finetuning Training Params
@@ -181,6 +189,36 @@ from transformers import AutoModelForSeq2SeqLM
 model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ```
 
+### Fine-tuning using Seq2SeqTrainer
+To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer` releated `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument to calculate BLEU and ROUGE metrics.
+
+With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set. 
+
+To see all the possible command line options, run:
+
+```bash
+./builtin_trainer/finetune.sh --help # This calls python finetune_trainer.py --help
+```
+
+**At the moment, `Seq2SeqTrainer` does not support *with teacher* distillation.**
+
+All `Seq2SeqTrainer` based fine-tuning scripts are included in the `builtin_trainer` directory.
+
+#### TPU Training
+`Seq2SeqTrainer` supports TPU training with few caveats
+1. As `generate` method does not work on TPU at the moment, `predict_with_generate` can not be used. You should use `--prediction_loss_only` to only calculate loss, and do not set `--do_predict` and `--predict_with_generate`.
+2. All sequences should be padded to be of equal length otherwise it leads to extremely slow training. (`finetune_trainer.py` does this automatically when running on TPU.)
+
+We provide a very simple launcher script named `xla_spawn.py` that lets you run our example scripts on multiple TPU cores without any boilerplate. Just pass a --num_cores flag to this script, then your regular training script with its arguments (this is similar to the torch.distributed.launch helper for torch.distributed).
+
+`builtin_trainer/finetune_tpu.sh` script provides minimal arguments needed for TPU training.
+
+Following command fine-tunes `sshleifer/student_marian_en_ro_6_3` on TPU V3-8 and should complete one epoch in ~5-6 mins.
+
+```bash
+./builtin_trainer/train_distil_marian_enro_tpu.sh
+```
+
 ### Evaluation Commands
 
 To create summaries for each article in dataset, we use `run_eval.py`, here are a few commands that run eval for different tasks and models.
@@ -189,7 +227,7 @@ If 'translation' is in your task name, the computed metric will be BLEU. Otherwi
 For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
 export DATA_DIR=wmt_en_ro
-python run_eval.py t5-base \
+./run_eval.py t5-base \
     $DATA_DIR/val.source t5_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \
@@ -203,7 +241,7 @@ python run_eval.py t5-base \
 This command works for MBART, although the BLEU score is suspiciously low.
 ```bash
 export DATA_DIR=wmt_en_ro
-python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
+./run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \
     --task translation \
@@ -216,7 +254,7 @@ python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_gen
 Summarization (xsum will be very similar):
 ```bash
 export DATA_DIR=cnn_dm
-python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
+./run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path cnn_rouge.json \
     --task summarization \
@@ -227,10 +265,10 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --fp16 \
     --bs 32
 ```
-### Multi-GPU Evalulation
+### Multi-GPU Evaluation
 here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
 because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
-`{type_path}.source` and `{type_path}.target`. Run `python run_distributed_eval.py --help` for all clargs.
+`{type_path}.source` and `{type_path}.target`. Run `./run_distributed_eval.py --help` for all clargs.
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=8  run_distributed_eval.py \
@@ -242,7 +280,7 @@ python -m torch.distributed.launch --nproc_per_node=8  run_distributed_eval.py \
 
 Contributions that implement this command for other distributed hardware setups are welcome!
 
-#### run_eval tips and tricks
+#### Single-GPU Eval: Tips and Tricks
 
 When using `run_eval.py`, the following features can be useful:
 
@@ -363,11 +401,11 @@ This feature can only be used:
 - with fairseq installed
 - on 1 GPU
 - without sortish sampler
-- after calling `python save_len_file.py $tok $data_dir`
+- after calling `./save_len_file.py $tok $data_dir`
 
 For example, 
 ```bash
-python save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
+./save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
 ./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
 ```
 splits `wmt_en_ro/train` into 11,197 uneven lengthed batches and can finish 1 epoch in 8 minutes on a v100.

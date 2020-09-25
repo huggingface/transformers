@@ -4,6 +4,7 @@ import linecache
 import math
 import os
 import pickle
+import socket
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Union
@@ -372,6 +373,7 @@ def get_git_info():
         "repo_id": str(repo),
         "repo_sha": str(repo.head.object.hexsha),
         "repo_branch": str(repo.active_branch),
+        "hostname": str(socket.gethostname()),
     }
     return repo_infos
 
@@ -454,3 +456,9 @@ def write_txt_file(ordered_tgt, path):
     for ln in ordered_tgt:
         f.write(ln + "\n")
         f.flush()
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]

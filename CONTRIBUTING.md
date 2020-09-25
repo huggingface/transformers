@@ -170,11 +170,17 @@ Follow these steps to start contributing:
    $ make style
    ```
 
-   `transformers` also uses `flake8` to check for coding mistakes. Quality
+   `transformers` also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
    control runs in CI, however you can also run the same checks with:
 
    ```bash
    $ make quality
+   ```
+
+   You can do the automatic style corrections and code verifications that can't be automated in one go:
+
+   ```bash
+   $ make fixup
    ```
 
    If you're modifying documents under `docs/source`, make sure to validate that

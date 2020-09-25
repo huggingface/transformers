@@ -130,6 +130,7 @@ class PretrainedConfig(object):
         - **eos_token_id** (:obj:`int`, `optional`)) -- The id of the `end-of-stream` token.
         - **decoder_start_token_id** (:obj:`int`, `optional`)) -- If an encoder-decoder model starts decoding with
           a different token than `bos`, the id of that token.
+        - **sep_token_id** (:obj:`int`, `optional`)) -- The id of the `separation` token.
 
     PyTorch specific parameters
         - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
@@ -195,6 +196,8 @@ class PretrainedConfig(object):
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.sep_token_id = kwargs.pop("sep_token_id", None)
+
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # task specific arguments
