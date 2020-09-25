@@ -1,6 +1,8 @@
 ---
 language: es
 thumbnail: https://i.imgur.com/uxAvBfh.png
+widget:
+- text: "Madrid es una ciudad muy [MASK] en España."
 
 
 ---

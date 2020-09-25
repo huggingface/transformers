@@ -15,6 +15,7 @@
 """ Logging utilities. """
 
 import logging
+import os
 import threading
 from logging import CRITICAL  # NOQA
 from logging import DEBUG  # NOQA
@@ -29,6 +30,33 @@ from typing import Optional
 
 _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
+
+log_levels = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
+
+_default_log_level = logging.WARNING
+
+
+def _get_default_logging_level():
+    """
+    If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level.
+    If it is not - fall back to ``_default_log_level``
+    """
+    env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
+    if env_level_str:
+        if env_level_str in log_levels:
+            return log_levels[env_level_str]
+        else:
+            logging.getLogger().warning(
+                f"Unknown option TRANSFORMERS_VERBOSITY={env_level_str}, "
+                f"has to be one of: { ', '.join(log_levels.keys()) }"
+            )
+    return _default_log_level
 
 
 def _get_library_name() -> str:
@@ -54,7 +82,7 @@ def _configure_library_root_logger() -> None:
         # Apply our default configuration to the library root logger.
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
-        library_root_logger.setLevel(logging.WARN)
+        library_root_logger.setLevel(_get_default_logging_level())
         library_root_logger.propagate = False
 
 
@@ -182,3 +210,32 @@ def enable_propagation() -> None:
 
     _configure_library_root_logger()
     _get_library_root_logger().propagate = True
+
+
+def enable_explicit_format() -> None:
+    """
+    Enable explicit formatting for every HuggingFace Transformers's logger. The explicit formatter is as follows:
+
+    ::
+
+        [LEVELNAME|FILENAME|LINE NUMBER] TIME >> MESSAGE
+
+    All handlers currently bound to the root logger are affected by this method.
+    """
+    handlers = _get_library_root_logger().handlers
+
+    for handler in handlers:
+        formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+        handler.setFormatter(formatter)
+
+
+def reset_format() -> None:
+    """
+    Resets the formatting for HuggingFace Transformers's loggers.
+
+    All handlers currently bound to the root logger are affected by this method.
+    """
+    handlers = _get_library_root_logger().handlers
+
+    for handler in handlers:
+        handler.setFormatter(None)

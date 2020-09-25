@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2020 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import importlib
 import inspect
 import os
@@ -47,6 +62,7 @@ MODEL_NAME_TO_DOC_FILE = {
     "openai": "gpt.rst",
     "transfo_xl": "transformerxl.rst",
     "xlm_roberta": "xlmroberta.rst",
+    "bert_generation": "bertgeneration.rst",
 }
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -141,18 +157,20 @@ def get_model_doc_files():
 # for the all_model_classes variable.
 def find_tested_models(test_file):
     """ Parse the content of test_file to detect what's in all_model_classes"""
+    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
     with open(os.path.join(PATH_TO_TESTS, test_file)) as f:
         content = f.read()
-    all_models = re.search(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
+    all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis
-    if all_models is None:
-        all_models = re.search(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
-    if all_models is not None:
+    if len(all_models) == 0:
+        all_models = re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
+    if len(all_models) > 0:
         model_tested = []
-        for line in all_models.groups()[0].split(","):
-            name = line.strip()
-            if len(name) > 0:
-                model_tested.append(name)
+        for entry in all_models:
+            for line in entry.split(","):
+                name = line.strip()
+                if len(name) > 0:
+                    model_tested.append(name)
         return model_tested
 
 
@@ -228,6 +246,9 @@ def _get_model_name(module):
     # Secial case for xlm_roberta
     if splits[-1] == "roberta" and splits[-2] == "xlm":
         return "_".join(splits[-2:])
+    # Special case for bert_generation
+    if splits[-1] == "generation" and splits[-2] == "bert":
+        return "_".join(splits[-2:])
     return splits[-1]
 
 
@@ -252,12 +273,50 @@ def check_all_models_are_documented():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+_re_decorator = re.compile(r"^\s*@(\S+)\s+$")
+
+
+def check_decorator_order(filename):
+    """ Check that in the test file `filename` the slow decorator is always last."""
+    with open(filename, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    decorator_before = None
+    errors = []
+    for i, line in enumerate(lines):
+        search = _re_decorator.search(line)
+        if search is not None:
+            decorator_name = search.groups()[0]
+            if decorator_before is not None and decorator_name.startswith("parameterized"):
+                errors.append(i)
+            decorator_before = decorator_name
+        elif decorator_before is not None:
+            decorator_before = None
+    return errors
+
+
+def check_all_decorator_order():
+    """ Check that in all test files, the slow decorator is always last."""
+    errors = []
+    for fname in os.listdir(PATH_TO_TESTS):
+        if fname.endswith(".py"):
+            filename = os.path.join(PATH_TO_TESTS, fname)
+            new_errors = check_decorator_order(filename)
+            errors += [f"- {filename}, line {i}" for i in new_errors]
+    if len(errors) > 0:
+        msg = "\n".join(errors)
+        raise ValueError(
+            f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
+        )
+
+
 def check_repo_quality():
     """ Check all models are properly tested and documented."""
     print("Checking all models are properly tested.")
+    check_all_decorator_order()
     check_all_models_are_tested()
-    print("Checking all models are properly documented.")
-    check_all_models_are_documented()
+    # Uncomment me when RAG is back
+    # print("Checking all models are properly documented.")
+    # check_all_models_are_documented()
 
 
 if __name__ == "__main__":
