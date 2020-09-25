@@ -553,7 +553,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         attn_score = attn_score.float()
         # perform masking
         if attention_mask is not None:
-            attn_score = attn_score - INF * attention_mask[:, None, None].float()
+            attn_score = attn_score - INF * (1 - attention_mask[:, None, None].float())
         # attention probability
         attn_prob = torch.softmax(attn_score, dim=-1, dtype=dtype)
         attn_prob = self.attention_dropout(attn_prob)
@@ -855,7 +855,9 @@ FUNNEL_INPUTS_DOCSTRING = r"""
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
