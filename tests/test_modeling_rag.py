@@ -702,8 +702,8 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_3 = rag_decoder_tokenizer.decode(output_ids[2], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = 'Björn Ulvaeus,'
-        EXPECTED_OUTPUT_TEXT_2 = 'Warhol produced several unbound portfolios,'
+        EXPECTED_OUTPUT_TEXT_1 = "Björn Ulvaeus,"
+        EXPECTED_OUTPUT_TEXT_2 = "Warhol produced several unbound portfolios,"
         EXPECTED_OUTPUT_TEXT_3 = "Otis the Aardvark,"
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
