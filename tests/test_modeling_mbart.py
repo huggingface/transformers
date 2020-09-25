@@ -82,6 +82,16 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
         assert_tensors_close(expected_slice, result_slice, atol=TOLERANCE)
 
     @slow
+    def test_enro_generate_one(self):
+        batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(
+            ["UN Chief Says There Is No Military Solution in Syria"]
+        ).to(torch_device)
+        translated_tokens = self.model.generate(**batch)
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        self.assertEqual(self.tgt_text[0], decoded[0])
+        # self.assertEqual(self.tgt_text[1], decoded[1])
+
+    @slow
     def test_enro_generate(self):
         batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(self.src_text).to(torch_device)
         translated_tokens = self.model.generate(**batch)

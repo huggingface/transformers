@@ -292,6 +292,7 @@ class BartEncoder(nn.Module):
         self.padding_idx = embed_tokens.padding_idx
         self.max_source_positions = config.max_position_embeddings
         self.variant = config.variant
+        self.norm_embed_before = config.norm_embed_before
         self.embed_tokens = embed_tokens
         if config.static_position_embeddings:
             self.embed_positions = SinusoidalPositionalEmbedding(
@@ -334,8 +335,8 @@ class BartEncoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
-        if self.variant != "prelayernorm":
-            x = self.layernorm_embedding(x)
+        if self.norm_embed_before:
+            x = self.layernorm_embedding(x)  # mbart
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
@@ -356,8 +357,8 @@ class BartEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-        if self.variant == "prelayernorm":  # just mbart/bbot. This is nn.Identity for pegasus
-            x = self.layernorm_embedding(x)
+        if not self.norm_embed_before:
+            x = self.layernorm_embedding(x)  # just blenderbot-3B.
         if self.layer_norm:
             x = self.layer_norm(x)
         if output_hidden_states:
@@ -498,6 +499,7 @@ class BartDecoder(nn.Module):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
+        self.norm_embed_before = config.norm_embed_before
         self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(
@@ -565,7 +567,7 @@ class BartDecoder(nn.Module):
         if self.variant == "xlm":
             x = self.layernorm_embedding(x)
         x += positions
-        if self.variant == "bart":
+        if self.norm_embed_before:
             x = self.layernorm_embedding(x)
 
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -604,7 +606,7 @@ class BartDecoder(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-        if self.variant == "prelayernorm":
+        if not self.norm_embed_before:
             x = self.layernorm_embedding(x)
 
         # Everything below here is book keeping

@@ -97,11 +97,13 @@ BART_CONFIG_ARGS_DOC = r"""
 """
 
 
-MODELTYPE_TO_LAYERNORM_VARIANT = {
+MODELTYPE_TO_LN_VARIANT = {
     "bart": "bart",
     "pegasus": "prelayernorm",
     "mbart": "prelayernorm",
     "marian": "bart",
+    # blenderbot-3B -> "prelayernorm",
+    # blenderbot-90 -> "xlm",
 }
 
 
@@ -183,11 +185,13 @@ class BartConfig(PretrainedConfig):
         if variant is not None:
             self.variant = variant
         else:
-            self.variant = MODELTYPE_TO_LAYERNORM_VARIANT[self.model_type]
+            self.variant = MODELTYPE_TO_LN_VARIANT[self.model_type]
+        # True for bart, mbart. Irrelevant for marian, pegasus. False for Blenderbot-3B, blenderbot-90M
+        self.norm_embed_before: bool = (self.variant == "bart") or (self.model_type == "mbart")
 
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
+        self.normalize_embedding = normalize_embedding  # True for mbart and blenderbot
         self.add_final_layer_norm = add_final_layer_norm
 
         # Params introduced for Marian
