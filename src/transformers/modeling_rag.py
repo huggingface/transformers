@@ -873,7 +873,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         hypos = []
         kwargs["num_beams"] = num_beams
-        kwargs["num_return_sequences"] = num_return_sequences
+        kwargs["num_return_sequences"] = num_beams
         kwargs["attention_mask"] = None
 
         for index in range(len(input_ids)):
