@@ -192,6 +192,8 @@ model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ### Fine-tuning using Seq2SeqTrainer
 To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer` releated `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument to calculate BLEU and ROUGE metrics.
 
+With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set. 
+
 To see all the possible command line options, run:
 
 ```bash
