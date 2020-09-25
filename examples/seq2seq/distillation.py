@@ -3,7 +3,6 @@
 import argparse
 import gc
 import os
-
 import sys
 from pathlib import Path
 from typing import List
@@ -15,10 +14,7 @@ from torch.nn import functional as F
 
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
-
-
 from make_student import create_student_by_copying_alternating_layers, get_layers_to_supervise
-
 from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 from utils import (
@@ -44,7 +40,6 @@ class BartSummarizationDistiller(SummarizationModule):
 
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
-        # def setup_student_and_teacher(self, hparams: argparse.Namespace):
         self.output_dir = Path(hparams.output_dir)
         self.output_dir.mkdir(exist_ok=True)
 
@@ -53,35 +48,28 @@ class BartSummarizationDistiller(SummarizationModule):
         hparams.model_name_or_path = str(save_dir)  # Tell lightning we are training the student
         teacher = AutoModelForSeq2SeqLM.from_pretrained(hparams.teacher).eval()
         use_task_specific_params(teacher, hparams.task)  # We copy good generation parameters to student by default
-
-        student, e_layers_to_copy, d_layers_to_copy = create_student_by_copying_alternating_layers(
+        student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
             teacher, e=hparams.student_encoder_layers, d=hparams.student_decoder_layers, save_path=save_dir
         )
         if hparams.length_penalty != -1:
             student.config.length_penalty = hparams.length_penalty
-        #student, student_cfg, teacher = self.setup_student_and_teacher(hparams)
         super().__init__(hparams, model=student, config=student.config)
-        self.e_layer_ids, self.d_layer_ids = e_layers_to_copy, d_layers_to_copy  # type: List[int], List[int]
+        self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]
         self.different_encoder = hparams.student_encoder_layers != teacher.config.encoder_layers
         self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
         self.teacher = teacher
-        use_task_specific_params(self.teacher, hparams.task)
         freeze_params(self.teacher)
-        assert_all_frozen(self.teacher)
 
-        if self.different_encoder:
-            assert any_requires_grad(self.model.get_encoder())
-        else:  # To save RAM, delete teacher encoder and freeze student encoder.
+        if not self.different_encoder:  # To save RAM, delete teacher encoder and freeze student encoder.
             try:
-                #freeze_params(self.model.model.encoder)
                 del self.teacher.model.encoder
             except AttributeError:  # T5
-                #freeze_params(self.model.encoder)
-                del self.teacher.encoder  # Delete the teacher encoder if it's identical to student
+                del self.teacher.encoder
         # Intermediate supervision: Decide which layers to supervise
-        #self.hparams.e_layer_to_copy = getattr(self.model.config, 'copied_encoder_layers', None)
         if hparams.supervise_forward:
-            self.d_matches = get_layers_to_supervise(n_student=len(self.d_layer_ids), n_teacher=self.teacher.config.decoder_layers)
+            self.d_matches = get_layers_to_supervise(
+                n_student=len(self.d_layer_ids), n_teacher=self.teacher.config.decoder_layers
+            )
         else:
             self.d_matches = self.d_layer_ids
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
@@ -95,7 +83,7 @@ class BartSummarizationDistiller(SummarizationModule):
 
     def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
         """Supervise MSE(teacher.encoder_outputs, student.encoder_outputs)."""
-        #raise NotImplementedError()
+        # raise NotImplementedError()
         if mask is not None:
             # mask has False at padding_idx
             sel_mask = mask[:, :, None].expand_as(student_outputs).bool()
@@ -113,7 +101,7 @@ class BartSummarizationDistiller(SummarizationModule):
         sel_mask = mask[:, :, None].expand_as(s_logits)
         vocab_size = s_logits.size(-1)
         s_logits_slct = torch.masked_select(s_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-        t_logits_slct = torch.masked_select(t_logits, sel_mask )  # (bs * seq_length * voc_size) modulo the 1s in mask
+        t_logits_slct = torch.masked_select(t_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
         s_logits_slct = s_logits_slct.view(-1, vocab_size)  # (bs * seq_length, voc_size) modulo the 1s in mask
         t_logits_slct = t_logits_slct.view(-1, vocab_size)  # (bs * seq_length, voc_size) modulo the 1s in mask
         assert t_logits_slct.size() == s_logits_slct.size()
@@ -176,9 +164,7 @@ class BartSummarizationDistiller(SummarizationModule):
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, src_mask)
 
-            hid_loss_enc = self.calc_hidden_loss(
-                src_mask, enc_hidden_state, teacher_enc_hid, self.hparams.e_layer_to_copy
-            )
+            hid_loss_enc = self.calc_hidden_loss(src_mask, enc_hidden_state, teacher_enc_hid, self.e_layer_ids)
 
         teacher_enc_outputs = (enc_outputs,)
         assert isinstance(teacher_enc_outputs, tuple), type(teacher_enc_outputs)
@@ -195,8 +181,9 @@ class BartSummarizationDistiller(SummarizationModule):
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
-            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.d_matches,
-                                                 normalize_hidden=self.hparams.normalize_hidden)
+            hid_loss_dec = self.calc_hidden_loss(
+                dec_mask, dec_hidden, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
+            )
 
         blended_loss = (
             self.alpha_ce * loss_ce

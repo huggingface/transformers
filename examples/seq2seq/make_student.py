@@ -1,15 +1,15 @@
 import warnings
 from pathlib import Path
-from typing import List, Union, Tuple
+from typing import List, Tuple, Union
 
 import fire
 from torch import nn
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, PreTrainedModel
 from transformers.utils import logging
+
+
 logger = logging.get_logger(__name__)
-
-
 
 
 def copy_layers(src_layers: nn.ModuleList, dest_layers: nn.ModuleList, layers_to_copy: List[int]) -> None:
@@ -17,11 +17,12 @@ def copy_layers(src_layers: nn.ModuleList, dest_layers: nn.ModuleList, layers_to
     assert len(dest_layers) == len(layers_to_copy), f"{len(dest_layers)} != {len(layers_to_copy)}"
     dest_layers.load_state_dict(layers_to_copy.state_dict())
 
+
 LAYERS_TO_COPY = {
-    # maps  num layers in student -> which teacher layers to copy.
+    # maps  num layers in teacher -> num_layers in student -> which teacher layers to copy.
     # 12: bart, 16: pegasus, 6: marian/Helsinki-NLP
     12: {
-        1: [0],
+        1: [0],  # This says that if the teacher has 12 layers and the student has 1, copy layer 0 of the teacher
         2: [0, 6],
         3: [0, 6, 11],
         4: [0, 4, 8, 11],
@@ -43,11 +44,10 @@ LAYERS_TO_COPY = {
     6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))},
 }
 LAYERS_TO_SUPERVISE = {
-    2: {1:[0]},
+    # maps  num layers in student -> which teacher layers to copy.
+    6: {1: [5], 2: [3, 5], 3: [1, 4, 5], 4: [1, 2, 4, 5]},
     12: {1: [11], 2: [5, 11], 3: [3, 7, 11], 6: [1, 3, 5, 8, 10, 11]},
     16: {1: [15], 4: [4, 9, 12, 15], 8: [1, 3, 5, 7, 9, 11, 13, 15]},
-    6: {1: [5], 2: [3, 5], 3: [1, 4, 5], 4: [1, 2, 4, 5]},
-    2: {1: [1], 2: [0, 1]},
 }
 
 
@@ -92,8 +92,9 @@ def create_student_by_copying_alternating_layers(
         d: how many Decoder layers should the student have, default is fully copy of teacher
         copy_first_teacher_layers: [bool] dont copy alternating layers, just the first e/d.
         **extra_config_kwargs: extra kwargs to pass to the student, by default the teacher config is used.
+
     Returns:
-        student: new, smaller model.
+        student: new, smaller model.  (Also saves it to save_path)
         e_layers_to_copy: list of which teacher encoder layers were used
         d_layers_to_copy: list of which teacher decoder layers were used
     """
@@ -106,19 +107,27 @@ def create_student_by_copying_alternating_layers(
     else:
 
         assert isinstance(teacher, PreTrainedModel), f"teacher must be a model or string got type {type(teacher)}"
-    teacher_e, teacher_d = teacher.config.encoder_layers, teacher.config.decoder_layers
-    if e is None:
-        e = teacher_e
-    if d is None:
-        d = teacher_d
+    init_kwargs = teacher.config.to_diff_dict()
+
+    try:
+        teacher_e, teacher_d = teacher.config.encoder_layers, teacher.config.decoder_layers
+        if e is None:
+            e = teacher_e
+        if d is None:
+            d = teacher_d
+        init_kwargs.update({"encoder_layers": e, "decoder_layers": d})
+    except AttributeError:  # T5
+        teacher_e, teacher_d = teacher.config.num_layers, teacher.config.num_hidden_layers
+        assert e == d, "T5 Students must be symmetric"
+        init_kwargs["num_layers"] = e
 
     # Kwargs to instantiate student = teacher kwargs with updated layer numbers + **extra_config_kwargs
-    init_kwargs = teacher.config.to_diff_dict()
-    init_kwargs.update({"encoder_layers": e, "decoder_layers": d}, **extra_config_kwargs)
-    # init_kwargs.update(**extra_config_kwargs)
+
+    init_kwargs.update(extra_config_kwargs)
+
     # Copy weights
     student_cfg = teacher.config_class(**init_kwargs)
-    student = type(teacher)(student_cfg)
+    student = AutoModelForSeq2SeqLM.from_config(student_cfg)
     # Start by copying the full teacher state dict this will copy the first N teacher layers to the student.
     info = student.load_state_dict(teacher.state_dict(), strict=False)
     assert info.missing_keys == [], info.missing_keys  # every student key should have a teacher keys.
@@ -126,7 +135,8 @@ def create_student_by_copying_alternating_layers(
     if copy_first_teacher_layers:  # Our copying is done. We just log and save
         e_layers_to_copy, d_layers_to_copy = list(range(e)), list(range(d))
         logger.info(
-            f'Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}')
+            f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}"
+        )
         student.save_pretrained(save_path)
         return student, e_layers_to_copy, d_layers_to_copy
 
@@ -140,7 +150,9 @@ def create_student_by_copying_alternating_layers(
     except AttributeError:  # For t5, student.model.encoder.layers is called student.encoder.block
         copy_layers(teacher.encoder.block, student.encoder.block, e_layers_to_copy)
         copy_layers(teacher.decoder.block, student.decoder.block, d_layers_to_copy)
-    logger.info(f'Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}')
+    logger.info(
+        f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}"
+    )
     student.config.init_metadata = dict(
         teacher_type=teacher.config.model_type,
         copied_encoder_layers=e_layers_to_copy,
