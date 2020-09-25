@@ -186,7 +186,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                         "You need to install pytorch to load from a PyTorch pretrained vocabulary, "
                         "or activate it with environment variables USE_TORCH=1 and USE_TF=0."
                     )
-                vocab_dict = torch.load(pretrained_vocab_file)
+                vocab_dict = torch.load(pretrained_vocab_file_torch)
 
             if vocab_dict is not None:
                 for key, value in vocab_dict.items():
