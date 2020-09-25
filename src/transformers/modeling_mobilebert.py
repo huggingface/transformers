@@ -31,7 +31,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import ACT2FN
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import (
     ModelOutput,
@@ -40,7 +40,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bert import BertIntermediate
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -155,7 +154,6 @@ class NoNorm(nn.Module):
         return input_tensor * self.weight + self.bias
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
 
 
@@ -358,10 +356,19 @@ class MobileBertAttention(nn.Module):
         return outputs
 
 
-class MobileBertIntermediate(BertIntermediate):
+class MobileBertIntermediate(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.dense = nn.Linear(config.true_hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
 
 
 class OutputBottleneck(nn.Module):

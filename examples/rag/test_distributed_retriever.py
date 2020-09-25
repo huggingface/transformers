@@ -153,4 +153,4 @@ class RagRetrieverTest(TestCase):
         self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
         self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
-        self.assertListEqual(list(doc_ids), [1, 0])
+        self.assertListEqual(doc_ids.tolist(), [[1], [0]])

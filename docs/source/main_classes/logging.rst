@@ -52,3 +52,7 @@ Other functions
 .. autofunction:: transformers.logging.set_verbosity
 
 .. autofunction:: transformers.logging.get_logger
+
+.. autofunction:: transformers.logging.enable_explicit_format
+
+.. autofunction:: transformers.logging.reset_format

@@ -456,3 +456,9 @@ def write_txt_file(ordered_tgt, path):
     for ln in ordered_tgt:
         f.write(ln + "\n")
         f.flush()
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]
