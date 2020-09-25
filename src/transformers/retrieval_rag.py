@@ -203,6 +203,7 @@ class HFIndex:
         dataset_name: str,
         dataset_split: str,
         index_name: str,
+        vector_size: int,
         index_path: Optional[str] = None,
         use_dummy_dataset=False,
     ):
@@ -210,6 +211,7 @@ class HFIndex:
         self.dataset_name = dataset_name
         self.dataset_split = dataset_split
         self.index_name = index_name
+        self.vector_size = vector_size
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
         self._index_initialize = False
@@ -218,6 +220,7 @@ class HFIndex:
         self.dataset = load_dataset(
             self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
         )
+        self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
 
     def is_initialized(self):
         return self._index_initialize
@@ -236,15 +239,19 @@ class HFIndex:
                 index_name=self.index_name,
                 dummy=self.use_dummy_dataset,
             )
+            self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
         self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
         return [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
     def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
-        _, docs = self.dataset.get_nearest_examples_batch("embeddings", question_hidden_states, n_docs)
-        ids = [[int(i) for i in doc["id"]] for doc in docs]
+        _, ids = self.dataset.search_batch("embeddings", question_hidden_states, n_docs)
+        docs = [self.dataset[[i for i in indices if i >= 0]] for indices in ids]
         vectors = [doc["embeddings"] for doc in docs]
+        for i in range(len(vectors)):
+            if len(vectors[i]) < n_docs:
+                vectors[i] = np.vstack([vectors[i], np.zeros((n_docs - len(vectors[i]), self.vector_size))])
         return np.array(ids), np.array(vectors)  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
 
@@ -274,7 +281,12 @@ class RagRetriever:
             )
             if config.index_name == "legacy"
             else HFIndex(
-                config.dataset, config.dataset_split, config.index_name, config.index_path, config.use_dummy_dataset
+                config.dataset,
+                config.dataset_split,
+                config.index_name,
+                config.retrieval_vector_size,
+                config.index_path,
+                config.use_dummy_dataset,
             )
         )
         self.generator_tokenizer = generator_tokenizer
@@ -384,8 +396,9 @@ class RagRetriever:
             )
             ids_batched.extend(ids)
             vectors_batched.extend(vectors)
-        return np.array(ids_batched), np.array(
-            vectors_batched
+        return (
+            np.array(ids_batched),
+            np.array(vectors_batched),
         )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
     def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
