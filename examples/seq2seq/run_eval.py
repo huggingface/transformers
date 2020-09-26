@@ -138,11 +138,9 @@ def run_generate(verbose=True):
 
     # Compute scores
     score_fn = calculate_bleu if "translation" in args.task else calculate_rouge
-
     output_lns = [x.rstrip() for x in open(args.save_path).readlines()]
     reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
-
-    scores: dict = score_fn(output_lns, reference_lns, cleaned_up_tokenization_spaces=False)
+    scores: dict = score_fn(output_lns, reference_lns)
     scores.update(runtime_metrics)
 
     if args.dump_args:
