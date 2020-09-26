@@ -85,7 +85,7 @@ def create_student_by_copying_alternating_layers(
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
     """Make a student by copying alternating layers from a teacher, save it to student_save_path.
     Args:
-        teacher: str or PretrainedModel if str, this will call AutoModelForSeq2SeqLM.from_pretrained(teacher) before
+        teacher: str or PreTrainedModel if str, this will call AutoModelForSeq2SeqLM.from_pretrained(teacher) before
         copying layers
         save_path: where to save the student, defaults to student directory.
         e: how many Encoder layers should the student have, default is fully copy of teacher
