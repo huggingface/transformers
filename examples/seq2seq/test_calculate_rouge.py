@@ -1,9 +1,10 @@
-# metrics = calculate_rouge_score(PRED, TGT)
 from collections import defaultdict
+
 import pandas as pd
+import pytest
 
 from utils import calculate_rouge
-import pytest
+
 
 PRED = [
     'Prosecutor: "No videos were used in the crash investigation" German papers say they saw a cell phone video of the final seconds on board Flight 9525. The Germanwings co-pilot says he had a "previous episode of severe depression" German airline confirms it knew of Andreas Lubitz\'s depression years before he took control.',
@@ -28,12 +29,18 @@ def test_aggregated_scores_are_determinstic():
     )
 
 
-@pytest.mark.parametrize("k", ['rougeL', 'rougeLsum'])
-def test_newline_cnn_improvement(k):
+def test_newline_cnn_improvement():
+    k = "rougeLsum"
     score = calculate_rouge(PRED, TGT, newline_sep=True, rouge_keys=[k])[k]
     score_no_sep = calculate_rouge(PRED, TGT, newline_sep=False, rouge_keys=[k])[k]
     assert score > score_no_sep
 
+
+def test_newline_irrelevant_for_other_metrics():
+    k = ['rouge1', 'rouge2', 'rougeL']
+    score_sep = calculate_rouge(PRED, TGT, newline_sep=True, rouge_keys=k)
+    score_no_sep = calculate_rouge(PRED, TGT, newline_sep=False, rouge_keys=k)
+    assert score_sep == score_no_sep
 
 def test_single_sent_scores_dont_depend_on_newline_sep():
     pred = [

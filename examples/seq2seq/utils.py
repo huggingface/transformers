@@ -440,18 +440,6 @@ def calculate_rouge(
         return aggregator._scores
 
 
-def calculate_rouge_old(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
-    aggregator = scoring.BootstrapAggregator()
-
-    for reference_ln, output_ln in zip(reference_lns, output_lns):
-        scores = scorer.score(reference_ln, output_ln)
-        aggregator.add_scores(scores)
-
-    result = aggregator.aggregate()
-    return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
-
-
 # Utilities for freezing parameters and checking whether they are frozen
 
 
