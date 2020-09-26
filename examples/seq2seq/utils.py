@@ -380,6 +380,7 @@ def get_git_info():
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
+
 def mid_stats(dct):
     new_dict = {}
     for k1, v1 in dct.items():
@@ -387,17 +388,36 @@ def mid_stats(dct):
         new_dict[k1] = {stat: round(getattr(mid, stat), 4) for stat in ["precision", "recall", "fmeasure"]}
     return new_dict
 
+
 import nltk
 
+
 def add_newline_to_eos(x: str) -> str:
-    return '\n'.join(nltk.sent_tokenize(x))
-
-#def process_rouge_scorer_output():
+    return "\n".join(nltk.sent_tokenize(x))
 
 
+def calculate_rouge(
+    output_lns: List[str],
+    reference_lns: List[str],
+    use_stemmer=True,
+    rouge_keys=ROUGE_KEYS,
+    just_fscore=True,
+    aggregate=True,
+    newline_sep=True,
+) -> Dict:
+    """
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True, rouge_keys=ROUGE_KEYS, just_fscore=True, aggregate=True, newline_sep=True) -> Dict:
-    nltk.download('punkt', quiet=True)
+    :param output_lns:
+    :param reference_lns:
+    :param use_stemmer: True
+    :param rouge_keys:
+    :param just_fscore:
+    :param aggregate:
+    :param newline_sep:
+    :return: Dict[score: value] if aggregate else defaultdict(list) keyed by rouge_keys
+
+    """
+    nltk.download("punkt", quiet=True)
     scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
     for pred, tgt in zip(reference_lns, output_lns):
@@ -408,9 +428,7 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer
         scores = scorer.score(pred, tgt)
         aggregator.add_scores(scores)
 
-
-    #metrics = {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
-
+    # metrics = {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
 
     if aggregate:
         result = aggregator.aggregate()
@@ -432,6 +450,7 @@ def calculate_rouge_old(output_lns: List[str], reference_lns: List[str], use_ste
 
     result = aggregator.aggregate()
     return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+
 
 # Utilities for freezing parameters and checking whether they are frozen
 
