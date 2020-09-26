@@ -78,8 +78,8 @@ def get_layers_to_supervise(n_student, n_teacher) -> List[int]:
 def create_student_by_copying_alternating_layers(
     teacher: Union[str, PreTrainedModel],
     save_path: Union[str, Path] = "student",
-    e: Union[int, None] = None,
-    d: Union[int, None] = None,
+    encoder_layers: Union[int, None] = None,
+    decoder_layers: Union[int, None] = None,
     copy_first_teacher_layers=False,  # D
     **extra_config_kwargs
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
