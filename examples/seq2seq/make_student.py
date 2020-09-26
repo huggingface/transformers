@@ -78,14 +78,14 @@ def get_layers_to_supervise(n_student, n_teacher) -> List[int]:
 def create_student_by_copying_alternating_layers(
     teacher: Union[str, PreTrainedModel],
     save_path: Union[str, Path] = "student",
-    e: Union[int, None] = None,
-    d: Union[int, None] = None,
+    encoder_layers: Union[int, None] = None,
+    decoder_layers: Union[int, None] = None,
     copy_first_teacher_layers=False,  # D
     **extra_config_kwargs
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
-    """Make a student by copying alternating layers from a teacher, save it to student_save_path.
+    """Make a student by copying alternating layers from a teacher, save it to save_path.
     Args:
-        teacher: str or PretrainedModel if str, this will call AutoModelForSeq2SeqLM.from_pretrained(teacher) before
+        teacher: str or PreTrainedModel if str, this will call AutoModelForSeq2SeqLM.from_pretrained(teacher) before
         copying layers
         save_path: where to save the student, defaults to student directory.
         e: how many Encoder layers should the student have, default is fully copy of teacher

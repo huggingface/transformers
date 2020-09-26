@@ -12,7 +12,7 @@ TINY_T5 = "patrickvonplaten/t5-tiny-random"
 
 
 @require_torch
-class CreateStudentTester(unittest.TestCase):
+class MakeStudentTester(unittest.TestCase):
     @cached_property
     def teacher_config(self):
         return AutoConfig.from_pretrained(TINY_BART)
