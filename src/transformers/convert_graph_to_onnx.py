@@ -23,6 +23,7 @@ SUPPORTED_PIPELINES = [
     "fill-mask",
     "question-answering",
     "text-generation",
+    "summarization",
     "translation_en_to_fr",
     "translation_en_to_de",
     "translation_en_to_ro",
