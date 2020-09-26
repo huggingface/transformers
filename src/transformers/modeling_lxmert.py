@@ -25,7 +25,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
-from .activations import gelu, swish
+from .activations import ACT2FN, gelu
 from .configuration_lxmert import LxmertConfig
 from .file_utils import (
     ModelOutput,
@@ -275,11 +275,6 @@ def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
     return model
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
-
-LxmertLayerNorm = torch.nn.LayerNorm
-
-
 class LxmertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -291,7 +286,7 @@ class LxmertEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, inputs_embeds=None):
@@ -385,7 +380,7 @@ class LxmertAttentionOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -447,7 +442,7 @@ class LxmertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -573,11 +568,11 @@ class LxmertVisualFeatureEncoder(nn.Module):
 
         # Object feature encoding
         self.visn_fc = nn.Linear(feat_dim, config.hidden_size)
-        self.visn_layer_norm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.visn_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-12)
 
         # Box position encoding
         self.box_fc = nn.Linear(pos_dim, config.hidden_size)
-        self.box_layer_norm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.box_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-12)
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -694,7 +689,7 @@ class LxmertPredictionHeadTransform(nn.Module):
         super(LxmertPredictionHeadTransform, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.transform_act_fn = ACT2FN[config.hidden_act]
-        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -731,7 +726,7 @@ class LxmertVisualAnswerHead(nn.Module):
         self.logit_fc = nn.Sequential(
             nn.Linear(hid_dim, hid_dim * 2),
             GeLU(),
-            LxmertLayerNorm(hid_dim * 2, eps=1e-12),
+            nn.LayerNorm(hid_dim * 2, eps=1e-12),
             nn.Linear(hid_dim * 2, num_labels),
         )
 
@@ -797,7 +792,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, LxmertLayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:

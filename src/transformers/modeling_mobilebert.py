@@ -31,7 +31,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import ACT2FN
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import (
     ModelOutput,
@@ -40,7 +40,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bert import BertIntermediate
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -155,7 +154,6 @@ class NoNorm(nn.Module):
         return input_tensor * self.weight + self.bias
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
 
 
@@ -358,10 +356,19 @@ class MobileBertAttention(nn.Module):
         return outputs
 
 
-class MobileBertIntermediate(BertIntermediate):
+class MobileBertIntermediate(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.dense = nn.Linear(config.true_hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
 
 
 class OutputBottleneck(nn.Module):
@@ -669,6 +676,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -806,14 +814,13 @@ class MobileBertModel(MobileBertPreTrainedModel):
     https://arxiv.org/pdf/2004.02984.pdf
     """
 
-    authorized_missing_keys = [r"position_ids"]
-
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
         self.embeddings = MobileBertEmbeddings(config)
         self.encoder = MobileBertEncoder(config)
-        self.pooler = MobileBertPooler(config)
+
+        self.pooler = MobileBertPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -912,7 +919,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1047,9 +1054,12 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.cls = MobileBertOnlyMLMHead(config)
         self.config = config
 
@@ -1339,11 +1349,14 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1525,11 +1538,14 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 

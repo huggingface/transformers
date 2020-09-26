@@ -555,7 +555,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
             attn_score = tf.cast(attn_score, tf.float32)
         # perform masking
         if attention_mask is not None:
-            attn_score = attn_score - INF * tf.cast(attention_mask[:, None, None], tf.float32)
+            attn_score = attn_score - INF * (1 - tf.cast(attention_mask[:, None, None], tf.float32))
         # attention probability
         attn_prob = tf.nn.softmax(attn_score, axis=-1)
         if dtype != tf.float32:

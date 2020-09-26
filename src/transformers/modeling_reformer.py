@@ -28,7 +28,7 @@ from torch import nn
 from torch.autograd.function import Function
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_fast, gelu_new, swish
+from .activations import ACT2FN
 from .configuration_reformer import ReformerConfig
 from .file_utils import (
     DUMMY_INPUTS,
@@ -53,20 +53,6 @@ REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/reformer-enwik8",
     # See all Reformer models at https://huggingface.co/models?filter=reformer
 ]
-
-
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
-ACT2FN = {
-    "gelu": gelu,
-    "relu": torch.nn.functional.relu,
-    "swish": swish,
-    "gelu_new": gelu_new,
-    "gelu_fast": gelu_fast,
-    "mish": mish,
-}
 
 
 # Define named tuples for nn.Modules here

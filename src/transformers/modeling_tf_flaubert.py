@@ -15,30 +15,32 @@
 """ TF 2.0 Flaubert model.
 """
 
-import random
+import itertools
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import tensorflow as tf
 
+from transformers.activations_tf import get_tf_activation
+
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import add_start_docstrings
+from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_outputs import TFBaseModelOutput
-from .modeling_tf_utils import keras_serializable, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list
 from .modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
     TFXLMForTokenClassification,
-    TFXLMMainLayer,
-    TFXLMModel,
-    TFXLMPredLayer,
-    TFXLMWithLMHeadModel,
-    get_masks,
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "FlaubertConfig"
+_TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
 TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Flaubert models at https://huggingface.co/models?filter=flaubert
@@ -155,27 +157,258 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 """
 
 
+def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
+    """
+    Generate hidden states mask, and optionally an attention mask.
+    """
+    bs = shape_list(lengths)[0]
+    if padding_mask is not None:
+        mask = padding_mask
+    else:
+        # assert lengths.max().item() <= slen
+        alen = tf.range(slen)
+        mask = tf.math.less(alen, lengths[:, tf.newaxis])
+
+    # attention mask is the same as mask, or triangular inferior attention (causal)
+    if causal:
+        attn_mask = tf.less_equal(
+            tf.tile(alen[tf.newaxis, tf.newaxis, :], (bs, slen, 1)), alen[tf.newaxis, :, tf.newaxis]
+        )
+    else:
+        attn_mask = mask
+
+    # sanity check
+    # assert shape_list(mask) == [bs, slen]
+    tf.debugging.assert_equal(shape_list(mask), [bs, slen])
+    assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
+
+    mask = tf.cast(mask, dtype=dtype)
+    attn_mask = tf.cast(attn_mask, dtype=dtype)
+
+    return mask, attn_mask
+
+
+class TFFlaubertPreTrainedModel(TFPreTrainedModel):
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = FlaubertConfig
+    base_model_prefix = "transformer"
+
+    @property
+    def dummy_inputs(self):
+        # Sometimes XLM has language embeddings so don't forget to build them as well if needed
+        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        if self.config.use_lang_emb and self.config.n_langs > 1:
+            langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        else:
+            langs_list = None
+        return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
+
+
 @add_start_docstrings(
-    "The bare Flaubert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Flaubert Model transformer outputing raw hidden-states without any specific head on top.",
     FLAUBERT_START_DOCSTRING,
 )
-class TFFlaubertModel(TFXLMModel):
-    config_class = FlaubertConfig
-
+class TFFlaubertModel(TFFlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
+    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="jplu/tf-flaubert-small-cased",
+        output_type=TFBaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(self, inputs, **kwargs):
+        outputs = self.transformer(inputs, **kwargs)
+        return outputs
+
+
+# Copied from transformers.modeling_tf_xlm.TFXLMMultiHeadAttention with XLM->Flaubert
+class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
+    NEW_ID = itertools.count()
+
+    def __init__(self, n_heads, dim, config, **kwargs):
+        super().__init__(**kwargs)
+        self.layer_id = next(TFFlaubertMultiHeadAttention.NEW_ID)
+        self.dim = dim
+        self.n_heads = n_heads
+        self.output_attentions = config.output_attentions
+        assert self.dim % self.n_heads == 0
+
+        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
+        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
+        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
+        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
+        self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        raise NotImplementedError
+
+    def call(self, input, mask, kv, cache, head_mask, output_attentions, training=False):
+        """
+        Self-attention (if kv is None) or attention over source sentence (provided by kv).
+        """
+        # Input is (bs, qlen, dim)
+        # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
+        bs, qlen, dim = shape_list(input)
+
+        if kv is None:
+            klen = qlen if cache is None else cache["slen"] + qlen
+        else:
+            klen = shape_list(kv)[1]
+
+        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        dim_per_head = tf.math.divide(self.dim, self.n_heads)
+        dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
+        mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
+
+        def shape(x):
+            """  projection """
+            return tf.transpose(tf.reshape(x, (bs, -1, self.n_heads, dim_per_head)), perm=(0, 2, 1, 3))
+
+        def unshape(x):
+            """  compute context """
+            return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.n_heads * dim_per_head))
+
+        q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
+
+        if kv is None:
+            k = shape(self.k_lin(input))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(input))  # (bs, n_heads, qlen, dim_per_head)
+        elif cache is None or self.layer_id not in cache:
+            k = v = kv
+            k = shape(self.k_lin(k))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(v))  # (bs, n_heads, qlen, dim_per_head)
+
+        if cache is not None:
+            if self.layer_id in cache:
+                if kv is None:
+                    k_, v_ = cache[self.layer_id]
+                    k = tf.concat([k_, k], axis=2)  # (bs, n_heads, klen, dim_per_head)
+                    v = tf.concat([v_, v], axis=2)  # (bs, n_heads, klen, dim_per_head)
+                else:
+                    k, v = cache[self.layer_id]
+
+            cache[self.layer_id] = (k, v)
+
+        q = tf.cast(q, dtype=tf.float32)
+        q = tf.multiply(q, tf.math.rsqrt(tf.cast(dim_per_head, dtype=tf.float32)))  # (bs, n_heads, qlen, dim_per_head)
+        k = tf.cast(k, dtype=q.dtype)
+        scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
+        mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
+        # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
+        mask = tf.cast(mask, dtype=scores.dtype)
+        scores = scores - 1e30 * (1.0 - mask)
+        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            weights = weights * head_mask
+
+        context = tf.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
+        context = unshape(context)  # (bs, qlen, dim)
+        outputs = (self.out_lin(context),)
+
+        if output_attentions:
+            outputs = outputs + (weights,)
+
+        return outputs
+
+
+# Copied from transformers.modeling_tf_xlm.TFXLMTransformerFFN
+class TFFlaubertTransformerFFN(tf.keras.layers.Layer):
+    def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
+        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
+        self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+
+    def call(self, input, training=False):
+        x = self.lin1(input)
+        x = self.act(x)
+        x = self.lin2(x)
+        x = self.dropout(x, training=training)
+
+        return x
+
 
 @keras_serializable
-class TFFlaubertMainLayer(TFXLMMainLayer):
+class TFFlaubertMainLayer(tf.keras.layers.Layer):
+    config_class = FlaubertConfig
+
     def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+        super().__init__(**kwargs)
+
+        self.n_heads = config.n_heads
+        self.n_langs = config.n_langs
+        self.dim = config.emb_dim
+        self.hidden_dim = self.dim * 4
+        self.n_words = config.n_words
+        self.pad_index = config.pad_index
+        self.causal = config.causal
+        self.n_layers = config.n_layers
+        self.use_lang_emb = config.use_lang_emb
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.position_embeddings = tf.keras.layers.Embedding(
+            config.max_position_embeddings,
+            self.dim,
+            embeddings_initializer=get_initializer(config.embed_init_std),
+            name="position_embeddings",
+        )
+
+        if config.n_langs > 1 and config.use_lang_emb:
+            self.lang_embeddings = tf.keras.layers.Embedding(
+                self.n_langs,
+                self.dim,
+                embeddings_initializer=get_initializer(config.embed_init_std),
+                name="lang_embeddings",
+            )
+
+        self.embeddings = TFSharedEmbeddings(
+            self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
+        )
+        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
+        self.attentions = []
+        self.layer_norm1 = []
+        self.ffns = []
+        self.layer_norm2 = []
+
+        for i in range(self.n_layers):
+            self.attentions.append(
+                TFFlaubertMultiHeadAttention(self.n_heads, self.dim, config=config, name="attentions_._{}".format(i))
+            )
+            self.layer_norm1.append(
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1_._{}".format(i))
+            )
+            # if self.is_decoder:
+            #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
+            #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
+            self.ffns.append(
+                TFFlaubertTransformerFFN(
+                    self.dim, self.hidden_dim, self.dim, config=config, name="ffns_._{}".format(i)
+                )
+            )
+            self.layer_norm2.append(
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2_._{}".format(i))
+            )
+
+    def get_input_embeddings(self):
+        return self.embeddings
 
     def call(
         self,
@@ -305,21 +538,26 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             inputs_embeds = self.embeddings(input_ids)
 
         tensor = inputs_embeds + self.position_embeddings(position_ids)
+
         if langs is not None and self.use_lang_emb:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
+
         tensor = self.layer_norm_emb(tensor)
         tensor = self.dropout(tensor, training=training)
         tensor = tensor * mask[..., tf.newaxis]
 
+        # hidden_states and attentions cannot be None in graph mode.
+        hidden_states = ()
+        attentions = ()
+
         # transformer layers
-        hidden_states = () if output_hidden_states else None
-        attentions = () if output_attentions else None
         for i in range(self.n_layers):
             # LayerDrop
-            dropout_probability = random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):
+            dropout_probability = tf.random.uniform([1], 0, 1)
+
+            if training and tf.less(dropout_probability, self.layerdrop):
                 continue
 
             if output_hidden_states:
@@ -331,8 +569,10 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                     tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training
                 )
                 attn = attn_outputs[0]
+
                 if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
+
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
                 tensor = self.layer_norm1[i](tensor)
@@ -342,8 +582,10 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                     tensor_normalized, attn_mask, None, cache, head_mask[i], output_attentions, training=training
                 )
                 attn = attn_outputs[0]
+
                 if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
+
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
 
@@ -375,9 +617,78 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
 
+        # Set to None here if the output booleans are at False
+        hidden_states = hidden_states if output_hidden_states else None
+        attentions = attentions if output_attentions else None
+
         if not return_dict:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
+
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
+
+
+# Copied from transformers.modeling_tf_xlm.TFXLMPredLayer
+class TFFlaubertPredLayer(tf.keras.layers.Layer):
+    """
+    Prediction layer (cross_entropy or adaptive_softmax).
+    """
+
+    def __init__(self, config, input_embeddings, **kwargs):
+        super().__init__(**kwargs)
+
+        self.asm = config.asm
+        self.n_words = config.n_words
+        self.pad_index = config.pad_index
+
+        if config.asm is False:
+            self.input_embeddings = input_embeddings
+        else:
+            raise NotImplementedError
+            # self.proj = nn.AdaptiveLogSoftmaxWithLoss(
+            #     in_features=dim,
+            #     n_classes=config.n_words,
+            #     cutoffs=config.asm_cutoffs,
+            #     div_value=config.asm_div_value,
+            #     head_bias=True,  # default is False
+            # )
+
+    def build(self, input_shape):
+        # The output weights are the same as the input embeddings, but there is an output-only bias for each token.
+        self.bias = self.add_weight(shape=(self.n_words,), initializer="zeros", trainable=True, name="bias")
+
+        super().build(input_shape)
+
+    def call(self, hidden_states):
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = hidden_states + self.bias
+
+        return hidden_states
+
+
+@dataclass
+class TFFlaubertWithLMHeadModelOutput(ModelOutput):
+    """
+    Base class for :class:`~transformers.TFFlaubertWithLMHeadModel` outputs.
+
+    Args:
+        logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    logits: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @add_start_docstrings(
@@ -385,13 +696,50 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
     (linear layer with weights tied to the input embeddings). """,
     FLAUBERT_START_DOCSTRING,
 )
-class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
-    config_class = FlaubertConfig
-
+class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
-        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+        self.pred_layer = TFFlaubertPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+
+    def get_output_embeddings(self):
+        return self.pred_layer.input_embeddings
+
+    def prepare_inputs_for_generation(self, inputs, **kwargs):
+        mask_token_id = self.config.mask_token_id
+        lang_id = self.config.lang_id
+
+        effective_batch_size = inputs.shape[0]
+        mask_token = tf.ones((effective_batch_size, 1), dtype=tf.int32) * mask_token_id
+        inputs = tf.concat([inputs, mask_token], axis=1)
+
+        if lang_id is not None:
+            langs = tf.ones_like(inputs) * lang_id
+        else:
+            langs = None
+        return {"inputs": inputs, "langs": langs}
+
+    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="jplu/tf-flaubert-small-cased",
+        output_type=TFFlaubertWithLMHeadModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(self, inputs, **kwargs):
+        return_dict = kwargs.get("return_dict")
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(inputs, **kwargs)
+
+        output = transformer_outputs[0]
+        outputs = self.pred_layer(output)
+
+        if not return_dict:
+            return (outputs,) + transformer_outputs[1:]
+
+        return TFFlaubertWithLMHeadModelOutput(
+            logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
+        )
 
 
 @add_start_docstrings(
