@@ -369,7 +369,7 @@ runtime: 6H on NVIDIA RTX 24GB GPU
 If you are using `wandb` and comparing the two distillation methods, using this entry point will make your logs consistent,
 because you will have the same hyperparameters logged in every run.
 
-#### With a teacher
+#### With a teacher (Intermediate Supervision)
 *Note* only BART variants are supported
 
 In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `BartSummarizationDistiller`.
@@ -378,7 +378,7 @@ This is how `sshleifer/distilbart-xsum*` checkpoints were produced.
 The command that produced `sshleifer/distilbart-xsum-12-6` is:
 
 ```bash
-./train_distilbart_xsum.sh
+./train_distilbart_xsum.sh --logger_name wandb --gpus 1
 ```
 
 runtime: 13H on V-100 16GB GPU.
