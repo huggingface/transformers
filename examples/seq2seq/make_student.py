@@ -78,9 +78,9 @@ def get_layers_to_supervise(n_student, n_teacher) -> List[int]:
 def create_student_by_copying_alternating_layers(
     teacher: Union[str, PreTrainedModel],
     save_path: Union[str, Path] = "student",
-    encoder_layers: Union[int, None] = None,
-    decoder_layers: Union[int, None] = None,
-    copy_first_teacher_layers=False,  # D
+    e: Union[int, None] = None,
+    d: Union[int, None] = None,
+    copy_first_teacher_layers=False,
     **extra_config_kwargs
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
     """Make a student by copying alternating layers from a teacher, save it to save_path.
@@ -98,9 +98,8 @@ def create_student_by_copying_alternating_layers(
         e_layers_to_copy: list of which teacher encoder layers were used
         d_layers_to_copy: list of which teacher decoder layers were used
     """
-    assert (e is not None) or (
-        d is not None
-    ), "e and d cannot be both None-- you would just have an identical teacher."
+    _msg = "encoder_layers and decoder_layers cannot be both None-- you would just have an identical teacher."
+    assert (e is not None) or (d is not None), _msg
     if isinstance(teacher, str):
         AutoTokenizer.from_pretrained(teacher).save_pretrained(save_path)  # purely for convenience
         teacher = AutoModelForSeq2SeqLM.from_pretrained(teacher).eval()
