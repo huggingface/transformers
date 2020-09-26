@@ -1,7 +1,6 @@
 from collections import defaultdict
 
 import pandas as pd
-import pytest
 
 from utils import calculate_rouge
 
@@ -37,10 +36,11 @@ def test_newline_cnn_improvement():
 
 
 def test_newline_irrelevant_for_other_metrics():
-    k = ['rouge1', 'rouge2', 'rougeL']
+    k = ["rouge1", "rouge2", "rougeL"]
     score_sep = calculate_rouge(PRED, TGT, newline_sep=True, rouge_keys=k)
     score_no_sep = calculate_rouge(PRED, TGT, newline_sep=False, rouge_keys=k)
     assert score_sep == score_no_sep
+
 
 def test_single_sent_scores_dont_depend_on_newline_sep():
     pred = [

@@ -29,6 +29,14 @@ try:
 except (ImportError, ModuleNotFoundError):
     FAIRSEQ_AVAILABLE = False
 
+try:
+    import nltk
+
+    nltk.download("punkt", quiet=True)
+    NLTK_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    NLTK_AVAILABLE = False
+
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
     """From fairseq"""
@@ -389,9 +397,6 @@ def mid_stats(dct):
     return new_dict
 
 
-import nltk
-
-
 def add_newline_to_eos(x: str) -> str:
     return "\n".join(nltk.sent_tokenize(x))
 
@@ -417,7 +422,9 @@ def calculate_rouge(
     :return: Dict[score: value] if aggregate else defaultdict(list) keyed by rouge_keys
 
     """
-    nltk.download("punkt", quiet=True)
+    if newline_sep:
+        assert NLTK_AVAILABLE, "newline separating sentences requires nltk. Run pip install nltk."
+
     scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
     for pred, tgt in zip(reference_lns, output_lns):
