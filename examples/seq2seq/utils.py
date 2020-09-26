@@ -380,26 +380,46 @@ def get_git_info():
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
+def mid_stats(dct):
+    new_dict = {}
+    for k1, v1 in dct.items():
+        mid = v1.mid
+        new_dict[k1] = {stat: round(getattr(mid, stat), 4) for stat in ["precision", "recall", "fmeasure"]}
+    return new_dict
 
-def calculate_rouge(
-    output_lns: List[str], reference_lns: List[str], cleaned_up_tokenization_spaces=False, use_stemmer=True
-) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
+import nltk
+
+def add_newline_to_eos(x: str) -> str:
+    return '\n'.join(nltk.sent_tokenize(x))
+
+#def process_rouge_scorer_output():
+
+
+
+def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True, rouge_keys=ROUGE_KEYS, just_fscore=True, aggregate=True, newline_sep=True) -> Dict:
+    nltk.download('punkt', quiet=True)
+    scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
-
-    split_txt = ". " if cleaned_up_tokenization_spaces else " . "
-
-    for reference_ln, output_ln in zip(reference_lns, output_lns):
-
+    for pred, tgt in zip(reference_lns, output_lns):
         # rougeLsum expects \n separated sentences within a summary
-        reference_ln_formatted = " . \n".join(reference_ln.split(". "))
-        output_ln_formatted = " . \n".join(output_ln.split(split_txt))
-
-        scores = scorer.score(reference_ln_formatted, output_ln_formatted)
+        if newline_sep:
+            pred = add_newline_to_eos(pred)
+            tgt = add_newline_to_eos(tgt)
+        scores = scorer.score(pred, tgt)
         aggregator.add_scores(scores)
 
-    result = aggregator.aggregate()
-    return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+
+    #metrics = {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+
+
+    if aggregate:
+        result = aggregator.aggregate()
+        if just_fscore:
+            return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+        else:
+            return mid_stats(result)
+    else:
+        return aggregator._scores
 
 
 def calculate_rouge_old(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
