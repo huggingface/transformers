@@ -1,27 +1,16 @@
 import fire
 
-from utils import calculate_rouge, calculate_rouge_old
+from utils import calculate_rouge, save_json
 
 
-def calculate_rouge_path(pred_path, tgt_path, cleaned_up_tokenization_spaces=False, use_stemmer=True, use_old=False):
-    output_lns = [x.rstrip() for x in open(pred_path).readlines()]
-    reference_lns = [x.rstrip() for x in open(tgt_path).readlines()][: len(output_lns)]
-    if use_old:
-        metrics = calculate_rouge_old(
-            output_lns,
-            reference_lns,
-            # cleaned_up_tokenization_spaces=cleaned_up_tokenization_spaces,
-            use_stemmer=use_stemmer,
-        )
-    else:
-        metrics = calculate_rouge(
-            output_lns,
-            reference_lns,
-            cleaned_up_tokenization_spaces=cleaned_up_tokenization_spaces,
-            use_stemmer=use_stemmer,
-        )
-    # print(metrics)
-    return metrics
+def calculate_rouge_path(pred_path, tgt_path, save_path=None, **kwargs):
+    """Kwargs will be passed to calculate_rouge"""
+    pred_lns = [x.strip() for x in open(pred_path).readlines()]
+    tgt_lns = [x.strip() for x in open(tgt_path).readlines()][: len(pred_lns)]
+    metrics = calculate_rouge(pred_lns, tgt_lns, **kwargs)
+    if save_path is not None:
+        save_json(metrics, save_path)
+    return metrics  # these print nicely
 
 
 if __name__ == "__main__":
