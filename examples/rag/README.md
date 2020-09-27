@@ -1,5 +1,5 @@
 # Intro
-Aimed at tackling the knowledge-inensive NLP tasks (think tasks a human wouldn't be expected to solve without access to external knowledge sources), RAG models are seq2seq models with access to a retrieval mechanism providing relevant context documents at training and evaluation time.
+Aimed at tackling the knowledge-intensive NLP tasks (think tasks a human wouldn't be expected to solve without access to external knowledge sources), RAG models are seq2seq models with access to a retrieval mechanism providing relevant context documents at training and evaluation time.
 
 A RAG model encapsulates two core components: a question encoder and a generator.
 During a forward pass, we encode the input with the question encoder and pass it
@@ -52,9 +52,8 @@ You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to th
 Our evaluation script enables two modes of evaluation (controlled by the `eval_mode` argument): `e2e` - end2end evaluation, returns EM (exact match) and F1 scores calculated for the downstream task and `retrieval` - which returns precision@k of the documents retrieved for provided inputs.
 
 The evaluation script expects paths to two files:
-- `evaluation_set` - a path to a file specifying the evaluation dataset, a single datapoint per line, e.g.
-```who is the owner of reading football club```
-- `gold_data_path` - a path to a file contaning ground truth answers for datapoints from the `evaluation_set`. Check below for expected format of the files under `gold_data_path`.
+- `evaluation_set` - a path to a file specifying the evaluation dataset, a single input per line.
+- `gold_data_path` - a path to a file contaning ground truth answers for datapoints from the `evaluation_set`, a single output per line. Check below for expected formats of the gold data files.
 
 
 ## Retrieval evaluation
@@ -82,22 +81,25 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
         --gold_data_path path/to/output/biencoder-nq-dev.pages \ # a dataset containing ground truth answers for samples from the evaluation_set
         --predictions_path path/to/retrieval_preds.tsv  \ # name of file where predictions will be stored
         --eval_mode retrieval \ # indicates whether we're performing retrieval evaluation or e2e evaluation
+        --k 1 # parameter k for the precision@k metric
     ```
 
 
 ## End-to-end evaluation
 
 We support two formats of the gold data file (controlled by the `gold_data_mode` parameter):
-- `qa` - where a single line in the following format: `input [tab] output_list`, e.g.:
+- `qa` - where a single line has the following format: `input [tab] output_list`, e.g.:
 ```
 who is the owner of reading football club	['Xiu Li Dai', 'Dai Yongge', 'Dai Xiuli', 'Yongge Dai']
 ```
-- `ans` - where a single line of the gold file contains a single expected output string, e.g.:
+- `ans` - where a single line contains a single expected answer, e.g.:
 ```
 Xiu Li Dai
 ```
 
-Predictions of the model will be saved under the path specified by the `predictions_path` parameter. If the path already exists, the script will use these predictions to calculate metrics. Add `--recalculate` parameter to force the script to perform inference from scratch. An example e2e evaluation run could look as follows:
+Predictions of the model for the samples from the `evaluation_set` will be saved under the path specified by the `predictions_path` parameter. If this path already exists, the script will use saved predictions to calculate metrics. Add `--recalculate` parameter to force the script to perform inference from scratch.
+
+An example e2e evaluation run could look as follows:
 ```bash
 python examples/rag/eval_rag.py \
     --model_name_or_path facebook/rag-sequence-nq \
