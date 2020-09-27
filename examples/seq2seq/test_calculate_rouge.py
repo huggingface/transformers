@@ -1,7 +1,9 @@
 from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
 
+from rouge_cli import calculate_rouge_path
 from utils import calculate_rouge
 
 
@@ -66,3 +68,13 @@ def test_pegasus_newline():
     prev_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"], newline_sep=False)["rougeLsum"]
     new_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"])["rougeLsum"]
     assert new_score > prev_score
+
+
+def test_rouge_cli():
+    data_dir = Path("examples/seq2seq/test_data/wmt_en_ro")
+    metrics = calculate_rouge_path(data_dir.joinpath("test.source"), data_dir.joinpath("test.target"))
+    assert isinstance(metrics, dict)
+    metrics_default_dict = calculate_rouge_path(
+        data_dir.joinpath("test.source"), data_dir.joinpath("test.target"), bootstrap_aggregation=False
+    )
+    assert isinstance(metrics_default_dict, defaultdict)
