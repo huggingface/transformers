@@ -33,7 +33,7 @@ python examples/rag/finetune.py \
 ```
 We publish two `base` models which can serve as a starting point for finetuning on downstream tasks (use them as `model_name_or_path`):
 - [`facebook/rag-sequence-base`](https://huggingface.co/facebook/rag-sequence-base) - a base for finetuning `RagSequenceForGeneration` models,
-- [`facebook/rag-token-base`](https://huggingface.co/facebook/rag-sequence-base) - a base for finetuning `RagTokenForGeneration` models.
+- [`facebook/rag-token-base`](https://huggingface.co/facebook/rag-token-base) - a base for finetuning `RagTokenForGeneration` models.
 
 The `base` models initialize the question encoder with [`facebook/dpr-question_encoder-single-nq-base`](https://huggingface.co/facebook/dpr-question_encoder-single-nq-base) and the generator with [`facebook/bart-large`](https://huggingface.co/facebook/bart-large).
 
@@ -49,31 +49,19 @@ You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to th
 
 
 # Evaluation
-Our evaluation script enables two modes of evaluation (controlled by the `eval_mode` argument): `e2e` - end2end evaluation, returns EM (exact match) and F1 scores calculated for the downstream task and `retrieval` - which returns precision@k of the documents retrieved for provided input.
+Our evaluation script enables two modes of evaluation (controlled by the `eval_mode` argument): `e2e` - end2end evaluation, returns EM (exact match) and F1 scores calculated for the downstream task and `retrieval` - which returns precision@k of the documents retrieved for provided inputs.
 
 The evaluation script expects paths to two files:
 - `evaluation_set` - a path to a file specifying the evaluation dataset, a single datapoint per line, e.g.
 ```who is the owner of reading football club```
-- `gold_data_path` - a path to a file contaning ground truth answers for datapoints from the `evaluation_set`.
+- `gold_data_path` - a path to a file contaning ground truth answers for datapoints from the `evaluation_set`. Check below for expected format of the files under `gold_data_path`.
 
-We expect the following formats of the gold data file:
-
-- for `e2e` evaluation, we support two formats of the gold file (controlled by the `gold_data_mode` parameter):
-    - `qa` - where a single line in the following format: `input [tab] output_list`, e.g.:
-    ```
-    who is the owner of reading football club	['Xiu Li Dai', 'Dai Yongge', 'Dai Xiuli', 'Yongge Dai']
-    ```
-    - `ans` - where a single line of the gold file contains the expected output string, e.g.:
-    ```
-    Xiu Li Dai
-    ```
-
-- for `retrieval` evaluation, we expect a tab-separated list of document titles constituting positive contexts for a given query, e.g. given a question `who sings does he love me with reba`, a line with ground truth retrieval data could look as follows:
-    ```
-    Does He Love You	Does He Love You	Red Sandy Spika dress of Reba McEntire	Greatest Hits Volume Two (Reba McEntire album)	Shoot for the Moon (album)
-    ```
 
 ## Retrieval evaluation
+For `retrieval` evaluation, we expect a gold data file where each line will consist of a tab-separated list of document titles constituting positive contexts for respective datapoints from the `evaluation_set`. E.g. given a question `who sings does he love me with reba` in the `evaluation_set`, a respective ground truth line could look as follows:
+```
+Does He Love You	Does He Love You	Red Sandy Spika dress of Reba McEntire	Greatest Hits Volume Two (Reba McEntire album)	Shoot for the Moon (album)
+```
 
 We demonstrate how to evaluate retrieval against DPR evaluation data. You can download respective files from links listed [here](https://github.com/facebookresearch/DPR/blob/master/data/download_data.py#L39-L45).
 
@@ -92,23 +80,34 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
         --model_type rag_sequence \ # RAG model type (rag_token or rag_sequence)
         --evaluation_set path/to/output/biencoder-nq-dev.questions \ # an input dataset for evaluation
         --gold_data_path path/to/output/biencoder-nq-dev.pages \ # a dataset containing ground truth answers for samples from the evaluation_set
-        --predictions_path path/to/retrieval_preds.tsv  \ # name of file in which predictions will be stored
+        --predictions_path path/to/retrieval_preds.tsv  \ # name of file where predictions will be stored
         --eval_mode retrieval \ # indicates whether we're performing retrieval evaluation or e2e evaluation
-        --recalculate # if predictions_filename already exists, and this option is set - we regenerate the answers, otherwise we reuse the predicsion file to calculate metrics.
     ```
 
 
 ## End-to-end evaluation
-A sample evaluation run. Predictions of the model will be saved under the path specified by the `predictions_path` parameter. If the path already exists, the script will use these predictions to calculate metrics. Add `--recalculate` parameter to force the script to perform inference from scratch:
+
+We support two formats of the gold data file (controlled by the `gold_data_mode` parameter):
+- `qa` - where a single line in the following format: `input [tab] output_list`, e.g.:
+```
+who is the owner of reading football club	['Xiu Li Dai', 'Dai Yongge', 'Dai Xiuli', 'Yongge Dai']
+```
+- `ans` - where a single line of the gold file contains a single expected output string, e.g.:
+```
+Xiu Li Dai
+```
+
+Predictions of the model will be saved under the path specified by the `predictions_path` parameter. If the path already exists, the script will use these predictions to calculate metrics. Add `--recalculate` parameter to force the script to perform inference from scratch. An example e2e evaluation run could look as follows:
 ```bash
 python examples/rag/eval_rag.py \
-	--model_name_or_path facebook/rag-sequence-nq \
+    --model_name_or_path facebook/rag-sequence-nq \
     --model_type rag_sequence \
     --evaluation_set path/to/test.source \
     --gold_data_path path/to/gold_data \
     --predictions_path path/to/e2e_preds.txt \
-    --eval_mode e2e \ # indicates whether we're performing retrieval evaluation or e2e evaluation (default)
+    --eval_mode e2e \
+    --gold_data_mode qa \
     --n_docs 5 \ # You can experiment with retrieving different number of documents at evaluation time
     --print_predictions \
-    --recalculate \ #adding this parameter will force re-calculating predictions even if predictions_path exists
+    --recalculate \ # adding this parameter will force recalculating predictions even if predictions_path already exists
 ```
