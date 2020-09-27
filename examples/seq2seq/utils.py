@@ -21,7 +21,7 @@ from torch.utils.data import Dataset, Sampler
 
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
-
+from sentence_splitter import add_newline_to_eos
 
 try:
     from fairseq.data.data_utils import batch_by_size
@@ -30,13 +30,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     FAIRSEQ_AVAILABLE = False
 
-try:
-    import nltk
 
-    nltk.download("punkt", quiet=True)
-    NLTK_AVAILABLE = True
-except (ImportError, ModuleNotFoundError):
-    NLTK_AVAILABLE = False
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
@@ -398,10 +392,6 @@ def extract_rouge_mid_statistics(dct):
     return new_dict
 
 
-def add_newline_to_eos(x: str) -> str:
-    re.sub("<n>", "", x)  # remove pegasus newline char
-    return "\n".join(nltk.sent_tokenize(x))
-
 
 def calculate_rouge(
     pred_lns: List[str],
@@ -430,9 +420,6 @@ def calculate_rouge(
          Dict[score: value] if aggregate else defaultdict(list) keyed by rouge_keys
 
     """
-    if newline_sep:
-        assert NLTK_AVAILABLE, "newline separating sentences requires nltk. Run pip install nltk."
-
     scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
     for pred, tgt in zip(tgt_lns, pred_lns):
