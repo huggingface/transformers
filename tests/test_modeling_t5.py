@@ -107,7 +107,7 @@ class T5ModelTester:
             d_ff=self.d_ff,
             d_kv=self.hidden_size // self.num_attention_heads,
             num_layers=self.num_hidden_layers,
-            decoder_layers=self.decoder_layers,
+            num_decoder_layers=self.decoder_layers,
             num_heads=self.num_attention_heads,
             relative_attention_num_buckets=self.relative_attention_num_buckets,
             dropout_rate=self.dropout_rate,
