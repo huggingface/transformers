@@ -20,7 +20,7 @@ from run_eval_search import run_search
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.hf_api import HfApi
 from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
-from utils import label_smoothed_nll_loss, lmap, load_json
+from utils import ROUGE_KEYS, label_smoothed_nll_loss, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -365,7 +365,7 @@ def test_run_eval_search(model):
         if "translation" in task:
             expected_strings.append("bleu")
         else:
-            expected_strings.extend(["rouge1", "rouge2", "rougeL"])
+            expected_strings.extend(ROUGE_KEYS)
         for w in expected_strings:
             assert w in cs.out
         for w in un_expected_strings:
