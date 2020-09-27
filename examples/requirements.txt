@@ -11,6 +11,7 @@ git-python==1.0.3
 faiss-cpu
 streamlit
 elasticsearch
+nltk
 pandas
 datasets
 fire
