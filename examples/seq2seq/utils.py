@@ -4,7 +4,6 @@ import linecache
 import math
 import os
 import pickle
-import re
 import socket
 from logging import getLogger
 from pathlib import Path
@@ -19,9 +18,10 @@ from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 
+from sentence_splitter import add_newline_to_eos
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
-from sentence_splitter import add_newline_to_eos
+
 
 try:
     from fairseq.data.data_utils import batch_by_size
@@ -29,8 +29,6 @@ try:
     FAIRSEQ_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
     FAIRSEQ_AVAILABLE = False
-
-
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
@@ -390,7 +388,6 @@ def extract_rouge_mid_statistics(dct):
         mid = v1.mid
         new_dict[k1] = {stat: round(getattr(mid, stat), 4) for stat in ["precision", "recall", "fmeasure"]}
     return new_dict
-
 
 
 def calculate_rouge(
