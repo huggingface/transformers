@@ -1081,10 +1081,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
     """
 
-    config_class = LongformerConfig
-    base_model_prefix = "longformer"
-
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -1100,7 +1097,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
         self.embeddings = LongformerEmbeddings(config)
         self.encoder = LongformerEncoder(config)
-        self.pooler = LongformerPooler(config)
+        self.pooler = LongformerPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -1270,7 +1267,7 @@ class LongformerModel(LongformerPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         # undo padding
         if padding_len > 0:
@@ -1290,13 +1287,13 @@ class LongformerModel(LongformerPreTrainedModel):
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top. """, LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(LongformerPreTrainedModel):
-    config_class = LongformerConfig
-    base_model_prefix = "longformer"
+
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.lm_head = LongformerLMHead(config)
 
         self.init_weights()
@@ -1395,11 +1392,14 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.classifier = LongformerClassificationHead(config)
 
         self.init_weights()
@@ -1500,11 +1500,14 @@ class LongformerClassificationHead(nn.Module):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1628,11 +1631,14 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForTokenClassification(LongformerPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.longformer = LongformerModel(config)
+        self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 

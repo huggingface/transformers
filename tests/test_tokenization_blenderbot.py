@@ -18,8 +18,8 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer, BlenderbotTokenizer
 from transformers.file_utils import cached_property
+from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer, BlenderbotTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -74,20 +74,19 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         assert src_text != decoded  # I wish it did!
         assert decoded == "i am a small frog ."
 
+
 class Blenderbot3BTokenizerTests(unittest.TestCase):
     @cached_property
     def tokenizer_3b(self):
         return BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
 
-    def test_special_tokens_3B_tok(self):
+    def test_encode_decode_cycle(self):
         tok = self.tokenizer_3b
         src_text = " I am a small frog."
         encoded = tok([src_text], padding=False, truncation=False)["input_ids"]
         decoded = tok.batch_decode(encoded, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        assert src_text == decoded  # I wish it did!
-        import ipdb; ipdb.set_trace()
+        assert src_text == decoded
 
     def test_3B_tokenization_same_as_parlai(self):
-        # TODO(SS): this can run on CPU
-        tok = self.tokenizer_3b
-        self.assertListEqual(tok(["sam"]).input_ids[0], [268, 343, 2])
+        assert self.tokenizer_3b.add_prefix_space
+        assert self.tokenizer_3b([" Sam", "Sam"]).input_ids ==  [[5502, 2], [5502, 2]]

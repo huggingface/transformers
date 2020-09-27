@@ -115,8 +115,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         model.model.decoder.embed_positions.weight.shape == expected_shape
 
 
-
-
 @unittest.skipUnless(torch_device != "cpu", "3B test too slow on CPU.")
 @require_torch
 class Blenderbot3BIntegrationTests(unittest.TestCase):
@@ -132,8 +130,6 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
     @cached_property
     def tokenizer(self):
         return BlenderbotTokenizer.from_pretrained(self.ckpt)
-
-
 
     @unittest.skip("This fails.")
     @slow
@@ -162,7 +158,6 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         # 9/24: __start__ I have social anxiety. I feel like I'm going to throw up and I'm sweating and blushing.__end__
 
 
-
 @require_torch
 class Blenderbot90MIntegrationTests(unittest.TestCase):
     ckpt = "facebook/blenderbot-90M"
@@ -177,7 +172,6 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     @cached_property
     def tokenizer(self):
         return BlenderbotSmallTokenizer.from_pretrained(self.ckpt)
-
 
     @unittest.skip("This does not pass. It should be deleted")
     def test_forward_90M_same_as_parlai(self):
