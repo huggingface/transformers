@@ -221,7 +221,6 @@ def make_padding_mask(input_ids, padding_idx=1):
 
 # Helper Modules
 
-FP16_CLAMP_VALUE = 64500
 
 class EncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
@@ -271,7 +270,8 @@ class EncoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.final_layer_norm(x)
         if torch.isinf(x).any() or torch.isnan(x).any():
-            x = torch.clamp(x, min=-FP16_CLAMP_VALUE, max=FP16_CLAMP_VALUE)
+            clamp_value = torch.finfo(x.dtype).max - 1000
+            x = torch.clamp(x, min=-clamp_value, max=clamp_value)
         return x, attn_weights
 
 
