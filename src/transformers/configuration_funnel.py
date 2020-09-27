@@ -36,20 +36,21 @@ FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FunnelConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.FunnelModel`.
-    It is used to instantiate an Funnel Transformer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Funnel Transformer `funnel-transformer/small <https://huggingface.co/funnel-transformer/small>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.FunnelModel` or a
+    :class:`~transformers.TFBertModel`. It is used to instantiate a Funnel Transformer model according to the specified
+    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
+    configuration to that of the Funnel Transformer `funnel-transformer/small
+    <https://huggingface.co/funnel-transformer/small>`__ architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
     for more information.
 
-
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the Funnel transformer. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.FunnelModel`.
+            Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
+            by the :obj:`inputs_ids` passed when calling :class:`~transformers.FunnelModel` or
+            :class:`~transformers.TFFunnelModel`.
         block_sizes (:obj:`List[int]`, `optional`, defaults to :obj:`[4, 4, 4]`):
             The sizes of the blocks used in the model.
         block_repeats (:obj:`List[int]`, `optional`):
@@ -77,7 +78,8 @@ class FunnelConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 3):
-            The vocabulary size of the `token_type_ids` passed into :class:`~transformers.FunnelModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.FunnelModel` or
+            :class:`~transformers.TFFunnelModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.1):
             The standard deviation of the `uniform initializer` for initializing all weight matrices in attention
             layers.

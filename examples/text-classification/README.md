@@ -23,6 +23,31 @@ Quick benchmarks from the script (no other modifications):
 Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
 
 
+## Run generic text classification script in TensorFlow
+
+The script [run_tf_text_classification.py](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_tf_text_classification.py) allows users to run a text classification on their own CSV files. For now there are few restrictions, the CSV files must have a header corresponding to the column names and not more than three columns: one column for the id, one column for the text and another column for a second piece of text in case of an entailment classification for example.
+
+To use the script, one as to run the following command line:
+```bash
+python run_tf_text_classification.py \
+  --train_file train.csv \ ### training dataset file location (mandatory if running with --do_train option)
+  --dev_file dev.csv \ ### development dataset file location (mandatory if running with --do_eval option)
+  --test_file test.csv \ ### test dataset file location (mandatory if running with --do_predict option)
+  --label_column_id 0 \ ### which column corresponds to the labels
+  --model_name_or_path bert-base-multilingual-uncased \
+  --output_dir model \
+  --num_train_epochs 4 \
+  --per_device_train_batch_size 16 \
+  --per_device_eval_batch_size 32 \
+  --do_train \
+  --do_eval \
+  --do_predict \
+  --logging_steps 10 \
+  --evaluate_during_training \
+  --save_steps 10 \
+  --overwrite_output_dir \
+  --max_seq_length 128
+```
 
 # Run PyTorch version
 
