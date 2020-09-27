@@ -89,4 +89,4 @@ class Blenderbot3BTokenizerTests(unittest.TestCase):
 
     def test_3B_tokenization_same_as_parlai(self):
         assert self.tokenizer_3b.add_prefix_space
-        assert self.tokenizer_3b([" Sam", "Sam"]).input_ids ==  [[5502, 2], [5502, 2]]
+        assert self.tokenizer_3b([" Sam", "Sam"]).input_ids == [[5502, 2], [5502, 2]]
