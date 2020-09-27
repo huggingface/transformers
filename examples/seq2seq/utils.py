@@ -18,7 +18,7 @@ from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 
-from sentence_splitter import add_newline_to_eos
+from sentence_splitter import add_newline_to_end_of_each_sentence
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
 
@@ -422,8 +422,8 @@ def calculate_rouge(
     for pred, tgt in zip(tgt_lns, pred_lns):
         # rougeLsum expects "\n" separated sentences within a summary
         if newline_sep:
-            pred = add_newline_to_eos(pred)
-            tgt = add_newline_to_eos(tgt)
+            pred = add_newline_to_end_of_each_sentence(pred)
+            tgt = add_newline_to_end_of_each_sentence(tgt)
         scores = scorer.score(pred, tgt)
         aggregator.add_scores(scores)
 
