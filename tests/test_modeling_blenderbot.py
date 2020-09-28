@@ -18,6 +18,7 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -28,16 +29,10 @@ if is_torch_available():
     import torch
 
     from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotTokenizer
-    from transformers.file_utils import cached_property
     from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
     def _long_tensor(tok_lst):
         return torch.tensor(tok_lst, dtype=torch.long, device=torch_device, requires_grad=False)
-
-    def freeze_params(model):
-        """Set requires_grad=False for each of model.parameters()"""
-        for par in model.parameters():
-            par.requires_grad = False
 
 
 TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
