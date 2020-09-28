@@ -89,6 +89,14 @@ class BlenderbotModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return self.config, inputs_dict
 
+    @unittest.skip("This test is flaky")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip("This test is flaky")
+    def test_model_outputs_equivalence(self):
+        pass
+
 
 @require_torch
 class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
