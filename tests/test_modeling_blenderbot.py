@@ -31,6 +31,18 @@ if is_torch_available():
     from transformers.file_utils import cached_property
     from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
+    def _long_tensor(tok_lst):
+        return torch.tensor(tok_lst, dtype=torch.long, device=torch_device, requires_grad=False)
+
+    def freeze_params(model):
+        """Set requires_grad=False for each of model.parameters()"""
+        for par in model.parameters():
+            par.requires_grad = False
+
+
+TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
+FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
+
 
 @require_torch
 class BlenderbotModelTester:
@@ -131,17 +143,25 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
     def tokenizer(self):
         return BlenderbotTokenizer.from_pretrained(self.ckpt)
 
-    @unittest.skip("This fails.")
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
 
-        src_text = [
-            "sam",
-        ]
-
+        src_text = ["Sam"]
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-        generated_utterances = self.model.generate(**model_inputs)
-        tgt_text = ["Sam is a great name. It means 'sun' in Gaelic."]
+        generated_utterances = self.model.generate(**model_inputs, **FASTER_GEN_KWARGS)
+        tgt_text = "Sam is a great name. It means 'sun' in Gaelic."
+
+        generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
+        assert generated_txt[0] == tgt_text
+
+    @slow
+    def test_generation_from_short_tensor_3B(self):
+        #
+        input_ids = _long_tensor([[5502, 2]]).to(torch_device)
+        generated_utterances = self.model.generate(input_ids, **FASTER_GEN_KWARGS)
+        tgt_text = "Sam is a great name. It means 'sun' in Gaelic."
+        generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
+        assert generated_txt[0] == tgt_text
 
         generated_txt = self.tokenizer.batch_decode(generated_utterances)
         self.assertListEqual(tgt_text, generated_txt)
@@ -152,10 +172,10 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         src_text = "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
 
         model_inputs = self.tokenizer([src_text], return_tensors="pt").to(torch_device)
-        generated_ids = self.model.generate(**model_inputs, min_length=15, early_stopping=True, num_beams=1)[0]
-        reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        assert "I'm not sure, but I do know that social anxiety disorder is a mental disorder." == reply
-        # 9/24: __start__ I have social anxiety. I feel like I'm going to throw up and I'm sweating and blushing.__end__
+        generated_ids = self.model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
+        reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
+
+        assert "I think it's because we are so worried about what people think of us." == reply
 
 
 @require_torch
@@ -267,29 +287,28 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         assert torch.allclose(expected_logits, logits, atol=1e-4)
 
     @slow
-    def test_generation_from_long_input_same_as_parlai_90M(self):
+    def test_90_generation_from_long_input(self):
 
         src_text = [
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
        i'm going to throw up.\nand why is that?"
         ]
         # tgt_text = "i ' m not sure . i just feel like i ' m going to throw up ."
-        tgt_text = "i don't know. i just feel like i'm going to throw up. it's not fun."
+        # tgt_text = "i don't know. i just feel like i'm going to throw up. it's not fun."
         # FP16: " i don't know. i feel like i'm going to throw up. it's hard for me."
+        tgt_text = "i'm not sure. i just feel like i've been feeling like i have to be in a certain place"
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-        generated_ids = self.model.generate(**model_inputs, early_stopping=True)[0]
-        reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        generated_ids = self.model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
+        reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
 
         assert tgt_text == reply
 
-    def test_generation_from_short_input_same_as_parlai_90M(self):
+    def test_90_generation_from_short_input(self):
         model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
         generated_utterances = self.model.generate(**model_inputs)
-        tgt_text = {
-            "__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor. __end__",
-            "__start__ have you ever been to a sam club? it's a great club in the south. __end__",
-        }
+        # generated_txt = self.tokenizer.decode(generated_utterances[0])
 
-        generated_txt = self.tokenizer.decode(generated_utterances[0])
-        assert generated_txt in tgt_text
+        # assert generated_txt == "__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor. __end__"
+        clean_txt = self.tokenizer.decode(generated_utterances[0], **TOK_DECODE_KW)
+        assert clean_txt == "have you ever been to a sam club? it's a great club in the south."
