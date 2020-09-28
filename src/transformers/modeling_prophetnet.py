@@ -16,28 +16,18 @@
 
 import logging
 import math
-import os
-import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bart import LayerNorm, invert_mask
-from .modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
-)
+from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel
 
 
@@ -52,7 +42,7 @@ PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 PROPHETNET_START_DOCSTRING = r"""
-    Model and checkpoints are converted from ProphetNet and xProphetNet original Fairseq version repo. 
+    Model and checkpoints are converted from ProphetNet and xProphetNet original Fairseq version repo.
     Details can be found from <https://github.com/microsoft/ProphetNet>
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matters related to general usage and behavior.
@@ -76,9 +66,7 @@ PROPHETNET_GENERATION_EXAMPLE = r"""
         # Generate Summary
         summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=512, early_stopping=True)
         print([tokenizer.decode(g) for g in summary_ids])
-    
     xProphetNet xGLUE News Title Generation example:
-    
         from transformers import ProphetNetTokenizer, ProphetNetForConditionalGeneration, ProphetNetConfig
 
         model = ProphetNetForConditionalGeneration.from_pretrained('microsoft/xprophetnet-large-wiki100-cased-xglue-ntg')
@@ -91,7 +79,7 @@ PROPHETNET_GENERATION_EXAMPLE = r"""
 
         # Generate Summary
         summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=100, early_stopping=True)
-        print([tokenizer.decode(g) for g in summary_ids])    
+        print([tokenizer.decode(g) for g in summary_ids])
 """
 
 PROPHETNET_INPUTS_DOCSTRING = r"""
@@ -148,7 +136,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.onnx_trace = False
 
-    def forward(self, input_ids, use_cache=False, positions=None):
+    def forward(self, input_ids, use_cache=False, past_key_values=None, positions=None):
         """Input is expected to be of size [bsz x seqlen]."""
         assert (positions is None) or (
             self.padding_idx is None
@@ -158,7 +146,12 @@ class LearnedPositionalEmbedding(nn.Embedding):
             if use_cache:
                 # positions is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                positions = input_ids.data.new(1, 1).fill_(int(self.padding_idx + input_ids.size(1)))
+                # TODO(PVP) - refactor here
+                num_prev_input_ids = (
+                    past_key_values[0]["self"]["prev_key"].shape[2] if past_key_values is not None else 0
+                )
+                num_input_ids = input_ids.size(1) + num_prev_input_ids
+                positions = input_ids.data.new(1, 1).fill_(int(self.padding_idx + num_input_ids))
             else:
                 mask = input_ids.data.ne(self.padding_idx).int()
                 positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + self.padding_idx
@@ -395,71 +388,6 @@ class EncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         return hidden_states, attn_weights
-
-
-class ProphetNetEncoder(nn.Module):
-    """
-    Same to Transformer Encoder.
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
-    is a :class:`EncoderLayer`.
-
-    Args:
-        config: ProphetNetConfig
-    """
-
-    def __init__(self, config: ProphetNetConfig, embed_tokens):
-        super().__init__()
-
-        self.output_hidden_states = config.output_hidden_states
-
-        self.dropout = config.dropout
-        embed_dim = embed_tokens.embedding_dim
-        self.padding_idx = embed_tokens.padding_idx
-        self.max_source_positions = config.max_position_embeddings
-
-        self.embed_tokens = embed_tokens
-        self.embed_scale = None
-        self.embed_positions = LearnedPositionalEmbedding(
-            config.max_position_embeddings + 1 + self.padding_idx, embed_dim, self.padding_idx
-        )
-
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.emb_layer_norm = LayerNorm(embed_dim)
-
-    def forward(self, input_ids, attention_mask=None, output_attentions=False, return_dict=False):
-        # remove bos to be consistent with fairseq version
-        #        input_ids = input_ids[:, 1:]
-        #        if attention_mask is not None:
-        #            attention_mask = attention_mask[:, 1:]
-
-        if attention_mask is not None:
-            attention_mask = invert_mask(attention_mask)
-
-        inputs_embeds = self.embed_tokens(input_ids)
-        embed_pos, real_positions = self.embed_positions(input_ids)
-        x = inputs_embeds + embed_pos
-        x = self.emb_layer_norm(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
-
-        encoder_states, all_attentions = (), ()
-        for encoder_layer in self.layers:
-            if self.output_hidden_states:
-                encoder_states = encoder_states + (x,)
-            x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
-            if output_attentions:
-                all_attentions = all_attentions + (x,)
-
-        if self.output_hidden_states:
-            encoder_states = encoder_states + (x,)
-
-        # T x B x C -> B x T x C
-        encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
-        x = x.transpose(0, 1)
-        if not return_dict:
-            return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
 def softmax(x, dim, onnx_trace=False):
@@ -999,7 +927,67 @@ def cal_relative_positions_buckets(num_buckets, max_distance, real_positions):
     return i_buckets_main_stream, i_bucket_relative_stream
 
 
-class ProphetNetDecoder(nn.Module):
+class ProphetNetEncoder(ProphetNetPreTrainedModel):
+    """
+    Same to Transformer Encoder.
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
+    is a :class:`EncoderLayer`.
+
+    Args:
+        config: ProphetNetConfig
+    """
+
+    def __init__(self, config: ProphetNetConfig, embed_tokens: nn.Embedding = None):
+        super().__init__(config)
+
+        self.output_hidden_states = config.output_hidden_states
+
+        self.dropout = config.dropout
+        embed_dim = embed_tokens.embedding_dim
+        self.padding_idx = embed_tokens.padding_idx
+        self.max_source_positions = config.max_position_embeddings
+
+        self.embed_tokens = embed_tokens
+        self.embed_scale = None
+        self.embed_positions = LearnedPositionalEmbedding(
+            config.max_position_embeddings + 1 + self.padding_idx, embed_dim, self.padding_idx
+        )
+
+        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.emb_layer_norm = LayerNorm(embed_dim)
+
+    def forward(self, input_ids, attention_mask=None, output_attentions=False, return_dict=False):
+        if attention_mask is not None:
+            attention_mask = invert_mask(attention_mask)
+
+        inputs_embeds = self.embed_tokens(input_ids)
+        embed_pos, real_positions = self.embed_positions(input_ids)
+        x = inputs_embeds + embed_pos
+        x = self.emb_layer_norm(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        # B x T x C -> T x B x C
+        x = x.transpose(0, 1)
+
+        encoder_states, all_attentions = (), ()
+        for encoder_layer in self.layers:
+            if self.output_hidden_states:
+                encoder_states = encoder_states + (x,)
+            x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
+            if output_attentions:
+                all_attentions = all_attentions + (x,)
+
+        if self.output_hidden_states:
+            encoder_states = encoder_states + (x,)
+
+        # T x B x C -> B x T x C
+        encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
+        x = x.transpose(0, 1)
+        if not return_dict:
+            return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
+
+
+class ProphetNetDecoder(ProphetNetPreTrainedModel):
     """
     N-stream decoder. One main stream, self.ngram predicting streams.
     Next self.ngram tokens are predicted.
@@ -1011,13 +999,12 @@ class ProphetNetDecoder(nn.Module):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: ProphetNetConfig, embed_tokens: nn.Embedding):
-        super().__init__()
+    def __init__(self, config: ProphetNetConfig, embed_tokens: nn.Embedding = None):
+        super().__init__(config)
         self.ngram = config.ngram
         self.num_buckets = config.num_buckets
         self.relative_max_distance = config.relative_max_distance
 
-        # for hugging face
         self.output_hidden_states = config.output_hidden_states
 
         self.dropout = config.dropout
@@ -1122,13 +1109,12 @@ class ProphetNetDecoder(nn.Module):
 
         """
         if encoder_padding_mask is not None:
-            # remove bos to be consistent with fairseq version
-            encoder_padding_mask = encoder_padding_mask[:, 1:]
             encoder_padding_mask = invert_mask(encoder_padding_mask)
-        main_stream_pos_embed, real_positions = self.embed_positions(input_ids, use_cache=use_cache)
+
+        main_stream_pos_embed, real_positions = self.embed_positions(
+            input_ids, use_cache=use_cache, past_key_values=past_key_values
+        )
         if use_cache:
-            input_ids = input_ids[:, -1:]
-            main_stream_pos_embed = main_stream_pos_embed[:, -1:]  # happens after we embed them
             i_buckets_main_stream, i_bucket_relative_stream = None, None
         else:
             i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(
@@ -1237,9 +1223,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.embed_tokens = self.embed_tokens
         self.decoder.embed_tokens = self.embed_tokens
 
-    def get_output_embeddings(self):
-        return _make_linear_from_emb(self.embed_tokens)  # make it on the fly
-
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="microsoft/prophetnet-large-uncased")
     def forward(
@@ -1301,13 +1284,6 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-def _make_linear_from_emb(emb):
-    vocab_size, emb_size = emb.weight.shape
-    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data
-    return lin_layer
-
-
 @add_start_docstrings(
     "The ProphetNet Model with a language modeling head. Can be used for summarization.", PROPHETNET_START_DOCSTRING
 )
@@ -1321,8 +1297,15 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
 
-    def output_layer(self, features, **kwargs):
-        return F.linear(features, self.model.embed_tokens.weight)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
 
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
     def forward(
@@ -1357,7 +1340,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             # print(outputs)
             # print('outputs.decoder_hidden_states')
             # print(outputs.last_hidden_state)
-        predicting_streams_logits = [self.output_layer(x) for x in predicting_streams]
+        predicting_streams_logits = [self.lm_head(stream) for stream in predicting_streams]
         # lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
 
         if labels is not None:
@@ -1419,6 +1402,10 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
     ):
+        assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
+
+        if past:
+            decoder_input_ids = decoder_input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1461,6 +1448,3 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
     def get_encoder(self):
         return self.model.encoder
-
-    def get_output_embeddings(self):
-        return _make_linear_from_emb(self.model.embed_tokens)  # make it on the fly
