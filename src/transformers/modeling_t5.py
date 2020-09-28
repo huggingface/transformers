@@ -907,7 +907,7 @@ T5_INPUTS_DOCSTRING = r"""
     T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: T5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -919,6 +919,7 @@ class T5Model(T5PreTrainedModel):
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
+        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
@@ -1077,6 +1078,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
+        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
