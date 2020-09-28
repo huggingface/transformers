@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
-from .modeling_bart import BartConfig
+from .configuration_bart import BartConfig
 
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
