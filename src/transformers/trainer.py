@@ -661,7 +661,7 @@ class Trainer:
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
-                find_unused_parameters=not getattr(self.config, "gradient_checkpointing", False),
+                find_unused_parameters=not getattr(model.config, "gradient_checkpointing", False),
             )
         # find_unused_parameters breaks checkpointing as per
         # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
