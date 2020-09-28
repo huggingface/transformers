@@ -46,7 +46,10 @@ The documentation is organized in five parts:
 - **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
 - **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
   transformers model
-- **PACKAGE REFERENCE** contains the documentation of each public class and function.
+- The three last section contain the documentation of each public class and function, grouped in:
+    - **MAIN CLASSES** for the main classes exposing the important APIs of the library.
+    - **MODELS** for the classes and functions related to each model implemented in the library.
+    - **INTERNAL HELPERS** for the classes and functions we use internally.
 
 The library currently contains PyTorch and Tensorflow implementations, pre-trained model weights, usage scripts and
 conversion utilities for the following models:
@@ -188,50 +191,60 @@ conversion utilities for the following models:
 
 .. toctree::
     :maxdepth: 2
-    :caption: Package Reference
+    :caption: Main Classes
 
     main_classes/configuration
-    main_classes/output
-    main_classes/model
-    main_classes/tokenizer
-    main_classes/pipelines
-    main_classes/trainer
-    main_classes/optimizer_schedules
-    main_classes/processors
     main_classes/logging
-    model_doc/auto
-    model_doc/encoderdecoder
-    model_doc/bert
-    model_doc/gpt
-    model_doc/transformerxl
-    model_doc/gpt2
-    model_doc/xlm
-    model_doc/xlnet
-    model_doc/roberta
-    model_doc/distilbert
-    model_doc/ctrl
-    model_doc/camembert
+    main_classes/model
+    main_classes/optimizer_schedules
+    main_classes/output
+    main_classes/pipelines
+    main_classes/processors
+    main_classes/tokenizer
+    main_classes/trainer
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Models
+
     model_doc/albert
-    model_doc/xlmroberta
-    model_doc/flaubert
+    model_doc/auto
     model_doc/bart
-    model_doc/t5
-    model_doc/electra
+    model_doc/bert
+    model_doc/bertgeneration
+    model_doc/camembert
+    model_doc/ctrl
     model_doc/dialogpt
-    model_doc/reformer
-    model_doc/marian
-    model_doc/longformer
-    model_doc/retribert
-    model_doc/mobilebert
+    model_doc/distilbert
     model_doc/dpr
-    model_doc/pegasus
-    model_doc/mbart
+    model_doc/electra
+    model_doc/encoderdecoder
+    model_doc/flaubert
     model_doc/fsmt
     model_doc/funnel
-    model_doc/lxmert
-    model_doc/bertgeneration
     model_doc/layoutlm
+    model_doc/longformer
+    model_doc/lxmert
+    model_doc/marian
+    model_doc/mbart
+    model_doc/mobilebert
+    model_doc/gpt
+    model_doc/gpt2
+    model_doc/pegasus
     model_doc/rag
+    model_doc/reformer
+    model_doc/retribert
+    model_doc/roberta
+    model_doc/t5
+    model_doc/transformerxl
+    model_doc/xlm
+    model_doc/xlmroberta
+    model_doc/xlnet
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Internal Helpers
+
     internal/modeling_utils
-    internal/tokenization_utils
     internal/pipelines_utils
+    internal/tokenization_utils
