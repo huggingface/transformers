@@ -307,8 +307,8 @@ class BartEncoder(nn.Module):
             )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
-        # mbart has one extra layer_norm
-        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        # mbart and blenderbot-3B have one extra layer_norm
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else nn.Identity()
 
     def forward(
         self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
@@ -359,8 +359,8 @@ class BartEncoder(nn.Module):
 
         if not self.norm_embed_before:
             x = self.layernorm_embedding(x)  # just blenderbot-3B.
-        if self.layer_norm:
-            x = self.layer_norm(x)
+
+        x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
             # T x B x C -> B x T x C
@@ -500,7 +500,7 @@ class BartDecoder(nn.Module):
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
         self.norm_embed_before = config.norm_embed_before
-        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else nn.Identity()
 
     def forward(
         self,
@@ -604,9 +604,7 @@ class BartDecoder(nn.Module):
 
         if not self.norm_embed_before:
             x = self.layernorm_embedding(x)
-
-        if self.layer_norm:  # if config.add_final_layer_norm (mBART)
-            x = self.layer_norm(x)
+        x = self.layer_norm(x)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
