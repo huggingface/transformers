@@ -18,15 +18,6 @@ VOCAB_FILES_NAMES = {
     # "tokenizer_config_file": "tokenizer_config.json",
 }
 CKPT_3B = "facebook/blenderbot-3B"
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
-    },
-    "merges_file": {
-        CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
-    },
-    "tokenizer_config_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/tokenizer_config.json"}
-}
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +28,11 @@ class BlenderbotTokenizer(RobertaTokenizer):
         "merges_file": "merges.txt",
         "tokenizer_config_file": "tokenizer_config.json",
     }
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    pretrained_vocab_files_map = {
+        "vocab_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json"},
+        "merges_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt"},
+        "tokenizer_config_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/tokenizer_config.json"},
+    }
     max_model_input_sizes = {"facebook/blenderbot-3B": 128}
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
@@ -56,12 +51,6 @@ class BlenderbotTokenizer(RobertaTokenizer):
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
-
-
-BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
-    "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
-}
 
 
 def get_pairs(word):
@@ -96,8 +85,12 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             vocabulary cannot be converted to an ID and is set to be this token instead.
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP
+    vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
+    pretrained_vocab_files_map = {
+        "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
+        "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
+    }
+
     max_model_input_sizes = {"facebook/blenderbot-90M": 512}
 
     def __init__(
