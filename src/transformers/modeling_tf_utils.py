@@ -319,7 +319,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
           derived classes of the same architecture adding modules on top of the base model.
         - **authorized_missing_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
           from the model when loading the model weights (and avoid unnecessary warnings).
-        - **authorized_unexpected_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
+        - **authorized_unexpected_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
           from the weights when loading the model weights (and avoid unnecessary warnings).
     """
     config_class = None
