@@ -176,7 +176,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             array = numpy.squeeze(array)
         elif len(symbolic_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
-        
+
         if list(symbolic_weight.shape) != list(array.shape):
             try:
                 array = numpy.reshape(array, symbolic_weight.shape)
@@ -338,7 +338,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             array = numpy.squeeze(array)
         elif len(pt_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
-        
+
         if list(pt_weight.shape) != list(array.shape):
             try:
                 array = numpy.reshape(array, pt_weight.shape)
