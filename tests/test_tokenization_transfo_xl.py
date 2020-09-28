@@ -24,7 +24,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
-    from transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
+    from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
 
 @require_torch
@@ -82,6 +82,44 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHeLLo ! how  \n Are yoU ?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
         )
+
+    def test_full_tokenizer_moses_numbers(self):
+        tokenizer = TransfoXLTokenizer(lower_case=False)
+        text_in = "Hello (bracket) and side-scrolled [and] Henry's $5,000 with 3.34 m. What's up!?"
+        tokens_out = [
+            "Hello",
+            "(",
+            "bracket",
+            ")",
+            "and",
+            "side",
+            "@-@",
+            "scrolled",
+            "[",
+            "and",
+            "]",
+            "Henry",
+            "'s",
+            "$",
+            "5",
+            "@,@",
+            "000",
+            "with",
+            "3",
+            "@.@",
+            "34",
+            "m",
+            ".",
+            "What",
+            "'s",
+            "up",
+            "!",
+            "?",
+        ]
+
+        self.assertListEqual(tokenizer.tokenize(text_in), tokens_out)
+
+        self.assertEqual(tokenizer.convert_tokens_to_string(tokens_out), text_in)
 
     def test_move_added_token(self):
         tokenizer = self.get_tokenizer()

@@ -84,6 +84,8 @@ def create_optimizer(
     num_train_steps: int,
     num_warmup_steps: int,
     min_lr_ratio: float = 0.0,
+    adam_beta1: float = 0.9,
+    adam_beta2: float = 0.999,
     adam_epsilon: float = 1e-8,
     weight_decay_rate: float = 0.0,
     include_in_weight_decay: Optional[List[str]] = None,
@@ -100,6 +102,10 @@ def create_optimizer(
             The number of warmup steps.
         min_lr_ratio (:obj:`float`, `optional`, defaults to 0):
             The final learning rate at the end of the linear decay will be :obj:`init_lr * min_lr_ratio`.
+        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
+            The beta1 to use in Adam.
+        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
+            The beta2 to use in Adam.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
             The epsilon to use in Adam.
         weight_decay_rate (:obj:`float`, `optional`, defaults to 0):
@@ -116,20 +122,24 @@ def create_optimizer(
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(
-            initial_learning_rate=init_lr, decay_schedule_fn=lr_schedule, warmup_steps=num_warmup_steps,
+            initial_learning_rate=init_lr,
+            decay_schedule_fn=lr_schedule,
+            warmup_steps=num_warmup_steps,
         )
     if weight_decay_rate > 0.0:
         optimizer = AdamWeightDecay(
             learning_rate=lr_schedule,
             weight_decay_rate=weight_decay_rate,
-            beta_1=0.9,
-            beta_2=0.999,
+            beta_1=adam_beta1,
+            beta_2=adam_beta2,
             epsilon=adam_epsilon,
             exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"],
             include_in_weight_decay=include_in_weight_decay,
         )
     else:
-        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=adam_epsilon)
+        optimizer = tf.keras.optimizers.Adam(
+            learning_rate=lr_schedule, beta_1=adam_beta1, beta_2=adam_beta2, epsilon=adam_epsilon
+        )
     # We return the optimizer and the LR scheduler in order to better track the
     # evolution of the LR independently of the optimizer.
     return optimizer, lr_schedule
@@ -213,9 +223,9 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             )
         return tf.no_op()
 
-    def apply_gradients(self, grads_and_vars, name=None):
+    def apply_gradients(self, grads_and_vars, name=None, **kwargs):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name,)
+        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""

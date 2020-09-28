@@ -16,7 +16,6 @@
 
 
 import argparse
-import logging
 import os
 import pickle
 import sys
@@ -32,9 +31,10 @@ from transformers import (
     load_tf_weights_in_transfo_xl,
 )
 from transformers.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
+from transformers.utils import logging
 
 
-logging.basicConfig(level=logging.INFO)
+logging.set_verbosity_info()
 
 # We do this to be able to load python 2 datasets pickles
 # See e.g. https://stackoverflow.com/questions/2121874/python-pickling-after-changing-a-modules-directory/2121918#2121918

@@ -65,7 +65,7 @@ def get_answer(question, context):
 
   return tokenizer.decode(output[0])
 
-context = "Manuel have created RuPERTa-base (a Spanish RoBERTa) with the support of HF-Transformers and Google"
+context = "Manuel has created RuPERTa-base (a Spanish RoBERTa) with the support of HF-Transformers and Google"
 question = "Who has supported Manuel?"
 
 get_answer(question, context)

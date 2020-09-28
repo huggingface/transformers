@@ -1,13 +1,13 @@
-import logging
 import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 if is_tf_available():
     import tensorflow as tf
@@ -42,6 +42,12 @@ class TFTrainingArguments(TrainingArguments):
             The batch size per GPU/TPU core/CPU for evaluation.
         gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
+
+            .. warning::
+
+                When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
+                logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
+                examples.
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
@@ -69,7 +75,7 @@ class TFTrainingArguments(TrainingArguments):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wherher to not use CUDA even when it is available or not.
+            Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -82,7 +88,7 @@ class TFTrainingArguments(TrainingArguments):
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
         debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter to activate the trace to record computation graphs and profiling information or not.
+            Whether to activate the trace to record computation graphs and profiling information or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -95,17 +101,33 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
+        xla (:obj:`bool`, `optional`):
+            Whether to activate the XLA compilation or not.
     """
 
     tpu_name: str = field(
-        default=None, metadata={"help": "Name of TPU"},
+        default=None,
+        metadata={"help": "Name of TPU"},
     )
+
+    xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
     @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
+
+        if self.xla:
+            tf.config.optimizer.set_jit(True)
+
         gpus = tf.config.list_physical_devices("GPU")
+
+        # Set to float16 at first
+        if self.fp16:
+            policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
+            tf.keras.mixed_precision.experimental.set_policy(policy)
 
         if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -119,10 +141,16 @@ class TFTrainingArguments(TrainingArguments):
                 tpu = None
 
             if tpu:
+                # Set to bfloat16 in case of TPU
+                if self.fp16:
+                    policy = tf.keras.mixed_precision.experimental.Policy("mixed_bfloat16")
+                    tf.keras.mixed_precision.experimental.set_policy(policy)
+
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)
 
                 strategy = tf.distribute.experimental.TPUStrategy(tpu)
+
             elif len(gpus) == 0:
                 strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
             elif len(gpus) == 1:
@@ -162,7 +190,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     def eval_batch_size(self) -> int:
@@ -175,7 +203,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     @tf_required

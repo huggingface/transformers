@@ -1,17 +1,17 @@
 Transformers
-================================================================================================================================================
+=======================================================================================================================
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose 
-architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural 
-Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between 
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
+architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural
+Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
 TensorFlow 2.0 and PyTorch.
 
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
 Features
----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
@@ -36,7 +36,7 @@ Choose the right framework for every part of a model's lifetime:
 - Seamlessly pick the right framework for training, evaluation, production
 
 Contents
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 The documentation is organized in five parts:
 
@@ -124,7 +124,23 @@ conversion utilities for the following models:
 22. `DPR <https://github.com/facebookresearch/DPR>`_ (from Facebook) released with the paper `Dense Passage Retrieval
     for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_ by Vladimir Karpukhin, Barlas Oğuz, Sewon
     Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-23. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+23. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
+    <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
+24. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_ (from Facebook) released with the paper  `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov,
+    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
+25. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
+    Cross-Modality Encoder Representations from Transformers for Open-Domain Question
+    Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
+26. `Funnel Transformer <https://github.com/laiguokun/Funnel-Transformer>`_ (from CMU/Google Brain) released with the paper
+    `Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
+    <https://arxiv.org/abs/2006.03236>`_ by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
+    `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
+    <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+28. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with the paper
+    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+    <https://arxiv.org/abs/1912.13318>`_ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
+29. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -154,11 +170,13 @@ conversion utilities for the following models:
 
     pretrained_models
     examples
+    custom_datasets
     notebooks
     converting_tensorflow_models
     migration
-    torchscript
     contributing
+    testing
+    serialization
 
 .. toctree::
     :maxdepth: 2
@@ -177,9 +195,10 @@ conversion utilities for the following models:
     main_classes/model
     main_classes/tokenizer
     main_classes/pipelines
+    main_classes/trainer
     main_classes/optimizer_schedules
     main_classes/processors
-    main_classes/trainer
+    main_classes/logging
     model_doc/auto
     model_doc/encoderdecoder
     model_doc/bert
@@ -205,3 +224,13 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    model_doc/pegasus
+    model_doc/mbart
+    model_doc/fsmt
+    model_doc/funnel
+    model_doc/lxmert
+    model_doc/bertgeneration
+    model_doc/layoutlm
+    internal/modeling_utils
+    internal/tokenization_utils
+    internal/pipelines_utils

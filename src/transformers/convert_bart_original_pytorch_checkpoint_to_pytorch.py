@@ -16,7 +16,6 @@
 
 
 import argparse
-import logging
 import os
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from transformers import (
     BartTokenizer,
 )
 from transformers.modeling_bart import _make_linear_from_emb
+from transformers.utils import logging
 
 
 FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn", "bart_xsum/model.pt"]
@@ -40,8 +40,8 @@ if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 SAMPLE_TEXT = " Hello world! cécé herlolip"
 
@@ -76,19 +76,6 @@ def load_xsum_checkpoint(checkpoint_path):
     hub_interface = torch.hub.load("pytorch/fairseq", "bart.large.cnn").eval()
     hub_interface.model.load_state_dict(sd["model"])
     return hub_interface
-
-
-def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
-    remove_ignore_keys_(state_dict)
-    vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
-    state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    mbart_config = BartConfig(vocab_size=vocab_size, **config_kwargs)
-    model = BartForConditionalGeneration(mbart_config)
-    model.model.load_state_dict(state_dict)
-    if hasattr(model, "lm_head"):
-        model.lm_head = _make_linear_from_emb(model.model.shared)
-    return model
 
 
 @torch.no_grad()
