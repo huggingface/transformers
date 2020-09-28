@@ -15,23 +15,21 @@
 """ PyTorch ProphetNet model, ported from ProphetNet repo(fairseq version). """
 
 import logging
+import math
 import os
+import warnings
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
-from torch import Tensor, nn
 import torch.nn.functional as F
+from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, MSELoss
+
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
-from .file_utils import add_start_docstrings
-from .modeling_utils import PreTrainedModel
-from typing import Dict, List, Optional, Tuple
-import numpy as np
-import math
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, add_code_sample_docstrings
-import warnings
-from .modeling_bart import  LayerNorm, invert_mask
-
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_bart import LayerNorm, invert_mask
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -40,6 +38,7 @@ from .modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
@@ -119,9 +118,6 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
 """
 
 
-
-
-
 class ProphetNetPreTrainedModel(PreTrainedModel):
     config_class = ProphetNetConfig
     base_model_prefix = "model"
@@ -137,6 +133,7 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+
 class LearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -146,18 +143,18 @@ class LearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(
-            self,
-            num_embeddings: int,
-            embedding_dim: int,
-            padding_idx: int,
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        padding_idx: int,
     ):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.onnx_trace = False
 
     def forward(self, input_ids, use_cache=False, positions=None):
         """Input is expected to be of size [bsz x seqlen]."""
-        assert (
-            (positions is None) or (self.padding_idx is None)
+        assert (positions is None) or (
+            self.padding_idx is None
         ), "If positions is pre-computed then padding_idx should not be set."
 
         if positions is None:
@@ -167,7 +164,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
                 positions = input_ids.data.new(1, 1).fill_(int(self.padding_idx + input_ids.size(1)))
             else:
                 mask = input_ids.data.ne(self.padding_idx).int()
-                positions = ( torch.cumsum(mask, dim=1).type_as(mask) * mask ).long() + self.padding_idx
+                positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + self.padding_idx
             real_positions = positions
         else:
             real_positions = positions
@@ -277,7 +274,10 @@ class SelfAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len,)
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (
+            bsz,
+            src_len,
+        )
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -285,7 +285,11 @@ class SelfAttention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
         attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training,)
+        attn_probs = F.dropout(
+            attn_weights,
+            p=self.dropout,
+            training=self.training,
+        )
 
         assert v is not None
         attn_output = torch.bmm(attn_probs, v)
@@ -352,15 +356,19 @@ class SelfAttention(nn.Module):
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
 
+
 class EncoderLayer(nn.Module):
     """
     Same to Transformer Encoder Layer
     """
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = SelfAttention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
+            self.embed_dim,
+            config.encoder_attention_heads,
+            dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -373,7 +381,10 @@ class EncoderLayer(nn.Module):
     def forward(self, hidden_states, encoder_padding_mask, output_attentions=False):
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
-            query=hidden_states, key=hidden_states, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
+            query=hidden_states,
+            key=hidden_states,
+            key_padding_mask=encoder_padding_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -389,7 +400,6 @@ class EncoderLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-
 class ProphetNetEncoder(nn.Module):
     """
     Same to Transformer Encoder.
@@ -399,6 +409,7 @@ class ProphetNetEncoder(nn.Module):
     Args:
         config: ProphetNetConfig
     """
+
     def __init__(self, config: ProphetNetConfig, embed_tokens):
         super().__init__()
 
@@ -411,7 +422,9 @@ class ProphetNetEncoder(nn.Module):
 
         self.embed_tokens = embed_tokens
         self.embed_scale = None
-        self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings+1+self.padding_idx, embed_dim, self.padding_idx)
+        self.embed_positions = LearnedPositionalEmbedding(
+            config.max_position_embeddings + 1 + self.padding_idx, embed_dim, self.padding_idx
+        )
 
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
@@ -425,7 +438,7 @@ class ProphetNetEncoder(nn.Module):
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)
 
-        inputs_embeds =self.embed_tokens(input_ids)
+        inputs_embeds = self.embed_tokens(input_ids)
         embed_pos, real_positions = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
         x = self.emb_layer_norm(x)
@@ -458,10 +471,24 @@ def softmax(x, dim, onnx_trace=False):
     else:
         return F.softmax(x, dim=dim, dtype=torch.float32)
 
+
 class NgramMultiheadAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads, kdim=None, vdim=None, dropout=0., bias=True,
-                 add_bias_kv=False, add_zero_attn=False, self_attention=False,
-                 encoder_decoder_attention=False, ngram=2, num_buckets=32, relative_max_distance=128):
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        kdim=None,
+        vdim=None,
+        dropout=0.0,
+        bias=True,
+        add_bias_kv=False,
+        add_zero_attn=False,
+        self_attention=False,
+        encoder_decoder_attention=False,
+        ngram=2,
+        num_buckets=32,
+        relative_max_distance=128,
+    ):
         super().__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
@@ -481,8 +508,9 @@ class NgramMultiheadAttention(nn.Module):
         self.self_attention = self_attention
         self.encoder_decoder_attention = encoder_decoder_attention
 
-        assert not self.self_attention or self.qkv_same_dim, 'Self-attention requires query, key and ' \
-                                                             'value to be of the same size'
+        assert not self.self_attention or self.qkv_same_dim, (
+            "Self-attention requires query, key and " "value to be of the same size"
+        )
 
         self.relative_linear = nn.Linear(embed_dim, num_buckets * num_heads)
         if self.qkv_same_dim:
@@ -495,7 +523,7 @@ class NgramMultiheadAttention(nn.Module):
         if bias:
             self.in_proj_bias = nn.Parameter(torch.Tensor(3 * embed_dim))
         else:
-            self.register_parameter('in_proj_bias', None)
+            self.register_parameter("in_proj_bias", None)
 
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
@@ -526,8 +554,8 @@ class NgramMultiheadAttention(nn.Module):
 
         nn.init.xavier_uniform_(self.out_proj.weight)
         if self.in_proj_bias is not None:
-            nn.init.constant_(self.in_proj_bias, 0.)
-            nn.init.constant_(self.out_proj.bias, 0.)
+            nn.init.constant_(self.in_proj_bias, 0.0)
+            nn.init.constant_(self.out_proj.bias, 0.0)
         if self.bias_k is not None:
             nn.init.xavier_normal_(self.bias_k)
         if self.bias_v is not None:
@@ -545,14 +573,17 @@ class NgramMultiheadAttention(nn.Module):
             i_buckets = i_bucket_main_stream
         else:
             # [B,T,S]
-            relative_positions = torch.arange(1, S + 1).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(
-                real_positions.device)
+            relative_positions = (
+                torch.arange(1, S + 1).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(real_positions.device)
+            )
             # [B,T,1]
             real_positions = real_positions.unsqueeze(0).repeat(B, T, 1)
             # [B,T,S]
             relative_positions = relative_positions - real_positions
             # [B,T,T]
-            i_buckets = _relative_positions_bucket(self.num_buckets, self.relative_max_distance, relative_positions, False)
+            i_buckets = _relative_positions_bucket(
+                self.num_buckets, self.relative_max_distance, relative_positions, False
+            )
 
         # [B,T,C]
         query = query.transpose(0, 1)
@@ -593,14 +624,16 @@ class NgramMultiheadAttention(nn.Module):
             i_buckets = i_bucket_relative_stream
         else:
             # [B,T,S]
-            assert real_positions[0][0] == S - 1, 'memory position is 1 2 3 4 5(S-1)'
+            assert real_positions[0][0] == S - 1, "memory position is 1 2 3 4 5(S-1)"
             relative_positions = torch.arange(0, S).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(real_positions.device)
             # [B,T,1]
             real_positions = real_positions.unsqueeze(0).repeat(B, T, 1)
             relative_positions = relative_positions
             # [B,T,2*T] or [B,T,S]
             relative_positions = relative_positions - real_positions
-            i_buckets = _relative_positions_bucket(self.num_buckets, self.relative_max_distance, relative_positions, False)
+            i_buckets = _relative_positions_bucket(
+                self.num_buckets, self.relative_max_distance, relative_positions, False
+            )
 
         # [ngram, B, T, C]
         query = query.transpose(1, 2)
@@ -625,15 +658,20 @@ class NgramMultiheadAttention(nn.Module):
 
         return result
 
-    def forward(self, hidden_states, key_padding_mask=None, layer_state=None,
-                need_weights=True, static_kv=False,
-                self_attn_mask=None,
-                ngram_mask_matrix=None,
-                i_buckets_main_stream=None,
-                i_bucket_relative_stream=None,
-                real_positions=None,
-                output_attentions = False
-                ):
+    def forward(
+        self,
+        hidden_states,
+        key_padding_mask=None,
+        layer_state=None,
+        need_weights=True,
+        static_kv=False,
+        self_attn_mask=None,
+        ngram_mask_matrix=None,
+        i_buckets_main_stream=None,
+        i_bucket_relative_stream=None,
+        real_positions=None,
+        output_attentions=False,
+    ):
 
         tgt_len, bsz, embed_dim = hidden_states.size()
         assert embed_dim == self.embed_dim
@@ -671,15 +709,15 @@ class NgramMultiheadAttention(nn.Module):
 
         if saved_state is not None:
             # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-            if 'prev_key' in saved_state:
-                prev_key = saved_state['prev_key'].view(bsz * self.num_heads, -1, self.head_dim)
+            if "prev_key" in saved_state:
+                prev_key = saved_state["prev_key"].view(bsz * self.num_heads, -1, self.head_dim)
                 if static_kv:
-                    assert False, 'static_kv not supprt in ngram decoder'
+                    assert False, "static_kv not supprt in ngram decoder"
                     k = prev_key
                 else:
                     k_main = torch.cat((prev_key, k_main), dim=1)
-            if 'prev_value' in saved_state:
-                prev_value = saved_state['prev_value'].view(bsz * self.num_heads, -1, self.head_dim)
+            if "prev_value" in saved_state:
+                prev_value = saved_state["prev_value"].view(bsz * self.num_heads, -1, self.head_dim)
                 if static_kv:
                     v = prev_value
                 else:
@@ -687,15 +725,16 @@ class NgramMultiheadAttention(nn.Module):
             # Update cache
             layer_state[self.cache_key] = {
                 "prev_key": k_main.view(bsz, self.num_heads, -1, self.head_dim),
-                "prev_value": v_main.view(bsz, self.num_heads, -1, self.head_dim)
+                "prev_value": v_main.view(bsz, self.num_heads, -1, self.head_dim),
             }
 
         real_tgt_len = tgt_len // (1 + self.ngram)
 
         attn_weights_main = torch.bmm(q_main, k_main.transpose(1, 2))
 
-        main_relative_logits = self.main_stream_relative_logits(h_main, attn_weights_main, real_positions,
-                                                                i_buckets_main_stream)
+        main_relative_logits = self.main_stream_relative_logits(
+            h_main, attn_weights_main, real_positions, i_buckets_main_stream
+        )
         attn_weights_main = attn_weights_main + main_relative_logits
 
         if self_attn_mask is not None:
@@ -703,7 +742,9 @@ class NgramMultiheadAttention(nn.Module):
             attn_weights_main = attn_weights_main + self_attn_mask
 
         attn_probs_main = softmax(
-            attn_weights_main, dim=-1, onnx_trace=self.onnx_trace,
+            attn_weights_main,
+            dim=-1,
+            onnx_trace=self.onnx_trace,
         ).type_as(attn_weights_main)
         attn_probs_main = F.dropout(attn_probs_main, p=self.dropout, training=self.training)
 
@@ -727,11 +768,12 @@ class NgramMultiheadAttention(nn.Module):
         # v_ngram = torch.cat([v_main.unsqueeze(0).repeat(self.ngram, 1, 1, 1) , torch.cat(v_predict_list).view(self.ngram, -1, real_tgt_len, self.head_dim)], 2)
 
         # [ngram, B*head, T, 2*T]
-        attn_weights_ngram = torch.einsum('nbtc,nbsc->nbts', (q_ngram, k_ngram))
+        attn_weights_ngram = torch.einsum("nbtc,nbsc->nbts", (q_ngram, k_ngram))
 
         # [ngram, B*head, T, S]
-        predict_relative_logits = self.ngram_relative_logits(h_ngram, attn_weights_ngram, real_positions,
-                                                             i_bucket_relative_stream)
+        predict_relative_logits = self.ngram_relative_logits(
+            h_ngram, attn_weights_ngram, real_positions, i_bucket_relative_stream
+        )
         # [ngram, B*head, T, 2*T]
         attn_weights_ngram = attn_weights_ngram + predict_relative_logits
 
@@ -740,12 +782,14 @@ class NgramMultiheadAttention(nn.Module):
             attn_weights_ngram = attn_weights_ngram + ngram_mask_matrix
 
         attn_weights_ngram = softmax(
-            attn_weights_ngram, dim=-1, onnx_trace=self.onnx_trace,
+            attn_weights_ngram,
+            dim=-1,
+            onnx_trace=self.onnx_trace,
         ).type_as(attn_weights_ngram)
         attn_weights_ngram = F.dropout(attn_weights_ngram, p=self.dropout, training=self.training)
 
         # [ngram, B*head, T, c]
-        attn_ngram = torch.einsum('nbts,nbsc->nbtc', (attn_weights_ngram, v_ngram))
+        attn_ngram = torch.einsum("nbts,nbsc->nbtc", (attn_weights_ngram, v_ngram))
         # [ngram, T, B, C]
         attn_ngram = attn_ngram.transpose(1, 2).contiguous().view(self.ngram, real_tgt_len, bsz, embed_dim)
         attn_ngram = self.out_proj(attn_ngram)
@@ -754,7 +798,7 @@ class NgramMultiheadAttention(nn.Module):
         attn = torch.cat([attn_main, attn_ngram], 0).view(-1, bsz, embed_dim)
 
         if output_attentions:
-            attn_weights = attn_weights_ngram#.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_ngram  # .view(bsz, self.num_heads, tgt_len, src_len)
         else:
             attn_weights = None
 
@@ -769,7 +813,7 @@ class NgramMultiheadAttention(nn.Module):
         else:
             bias = self.in_proj_bias
             if bias is not None:
-                bias = bias[:self.embed_dim]
+                bias = bias[: self.embed_dim]
             return F.linear(query, self.q_proj_weight, bias)
 
     def in_proj_k(self, key):
@@ -779,7 +823,7 @@ class NgramMultiheadAttention(nn.Module):
             weight = self.k_proj_weight
             bias = self.in_proj_bias
             if bias is not None:
-                bias = bias[self.embed_dim:2 * self.embed_dim]
+                bias = bias[self.embed_dim : 2 * self.embed_dim]
             return F.linear(key, weight, bias)
 
     def in_proj_v(self, value):
@@ -789,7 +833,7 @@ class NgramMultiheadAttention(nn.Module):
             weight = self.v_proj_weight
             bias = self.in_proj_bias
             if bias is not None:
-                bias = bias[2 * self.embed_dim:]
+                bias = bias[2 * self.embed_dim :]
             return F.linear(value, weight, bias)
 
     def _in_proj(self, input, start=0, end=None):
@@ -799,6 +843,7 @@ class NgramMultiheadAttention(nn.Module):
         if bias is not None:
             bias = bias[start:end]
         return F.linear(input, weight, bias)
+
 
 class ProphetNetDecoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
@@ -815,7 +860,7 @@ class ProphetNetDecoderLayer(nn.Module):
             add_bias_kv=False,
             add_zero_attn=False,
             self_attention=True,
-            ngram=config.ngram
+            ngram=config.ngram,
         )
         self.encoder_attn = SelfAttention(
             self.embed_dim,
@@ -842,7 +887,7 @@ class ProphetNetDecoderLayer(nn.Module):
         ngram_mask_matrix=None,
         i_buckets_main_stream=None,
         i_bucket_relative_stream=None,
-        real_positions=None
+        real_positions=None,
     ):
         # one main stream and ngram predicting streams
         residual = hidden_states
@@ -859,7 +904,7 @@ class ProphetNetDecoderLayer(nn.Module):
             i_buckets_main_stream=i_buckets_main_stream,
             i_bucket_relative_stream=i_bucket_relative_stream,
             real_positions=real_positions,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -890,20 +935,22 @@ class ProphetNetDecoderLayer(nn.Module):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
+
 def ngram_attention_bias(length, num_skip):
-        bias_result = []
-        for n_skip in range(num_skip):
-            bias_n_skip = []
-            for i in range(length):
-                bias_this = [float('-inf')] * (2 * length)
-                bias_this[length + i] = 0
-                first_k = i - n_skip
-                first_k = first_k if first_k > 0 else 0
-                for j in range(first_k + 1):
-                    bias_this[j] = 0
-                bias_n_skip.append(bias_this)
-            bias_result.append(bias_n_skip)
-        return torch.from_numpy(np.array(bias_result, dtype=np.float32))
+    bias_result = []
+    for n_skip in range(num_skip):
+        bias_n_skip = []
+        for i in range(length):
+            bias_this = [float("-inf")] * (2 * length)
+            bias_this[length + i] = 0
+            first_k = i - n_skip
+            first_k = first_k if first_k > 0 else 0
+            for j in range(first_k + 1):
+                bias_this[j] = 0
+            bias_n_skip.append(bias_this)
+        bias_result.append(bias_n_skip)
+    return torch.from_numpy(np.array(bias_result, dtype=np.float32))
+
 
 def _relative_positions_bucket(num_buckets, max_distance, relative_positions, is_bidirectional=False):
     n = -relative_positions
@@ -917,7 +964,8 @@ def _relative_positions_bucket(num_buckets, max_distance, relative_positions, is
     max_exact = num_buckets // 2
     is_small = torch.lt(n, max_exact)
     val_if_large = max_exact + torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (
-            num_buckets - max_exact)
+        num_buckets - max_exact
+    )
     val_if_large = torch.min(val_if_large, torch.ones_like(val_if_large) * (num_buckets - 1))
     val_if_large = val_if_large.int()
     result = result + torch.where(is_small, n.int(), val_if_large)
@@ -937,17 +985,22 @@ def cal_relative_positions_buckets(num_buckets, max_distance, real_positions):
     # input shift
     real_positions_shift_predicting_stream = real_positions - 1
     # [B,1, 2*T]
-    predicting_stream_relative_positions = torch.cat((real_positions_shift_predicting_stream, real_positions),
-                                                     dim=-1).unsqueeze(1)
+    predicting_stream_relative_positions = torch.cat(
+        (real_positions_shift_predicting_stream, real_positions), dim=-1
+    ).unsqueeze(1)
     # [B,T, 2*T]
-    predicting_stream_relative_positions = predicting_stream_relative_positions.repeat(1, real_positions.size(-1),
-                                                                                       1)
+    predicting_stream_relative_positions = predicting_stream_relative_positions.repeat(1, real_positions.size(-1), 1)
     # [B,T, 1]
     real_positions_predicting_stream = real_positions.unsqueeze(-1)
     predicting_stream_relative_positions = predicting_stream_relative_positions - real_positions_predicting_stream
-    i_buckets_main_stream = _relative_positions_bucket(num_buckets, max_distance, main_stream_relative_positions, is_bidirectional=False)
-    i_bucket_relative_stream = _relative_positions_bucket(num_buckets, max_distance, predicting_stream_relative_positions, is_bidirectional=False)
+    i_buckets_main_stream = _relative_positions_bucket(
+        num_buckets, max_distance, main_stream_relative_positions, is_bidirectional=False
+    )
+    i_bucket_relative_stream = _relative_positions_bucket(
+        num_buckets, max_distance, predicting_stream_relative_positions, is_bidirectional=False
+    )
     return i_buckets_main_stream, i_bucket_relative_stream
+
 
 class ProphetNetDecoder(nn.Module):
     """
@@ -960,6 +1013,7 @@ class ProphetNetDecoder(nn.Module):
         config: ProphetNetConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
+
     def __init__(self, config: ProphetNetConfig, embed_tokens: nn.Embedding):
         super().__init__()
         self.ngram = config.ngram
@@ -975,64 +1029,82 @@ class ProphetNetDecoder(nn.Module):
         self.embed_scale = None
         self.embed_tokens = embed_tokens
         embed_dim = config.hidden_size
-        self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings + 2 + self.padding_idx,
-                                                          embed_dim, self.padding_idx)
+        self.embed_positions = LearnedPositionalEmbedding(
+            config.max_position_embeddings + 2 + self.padding_idx, embed_dim, self.padding_idx
+        )
         self.ngram_input_embed = nn.Embedding(self.ngram, embed_dim, None)
 
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
-
     def cal_and_buffer_finetune_relative_positions(self, real_positions):
         n_tokens = real_positions.size(-1)
         batch_size = real_positions.size(0)
-        if not hasattr(self,
-                       '_finetune_i_bucket_main_stream') or \
-                self._finetune_i_bucket_main_stream is None \
-                or self._finetune_i_bucket_main_stream.device != real_positions.device:
+        if (
+            not hasattr(self, "_finetune_i_bucket_main_stream")
+            or self._finetune_i_bucket_main_stream is None
+            or self._finetune_i_bucket_main_stream.device != real_positions.device
+        ):
             fake_positions = torch.arange(1, self.max_target_positions + 1).repeat(1, 1)
-            finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream = cal_relative_positions_buckets(self.num_buckets, self.relative_max_distance, fake_positions)
+            finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream = cal_relative_positions_buckets(
+                self.num_buckets, self.relative_max_distance, fake_positions
+            )
             self._finetune_i_bucket_main_stream = finetune_i_bucket_main_stream.to(real_positions.device)
             self._finetune_i_bucket_predicting_stream = finetune_i_bucket_predicting_stream.to(real_positions.device)
-        finetune_i_bucket_main_stream = self._finetune_i_bucket_main_stream[:, :n_tokens, :n_tokens].repeat(batch_size,
-                                                                                                            1, 1)
-        finetune_i_bucket_predicting_stream = torch.cat([
-            self._finetune_i_bucket_predicting_stream[:, :n_tokens, :n_tokens],
-            self._finetune_i_bucket_predicting_stream[:, :n_tokens,
-            self.max_target_positions:self.max_target_positions + n_tokens]
-        ], 2).repeat(batch_size, 1, 1)
+        finetune_i_bucket_main_stream = self._finetune_i_bucket_main_stream[:, :n_tokens, :n_tokens].repeat(
+            batch_size, 1, 1
+        )
+        finetune_i_bucket_predicting_stream = torch.cat(
+            [
+                self._finetune_i_bucket_predicting_stream[:, :n_tokens, :n_tokens],
+                self._finetune_i_bucket_predicting_stream[
+                    :, :n_tokens, self.max_target_positions : self.max_target_positions + n_tokens
+                ],
+            ],
+            2,
+        ).repeat(batch_size, 1, 1)
         return finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream
 
     def buffered_future_mask(self, tensor):
         dim = tensor.size(0)
-        if not hasattr(self,
-                       '_future_mask') or self._future_mask is None or self._future_mask.device != tensor.device or self._future_mask.size(
-            0) < dim:
+        if (
+            not hasattr(self, "_future_mask")
+            or self._future_mask is None
+            or self._future_mask.device != tensor.device
+            or self._future_mask.size(0) < dim
+        ):
             self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
         return self._future_mask[:dim, :dim]
 
     def buffered_future_mask_ngram(self, tensor):
         dim = tensor.size(0)
-        if not hasattr(self,
-                       '_ngram_future_mask') or self._ngram_future_mask is None or self._ngram_future_mask.device != tensor.device:
-            self._ngram_future_mask = ngram_attention_bias(self.max_target_positions, self.ngram).type(tensor.dtype).to(
-                tensor.device)
-        ngram_future_mask = torch.cat([self._ngram_future_mask[:, :dim, :dim],
-                                       self._ngram_future_mask[:, :dim,
-                                       self.max_target_positions: self.max_target_positions + dim]
-                                       ], 2)
+        if (
+            not hasattr(self, "_ngram_future_mask")
+            or self._ngram_future_mask is None
+            or self._ngram_future_mask.device != tensor.device
+        ):
+            self._ngram_future_mask = (
+                ngram_attention_bias(self.max_target_positions, self.ngram).type(tensor.dtype).to(tensor.device)
+            )
+        ngram_future_mask = torch.cat(
+            [
+                self._ngram_future_mask[:, :dim, :dim],
+                self._ngram_future_mask[:, :dim, self.max_target_positions : self.max_target_positions + dim],
+            ],
+            2,
+        )
         return ngram_future_mask
 
     def forward(
-            self,
-            input_ids,
-            encoder_hidden_states,
-            encoder_padding_mask,
-            past_key_values=None,
-            use_cache=False,
-            output_attentions=False,
-            return_dict=False,
-            **unused,
+        self,
+        input_ids,
+        encoder_hidden_states,
+        encoder_padding_mask,
+        past_key_values=None,
+        use_cache=False,
+        output_attentions=False,
+        return_dict=False,
+        **unused,
     ):
         """
 
@@ -1056,16 +1128,15 @@ class ProphetNetDecoder(nn.Module):
             # remove bos to be consistent with fairseq version
             encoder_padding_mask = encoder_padding_mask[:, 1:]
             encoder_padding_mask = invert_mask(encoder_padding_mask)
-        main_stream_pos_embed, real_positions = self.embed_positions(
-            input_ids,
-            use_cache=use_cache
-        )
+        main_stream_pos_embed, real_positions = self.embed_positions(input_ids, use_cache=use_cache)
         if use_cache:
             input_ids = input_ids[:, -1:]
             main_stream_pos_embed = main_stream_pos_embed[:, -1:]  # happens after we embed them
             i_buckets_main_stream, i_bucket_relative_stream = None, None
         else:
-            i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(real_positions)
+            i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(
+                real_positions
+            )
         predicting_stream_pos_embed = self.embed_positions._forward(real_positions + 1)
         hidden_states = self.embed_tokens(input_ids)
         if self.embed_scale is not None:
@@ -1079,12 +1150,15 @@ class ProphetNetDecoder(nn.Module):
             B = hidden_states.size(1)
             ngram_masks = [
                 (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, B, 1)
-                for ngram in range(self.ngram)]
+                for ngram in range(self.ngram)
+            ]
             self_attn_mask = None
             ngram_mask_matrix = None
         else:
-            ngram_masks = [(ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1) for
-                           ngram in range(self.ngram)]
+            ngram_masks = [
+                (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1)
+                for ngram in range(self.ngram)
+            ]
             self_attn_mask = self.buffered_future_mask(hidden_states)
             ngram_mask_matrix = self.buffered_future_mask_ngram(hidden_states)
         # TODO in train [(1+ngram)*T, B, C], in inference [T+ngram, B, C]
@@ -1112,7 +1186,7 @@ class ProphetNetDecoder(nn.Module):
                 ngram_mask_matrix=ngram_mask_matrix,
                 i_buckets_main_stream=i_buckets_main_stream,
                 i_bucket_relative_stream=i_bucket_relative_stream,
-                real_positions=real_positions
+                real_positions=real_positions,
             )
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
@@ -1127,16 +1201,22 @@ class ProphetNetDecoder(nn.Module):
         if not return_dict:
             return hidden_states_list, next_cache, all_hidden_states, list(all_self_attns)
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states_list, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+            last_hidden_state=hidden_states_list,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
         )
+
 
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a input_ids with -inf."""
     return t.float().fill_(float("-inf")).type_as(t)
 
+
 def _filter_out_falsey_values(tup) -> Tuple:
     """Remove entries that are None or [] from an iterable."""
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
+
 
 @add_start_docstrings(
     "The bare ProphetNet Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1166,15 +1246,15 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="microsoft/prophetnet-large-uncased")
     def forward(
-            self,
-            input_ids,
-            attention_mask=None,
-            decoder_input_ids=None,
-            encoder_outputs: Optional[Tuple] = None,
-            past_key_values=None,
-            use_cache=False,
-            output_attentions=None,
-            return_dict=False,
+        self,
+        input_ids,
+        attention_mask=None,
+        decoder_input_ids=None,
+        encoder_outputs: Optional[Tuple] = None,
+        past_key_values=None,
+        use_cache=False,
+        output_attentions=None,
+        return_dict=False,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -1185,7 +1265,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
-                return_dict=return_dict
+                return_dict=return_dict,
             )
         if return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1201,7 +1281,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         if not return_dict:
@@ -1223,11 +1303,13 @@ def _reorder_buffer(attn_cache, new_order):
             attn_cache[k] = input_buffer_k.index_select(0, new_order)
     return attn_cache
 
+
 def _make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
     lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
     lin_layer.weight.data = emb.weight.data
     return lin_layer
+
 
 @add_start_docstrings(
     "The ProphetNet Model with a language modeling head. Can be used for summarization.", PROPHETNET_START_DOCSTRING
@@ -1268,7 +1350,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
         if not return_dict:
             predicting_streams = outputs[0][1:]
@@ -1279,11 +1361,13 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             # print('outputs.decoder_hidden_states')
             # print(outputs.last_hidden_state)
         predicting_streams_logits = [self.output_layer(x) for x in predicting_streams]
-        #lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
+        # lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
 
         if labels is not None:
             # fine-tune
-            expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(self.padding_idx)
+            expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(
+                self.padding_idx
+            )
             for i in range(self.config.ngram):
                 if i > 0 and self.disable_ngram_loss:
                     break
@@ -1294,19 +1378,15 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 dim=-1,
                 dtype=torch.float32,
             )
-            loss = F.nll_loss(
-                lprobs,
-                expend_targets.view(-1),
-                reduction='sum'
-            )
-            if self.config.eps > 0.:
+            loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="sum")
+            if self.config.eps > 0.0:
                 smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
                 non_pad_mask = expend_targets.ne(self.padding_idx).view(-1)
                 smooth_loss = smooth_loss[non_pad_mask]
                 smooth_loss = smooth_loss.sum()
 
                 eps_i = self.config.eps / lprobs.size(-1)
-                loss = (1. - self.config.eps) * loss + eps_i * smooth_loss
+                loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
             if not return_dict:
                 return (loss,) + outputs
             else:
@@ -1323,7 +1403,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         else:
             # inference
             if not return_dict:
-                outputs_logits = (predicting_streams_logits[0],) + outputs[1:]  # Add cache, hidden states and attention if they are here
+                outputs_logits = (predicting_streams_logits[0],) + outputs[
+                    1:
+                ]  # Add cache, hidden states and attention if they are here
                 return outputs_logits
             else:
                 return Seq2SeqLMOutput(

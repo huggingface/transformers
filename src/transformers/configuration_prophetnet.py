@@ -30,39 +30,39 @@ PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ProphetNetConfig(PretrainedConfig):
     r"""
-            Configuration class for ProphetNet. Parameters are renamed from the fairseq implementation
-        """
+    Configuration class for ProphetNet. Parameters are renamed from the fairseq implementation
+    """
     model_type = "prophetnet"
 
     def __init__(
-            self,
-            activation_dropout=0.1,
-            activation_function="gelu",
-            vocab_size=30522,
-            hidden_size=1024,
-            encoder_ffn_dim=4096,
-            encoder_layers=12,
-            encoder_attention_heads=16,
-            decoder_ffn_dim=4096,
-            decoder_layers=12,
-            decoder_attention_heads=16,
-            encoder_layerdrop=0.1,
-            decoder_layerdrop=0.1,
-            attention_dropout=0.1,
-            dropout=0.1,
-            max_position_embeddings=512,
-            init_std=0.02,
-            num_labels=3,
-            is_encoder_decoder=True,
-            pad_token_id=0,
-            bos_token_id=102,
-            eos_token_id=102,
-            ngram=2,
-            num_buckets=32,
-            relative_max_distance=128,
-            disable_ngram_loss=False,
-            eps=0.0,
-            **common_kwargs
+        self,
+        activation_dropout=0.1,
+        activation_function="gelu",
+        vocab_size=30522,
+        hidden_size=1024,
+        encoder_ffn_dim=4096,
+        encoder_layers=12,
+        encoder_attention_heads=16,
+        decoder_ffn_dim=4096,
+        decoder_layers=12,
+        decoder_attention_heads=16,
+        encoder_layerdrop=0.1,
+        decoder_layerdrop=0.1,
+        attention_dropout=0.1,
+        dropout=0.1,
+        max_position_embeddings=512,
+        init_std=0.02,
+        num_labels=3,
+        is_encoder_decoder=True,
+        pad_token_id=0,
+        bos_token_id=102,
+        eos_token_id=102,
+        ngram=2,
+        num_buckets=32,
+        relative_max_distance=128,
+        disable_ngram_loss=False,
+        eps=0.0,
+        **common_kwargs
     ):
         super().__init__(
             num_labels=num_labels,
@@ -86,7 +86,7 @@ class ProphetNetConfig(PretrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        #parameters for prophetnet
+        # parameters for prophetnet
         self.ngram = ngram
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
@@ -98,8 +98,6 @@ class ProphetNetConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.dropout = dropout
 
-
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
-

@@ -15,10 +15,10 @@
 
 import logging
 from typing import List, Optional
-from .tokenization_bert import BertTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
+from .tokenization_bert import BertTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -28,34 +28,35 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/prophetnet-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/prophetnet-large-uncased/prophetnet.tokenizer",
-        "microsoft/xprophetnet-large-wiki100-cased": "https://cdn.huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer"
+        "microsoft/xprophetnet-large-wiki100-cased": "https://cdn.huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer",
     }
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
     "microsoft/prophetnet-large-uncased": {"do_lower_case": True, "xprophetnet_tokenizer": False},
-    "microsoft/xprophetnet-large-wiki100-cased": {"do_lower_case": False, "xprophetnet_tokenizer": True}
+    "microsoft/xprophetnet-large-wiki100-cased": {"do_lower_case": False, "xprophetnet_tokenizer": True},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/prophetnet-large-uncased": 512,
-    "microsoft/xprophetnet-large-wiki100-cased": 512
+    "microsoft/xprophetnet-large-wiki100-cased": 512,
 }
-
 
 
 class ProphetNetTokenizer(PreTrainedTokenizer):
     r"""
-            ProphetNet inherit from BERT-tokenizer, xProphetNet  inherit from XLMR-tokenizer
-        """
+    ProphetNet inherit from BERT-tokenizer, xProphetNet  inherit from XLMR-tokenizer
+    """
 
-    vocab_files_names = VOCAB_FILES_NAMES     # default english version rather than cross-lingual version.
+    vocab_files_names = VOCAB_FILES_NAMES  # default english version rather than cross-lingual version.
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __new__(cls, **kwargs):
-        xprophetnet_tokenizer = False if 'xprophetnet_tokenizer' not in kwargs.keys() else kwargs['xprophetnet_tokenizer']
+        xprophetnet_tokenizer = (
+            False if "xprophetnet_tokenizer" not in kwargs.keys() else kwargs["xprophetnet_tokenizer"]
+        )
         if xprophetnet_tokenizer:
             super_class = XLMRobertaTokenizer
         else:
@@ -102,7 +103,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
                 mask_token=mask_token,
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 xprophetnet_tokenizer=False,
-                **kwargs
+                **kwargs,
             )
             self.unique_no_split_tokens.append("[X_SEP]")
         else:
@@ -124,7 +125,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
                 pad_token=pad_token,
                 mask_token=mask_token,
                 xprophetnet_tokenizer=True,
-                **kwargs
+                **kwargs,
             )
             # Original fairseq vocab and spm vocab must be "aligned":
             # model    | '[PAD]'   | '[CLS]' | '<SEP>' | '[UNK]' | '[MASK]' | '[unused1]' | ......... | '[unused9]'  | ',' | '▁'
@@ -132,7 +133,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             # put special tokens and [unused] tokens into the vocab
             self.fairseq_tokens_to_ids = {"[PAD]": 0, "[CLS]": 1, "[SEP]": 2, "[UNK]": 3, "[MASK]": 4}
             for i in range(10):
-                tok = '[unused{}]'.format(i)
+                tok = "[unused{}]".format(i)
                 self.fairseq_tokens_to_ids[tok] = 5 + i
 
             # The first "real" token "," has position 15 in the embedding vocab and position 3 in the spm vocab
@@ -167,6 +168,3 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             return [self.sep_token_id] + token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
         return sep + token_ids_0 + sep + token_ids_1 + sep
-
-
-

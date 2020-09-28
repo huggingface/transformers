@@ -38,6 +38,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    ProphetNetConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -46,7 +47,6 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
-    ProphetNetConfig,
     replace_list_option_in_docstrings,
 )
 from .configuration_marian import MarianConfig
@@ -145,6 +145,7 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_prophetnet import ProphetNetForConditionalGeneration, ProphetNetModel
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -188,15 +189,7 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
-from .modeling_prophetnet import (
-    ProphetNetModel,
-    ProphetNetForConditionalGeneration
-)
-
 from .utils import logging
-
-
-
 
 
 logger = logging.get_logger(__name__)
@@ -330,7 +323,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MBartConfig, MBartForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
-        (ProphetNetConfig, ProphetNetForConditionalGeneration)
+        (ProphetNetConfig, ProphetNetForConditionalGeneration),
     ]
 )
 
