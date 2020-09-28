@@ -95,7 +95,7 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
             failures.append([k, new_k])
         else:
             mapping[new_k] = v
-    if cfg.layernorm_variant == "prelayernorm":
+    if cfg.normalize_before:
         rename_layernorm_keys(sd)
     m.model.load_state_dict(mapping, strict=True)
     m.half()
