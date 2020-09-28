@@ -155,6 +155,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
 
         generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
         assert generated_txt[0] == tgt_text
+
     @slow
     def test_generation_from_long_input_same_as_parlai_3B(self):
 
