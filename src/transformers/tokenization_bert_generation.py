@@ -34,23 +34,23 @@ tokenizer_url = (
 
 class BertGenerationTokenizer(PreTrainedTokenizer):
     """
-    Constructs a BertGenerationTokenizer tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Construct a BertGeneration tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`string`):
+        vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (:obj:`string`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
-        bos_token (:obj:`string`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The begin of sequence token.
-        unk_token (:obj:`string`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`string`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
     """
 
@@ -142,8 +142,15 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         return out_string
 
     def save_vocabulary(self, save_directory):
-        """Save the sentencepiece vocabulary (copy original file) and special tokens file
-        to a directory.
+        """
+        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
         """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))

@@ -1,5 +1,5 @@
 Fine-tuning with custom datasets
-================================
+=======================================================================================================================
 
 .. note::
 
@@ -24,7 +24,7 @@ We include several examples, each of which demonstrates a different type of comm
 .. _seq_imdb:
 
 Sequence Classification with IMDb Reviews
------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. note::
 
@@ -139,7 +139,7 @@ Now that our datasets our ready, we can fine-tune a model either with the 🤗
 .. _ft_trainer:
 
 Fine-tuning with Trainer
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The steps above prepared the datasets in the way that the trainer is expected. Now all we need to do is create a
 model to fine-tune, define the :class:`~transformers.TrainingArguments`/:class:`~transformers.TFTrainingArguments`
@@ -200,7 +200,7 @@ and instantiate a :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer
 .. _ft_native:
 
 Fine-tuning with native PyTorch/TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We can also train use native PyTorch or TensorFlow:
 
@@ -244,7 +244,7 @@ We can also train use native PyTorch or TensorFlow:
 .. _tok_ner:
 
 Token Classification with W-NUT Emerging Entities
--------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. note::
 
@@ -324,7 +324,7 @@ which we'll use in a moment:
     id2tag = {id: tag for tag, id in tag2id.items()}
 
 To encode the tokens, we'll use a pre-trained DistilBert tokenizer. We can tell the tokenizer that we're dealing
-with ready-split tokens rather than full sentence strings by passing ``is_pretokenized=True``. We'll also pass
+with ready-split tokens rather than full sentence strings by passing ``is_split_into_words=True``. We'll also pass
 ``padding=True`` and ``truncation=True`` to pad the sequences to be the same length. Lastly, we can tell the model
 to return information about the tokens which are split by the wordpiece tokenization process, which we will need in
 a moment.
@@ -333,8 +333,8 @@ a moment.
 
     from transformers import DistilBertTokenizerFast
     tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-cased')
-    train_encodings = tokenizer(train_texts, is_pretokenized=True, return_offsets_mapping=True, padding=True, truncation=True)
-    val_encodings = tokenizer(val_texts, is_pretokenized=True, return_offsets_mapping=True, padding=True, truncation=True)
+    train_encodings = tokenizer(train_texts, is_split_into_words=True, return_offsets_mapping=True, padding=True, truncation=True)
+    val_encodings = tokenizer(val_texts, is_split_into_words=True, return_offsets_mapping=True, padding=True, truncation=True)
 
 Great, so now our tokens are nicely encoded in the format that they need to be in to feed them into our DistilBert
 model below.
@@ -443,7 +443,7 @@ sequence classification example above.
 .. _qa_squad:
 
 Question Answering with SQuAD 2.0
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. note::
 
@@ -655,7 +655,7 @@ multiple model outputs.
 .. _resources:
 
 Additional Resources
---------------------
+-----------------------------------------------------------------------------------------------------------------------
 
   - `How to train a new language model from scratch using Transformers and Tokenizers
     <https://huggingface.co/blog/how-to-train>`_. Blog post showing the steps to load in Esperanto data and train a
@@ -666,7 +666,7 @@ Additional Resources
 .. _nlplib:
 
 Using the 🤗 NLP Datasets & Metrics library
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This tutorial demonstrates how to read in datasets from various raw text formats and prepare them for training with
 🤗 Transformers so that you can do the same thing with your own custom datasets. However, we recommend users use the

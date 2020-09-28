@@ -1,12 +1,14 @@
 OpenAI GPT
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Overview
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-OpenAI GPT model was proposed in `Improving Language Understanding by Generative Pre-Training <https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf>`__
+OpenAI GPT model was proposed in `Improving Language Understanding by Generative Pre-Training
+<https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf>`__
 by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever. It's a causal (unidirectional)
-transformer pre-trained using language modeling on a large corpus will long range dependencies, the Toronto Book Corpus.
+transformer pre-trained using language modeling on a large corpus will long range dependencies, the Toronto Book
+Corpus.
 
 The abstract from the paper is the following:
 
@@ -36,7 +38,7 @@ Tips:
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt>`__ is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT is one of them.
 
-The original code can be found `here <https://github.com/openai/finetune-transformer-lm>`_.
+The original code can be found `here <https://github.com/openai/finetune-transformer-lm>`__.
 
 Note:
 
@@ -46,33 +48,33 @@ If you want to reproduce the original tokenization process of the `OpenAI GPT` p
     pip install spacy ftfy==4.4.3
     python -m spacy download en
 
-If you don't install ``ftfy`` and ``SpaCy``, the :class:`transformers.OpenAIGPTTokenizer` will default to tokenize using 
-BERT's :obj:`BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage, don't 
+If you don't install ``ftfy`` and ``SpaCy``, the :class:`~transformers.OpenAIGPTTokenizer` will default to tokenize
+using BERT's :obj:`BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage, don't 
 worry).
 
 OpenAIGPTConfig
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTConfig
     :members:
 
 
 OpenAIGPTTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTTokenizer
     :members: save_vocabulary
 
 
 OpenAIGPTTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTTokenizerFast
     :members:
 
 
 OpenAI specific outputs
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
     :members:
@@ -82,42 +84,42 @@ OpenAI specific outputs
 
 
 OpenAIGPTModel
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTModel
-    :members:
+    :members: forward
 
 
 OpenAIGPTLMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTLMHeadModel
-    :members:
+    :members: forward
 
 
 OpenAIGPTDoubleHeadsModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTDoubleHeadsModel
-    :members:
+    :members: forward
 
 
 TFOpenAIGPTModel
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTModel
-    :members:
+    :members: call
 
 
 TFOpenAIGPTLMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTLMHeadModel
-    :members:
+    :members: call
 
 
 TFOpenAIGPTDoubleHeadsModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTDoubleHeadsModel
-    :members:
+    :members: call

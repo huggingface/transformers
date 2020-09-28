@@ -16,6 +16,7 @@
 """TF general model utils."""
 import functools
 import os
+import re
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -85,20 +86,20 @@ def keras_serializable(cls):
 
     @functools.wraps(initializer)
     def wrapped_init(self, *args, **kwargs):
-        transformers_config = kwargs.pop("transformers_config", None)
-        config = args[0] if args and isinstance(args[0], PretrainedConfig) else kwargs.get("config", None)
-        if config is not None and transformers_config is not None:
-            raise ValueError("Must pass either `config` or `transformers_config`, not both")
-        elif config is not None:
-            # normal layer construction, call with unchanged args (config is already in there)
-            initializer(self, *args, **kwargs)
-        elif transformers_config is not None:
-            # Keras deserialization, convert dict to config
-            config = config_class.from_dict(transformers_config)
+        config = args[0] if args and isinstance(args[0], PretrainedConfig) else kwargs.pop("config", None)
+
+        if isinstance(config, dict):
+            config = config_class.from_dict(config)
             initializer(self, config, *args, **kwargs)
+        elif isinstance(config, PretrainedConfig):
+            if len(args) > 0:
+                initializer(self, *args, **kwargs)
+            else:
+                initializer(self, config, *args, **kwargs)
         else:
-            raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
-        self._transformers_config = config
+            raise ValueError("Must pass either `config` (PretrainedConfig) or `config` (dict)")
+
+        self._config = config
         self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
@@ -109,7 +110,7 @@ def keras_serializable(cls):
 
         def get_config(self):
             cfg = super(cls, self).get_config()
-            cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg["config"] = self._config.to_dict()
             cfg.update(self._kwargs)
             return cfg
 
@@ -233,6 +234,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     """
     config_class = None
     base_model_prefix = ""
+    authorized_missing_keys = None
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -504,17 +506,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         Examples::
 
-            from transformers import BertConfig, TFBertModel
-            # Download model and configuration from S3 and cache.
-            model = TFBertModel.from_pretrained('bert-base-uncased')
-            # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
-            model = TFBertModel.from_pretrained('./test/saved_model/')
-            # Update configuration during loading.
-            model = TFBertModel.from_pretrained('bert-base-uncased', output_attentions=True)
-            assert model.config.output_attentions == True
-            # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
-            config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
-            model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
+            >>> from transformers import BertConfig, TFBertModel
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = TFBertModel.from_pretrained('bert-base-uncased')
+            >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
+            >>> model = TFBertModel.from_pretrained('./test/saved_model/')
+            >>> # Update configuration during loading.
+            >>> model = TFBertModel.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> assert model.config.output_attentions == True
+            >>> # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
+            >>> config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
+            >>> model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
 
         """
         config = kwargs.pop("config", None)
@@ -629,6 +631,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         missing_keys = list(model_layer_names - hdf5_layer_names)
         unexpected_keys = list(hdf5_layer_names - model_layer_names)
         error_msgs = []
+
+        if cls.authorized_missing_keys is not None:
+            for pat in cls.authorized_missing_keys:
+                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
         if len(unexpected_keys) > 0:
             logger.warning(

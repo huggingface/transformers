@@ -230,8 +230,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
 
-    @slow
     @require_torch
+    @slow
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 

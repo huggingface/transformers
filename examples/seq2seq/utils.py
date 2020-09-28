@@ -4,6 +4,7 @@ import linecache
 import math
 import os
 import pickle
+import socket
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Union
@@ -17,8 +18,17 @@ from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 
+from sentence_splitter import add_newline_to_end_of_each_sentence
 from transformers import BartTokenizer
 from transformers.file_utils import cached_property
+
+
+try:
+    from fairseq.data.data_utils import batch_by_size
+
+    FAIRSEQ_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    FAIRSEQ_AVAILABLE = False
 
 
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
@@ -94,7 +104,13 @@ class AbstractSeq2SeqDataset(Dataset):
         super().__init__()
         self.src_file = Path(data_dir).joinpath(type_path + ".source")
         self.tgt_file = Path(data_dir).joinpath(type_path + ".target")
-        self.src_lens = self.get_char_lens(self.src_file)
+        self.len_file = Path(data_dir).joinpath(type_path + ".len")
+        if os.path.exists(self.len_file):
+            self.src_lens = pickle_load(self.len_file)
+            self.used_char_len = False
+        else:
+            self.src_lens = self.get_char_lens(self.src_file)
+            self.used_char_len = True
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
         assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
@@ -115,11 +131,41 @@ class AbstractSeq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    def make_sortish_sampler(self, batch_size, distributed=False, **kwargs):
+    @cached_property
+    def tgt_lens(self):
+        """Length in characters of target documents"""
+        return self.get_char_lens(self.tgt_file)
+
+    def make_sortish_sampler(self, batch_size, distributed=False, shuffle=True, **kwargs):
         if distributed:
-            return DistributedSortishSampler(self, batch_size, **kwargs)
+            return DistributedSortishSampler(self, batch_size, shuffle=shuffle, **kwargs)
         else:
-            return SortishSampler(self.src_lens, batch_size)
+            return SortishSampler(self.src_lens, batch_size, shuffle=shuffle)
+
+    def make_dynamic_sampler(self, max_tokens_per_batch=1024, **kwargs):
+        assert FAIRSEQ_AVAILABLE, "Dynamic batch size requires `pip install fairseq`"
+        assert not self.used_char_len, "You must call  python make_len_file.py before calling make_dynamic_sampler"
+        sorted_indices = list(self.make_sortish_sampler(1024, shuffle=False))
+
+        def num_tokens_in_example(i):
+            return min(self.src_lens[i], self.max_target_length)
+
+        # call fairseq cython function
+        batch_sampler: List[List[int]] = batch_by_size(
+            sorted_indices,
+            num_tokens_fn=num_tokens_in_example,
+            max_tokens=max_tokens_per_batch,
+            required_batch_size_multiple=64,
+        )
+        shuffled_batches = [batch_sampler[i] for i in np.random.permutation(range(len(batch_sampler)))]
+        # move the largest batch to the front to OOM quickly (uses an approximation for padding)
+        approximate_toks_per_batch = [max(self.src_lens[i] for i in batch) * len(batch) for batch in shuffled_batches]
+        largest_batch_idx = np.argmax(approximate_toks_per_batch)
+        shuffled_batches[0], shuffled_batches[largest_batch_idx] = (
+            shuffled_batches[largest_batch_idx],
+            shuffled_batches[0],
+        )
+        return shuffled_batches
 
     def __getitem__(self, item):
         raise NotImplementedError("You must implement this")
@@ -193,18 +239,20 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
 class SortishSampler(Sampler):
     "Go through the text data by order of src length with a bit of randomness. From fastai repo."
 
-    def __init__(self, data, batch_size):
-        self.data, self.bs = data, batch_size
+    def __init__(self, data, batch_size, shuffle=True):
+        self.data, self.bs, self.shuffle = data, batch_size, shuffle
 
     def __len__(self) -> int:
         return len(self.data)
 
     def __iter__(self):
-        return iter(sortish_sampler_indices(self.data, self.bs))
+        return iter(sortish_sampler_indices(self.data, self.bs, shuffle=self.shuffle))
 
 
-def sortish_sampler_indices(data: List, bs: int) -> np.array:
+def sortish_sampler_indices(data: List, bs: int, shuffle=True) -> np.array:
     "Go through the text data by order of src length with a bit of randomness. From fastai repo."
+    if not shuffle:
+        return np.argsort(np.array(data) * -1)
 
     def key_fn(i):
         return data[i]
@@ -225,7 +273,7 @@ def sortish_sampler_indices(data: List, bs: int) -> np.array:
 class DistributedSortishSampler(Sampler):
     """Copied from torch DistributedSampler"""
 
-    def __init__(self, dataset, batch_size, num_replicas=None, rank=None, add_extra_examples=True):
+    def __init__(self, dataset, batch_size, num_replicas=None, rank=None, add_extra_examples=True, shuffle=True):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -246,13 +294,14 @@ class DistributedSortishSampler(Sampler):
             self.num_samples = len(self.available_indices)
         self.batch_size = batch_size
         self.add_extra_examples = add_extra_examples
+        self.shuffle = shuffle
 
     def __iter__(self) -> Iterable:
         g = torch.Generator()
         g.manual_seed(self.epoch)
 
         sortish_data = [self.dataset.src_lens[i] for i in self.available_indices]
-        sortish_indices = sortish_sampler_indices(sortish_data, self.batch_size)
+        sortish_indices = sortish_sampler_indices(sortish_data, self.batch_size, shuffle=self.shuffle)
         indices = [self.available_indices[i] for i in sortish_indices]
         assert len(indices) == self.num_samples
         return iter(indices)
@@ -309,9 +358,9 @@ def save_git_info(folder_path: str) -> None:
     save_json(repo_infos, os.path.join(folder_path, "git_log.json"))
 
 
-def save_json(content, path):
+def save_json(content, path, indent=4, **json_dump_kwargs):
     with open(path, "w") as f:
-        json.dump(content, f, indent=4)
+        json.dump(content, f, indent=indent, **json_dump_kwargs)
 
 
 def load_json(path):
@@ -325,23 +374,68 @@ def get_git_info():
         "repo_id": str(repo),
         "repo_sha": str(repo.head.object.hexsha),
         "repo_branch": str(repo.active_branch),
+        "hostname": str(socket.gethostname()),
     }
     return repo_infos
 
 
-ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
+ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
+def extract_rouge_mid_statistics(dct):
+    new_dict = {}
+    for k1, v1 in dct.items():
+        mid = v1.mid
+        new_dict[k1] = {stat: round(getattr(mid, stat), 4) for stat in ["precision", "recall", "fmeasure"]}
+    return new_dict
+
+
+def calculate_rouge(
+    pred_lns: List[str],
+    tgt_lns: List[str],
+    use_stemmer=True,
+    rouge_keys=ROUGE_KEYS,
+    return_precision_and_recall=False,
+    bootstrap_aggregation=True,
+    newline_sep=True,
+) -> Dict:
+    """Calculate rouge using rouge_scorer package.
+
+    Args:
+        pred_lns: list of summaries generated by model
+        tgt_lns: list of groundtruth summaries (e.g. contents of val.target)
+        use_stemmer:  Bool indicating whether Porter stemmer should be used to
+        strip word suffixes to improve matching.
+        rouge_keys:  which metrics to compute, defaults to rouge1, rouge2, rougeL, rougeLsum
+        return_precision_and_recall: (False) whether to also return precision and recall.
+        bootstrap_aggregation: whether to do the typical bootstrap resampling of scores. Defaults to True, if False
+            this function returns a collections.defaultdict[metric: list of values for each observation for each subscore]``
+        newline_sep:(default=True) whether to add newline between sentences. This is essential for calculation rougeL
+        on multi sentence summaries (CNN/DM dataset).
+
+    Returns:
+         Dict[score: value] if aggregate else defaultdict(list) keyed by rouge_keys
+
+    """
+    scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
-
-    for reference_ln, output_ln in zip(reference_lns, output_lns):
-        scores = scorer.score(reference_ln, output_ln)
+    for pred, tgt in zip(tgt_lns, pred_lns):
+        # rougeLsum expects "\n" separated sentences within a summary
+        if newline_sep:
+            pred = add_newline_to_end_of_each_sentence(pred)
+            tgt = add_newline_to_end_of_each_sentence(tgt)
+        scores = scorer.score(pred, tgt)
         aggregator.add_scores(scores)
 
-    result = aggregator.aggregate()
-    return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+    if bootstrap_aggregation:
+        result = aggregator.aggregate()
+        if return_precision_and_recall:
+            return extract_rouge_mid_statistics(result)  # here we return dict
+        else:
+            return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+
+    else:
+        return aggregator._scores  # here we return defaultdict(list)
 
 
 # Utilities for freezing parameters and checking whether they are frozen
@@ -374,21 +468,26 @@ def assert_not_all_frozen(model):
     assert any(model_grads), f"none of {npars} weights require grad"
 
 
-# CLI Parsing utils
-
-
-def parse_numeric_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, float]]:
-    """Parse an argv list of unspecified command line args to a dict. Assumes all values are numeric."""
+def parse_numeric_n_bool_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, float, bool]]:
+    """
+    Parse an argv list of unspecified command line args to a dict.
+    Assumes all values are either numeric or boolean in the form of true/false.
+    """
     result = {}
     assert len(unparsed_args) % 2 == 0, f"got odd number of unparsed args: {unparsed_args}"
     num_pairs = len(unparsed_args) // 2
     for pair_num in range(num_pairs):
         i = 2 * pair_num
         assert unparsed_args[i].startswith("--")
-        try:
-            value = int(unparsed_args[i + 1])
-        except ValueError:
-            value = float(unparsed_args[i + 1])  # this can raise another informative ValueError
+        if unparsed_args[i + 1].lower() == "true":
+            value = True
+        elif unparsed_args[i + 1].lower() == "false":
+            value = False
+        else:
+            try:
+                value = int(unparsed_args[i + 1])
+            except ValueError:
+                value = float(unparsed_args[i + 1])  # this can raise another informative ValueError
 
         result[unparsed_args[i][2:]] = value
     return result
@@ -399,3 +498,9 @@ def write_txt_file(ordered_tgt, path):
     for ln in ordered_tgt:
         f.write(ln + "\n")
         f.flush()
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]

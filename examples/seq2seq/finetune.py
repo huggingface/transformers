@@ -1,7 +1,10 @@
+#!/usr/bin/env python
+
 import argparse
 import glob
 import logging
 import os
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -12,49 +15,31 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
-from lightning_base import BaseTransformer, add_generic_args, generic_train
+from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
+from utils import (
+    ROUGE_KEYS,
+    LegacySeq2SeqDataset,
+    Seq2SeqDataset,
+    assert_all_frozen,
+    calculate_bleu,
+    calculate_rouge,
+    flatten_list,
+    freeze_params,
+    get_git_info,
+    label_smoothed_nll_loss,
+    lmap,
+    pickle_save,
+    save_git_info,
+    use_task_specific_params,
+)
 
 
-try:
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-    from .utils import (
-        ROUGE_KEYS,
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        flatten_list,
-        freeze_params,
-        get_git_info,
-        label_smoothed_nll_loss,
-        lmap,
-        pickle_save,
-        save_git_info,
-        save_json,
-        use_task_specific_params,
-    )
-except ImportError:
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-    from utils import (
-        ROUGE_KEYS,
-        LegacySeq2SeqDataset,
-        Seq2SeqDataset,
-        assert_all_frozen,
-        calculate_bleu,
-        calculate_rouge,
-        flatten_list,
-        freeze_params,
-        get_git_info,
-        label_smoothed_nll_loss,
-        lmap,
-        pickle_save,
-        save_git_info,
-        save_json,
-        use_task_specific_params,
-    )
+# need the parent dir module
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
+
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +53,12 @@ class SummarizationModule(BaseTransformer):
     def __init__(self, hparams, **kwargs):
         if hparams.sortish_sampler and hparams.gpus > 1:
             hparams.replace_sampler_ddp = False
+        elif hparams.max_tokens_per_batch is not None:
+            if hparams.gpus > 1:
+                raise NotImplementedError("Dynamic Batch size does not work for multi-gpu training")
+            if hparams.sortish_sampler:
+                raise ValueError("--sortish_sampler and --max_tokens_per_batch may not be used simultaneously")
+
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)
@@ -76,6 +67,8 @@ class SummarizationModule(BaseTransformer):
         pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = 0
         self.metrics = defaultdict(list)
+        self.model_type = self.config.model_type
+        self.vocab_size = self.config.tgt_vocab_size if self.model_type == "fsmt" else self.config.vocab_size
 
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
@@ -96,7 +89,6 @@ class SummarizationModule(BaseTransformer):
         }
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
-
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
@@ -122,14 +114,18 @@ class SummarizationModule(BaseTransformer):
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        try:
-            freeze_params(self.model.model.shared)
+        if self.model_type == "t5":
+            freeze_params(self.model.shared)
+            for d in [self.model.encoder, self.model.decoder]:
+                freeze_params(d.embed_tokens)
+        elif self.model_type == "fsmt":
             for d in [self.model.model.encoder, self.model.model.decoder]:
                 freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
-        except AttributeError:
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
+        else:
+            freeze_params(self.model.model.shared)
+            for d in [self.model.model.encoder, self.model.model.decoder]:
+                freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
 
     def forward(self, input_ids, **kwargs):
@@ -156,7 +152,7 @@ class SummarizationModule(BaseTransformer):
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
 
-            assert lm_logits.shape[-1] == self.model.config.vocab_size
+            assert lm_logits.shape[-1] == self.vocab_size
             loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
@@ -175,6 +171,10 @@ class SummarizationModule(BaseTransformer):
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
         logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["labels"].ne(self.pad).sum()
+        logs["bs"] = batch["input_ids"].shape[0]
+        logs["src_pad_tok"] = batch["input_ids"].eq(self.pad).sum()
+        logs["src_pad_frac"] = batch["input_ids"].eq(self.pad).float().mean()
+        # TODO(SS): make a wandb summary metric for this
         return {"loss": loss_tensors[0], "log": logs}
 
     def validation_step(self, batch, batch_idx) -> Dict:
@@ -195,7 +195,7 @@ class SummarizationModule(BaseTransformer):
         losses.update(generative_metrics)
         all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         all_metrics["step_count"] = self.step_count
-        self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
+        self.metrics[prefix].append(all_metrics)  # callback writes this to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
         return {
             "log": all_metrics,
@@ -203,10 +203,6 @@ class SummarizationModule(BaseTransformer):
             f"{prefix}_loss": loss,
             f"{prefix}_{self.val_metric}": metric_tensor,
         }
-
-    def save_metrics(self, latest_metrics, type_path) -> None:
-        self.metrics[type_path].append(latest_metrics)
-        save_json(self.metrics, self.metrics_save_path)
 
     def calc_generative_metrics(self, preds, target) -> Dict:
         return calculate_rouge(preds, target)
@@ -253,20 +249,39 @@ class SummarizationModule(BaseTransformer):
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
-        sampler = None
-        if self.hparams.sortish_sampler and type_path == "train":
-            sampler = dataset.make_sortish_sampler(batch_size, distributed=self.hparams.gpus > 1)
-            shuffle = False
 
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            collate_fn=dataset.collate_fn,
-            shuffle=shuffle,
-            num_workers=self.num_workers,
-            sampler=sampler,
-        )
-        return dataloader
+        if self.hparams.sortish_sampler and type_path != "test":
+            sampler = dataset.make_sortish_sampler(batch_size, distributed=self.hparams.gpus > 1)
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=dataset.collate_fn,
+                shuffle=False,
+                num_workers=self.num_workers,
+                sampler=sampler,
+            )
+
+        elif self.hparams.max_tokens_per_batch is not None and type_path != "test":
+            batch_sampler = dataset.make_dynamic_sampler(
+                self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1
+            )
+            return DataLoader(
+                dataset,
+                batch_sampler=batch_sampler,
+                collate_fn=dataset.collate_fn,
+                # shuffle=False,
+                num_workers=self.num_workers,
+                # batch_size=None,
+            )
+        else:
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=dataset.collate_fn,
+                shuffle=shuffle,
+                num_workers=self.num_workers,
+                sampler=None,
+            )
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
@@ -313,6 +328,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
+        parser.add_argument("--max_tokens_per_batch", type=int, default=None)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")

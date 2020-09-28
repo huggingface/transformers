@@ -1,17 +1,17 @@
 Transformers
-================================================================================================================================================
+=======================================================================================================================
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose 
-architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural 
-Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between 
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
+architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural
+Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
 TensorFlow 2.0 and PyTorch.
 
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
 Features
----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
@@ -36,7 +36,7 @@ Choose the right framework for every part of a model's lifetime:
 - Seamlessly pick the right framework for training, evaluation, production
 
 Contents
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 The documentation is organized in five parts:
 
@@ -127,7 +127,7 @@ conversion utilities for the following models:
 23. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
     <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
 24. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_ (from Facebook) released with the paper  `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov,
-    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.  
+    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 25. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
     Cross-Modality Encoder Representations from Transformers for Open-Domain Question
     Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
@@ -137,7 +137,10 @@ conversion utilities for the following models:
 27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
     `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
     <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
-28. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+28. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with the paper
+    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+    <https://arxiv.org/abs/1912.13318>`_ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
+29. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -172,6 +175,7 @@ conversion utilities for the following models:
     converting_tensorflow_models
     migration
     contributing
+    testing
     serialization
 
 .. toctree::
@@ -222,9 +226,11 @@ conversion utilities for the following models:
     model_doc/dpr
     model_doc/pegasus
     model_doc/mbart
+    model_doc/fsmt
     model_doc/funnel
     model_doc/lxmert
     model_doc/bertgeneration
+    model_doc/layoutlm
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

@@ -116,19 +116,17 @@ def get_pairs(word):
 
 class CTRLTokenizer(PreTrainedTokenizer):
     """
-    Constructs a CTRL tokenizer. Peculiarities:
+    Construct a CTRL tokenizer. Based on Byte-Pair-Encoding.
 
-    - Byte-Pair-Encoding
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """

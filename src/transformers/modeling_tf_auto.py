@@ -448,14 +448,13 @@ class TFAutoModel(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModel
-            # Download configuration from S3 and cache.
-            config = TFAutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModel.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModel
+            >>> # Download configuration from S3 and cache.
+            >>> config = TFAutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModel.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_MAPPING.keys():
+            return TF_MODEL_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -494,9 +493,10 @@ class TFAutoModel(object):
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_MAPPING.keys():
+            return TF_MODEL_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -542,14 +542,13 @@ class TFAutoModelForPreTraining(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForPreTraining
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForPreTraining.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForPreTraining
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForPreTraining.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_PRETRAINING_MAPPING.keys():
+            return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -588,9 +587,10 @@ class TFAutoModelForPreTraining(object):
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_PRETRAINING_MAPPING.keys():
+            return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -642,10 +642,10 @@ class TFAutoModelWithLMHead(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelWithLMHead
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelWithLMHead.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelWithLMHead
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelWithLMHead.from_config(config)
         """
         warnings.warn(
             "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
@@ -653,9 +653,8 @@ class TFAutoModelWithLMHead(object):
             "and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
-        for config_class, model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_WITH_LM_HEAD_MAPPING.keys():
+            return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -701,10 +700,10 @@ class TFAutoModelWithLMHead(object):
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.items():
-            # Not using isinstance() here to do not take into account inheritance
-            if config_class == type(config):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_WITH_LM_HEAD_MAPPING.keys():
+            return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -750,14 +749,13 @@ class TFAutoModelForCausalLM:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForCausalLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('gpt2')
-            model = TFAutoModelForCausalLM.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForCausalLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('gpt2')
+            >>> model = TFAutoModelForCausalLM.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys():
+            return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -796,9 +794,10 @@ class TFAutoModelForCausalLM:
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys():
+            return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -844,14 +843,13 @@ class TFAutoModelForMaskedLM:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForMaskedLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForMaskedLM.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForMaskedLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForMaskedLM.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_MASKED_LM_MAPPING.keys():
+            return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -890,9 +888,10 @@ class TFAutoModelForMaskedLM:
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_MASKED_LM_MAPPING.keys():
+            return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -938,14 +937,13 @@ class TFAutoModelForSeq2SeqLM:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('t5')
-            model = TFAutoModelForSeq2SeqLM.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('t5')
+            >>> model = TFAutoModelForSeq2SeqLM.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
+            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -986,9 +984,10 @@ class TFAutoModelForSeq2SeqLM:
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
+            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1036,14 +1035,13 @@ class TFAutoModelForSequenceClassification(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForSequenceClassification
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForSequenceClassification.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForSequenceClassification
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForSequenceClassification.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
+            return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1084,9 +1082,10 @@ class TFAutoModelForSequenceClassification(object):
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
+            return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1133,14 +1132,13 @@ class TFAutoModelForQuestionAnswering(object):
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForQuestionAnswering
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForQuestionAnswering.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForQuestionAnswering
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForQuestionAnswering.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
+            return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1181,9 +1179,10 @@ class TFAutoModelForQuestionAnswering(object):
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
+            return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1230,14 +1229,13 @@ class TFAutoModelForTokenClassification:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForTokenClassification
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForTokenClassification.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForTokenClassification
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForTokenClassification.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
+            return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1278,9 +1276,10 @@ class TFAutoModelForTokenClassification:
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
+            return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1328,14 +1327,13 @@ class TFAutoModelForMultipleChoice:
 
         Examples::
 
-            from transformers import AutoConfig, TFAutoModelForMultipleChoice
-            # Download configuration from S3 and cache.
-            config = AutoConfig.from_pretrained('bert-base-uncased')
-            model = TFAutoModelForMultipleChoice.from_config(config)
+            >>> from transformers import AutoConfig, TFAutoModelForMultipleChoice
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForMultipleChoice.from_config(config)
         """
-        for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class(config)
+        if type(config) in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
+            return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)](config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1376,9 +1374,10 @@ class TFAutoModelForMultipleChoice:
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
-        for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
-            if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        if type(config) in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
+            return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
