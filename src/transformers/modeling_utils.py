@@ -398,6 +398,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     config_class = None
     base_model_prefix = ""
     authorized_missing_keys = None
+    authorized_unexpected_keys = None
     keys_to_never_save = None
 
     @property
@@ -1012,6 +1013,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             if cls.authorized_missing_keys is not None:
                 for pat in cls.authorized_missing_keys:
                     missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+            if cls.authorized_unexpected_keys is not None:
+                for pat in cls.authorized_unexpected_keys:
+                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
             if len(unexpected_keys) > 0:
                 logger.warning(

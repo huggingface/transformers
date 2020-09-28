@@ -16,6 +16,7 @@
 """TF general model utils."""
 import functools
 import os
+import re
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -233,6 +234,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     """
     config_class = None
     base_model_prefix = ""
+    authorized_missing_keys = None
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -629,6 +631,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         missing_keys = list(model_layer_names - hdf5_layer_names)
         unexpected_keys = list(hdf5_layer_names - model_layer_names)
         error_msgs = []
+
+        if cls.authorized_missing_keys is not None:
+            for pat in cls.authorized_missing_keys:
+                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
         if len(unexpected_keys) > 0:
             logger.warning(
