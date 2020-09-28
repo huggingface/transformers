@@ -313,10 +313,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
+          from the model when loading the model weights (and avoid unnecessary warnings).
+        - **authorized_unexpected_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
+          from the weights when loading the model weights (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
     authorized_missing_keys = None
+    authorized_unexpected_keys = None
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:

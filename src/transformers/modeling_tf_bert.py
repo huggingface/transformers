@@ -1027,6 +1027,8 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
+    authorized_unexpected_keys = [r"mlm___cls"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1076,7 +1078,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
-    authorized_unexpected_keys = [r"nsp___cls"]
+    authorized_unexpected_keys = [r"nsp___cls", r"mlm___cls"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1161,7 +1163,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     BERT_START_DOCSTRING,
 )
 class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
-    authorized_unexpected_keys = [r"nsp___cls"]
+    authorized_unexpected_keys = [r"nsp___cls", r"mlm___cls"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1289,7 +1291,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
-    authorized_unexpected_keys = [r"pooler", r"nsp___cls"]
+    authorized_unexpected_keys = [r"pooler", r"nsp___cls", r"mlm___cls"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1371,7 +1373,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     BERT_START_DOCSTRING,
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
-    authorized_unexpected_keys = [r"pooler", r"nsp___cls"]
+    authorized_unexpected_keys = [r"pooler", r"nsp___cls", r"mlm___cls"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
