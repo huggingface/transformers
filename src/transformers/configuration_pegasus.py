@@ -38,13 +38,13 @@ DEFAULTS = dict(
     pad_token_id=0,
     eos_token_id=1,
     is_encoder_decoder=True,
-    normalize_before=True,
     scale_embedding=True,
     normalize_embedding=False,
     add_final_layer_norm=True,
     static_position_embeddings=True,
     num_beams=8,
     activation_function="relu",
+    layernorm_variant="prelayernorm",
 )
 # Config values that vary between checkpoints: for testing and conversion
 task_specific_params = {

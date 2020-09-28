@@ -137,6 +137,7 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
+        do_blenderbot_90_layernorm=False,
         force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
@@ -174,7 +175,7 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-
+        self.do_blenderbot_90_layernorm = do_blenderbot_90_layernorm
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
@@ -194,7 +195,8 @@ class BartConfig(PretrainedConfig):
         self.classif_dropout = classifier_dropout
 
         # pos embedding offset
-        self.extra_pos_embeddings = self.pad_token_id + 1
+        self.extra_pos_embeddings = extra_pos_embeddings
+        # bart has a hack that offsets positional embeddings by 2, other models don't do do this
 
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
 
