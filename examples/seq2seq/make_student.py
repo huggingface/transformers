@@ -81,6 +81,8 @@ def create_student_by_copying_alternating_layers(
     e: Union[int, None] = None,
     d: Union[int, None] = None,
     copy_first_teacher_layers=False,
+    e_layers_to_copy=None,
+    d_layers_to_copy=None,
     **extra_config_kwargs
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
     """Make a student by copying alternating layers from a teacher, save it to save_path.
@@ -142,8 +144,10 @@ def create_student_by_copying_alternating_layers(
         return student, e_layers_to_copy, d_layers_to_copy
 
     # Decide which layers of the teacher to copy. Not exactly alternating -- we try to keep first and last layer.
-    e_layers_to_copy: List[int] = pick_layers_to_copy(e, teacher_e)
-    d_layers_to_copy: List[int] = pick_layers_to_copy(d, teacher_d)
+    if e_layers_to_copy is None:
+        e_layers_to_copy: List[int] = pick_layers_to_copy(e, teacher_e)
+    if d_layers_to_copy is None:
+        d_layers_to_copy: List[int] = pick_layers_to_copy(d, teacher_d)
 
     try:
         copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
