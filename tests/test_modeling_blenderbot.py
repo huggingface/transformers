@@ -31,10 +31,6 @@ if is_torch_available():
     from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotTokenizer
     from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
-    def _long_tensor(tok_lst):
-        return torch.tensor(tok_lst, dtype=torch.long, device=torch_device, requires_grad=False)
-
-
 TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
 FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
 

@@ -50,7 +50,10 @@ class BlenderbotConfig(BartConfig):
         attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
         relu_dropout: (:obj:`float`, default to 0.0), relu dropout
         vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
-        layernorm_variant: (obj: str, default to "prelayernorm") defines when to apply a layernorm
+        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
+            Call layernorm before attention ops. True for pegasus, mbart, blenderbot-3B
+        do_blenderbot_90_layernorm (:obj:`bool`, optional, defaults to :obj:`False`):
+           blenderbot-90 calls layernorm_embedding one line earlier. see https://tinyurl.com/y66r9gnh
         init_std: (obj: float, default to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         is_encoder_decoder: (obj:`boolean`, default to True)
         pad_token_id: (obj:`int`, default to 1): token id used to pad sequences.

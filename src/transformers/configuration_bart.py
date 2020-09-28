@@ -68,7 +68,9 @@ BART_CONFIG_ARGS_DOC = r"""
         add_bias_logits (:obj:`bool`, optional, defaults to :obj:`False`):
             True for marian only.
         normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
-            Call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
+            Call layernorm before attention ops. True for pegasus, mbart, blenderbot-3B.
+        do_blenderbot_90_layernorm (:obj:`bool`, optional, defaults to :obj:`False`):
+           blenderbot-90 calls layernorm_embedding one line earlier. see https://tinyurl.com/y66r9gnh
         normalize_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
             Call layernorm after embeddings. Only True for Bart.
         static_position_embeddings (:obj:`bool`, optional, defaults to :obj:`False`):

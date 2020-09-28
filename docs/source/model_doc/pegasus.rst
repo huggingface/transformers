@@ -96,7 +96,7 @@ As of Aug 10, 2020, they are:
     pad_token_id=0,
     eos_token_id=1,
     is_encoder_decoder=True,
-    variant='prelayernorm',
+    normalize_before=True,
     scale_embedding=True,
     normalize_embedding=False,
     add_final_layer_norm=True,
