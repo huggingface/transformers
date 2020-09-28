@@ -707,8 +707,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         missing_keys, unexpected_keys = detect_tf_missing_unexpected_layers(model, resolved_archive_file)
 
         if cls.authorized_missing_keys is not None:
-                for pat in cls.authorized_missing_keys:
-                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+            for pat in cls.authorized_missing_keys:
+                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+        
+        if cls.authorized_unexpected_keys is not None:
+            for pat in cls.authorized_unexpected_keys:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
         if len(unexpected_keys) > 0:
             logger.warning(
@@ -736,7 +740,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         if output_loading_info:
-            loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+            loading_info = {"missing_keys": missing_keys, "unexpected_layers_weights": unexpected_keys}
 
             return model, loading_info
 
