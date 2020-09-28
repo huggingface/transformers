@@ -67,6 +67,8 @@ BART_CONFIG_ARGS_DOC = r"""
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         add_bias_logits (:obj:`bool`, optional, defaults to :obj:`False`):
             True for marian only.
+        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
+            Call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
         normalize_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
             Call layernorm after embeddings. Only True for Bart.
         static_position_embeddings (:obj:`bool`, optional, defaults to :obj:`False`):
@@ -95,16 +97,6 @@ BART_CONFIG_ARGS_DOC = r"""
             Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
 
 """
-
-
-MODELTYPE_TO_LN_VARIANT = {
-    "bart": "bart",
-    "pegasus": "prelayernorm",
-    "mbart": "prelayernorm",
-    "marian": "bart",
-    # blenderbot-3B -> "prelayernorm",
-    # blenderbot-90 -> "xlm",
-}
 
 
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
@@ -139,12 +131,13 @@ class BartConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        normalize_before=False,
         add_final_layer_norm=False,
         scale_embedding=False,
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
-        variant=None,
+        do_blenderbot_90_layernorm=False,
         force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
@@ -182,16 +175,11 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-        if variant is not None:
-            self.variant = variant
-        else:
-            self.variant = MODELTYPE_TO_LN_VARIANT[self.model_type]
-        # True for bart, mbart. Irrelevant for marian, pegasus. False for Blenderbot-3B, blenderbot-90M
-        self.norm_embed_before: bool = (self.variant != "prelayernorm") or (self.model_type == "mbart")
-
+        self.do_blenderbot_90_layernorm = do_blenderbot_90_layernorm
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.normalize_embedding = normalize_embedding  # True for mbart and blenderbot
+        self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
+        self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
 
         # Params introduced for Marian
@@ -222,8 +210,8 @@ class BartConfig(PretrainedConfig):
 
     def is_valid_mbart(self) -> bool:
         """Is the configuration aligned with the MBART paper."""
-        if self.variant == "prelayernorm" and self.add_final_layer_norm and self.scale_embedding:
+        if self.normalize_before and self.add_final_layer_norm and self.scale_embedding:
             return True
-        if self.variant == "prelayernorm" or self.add_final_layer_norm or self.scale_embedding:
+        if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False

@@ -44,7 +44,7 @@ DEFAULTS = dict(
     static_position_embeddings=True,
     num_beams=8,
     activation_function="relu",
-    variant="prelayernorm",
+    layernorm_variant="prelayernorm",
 )
 # Config values that vary between checkpoints: for testing and conversion
 task_specific_params = {

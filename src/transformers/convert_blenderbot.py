@@ -57,6 +57,20 @@ def rename_state_dict_key(k):
     return k
 
 
+def rename_layernorm_keys(sd):
+    keys = [
+        "model.encoder.layernorm_embedding.weight",
+        "model.encoder.layernorm_embedding.bias",
+        "model.decoder.layernorm_embedding.weight",
+        "model.decoder.layernorm_embedding.bias",
+    ]
+    for k in keys:
+        v = sd.pop(k)
+        new_k = k.replace("layernorm_embedding", "layer_norm")
+        assert new_k not in sd
+        sd[new_k] = v
+
+
 IGNORE_KEYS = ["START"]
 
 
@@ -81,6 +95,8 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
             failures.append([k, new_k])
         else:
             mapping[new_k] = v
+    if cfg.layernorm_variant == "prelayernorm":
+        rename_layernorm_keys(sd)
     m.model.load_state_dict(mapping, strict=True)
     m.half()
     m.save_pretrained(pytorch_dump_folder_path)

@@ -54,7 +54,7 @@ RAG_CONFIG_DOC = r"""
             A path to text passages compatible with the faiss index. Required if using
             :class:`~transformers.retrieval_rag.LegacyIndex`
         use_dummy_dataset (:obj:`bool`, `optional`, defaults to ``False``)
-            Whether to load a "dummy" variant of the dataset specified by :obj:`dataset`.
+            Whether to load a "dummy" layernorm_variant of the dataset specified by :obj:`dataset`.
         label_smoothing (:obj:`float`, `optional`, defaults to 0.0):
             Only relevant if ``return_loss`` is set to :obj:`True`. Controls the ``epsilon`` parameter value for label
             smoothing in the loss calculation. If set to 0, no label smoothing is performed.
