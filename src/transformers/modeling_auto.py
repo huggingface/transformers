@@ -48,6 +48,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -183,6 +184,7 @@ from .modeling_xlm import (
     XLMModel,
     XLMWithLMHeadModel,
 )
+from .modeling_xlm_prophetnet import XLMProphetNetForConditionalGeneration, XLMProphetNetModel
 from .modeling_xlm_roberta import (
     XLMRobertaForCausalLM,
     XLMRobertaForMaskedLM,
@@ -235,6 +237,7 @@ MODEL_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationEncoder),
         (DPRConfig, DPRQuestionEncoder),
         (ProphetNetConfig, ProphetNetModel),
+        (XLMProphetNetConfig, XLMProphetNetModel),
     ]
 )
 
@@ -344,6 +347,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ProphetNetConfig, ProphetNetForConditionalGeneration),
+        (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),
     ]
 )
 

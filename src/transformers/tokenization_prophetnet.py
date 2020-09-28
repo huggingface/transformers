@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import logging
+import os
 from typing import List, Optional
 
-from .tokenization_bert import BertTokenizer
+from .tokenization_bert import BasicTokenizer, WordpieceTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -28,120 +29,240 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/prophetnet-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/prophetnet-large-uncased/prophetnet.tokenizer",
-        "microsoft/xprophetnet-large-wiki100-cased": "https://cdn.huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer",
     }
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
     "microsoft/prophetnet-large-uncased": {"do_lower_case": True, "xprophetnet_tokenizer": False},
-    "microsoft/xprophetnet-large-wiki100-cased": {"do_lower_case": False, "xprophetnet_tokenizer": True},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/prophetnet-large-uncased": 512,
-    "microsoft/xprophetnet-large-wiki100-cased": 512,
 }
+
+
+def load_vocab(vocab_file):
+    """Loads a vocabulary file into a dictionary."""
+    vocab = collections.OrderedDict()
+    with open(vocab_file, "r", encoding="utf-8") as reader:
+        tokens = reader.readlines()
+    for index, token in enumerate(tokens):
+        token = token.rstrip("\n")
+        vocab[token] = index
+    return vocab
 
 
 class ProphetNetTokenizer(PreTrainedTokenizer):
     r"""
-    ProphetNet inherit from BERT-tokenizer, xProphetNet  inherit from XLMR-tokenizer
+    Construct a ProphetNetTokenizer. Based on WordPiece.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            File containing the vocabulary.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to lowercase the input when tokenizing.
+        do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to do basic tokenization before WordPiece.
+        never_split (:obj:`Iterable`, `optional`):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
+            :obj:`do_basic_tokenize=True`
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to tokenize Chinese characters.
+
+            This should likely be deactivated for Japanese (see this `issue
+            <https://github.com/huggingface/transformers/issues/328>`__).
+        strip_accents: (:obj:`bool`, `optional`):
+            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
+            value for :obj:`lowercase` (as in the original BERT).
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES  # default english version rather than cross-lingual version.
+    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __new__(cls, **kwargs):
-        xprophetnet_tokenizer = (
-            False if "xprophetnet_tokenizer" not in kwargs.keys() else kwargs["xprophetnet_tokenizer"]
-        )
-        if xprophetnet_tokenizer:
-            super_class = XLMRobertaTokenizer
-        else:
-            super_class = BertTokenizer
-        cls = type(cls.__name__, (cls, super_class), {})
-        return super(ProphetNetTokenizer, cls).__new__(cls)
-
     def __init__(
         self,
         vocab_file,
-        xprophetnet_tokenizer=False,
-        do_lower_case=None,
-        do_basic_tokenize=None,
+        do_lower_case=True,
+        do_basic_tokenize=True,
         never_split=None,
-        unk_token=None,
-        sep_token=None,
-        pad_token=None,
-        cls_token=None,
-        mask_token=None,
-        tokenize_chinese_chars=None,
-        bos_token=None,
-        eos_token=None,
+        unk_token="[UNK]",
+        sep_token="[SEP]",
+        x_sep_token="[X_SEP]",
+        pad_token="[PAD]",
+        mask_token="[MASK]",
+        tokenize_chinese_chars=True,
+        strip_accents=None,
         **kwargs
     ):
-        if not xprophetnet_tokenizer:
-            # inherit from BERT tokenizer
-            do_lower_case = True if do_lower_case is None else do_lower_case
-            do_basic_tokenize = True if do_lower_case is None else do_basic_tokenize
-            unk_token = "[UNK]" if unk_token is None else unk_token
-            sep_token = "[SEP]" if sep_token is None else sep_token
-            pad_token = "[PAD]" if pad_token is None else pad_token
-            cls_token = "[SEP]" if cls_token is None else cls_token
-            mask_token = "[MASK]" if mask_token is None else mask_token
-            tokenize_chinese_chars = True if tokenize_chinese_chars is None else tokenize_chinese_chars
-            super(ProphetNetTokenizer, self).__init__(
-                vocab_file=vocab_file,
-                do_lower_case=do_lower_case,
-                do_basic_tokenize=do_basic_tokenize,
-                never_split=never_split,
-                unk_token=unk_token,
-                sep_token=sep_token,
-                pad_token=pad_token,
-                cls_token=cls_token,
-                mask_token=mask_token,
-                tokenize_chinese_chars=tokenize_chinese_chars,
-                xprophetnet_tokenizer=False,
-                **kwargs,
-            )
-            self.unique_no_split_tokens.append("[X_SEP]")
-        else:
-            # inherit from XLM-R tokenizer
-            bos_token = "[SEP]" if bos_token is None else bos_token
-            eos_token = "[SEP]" if eos_token is None else eos_token
-            sep_token = "[SEP]" if sep_token is None else sep_token
-            cls_token = "[SEP]" if cls_token is None else cls_token
-            unk_token = "[UNK]" if unk_token is None else unk_token
-            pad_token = "[PAD]" if pad_token is None else pad_token
-            mask_token = "[MASK]" if mask_token is None else mask_token
-            super(ProphetNetTokenizer, self).__init__(
-                vocab_file=vocab_file,
-                bos_token=bos_token,
-                eos_token=eos_token,
-                sep_token=sep_token,
-                cls_token=cls_token,
-                unk_token=unk_token,
-                pad_token=pad_token,
-                mask_token=mask_token,
-                xprophetnet_tokenizer=True,
-                **kwargs,
-            )
-            # Original fairseq vocab and spm vocab must be "aligned":
-            # model    | '[PAD]'   | '[CLS]' | '<SEP>' | '[UNK]' | '[MASK]' | '[unused1]' | ......... | '[unused9]'  | ',' | '▁'
-            # spm      | '<unk>'   | '<s>'   | '</s>'  | ','     | '.'   | '▁'  | 's' | '▁de'  | '-'   | '▁a'
-            # put special tokens and [unused] tokens into the vocab
-            self.fairseq_tokens_to_ids = {"[PAD]": 0, "[CLS]": 1, "[SEP]": 2, "[UNK]": 3, "[MASK]": 4}
-            for i in range(10):
-                tok = "[unused{}]".format(i)
-                self.fairseq_tokens_to_ids[tok] = 5 + i
+        super().__init__(
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            x_sep_token=x_sep_token,
+            **kwargs,
+        )
+        self.unique_no_split_tokens.append(x_sep_token)
 
-            # The first "real" token "," has position 15 in the embedding vocab and position 3 in the spm vocab
-            self.fairseq_offset = 12
-            self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-            for k in self.fairseq_tokens_to_ids.keys():
-                self.unique_no_split_tokens.append(k)
-        self.xprophetnet_tokenizer = xprophetnet_tokenizer
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = ProphetNetTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+            )
+        self.vocab = load_vocab(vocab_file)
+        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.do_basic_tokenize = do_basic_tokenize
+        if do_basic_tokenize:
+            self.basic_tokenizer = BasicTokenizer(
+                do_lower_case=do_lower_case,
+                never_split=never_split,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                strip_accents=strip_accents,
+            )
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+
+    @property
+    def vocab_size(self):
+        return len(self.vocab)
+
+    def get_vocab(self):
+        return dict(self.vocab, **self.added_tokens_encoder)
+
+    def _tokenize(self, text):
+        split_tokens = []
+        if self.do_basic_tokenize:
+            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
+
+                # If the token is part of the never_split set
+                if token in self.basic_tokenizer.never_split:
+                    split_tokens.append(token)
+                else:
+                    split_tokens += self.wordpiece_tokenizer.tokenize(token)
+        else:
+            split_tokens = self.wordpiece_tokenizer.tokenize(text)
+        return split_tokens
+
+    def _convert_token_to_id(self, token):
+        """ Converts a token (str) in an id using the vocab. """
+        return self.vocab.get(token, self.vocab.get(self.unk_token))
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.ids_to_tokens.get(index, self.unk_token)
+
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        out_string = " ".join(tokens).replace(" ##", "").strip()
+        return out_string
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` method.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formated with special tokens for the model."
+                )
+            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+
+        if token_ids_1 is not None:
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1]
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A ProphetNet sequence pair mask has the following format:
+
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        sep = [self.sep_token_id]
+        if token_ids_1 is None:
+            return len(token_ids_0 + sep) * [0]
+        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    def save_vocabulary(self, vocab_path):
+        """
+        Save the vocabulary (copy original file) and special tokens file to a directory.
+
+        Args:
+            vocab_path (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
+        index = 0
+        if os.path.isdir(vocab_path):
+            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["vocab_file"])
+        else:
+            vocab_file = vocab_path
+        with open(vocab_file, "w", encoding="utf-8") as writer:
+            for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning(
+                        "Saving vocabulary to {}: vocabulary indices are not consecutive."
+                        " Please check that the vocabulary is not corrupted!".format(vocab_file)
+                    )
+                    index = token_index
+                writer.write(token + "\n")
+                index += 1
+        return (vocab_file,)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -149,22 +270,21 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A ProphetNet sequence has the following format:
+        A BERT sequence has the following format:
 
-        - single sequence: ``[SEP] X [SEP]``
-        - pair of sequences: ``[SEP] A [SEP] B [SEP]``
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-
         if token_ids_1 is None:
-            return [self.sep_token_id] + token_ids_0 + [self.sep_token_id]
+            return token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
-        return sep + token_ids_0 + sep + token_ids_1 + sep
+        return token_ids_0 + sep + token_ids_1 + sep

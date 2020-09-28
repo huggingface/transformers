@@ -49,6 +49,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -77,8 +78,8 @@ from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_pegasus import PegasusTokenizer
-from .tokenization_prophetnet import ProphetNetTokenizer
 from .tokenization_phobert import PhobertTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 from .tokenization_rag import RagTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
@@ -86,6 +87,7 @@ from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
+from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 from .utils import logging
@@ -130,6 +132,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
+        (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
     ]
 )
 

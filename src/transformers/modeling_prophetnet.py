@@ -47,13 +47,11 @@ _TOKENIZER_FOR_DOC = "ProphetNetTokenizer"
 
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/prophetnet-large-uncased",
-    "microsoft/xprophetnet-large-wiki100-cased",
     # See all ProphetNet models at https://huggingface.co/models?filter=prophetnet
 ]
 
 
 PROPHETNET_START_DOCSTRING = r"""
-
     Model and checkpoints are converted from ProphetNet and xProphetNet original Fairseq version repo. 
     Details can be found from <https://github.com/microsoft/ProphetNet>
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
@@ -63,7 +61,6 @@ PROPHETNET_START_DOCSTRING = r"""
         config (:class:`~transformers.ProphetNetConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-
 """
 PROPHETNET_GENERATION_EXAMPLE = r"""
     ProphetNet Summarization example::
@@ -431,9 +428,9 @@ class ProphetNetEncoder(nn.Module):
 
     def forward(self, input_ids, attention_mask=None, output_attentions=False, return_dict=False):
         # remove bos to be consistent with fairseq version
-        input_ids = input_ids[:, 1:]
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, 1:]
+        #        input_ids = input_ids[:, 1:]
+        #        if attention_mask is not None:
+        #            attention_mask = attention_mask[:, 1:]
 
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)

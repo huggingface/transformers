@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/prophetnet-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/prophetnet-large-uncased/config.json",
-    "microsoft/xprophetnet-large-wiki100-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/xprophetnet-large-wiki100-cased/config.json",
 }
 
 

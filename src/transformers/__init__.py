@@ -197,6 +197,7 @@ from .tokenization_utils_base import (
 )
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
+from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
@@ -425,7 +426,12 @@ if is_torch_available():
         load_tf_weights_in_openai_gpt,
     )
     from .modeling_pegasus import PegasusForConditionalGeneration
-    from .modeling_prophetnet import ProphetNetForConditionalGeneration, ProphetNetModel, ProphetNetPreTrainedModel
+    from .modeling_prophetnet import (
+        PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ProphetNetForConditionalGeneration,
+        ProphetNetModel,
+        ProphetNetPreTrainedModel,
+    )
     from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
     from .modeling_reformer import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -474,6 +480,11 @@ if is_torch_available():
         XLMModel,
         XLMPreTrainedModel,
         XLMWithLMHeadModel,
+    )
+    from .modeling_xlm_prophetnet import (
+        XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLMProphetNetForConditionalGeneration,
+        XLMProphetNetModel,
     )
     from .modeling_xlm_roberta import (
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
