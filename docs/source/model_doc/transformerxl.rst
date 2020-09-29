@@ -47,13 +47,6 @@ TransfoXLTokenizer
     :members: save_vocabulary
 
 
-TransfoXLTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.TransfoXLTokenizerFast
-    :members:
-
-
 TransfoXL specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -166,7 +166,7 @@ from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer, T5TokenizerFast
-from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
+from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     BatchEncoding,

@@ -2,12 +2,7 @@ from typing import Dict, List, Tuple
 
 from sentencepiece import SentencePieceProcessor
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
-from tokenizers.models import BPE, Unigram, WordPiece
-from tokenizers.normalizers import NFKD, Lowercase, Precompiled, Replace, Sequence, StripAccents
-from tokenizers.pre_tokenizers import Metaspace
-from tokenizers.pre_tokenizers import Sequence as PSequence
-from tokenizers.pre_tokenizers import WhitespaceSplit
-from tokenizers.processors import TemplateProcessing
+from tokenizers.models import BPE, Unigram, WordPiece, WordLevel
 
 # from transformers.tokenization_openai import OpenAIGPTTokenizer
 from transformers.utils import sentencepiece_model_pb2 as model
@@ -225,7 +220,7 @@ class SpmConverter(Converter):
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        return Precompiled(precompiled_charsmap)
+        return normalizers.Precompiled(precompiled_charsmap)
 
     def post_processor(self):
         return None
@@ -238,10 +233,10 @@ class SpmConverter(Converter):
 
         replacement = "▁"
         add_prefix_space = True
-        tokenizer.pre_tokenizer = PSequence(
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
-                WhitespaceSplit(),
-                Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
             ]
         )
         tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
@@ -260,19 +255,19 @@ class AlbertConverter(SpmConverter):
         ]
 
     def normalizer(self, proto):
-        normalizers = [Replace("``", '"'), Replace("''", '"')]
+        list_normalizers = [normalizers.Replace("``", '"'), normalizers.Replace("''", '"')]
         if not self.original_tokenizer.keep_accents:
-            normalizers.append(NFKD())
-            normalizers.append(StripAccents())
+            list_normalizers.append(normalizers.NFKD())
+            list_normalizers.append(normalizers.StripAccents())
         if self.original_tokenizer.do_lower_case:
-            normalizers.append(Lowercase())
+            list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        normalizers.append(Precompiled(precompiled_charsmap))
-        return Sequence(normalizers)
+        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["[CLS]", "$0", "[SEP]"],
             seq_b=["$1", "[SEP]"],
             special_tokens=[
@@ -300,7 +295,7 @@ class CamembertConverter(SpmConverter):
         return 3
 
     def post_processor(self):
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["<s>", "$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[
@@ -353,7 +348,7 @@ class MBartConverter(SpmConverter):
         return 3
 
     def post_processor(self):
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["$0", "</s>", "en_XX"],
             seq_b=["$1", "</s>"],
             special_tokens=[
@@ -380,7 +375,7 @@ class XLMRobertaConverter(SpmConverter):
         return unk_id
 
     def post_processor(self):
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["<s>", "$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[
@@ -398,19 +393,19 @@ class XLNetConverter(SpmConverter):
         ]
 
     def normalizer(self, proto):
-        normalizers = [Replace("``", '"'), Replace("''", '"')]
+        list_normalizers = [normalizers.Replace("``", '"'), normalizers.Replace("''", '"')]
         if not self.original_tokenizer.keep_accents:
-            normalizers.append(NFKD())
-            normalizers.append(StripAccents())
+            list_normalizers.append(normalizers.NFKD())
+            list_normalizers.append(normalizers.StripAccents())
         if self.original_tokenizer.do_lower_case:
-            normalizers.append(Lowercase())
+            list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        normalizers.append(Precompiled(precompiled_charsmap))
-        return Sequence(normalizers)
+        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["$0", "<sep>", "<cls>"],
             seq_b=["$1", "<sep>"],
             special_tokens=[
@@ -441,7 +436,7 @@ class PegasusConverter(SpmConverter):
 
     def post_processor(self):
         eos = self.original_tokenizer.eos_token
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["$0", eos],
             seq_b=["$1", eos],
             special_tokens=[
@@ -459,7 +454,7 @@ class T5Converter(SpmConverter):
         return vocab
 
     def post_processor(self):
-        return TemplateProcessing(
+        return processors.TemplateProcessing(
             seq_a=["$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[

@@ -66,7 +66,7 @@ from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
-from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
+from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
@@ -97,7 +97,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
-        (TransfoXLConfig, (TransfoXLTokenizer, TransfoXLTokenizerFast)),
+        (TransfoXLConfig, (TransfoXLTokenizer, None)),
         (XLNetConfig, (XLNetTokenizer, None)),
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
