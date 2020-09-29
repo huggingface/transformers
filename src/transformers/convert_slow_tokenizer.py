@@ -60,17 +60,17 @@ class BertConverter(Converter):
         vocab = self.original_tokenizer.vocab
         tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
 
-        # Let the tokenizer know about special tokens if they are part of the vocab
-        if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
-            tokenizer.add_special_tokens([str(self.original_tokenizer.unk_token)])
-        if tokenizer.token_to_id(str(self.original_tokenizer.sep_token)) is not None:
-            tokenizer.add_special_tokens([str(self.original_tokenizer.sep_token)])
-        if tokenizer.token_to_id(str(self.original_tokenizer.cls_token)) is not None:
-            tokenizer.add_special_tokens([str(self.original_tokenizer.cls_token)])
-        if tokenizer.token_to_id(str(self.original_tokenizer.pad_token)) is not None:
-            tokenizer.add_special_tokens([str(self.original_tokenizer.pad_token)])
-        if tokenizer.token_to_id(str(self.original_tokenizer.mask_token)) is not None:
-            tokenizer.add_special_tokens([str(self.original_tokenizer.mask_token)])
+        # # Let the tokenizer know about special tokens if they are part of the vocab
+        # if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.unk_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.sep_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.sep_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.cls_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.cls_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.pad_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.pad_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.mask_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.mask_token)])
 
         tokenize_chinese_chars = False
         strip_accents = False
@@ -88,16 +88,69 @@ class BertConverter(Converter):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
 
-        sep_token_id = tokenizer.token_to_id(str(self.original_tokenizer.sep_token))
-        if sep_token_id is None:
-            raise TypeError("sep_token not found in the vocabulary")
-        cls_token_id = tokenizer.token_to_id(str(self.original_tokenizer.cls_token))
-        if cls_token_id is None:
-            raise TypeError("cls_token not found in the vocabulary")
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
 
-        tokenizer.post_processor = processors.BertProcessing(
-            (str(self.original_tokenizer.sep_token), sep_token_id),
-            (str(self.original_tokenizer.cls_token), cls_token_id),
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+        tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
+class FunnelConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+
+        # # Let the tokenizer know about special tokens if they are part of the vocab
+        # if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.unk_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.sep_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.sep_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.cls_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.cls_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.pad_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.pad_token)])
+        # if tokenizer.token_to_id(str(self.original_tokenizer.mask_token)) is not None:
+        #     tokenizer.add_special_tokens([str(self.original_tokenizer.mask_token)])
+
+        tokenize_chinese_chars = False
+        strip_accents = False
+        do_lower_case = False
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
+            tokenize_chinese_chars = self.original_tokenizer.basic_tokenizer.tokenize_chinese_chars
+            strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
+            do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
+
+        tokenizer.normalizer = normalizers.BertNormalizer(
+            clean_text=True,
+            handle_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:2 $A:0 {sep}:0",  # token_type_id is 2 for Funnel transformer
+            pair=f"{cls}:2 $A:0 {sep}:0 $B:1 {sep}:1",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -268,11 +321,11 @@ class AlbertConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            seq_a=["[CLS]", "$0", "[SEP]"],
-            seq_b=["$1", "[SEP]"],
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
             special_tokens=[
-                ("[CLS]", self.original_tokenizer.get_vocab()["[CLS]"]),
-                ("[SEP]", self.original_tokenizer.get_vocab()["[SEP]"]),
+                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
+                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
             ],
         )
 
@@ -296,11 +349,11 @@ class CamembertConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            seq_a=["<s>", "$0", "</s>"],
-            seq_b=["$1", "</s>"],
+            single=["<s>", "$0", "</s>"],
+            pair=["<s>", "$0", "</s>", "$1", "</s>"],
             special_tokens=[
-                ("<s>", self.original_tokenizer.get_vocab()["<s>"]),
-                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
 
@@ -349,11 +402,11 @@ class MBartConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            seq_a=["$0", "</s>", "en_XX"],
-            seq_b=["$1", "</s>"],
+            single=["$0", "</s>", "en_XX"],
+            pair=["$0", "</s>", "en_XX", "$1", "</s>"],
             special_tokens=[
-                ("en_XX", self.original_tokenizer.get_vocab()["en_XX"]),
-                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
+                ("en_XX", self.original_tokenizer.convert_tokens_to_ids("en_XX")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
 
@@ -376,11 +429,11 @@ class XLMRobertaConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            seq_a=["<s>", "$0", "</s>"],
-            seq_b=["$1", "</s>"],
+            single=["<s>", "$0", "</s>"],
+            pair=["<s>", "$0", "</s>", "$1", "</s>"],
             special_tokens=[
-                ("<s>", self.original_tokenizer.get_vocab()["<s>"]),
-                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
 
@@ -406,11 +459,11 @@ class XLNetConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            seq_a=["$0", "<sep>", "<cls>"],
-            seq_b=["$1", "<sep>"],
+            single=["$0", "<sep>", "<cls>"],
+            pair=["$0", "<sep>", "<cls>", "$1", "<sep>"],
             special_tokens=[
-                ("<sep>", self.original_tokenizer.get_vocab()["<sep>"]),
-                ("<cls>", self.original_tokenizer.get_vocab()["<cls>"]),
+                ("<sep>", self.original_tokenizer.convert_tokens_to_ids("<sep>")),
+                ("<cls>", self.original_tokenizer.convert_tokens_to_ids("<cls>")),
             ],
         )
 
@@ -437,10 +490,10 @@ class PegasusConverter(SpmConverter):
     def post_processor(self):
         eos = self.original_tokenizer.eos_token
         return processors.TemplateProcessing(
-            seq_a=["$0", eos],
-            seq_b=["$1", eos],
+            single=["$0", eos],
+            pair=["$0", eos, "$1", eos],
             special_tokens=[
-                (eos, self.original_tokenizer.get_vocab()[eos]),
+                (eos, self.original_tokenizer.convert_tokens_to_ids(eos)),
             ],
         )
 
@@ -457,7 +510,7 @@ class T5Converter(SpmConverter):
             seq_a=["$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[
-                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
 
@@ -471,7 +524,7 @@ CONVERTERS = {
     "DPRReaderTokenizer": BertConverter,
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
-    "FunnelTokenizer": BertConverter,
+    "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "LxmertTokenizer": BertConverter,
     "MBartTokenizer": MBartConverter,

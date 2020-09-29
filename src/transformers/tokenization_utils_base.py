@@ -1317,7 +1317,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
-        self.deprecation_warnings = {}  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
+        self.deprecation_warnings = (
+            {}
+        )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
 
         super().__init__(**kwargs)
 
@@ -1351,11 +1353,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def max_len_single_sentence(self, value) -> int:
         # For backward compatibility, allow to try to setup 'max_len_single_sentence'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
-            if not self.deprecation_warnings.get('max_len_single_sentence', False):
+            if not self.deprecation_warnings.get("max_len_single_sentence", False):
                 logger.warning(
                     "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
                 )
-            self.deprecation_warnings['max_len_single_sentence'] = True
+            self.deprecation_warnings["max_len_single_sentence"] = True
         else:
             raise ValueError(
                 "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
@@ -1365,11 +1367,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def max_len_sentences_pair(self, value) -> int:
         # For backward compatibility, allow to try to setup 'max_len_sentences_pair'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
-            if not self.deprecation_warnings.get('max_len_sentences_pair', False):
+            if not self.deprecation_warnings.get("max_len_sentences_pair", False):
                 logger.warning(
                     "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
                 )
-            self.deprecation_warnings['max_len_sentences_pair'] = True
+            self.deprecation_warnings["max_len_sentences_pair"] = True
         else:
             raise ValueError(
                 "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
@@ -1809,7 +1811,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If you only set max_length, it activates truncation for max_length
         if max_length is not None and padding is False and truncation is False:
             if verbose:
-                if not self.deprecation_warnings.get('Truncation-not-explicitely-activated', False):
+                if not self.deprecation_warnings.get("Truncation-not-explicitely-activated", False):
                     logger.warning(
                         "Truncation was not explicitely activated but `max_length` is provided a specific value, "
                         "please use `truncation=True` to explicitely truncate examples to max length. "
@@ -1817,7 +1819,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         "If you encode pairs of sequences (GLUE-style) with the tokenizer you can select this strategy "
                         "more precisely by providing a specific strategy to `truncation`."
                     )
-                self.deprecation_warnings['Truncation-not-explicitely-activated'] = True
+                self.deprecation_warnings["Truncation-not-explicitely-activated"] = True
             truncation = "longest_first"
 
         # Get padding strategy
@@ -1873,12 +1875,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if padding_strategy == PaddingStrategy.MAX_LENGTH:
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
-                        if not self.deprecation_warnings.get('Asking-to-pad-to-max_length', False):
+                        if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
                             logger.warning(
                                 "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
                                 "Default to no padding."
                             )
-                        self.deprecation_warnings['Asking-to-pad-to-max_length'] = True
+                        self.deprecation_warnings["Asking-to-pad-to-max_length"] = True
                     padding_strategy = PaddingStrategy.DO_NOT_PAD
                 else:
                     max_length = self.model_max_length
@@ -1886,12 +1888,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
-                        if not self.deprecation_warnings.get('Asking-to-truncate-to-max_length', False):
+                        if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
                             logger.warning(
                                 "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
                                 "Default to no truncation."
                             )
-                        self.deprecation_warnings['Asking-to-truncate-to-max_length'] = True
+                        self.deprecation_warnings["Asking-to-truncate-to-max_length"] = True
                     truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
                 else:
                     max_length = self.model_max_length
@@ -2542,13 +2544,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Check lengths
         if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
-            if not self.deprecation_warnings.get('sequence-length-is-longer-than-the-specified-maximum', False):
+            if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
                 logger.warning(
                     "Token indices sequence length is longer than the specified maximum sequence length "
                     "for this model ({} > {}). Running this sequence through the model will result in "
                     "indexing errors".format(len(encoded_inputs["input_ids"]), self.model_max_length)
                 )
-            self.deprecation_warnings['sequence-length-is-longer-than-the-specified-maximum'] = True
+            self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:

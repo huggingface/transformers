@@ -1,26 +1,49 @@
 import logging
+import shutil
+import tempfile
 import unittest
 from collections import namedtuple
 from itertools import takewhile
-import tempfile
-import shutil
 
 from transformers import (
     AlbertTokenizer,
     AlbertTokenizerFast,
+    BartTokenizer,
+    BartTokenizerFast,
     BertTokenizer,
     BertTokenizerFast,
+    CamembertTokenizer,
+    CamembertTokenizerFast,
     DistilBertTokenizer,
     DistilBertTokenizerFast,
+    DPRContextEncoderTokenizer,
+    DPRContextEncoderTokenizerFast,
+    DPRQuestionEncoderTokenizer,
+    DPRQuestionEncoderTokenizerFast,
+    DPRReaderTokenizer,
+    DPRReaderTokenizerFast,
+    FunnelTokenizer,
+    FunnelTokenizerFast,
     GPT2Tokenizer,
     GPT2TokenizerFast,
+    LxmertTokenizer,
+    LxmertTokenizerFast,
+    MBartTokenizer,
+    MBartTokenizerFast,
     OpenAIGPTTokenizer,
     OpenAIGPTTokenizerFast,
-    PreTrainedTokenizer,
+    PegasusTokenizer,
+    PegasusTokenizerFast,
+    ReformerTokenizer,
+    ReformerTokenizerFast,
     RobertaTokenizer,
     RobertaTokenizerFast,
     T5Tokenizer,
     T5TokenizerFast,
+    XLMRobertaTokenizer,
+    XLMRobertaTokenizerFast,
+    XLNetTokenizer,
+    XLNetTokenizerFast,
     is_torch_available,
 )
 from transformers.testing_utils import get_tests_dir
@@ -48,11 +71,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
-        self.tokenizers_list = [(tok_case, pretrained_name, dict(t for t in tok_case.kwargs) if tok_case.kwargs else {})
-                                for tok_case in self.TOKENIZERS_CLASSES
-                                for pretrained_name in tok_case.python_cls.pretrained_vocab_files_map[tok_case.vocab_key].keys()
-                                if tok_case.filter is None or (
-                                    tok_case.filter is not None and tok_case.filter(tok_case, pretrained_name))]
+        self.tokenizers_list = [
+            (tok_case, pretrained_name, dict(t for t in tok_case.kwargs) if tok_case.kwargs else {})
+            for tok_case in self.TOKENIZERS_CLASSES
+            for pretrained_name in tok_case.python_cls.pretrained_vocab_files_map[tok_case.vocab_key].keys()
+            if tok_case.filter is None or (tok_case.filter is not None and tok_case.filter(tok_case, pretrained_name))
+        ]
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
@@ -126,7 +150,9 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 self.assertEqual(encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
                 self.assertEqual(batch_encoding.word_to_tokens(1, 0).start, 0)
                 self.assertEqual(batch_encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
-                self.assertEqual(batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1)
+                self.assertEqual(
+                    batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1
+                )
 
                 # Assert token_to_chars
                 self.assertEqual(encoding.token_to_chars(0).start, 0)
@@ -135,7 +161,9 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 self.assertEqual(encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
                 self.assertEqual(batch_encoding.token_to_chars(1, 0).start, 0)
                 self.assertEqual(batch_encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
-                self.assertEqual(batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1)
+                self.assertEqual(
+                    batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1
+                )
 
                 # Assert char_to_token
                 self.assertEqual(encoding.char_to_token(0), 0)
@@ -162,7 +190,9 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 self.assertEqual(encoding.word_to_chars(0, last_word_index).end, last_char_index + 1)
                 self.assertEqual(batch_encoding.word_to_chars(1, 0).start, 0)
                 self.assertEqual(batch_encoding.word_to_chars(0, last_word_index).end, last_char_index + 1)
-                self.assertEqual(batch_encoding.word_to_chars(last_batch_index, last_word_index).end, last_char_index + 1)
+                self.assertEqual(
+                    batch_encoding.word_to_chars(last_batch_index, last_word_index).end, last_char_index + 1
+                )
 
     def test_tokenization_python_rust_equals(self):
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
@@ -208,8 +238,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
 
                 # Check we have the same number of added_tokens for both pair and non-pair inputs.
-                self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
-                self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
+                self.assertEqual(
+                    tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+                )
+                self.assertEqual(
+                    tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True)
+                )
 
     def test_max_length_equal(self):
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
@@ -301,55 +335,54 @@ class CommonFastTokenizerTest(unittest.TestCase):
         This needs to be padded so that it can represented as a tensor
         """
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
-            tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
-            tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
-            for tokenizer in [tokenizer_r, tokenizer_p]:
-                with self.subTest("{} ({}, {})".format(tok_case.name, pretrained_name, tokenizer_r.__class__.__name__)):
+            tokenizer = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
 
-                    returned_tensor = "pt" if is_torch_available() else "tf"
+            with self.subTest("{} ({}, {})".format(tok_case.name, pretrained_name, tokenizer.__class__.__name__)):
 
-                    if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
-                        return
+                returned_tensor = "pt" if is_torch_available() else "tf"
 
-                    tokens = tokenizer.encode_plus(
-                        "HuggingFace is solving NLP one commit at a time",
-                        max_length=6,
-                        padding=True,
-                        truncation=True,
-                        return_tensors=returned_tensor,
-                        return_overflowing_tokens=True,
-                    )
+                if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
+                    return
 
-                    for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
-                        self.assertEqual(len(tokens[key].shape), 2)
+                tokens = tokenizer.encode_plus(
+                    "HuggingFace is solving NLP one commit at a time",
+                    max_length=6,
+                    padding=True,
+                    truncation=True,
+                    return_tensors=returned_tensor,
+                    return_overflowing_tokens=True,
+                )
 
-                    # Mono sample
-                    tokens = tokenizer.batch_encode_plus(
-                        ["HuggingFace is solving NLP one commit at a time"],
-                        max_length=6,
-                        padding=True,
-                        truncation="only_first",
-                        return_tensors=returned_tensor,
-                        return_overflowing_tokens=True,
-                    )
+                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
+                    self.assertEqual(len(tokens[key].shape), 2)
 
-                    for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
-                        self.assertEqual(len(tokens[key].shape), 2)
-                        self.assertEqual(tokens[key].shape[-1], 6)
+                # Mono sample
+                tokens = tokenizer.batch_encode_plus(
+                    ["HuggingFace is solving NLP one commit at a time"],
+                    max_length=6,
+                    padding=True,
+                    truncation="only_first",
+                    return_tensors=returned_tensor,
+                    return_overflowing_tokens=True,
+                )
 
-                    # Multi sample
-                    tokens = tokenizer.batch_encode_plus(
-                        ["HuggingFace is solving NLP one commit at a time", "Very tiny input"],
-                        max_length=6,
-                        padding=True,
-                        truncation="only_first",
-                        return_tensors=returned_tensor,
-                        return_overflowing_tokens=True,
-                    )
+                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
+                    self.assertEqual(len(tokens[key].shape), 2)
+                    self.assertEqual(tokens[key].shape[-1], 6)
 
-                    for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
-                        self.assertEqual(len(tokens[key].shape), 2)
-                        self.assertEqual(tokens[key].shape[-1], 6)
+                # Multi sample
+                tokens = tokenizer.batch_encode_plus(
+                    ["HuggingFace is solving NLP one commit at a time", "Very tiny input"],
+                    max_length=6,
+                    padding=True,
+                    truncation="only_first",
+                    return_tensors=returned_tensor,
+                    return_overflowing_tokens=True,
+                )
+
+                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
+                    self.assertEqual(len(tokens[key].shape), 2)
+                    self.assertEqual(tokens[key].shape[-1], 6)
 
     def test_pretokenized_inputs(self):
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
@@ -361,8 +394,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 pretokenized_input_pair = "This is a sample pair".split()
 
                 # Test encode for pretokenized inputs
-                output_r = tokenizer_r.encode(pretokenized_input_simple, is_split_into_words=True)
-                output_p = tokenizer_p.encode(pretokenized_input_simple, is_split_into_words=True)
+                output_r = tokenizer_r.encode(
+                    pretokenized_input_simple, is_split_into_words=True, add_special_tokens=False
+                )
+                output_p = tokenizer_p.encode(
+                    pretokenized_input_simple, is_split_into_words=True, add_special_tokens=False
+                )
                 self.assertEqual(output_p, output_r)
 
                 kwargs = {
@@ -372,6 +409,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
                     "return_overflowing_tokens": False,
                     "return_special_tokens_mask": True,
                     "return_offsets_mapping": False,  # Not implemented in python tokenizers
+                    "add_special_tokens": False,
                 }
                 batch_kwargs = {
                     "is_split_into_words": True,
@@ -380,6 +418,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
                     "return_overflowing_tokens": False,
                     "return_special_tokens_mask": True,  # we have an 's' here
                     "return_offsets_mapping": False,  # Not implemented in python tokenizers
+                    "add_special_tokens": False,
                 }
                 # Test encode_plus for pretokenized inputs
                 output_r = tokenizer_r.encode_plus(pretokenized_input_simple, **kwargs)
@@ -395,8 +434,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
                     self.assertEqual(output_p[key], output_r[key])
 
                 # Test encode for pretokenized inputs pairs
-                output_r = tokenizer_r.encode(pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True)
-                output_p = tokenizer_p.encode(pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True)
+                output_r = tokenizer_r.encode(
+                    pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True
+                )
+                output_p = tokenizer_p.encode(
+                    pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True
+                )
                 self.assertEqual(output_p, output_r)
 
                 # Test encode_plus for pretokenized inputs
@@ -439,8 +482,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
                 # Input string
-                input_simple = tokenizer_p.tokenize("This is a sample input")
-                input_pair = tokenizer_p.tokenize("This is a sample pair")
+                input_simple = tokenizer_p.tokenize("This is a sample input", add_special_tokens=False)
+                input_pair = tokenizer_p.tokenize("This is a sample pair", add_special_tokens=False)
 
                 # Generate output
                 output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
@@ -453,8 +496,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 self.assertEqual(output_p, output_r)
 
                 # Input tokens id
-                input_simple = tokenizer_p.encode("This is a sample input")
-                input_pair = tokenizer_p.encode("This is a sample pair")
+                input_simple = tokenizer_p.encode("This is a sample input", add_special_tokens=False)
+                input_pair = tokenizer_p.encode("This is a sample pair", add_special_tokens=False)
 
                 # Generate output
                 output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
@@ -471,6 +514,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             with self.subTest("{} ({})".format(tok_case.name, pretrained_name)):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
+
                 def assert_padded_input_match(input_r: list, input_p: list, max_length: int):
 
                     # Ensure we match max_length
@@ -529,12 +573,20 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 assert_padded_input_match(input_r, input_p, len(input_r))
 
                 # Encode_plus - Simple input
-                input_r = tokenizer_r.encode_plus("This is a simple input", max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode_plus("This is a simple input", max_length=max_length, pad_to_max_length=True)
+                input_r = tokenizer_r.encode_plus(
+                    "This is a simple input", max_length=max_length, pad_to_max_length=True
+                )
+                input_p = tokenizer_p.encode_plus(
+                    "This is a simple input", max_length=max_length, pad_to_max_length=True
+                )
                 assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus("This is a simple input", max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode_plus("This is a simple input", max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.encode_plus(
+                    "This is a simple input", max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode_plus(
+                    "This is a simple input", max_length=max_length, padding="max_length"
+                )
                 assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
@@ -568,10 +620,14 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
                 # Batch_encode_plus - Simple input
                 input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, pad_to_max_length=True
+                    ["This is a simple input 1", "This is a simple input 2"],
+                    max_length=max_length,
+                    pad_to_max_length=True,
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, pad_to_max_length=True
+                    ["This is a simple input 1", "This is a simple input 2"],
+                    max_length=max_length,
+                    pad_to_max_length=True,
                 )
                 assert_batch_padded_input_match(input_r, input_p, max_length)
 
@@ -602,7 +658,9 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 input_r = tokenizer_r.batch_encode_plus(
                     ["This is a simple input 1", "This is a simple input 2"], padding="longest"
                 )
-                input_p = tokenizer_p.batch_encode_plus(["This is a simple input 1", "This is a simple input 2"], padding=True)
+                input_p = tokenizer_p.batch_encode_plus(
+                    ["This is a simple input 1", "This is a simple input 2"], padding=True
+                )
                 assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
                 # Batch_encode_plus - Pair input
@@ -692,10 +750,14 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
                 # Checks it save with the same files
-                self.assertSequenceEqual(tokenizer_r.save_vocabulary(self.tmpdirname), tokenizer_p.save_vocabulary(self.tmpdirname))
+                self.assertSequenceEqual(
+                    tokenizer_r.save_vocabulary(self.tmpdirname), tokenizer_p.save_vocabulary(self.tmpdirname)
+                )
 
                 # Checks everything loads correctly in the same way
-                tokenizer_rp, tokenizer_pp = tokenizer_r.from_pretrained(self.tmpdirname), tokenizer_p.from_pretrained(self.tmpdirname)
+                tokenizer_rp, tokenizer_pp = tokenizer_r.from_pretrained(self.tmpdirname), tokenizer_p.from_pretrained(
+                    self.tmpdirname
+                )
 
                 # Check special tokens are set accordingly on Rust and Python
                 for key in tokenizer_pp.special_tokens_map:
@@ -710,18 +772,19 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
                 tokens_r = tokenizer_r.encode_plus(
-                    sentence, add_special_tokens=True,
+                    sentence,
+                    add_special_tokens=True,
                 )
                 tokens_p = tokenizer_p.encode_plus(
-                    sentence, add_special_tokens=True,
+                    sentence,
+                    add_special_tokens=True,
                 )
 
                 for key in tokens_p.keys():
                     self.assertEqual(tokens_r[key], tokens_p[key])
 
                 if "token_type_ids" in tokens_r:
-                    self.assertEqual(sum(tokens_r["token_type_ids"]), 0)
-                    self.assertEqual(sum(tokens_p["token_type_ids"]), 0)
+                    self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
                 tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
@@ -739,19 +802,24 @@ class CommonFastTokenizerTest(unittest.TestCase):
                     # tokenize()
                     no_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=False)
                     with_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=True)
-                    self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
+                    self.assertEqual(
+                        len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add
+                    )
 
                     # encode()
                     no_special_tokens = tokenizer_r.encode(text, add_special_tokens=False)
                     with_special_tokens = tokenizer_r.encode(text, add_special_tokens=True)
-                    self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
+                    self.assertEqual(
+                        len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add
+                    )
 
                     # encode_plus()
                     no_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=False)
                     with_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=True)
                     for key in no_special_tokens.keys():
                         self.assertEqual(
-                            len(no_special_tokens[key]), len(with_special_tokens[key]) - simple_num_special_tokens_to_add
+                            len(no_special_tokens[key]),
+                            len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
                         )
 
                     # # batch_encode_plus
@@ -767,8 +835,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
                 string_sequence = "Asserting that both tokenizers are equal"
-                python_output = tokenizer_p.prepare_for_model(tokenizer_p.encode(string_sequence))
-                rust_output = tokenizer_r.prepare_for_model(tokenizer_r.encode(string_sequence))
+                python_output = tokenizer_p.prepare_for_model(
+                    tokenizer_p.encode(string_sequence, add_special_tokens=False)
+                )
+                rust_output = tokenizer_r.prepare_for_model(
+                    tokenizer_r.encode(string_sequence, add_special_tokens=False)
+                )
                 for key in python_output:
                     self.assertEqual(python_output[key], rust_output[key])
 
@@ -784,6 +856,32 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
             Tokenizer(
                 "DistilBert", DistilBertTokenizerFast, DistilBertTokenizer, "vocab_file", filter_non_english, None
             ),
+            Tokenizer(
+                "DPRReaderTokenizer",
+                DPRReaderTokenizerFast,
+                DPRReaderTokenizer,
+                "vocab_file",
+                filter_non_english,
+                None,
+            ),
+            Tokenizer(
+                "DPRQuestionEncoderTokenizer",
+                DPRQuestionEncoderTokenizerFast,
+                DPRQuestionEncoderTokenizer,
+                "vocab_file",
+                filter_non_english,
+                None,
+            ),
+            Tokenizer(
+                "DPRContextEncoderTokenizer",
+                DPRContextEncoderTokenizerFast,
+                DPRContextEncoderTokenizer,
+                "vocab_file",
+                filter_non_english,
+                None,
+            ),
+            Tokenizer("FunnelTokenizer", FunnelTokenizerFast, FunnelTokenizer, "vocab_file", filter_non_english, None),
+            Tokenizer("LxmertTokenizer", LxmertTokenizerFast, LxmertTokenizer, "vocab_file", filter_non_english, None),
         ]
     )
 
@@ -792,7 +890,7 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
             with self.subTest("{} ({})".format(tok_case.name, pretrained_name)):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
 
-                sentence = "A, naïve [MASK] AllenNLP sentence."
+                sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
                 tokens = tokenizer_r.encode_plus(
                     sentence,
                     return_attention_mask=False,
@@ -804,37 +902,39 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
                 do_lower_case = tokenizer_r.do_lower_case if hasattr(tokenizer_r, "do_lower_case") else False
                 expected_results = (
                     [
-                        ((0, 0), "[CLS]"),
+                        ((0, 0), tokenizer_r.cls_token),
                         ((0, 1), "A"),
                         ((1, 2), ","),
                         ((3, 5), "na"),
                         ((5, 6), "##ï"),
                         ((6, 8), "##ve"),
-                        ((9, 15), "[MASK]"),
+                        ((9, 15), tokenizer_r.mask_token),
                         ((16, 21), "Allen"),
                         ((21, 23), "##NL"),
                         ((23, 24), "##P"),
                         ((25, 33), "sentence"),
                         ((33, 34), "."),
-                        ((0, 0), "[SEP]"),
+                        ((0, 0), tokenizer_r.sep_token),
                     ]
                     if not do_lower_case
                     else [
-                        ((0, 0), "[CLS]"),
+                        ((0, 0), tokenizer_r.cls_token),
                         ((0, 1), "a"),
                         ((1, 2), ","),
                         ((3, 8), "naive"),
-                        ((9, 15), "[MASK]"),
+                        ((9, 15), tokenizer_r.mask_token),
                         ((16, 21), "allen"),
                         ((21, 23), "##nl"),
                         ((23, 24), "##p"),
                         ((25, 33), "sentence"),
                         ((33, 34), "."),
-                        ((0, 0), "[SEP]"),
+                        ((0, 0), tokenizer_r.sep_token),
                     ]
                 )
 
-                self.assertEqual([e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"]))
+                self.assertEqual(
+                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
+                )
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
 
@@ -848,9 +948,36 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
                 "vocab_file",
                 filter_roberta_detectors,
                 (("cls_token", "<s>"),),
-            )
+            ),
+            Tokenizer(
+                "Bart",
+                BartTokenizerFast,
+                BartTokenizer,
+                "vocab_file",
+                filter_roberta_detectors,
+                (("cls_token", "<s>"),),
+            ),
+            Tokenizer(
+                "XLMRoberta",
+                XLMRobertaTokenizerFast,
+                XLMRobertaTokenizer,
+                "vocab_file",
+                filter_roberta_detectors,
+                (("cls_token", "<s>"),),
+            ),
+            Tokenizer(
+                "MBart",
+                MBartTokenizerFast,
+                MBartTokenizer,
+                "vocab_file",
+                filter_roberta_detectors,
+                (("cls_token", "<s>"),),
+            ),
         ]
     )
+
+    def test_pretokenized_inputs(self):
+        pass
 
     def test_embeded_special_tokens(self):
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
@@ -876,8 +1003,12 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
 
                 tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
-                self.assertSequenceEqual(tokens_r, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"])
-                self.assertSequenceEqual(tokens_p, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"])
+                self.assertSequenceEqual(
+                    tokens_r, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                )
+                self.assertSequenceEqual(
+                    tokens_p, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                )
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
@@ -886,20 +1017,8 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
         Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file", None, [("add_prefix_space", True)]),
     ]
 
-    # def fast_align_python(self, tokenizer_r, tokenizer_p, tok_case, pretrained_name):
-    #     # Check is_fast is set correctly
-    #     self.assertFalse(tokenizer_p.is_fast)
-    #     self.assertTrue(tokenizer_r.is_fast)
-
-    #     # Check that Rust and Python align
-    #     self.assert_padding(tokenizer_r, tokenizer_p)
-
-    #     # Specific for
-    #     kwargs = {}
-    #     if tok_case.kwargs is not None:
-    #         kwargs = dict(tok_case.kwargs)
-    #     tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
-    #     self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
+    def test_pretokenized_inputs(self):
+        pass
 
     def test_padding(self, max_length=15):
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
@@ -954,6 +1073,10 @@ class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = frozenset(
         [
             Tokenizer("Albert", AlbertTokenizerFast, AlbertTokenizer, "vocab_file", None, None),
+            Tokenizer("Camembert", CamembertTokenizerFast, CamembertTokenizer, "vocab_file", None, None),
             Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
+            Tokenizer("Pegasus", PegasusTokenizerFast, PegasusTokenizer, "vocab_file", None, None),
+            Tokenizer("Reformer", ReformerTokenizerFast, ReformerTokenizer, "vocab_file", None, None),
+            Tokenizer("XLNet", XLNetTokenizerFast, XLNetTokenizer, "vocab_file", None, None),
         ]
     )
