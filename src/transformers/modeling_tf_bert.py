@@ -516,7 +516,7 @@ class TFBertNSPHead(tf.keras.layers.Layer):
 class TFBertMainLayer(tf.keras.layers.Layer):
     config_class = BertConfig
 
-    def __init__(self, config, add_pooling_layer=True, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.num_hidden_layers = config.num_hidden_layers
@@ -526,7 +526,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
-        self.pooler = TFBertPooler(config, name="pooler") if add_pooling_layer else None
+        self.pooler = TFBertPooler(config, name="pooler")
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -638,7 +638,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
             return (
@@ -876,7 +876,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
                 "bi-directional self-attention."
             )
 
-        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
+        self.bert = TFBertMainLayer(config, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
@@ -958,7 +958,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         if not config.is_decoder:
             logger.warning("If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
+        self.bert = TFBertMainLayer(config, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
@@ -1333,7 +1333,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
+        self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1419,7 +1419,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
+        self.bert = TFBertMainLayer(config, name="bert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
