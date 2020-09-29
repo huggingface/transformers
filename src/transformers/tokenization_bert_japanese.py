@@ -15,8 +15,8 @@
 """Tokenization classes."""
 
 
-import copy
 import collections
+import copy
 import os
 import unicodedata
 from typing import Optional
@@ -170,7 +170,8 @@ class BertJapaneseTokenizer(BertTokenizer):
         self.__dict__ = state
         if self.word_tokenizer_type == "mecab":
             self.word_tokenizer = MecabTokenizer(
-                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.mecab_kwargs or {}))
+                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.mecab_kwargs or {})
+            )
 
     def _tokenize(self, text):
         if self.do_word_tokenize:
