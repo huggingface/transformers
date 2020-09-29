@@ -1,7 +1,6 @@
 import random
 from time import sleep, time
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 import torch
@@ -28,11 +27,6 @@ colors = [
     "#DDCC77",
     "#88CCEE",
 ]
-
-plt.rc("axes", titlesize=16)  # fontsize of the axes title
-plt.rc("axes", labelsize=16)  # fontsize of the x and y labels
-plt.rc("xtick", labelsize=12)  # fontsize of the tick labels
-plt.rc("ytick", labelsize=12)  # fontsize of the tick labels
 
 
 @st.cache(
