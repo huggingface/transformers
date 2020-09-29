@@ -5,7 +5,7 @@ To create the package for pypi.
 
 1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
 
-2. Unpin specific versions from setup.py (like isort).
+2. Unpin specific versions from setup.py that use a git install.
 
 2. Commit these changes with the message: "Release: VERSION"
 
@@ -98,7 +98,7 @@ extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-
 
 setup(
     name="transformers",
-    version="3.3.0",
+    version="3.3.1",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
