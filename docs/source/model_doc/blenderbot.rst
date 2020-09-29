@@ -17,7 +17,7 @@ The authors' code can be found `here <https://github.com/facebookresearch/ParlAI
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~
 
-Blenderbot uses a standard seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf> based architecture
+Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture
 
 
 BlenderbotConfig
