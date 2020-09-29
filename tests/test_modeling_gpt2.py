@@ -380,33 +380,34 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
-        model.to(torch_device)
-        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-        expected_output_ids = [
-            464,
-            3290,
-            373,
-            1043,
-            287,
-            257,
-            2214,
-            1474,
-            262,
-            16246,
-            286,
-            2688,
-            290,
-            2688,
-            27262,
-            13,
-            198,
-            198,
-            464,
-            3290,
-        ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        for checkpointing in [True, False]:
+            model = GPT2LMHeadModel.from_pretrained("gpt2", gradient_checkpointing=checkpointing)
+            model.to(torch_device)
+            input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
+            expected_output_ids = [
+                464,
+                3290,
+                373,
+                1043,
+                287,
+                257,
+                2214,
+                1474,
+                262,
+                16246,
+                286,
+                2688,
+                290,
+                2688,
+                27262,
+                13,
+                198,
+                198,
+                464,
+                3290,
+            ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+            output_ids = model.generate(input_ids, do_sample=False)
+            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
     def test_lm_generate_distilgpt2(self):
