@@ -104,7 +104,7 @@ class GPT2Config(PretrainedConfig):
 
             The dropout ratio to be used after the projection and activation.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
