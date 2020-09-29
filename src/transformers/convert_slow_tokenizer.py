@@ -471,6 +471,7 @@ CONVERTERS = {
     "DPRReaderTokenizer": BertConverter,
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
+    "FunnelTokenizer": BertConverter,
     "GPT2Tokenizer": GPT2Converter,
     "LxmertTokenizer": BertConverter,
     "MBartTokenizer": MBartConverter,
