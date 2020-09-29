@@ -124,8 +124,9 @@ setup(
         "tqdm >= 4.27",
         # for OpenAI GPT
         "regex != 2019.12.17",
-        # for XLNet
+        # for SentencePiece models
         "sentencepiece != 0.1.92",
+        "protobuf",
         # for XLM
         "sacremoses",
     ],
