@@ -411,6 +411,9 @@ class TFBertEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -581,11 +584,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -641,6 +639,12 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        if not return_dict:
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -846,6 +850,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
         seq_relationship_score = self.nsp(pooled_output)
 
+        if not return_dict:
+            return (prediction_scores, seq_relationship_score) + outputs[2:]
+
         return TFBertForPreTrainingOutput(
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
@@ -927,6 +934,10 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=training)
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
             loss=loss,
@@ -1010,6 +1021,10 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             labels = labels[:, 1:]
             loss = self.compute_loss(labels, logits)
 
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFCausalLMOutput(
             loss=loss,
             logits=logits,
@@ -1077,6 +1092,9 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         if not return_dict:
             output = (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
+
+        if not return_dict:
+            return (seq_relationship_score,) + outputs[2:]
 
         return TFNextSentencePredictorOutput(
             loss=next_sentence_loss,
@@ -1157,6 +1175,10 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1283,6 +1305,10 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFMultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1364,6 +1390,10 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1460,6 +1490,10 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             loss = self.compute_loss(labels, (start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=loss,
