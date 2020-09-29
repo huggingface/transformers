@@ -23,8 +23,8 @@ from typing import List, Optional
 
 from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
 

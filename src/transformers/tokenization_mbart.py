@@ -15,7 +15,7 @@
 
 from typing import List, Optional
 
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast

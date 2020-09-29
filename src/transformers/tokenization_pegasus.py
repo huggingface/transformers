@@ -14,9 +14,8 @@
 # limitations under the License.
 from typing import Dict, List, Optional
 
-from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
-
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 
 
