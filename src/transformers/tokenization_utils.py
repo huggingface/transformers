@@ -722,7 +722,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return " ".join(tokens)
 
     def decode(
-        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True,
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
     ) -> str:
         """
