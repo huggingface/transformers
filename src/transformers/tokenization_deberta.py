@@ -37,16 +37,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "bpe_encoder.bin"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model shortcut names.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/deberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-base/bpe_encoder.bin",
@@ -54,19 +46,11 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-####################################################
-# Mapping from model shortcut names to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/deberta-base": 512,
     "microsoft/deberta-large": 512,
 }
 
-####################################################
-# Mapping from model shortcut names to a dictionary of additional
-# keyword arguments for Tokenizer `__init__`.
-# To be used for checkpoint specific configurations.
-####################################################
 PRETRAINED_INIT_CONFIGURATION = {
     "microsoft/deberta-base": {"do_lower_case": False},
     "microsoft/deberta-large": {"do_lower_case": False},
@@ -494,8 +478,26 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
     splitting + wordpiece
 
     Args:
-        vocab_file: Path to a one-wordpiece-per-line vocabulary file
-        do_lower_case: Whether to lower case the input. Only has an effect when do_basic_tokenize=True
+        vocab_file (:obj:`str`):
+            File containing the vocabulary.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to lowercase the input when tokenizing.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -514,14 +516,6 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         **kwargs
     ):
-        """Constructs a XxxTokenizer.
-
-        Args:
-            **vocab_file**: Path to a one-wordpiece-per-line vocabulary file
-            **do_lower_case**: (`optional`) boolean (default False)
-                Whether to lower case the input
-                Only has an effect when do_basic_tokenize=True
-        """
         super().__init__(
             unk_token=unk_token,
             sep_token=sep_token,
@@ -578,6 +572,15 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
 
         - single sequence: [CLS] X [SEP]
         - pair of sequences: [CLS] A [SEP] B [SEP]
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -627,6 +630,16 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
         | first sequence    | second sequence
 
         if token_ids_1 is None, only returns the first portion of the mask (0's).
+        ~
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

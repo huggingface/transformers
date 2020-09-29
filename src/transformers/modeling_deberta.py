@@ -266,7 +266,7 @@ class DebertaAttention(nn.Module):
             self_output, att_matrix = self_output
         if query_states is None:
             query_states = hidden_states
-        attention_output = self.output(self_output, query_states, attention_mask)
+        attention_output = self.output(self_output, query_states)
 
         if return_att:
             return (attention_output, att_matrix)
@@ -332,7 +332,7 @@ class DebertaLayer(nn.Module):
         if return_att:
             attention_output, att_matrix = attention_output
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output, attention_mask)
+        layer_output = self.output(intermediate_output, attention_output)
         if return_att:
             return (layer_output, att_matrix)
         else:
@@ -723,13 +723,14 @@ class DeBERTaEmbeddings(nn.Module):
 
         embeddings = self.LayerNorm(embeddings)
 
-        if mask.dim() != input.dim():
-            if mask.dim() == 4:
-                mask = mask.squeeze(1).squeeze(1)
-            mask = mask.unsqueeze(2)
-        mask = mask.to(embeddings.dtype)
+        if mask is not None:
+            if mask.dim() != embeddings.dim():
+                if mask.dim() == 4:
+                    mask = mask.squeeze(1).squeeze(1)
+                mask = mask.unsqueeze(2)
+            mask = mask.to(embeddings.dtype)
 
-        embeddings = embeddings * mask
+            embeddings = embeddings * mask
 
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -940,7 +941,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
 
         self.deberta = DeBERTaModel(config)
         self.pooler = ContextPooler(config)
-        output_dim = self.pooler.output_dim()
+        output_dim = self.pooler.output_dim
 
         self.classifier = torch.nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
