@@ -1102,11 +1102,6 @@ class TFT5Model(TFT5PreTrainedModel):
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1143,6 +1138,10 @@ class TFT5Model(TFT5PreTrainedModel):
         past = (
             (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
         )
+        if not return_dict:
+            if past is not None:
+                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
+            return decoder_outputs + encoder_outputs
 
         # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
         # TF refuses to compile anymore.
@@ -1312,11 +1311,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1367,6 +1361,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         past = (
             (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
         )
+        if not return_dict:
+            if past is not None:
+                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
+            output = (logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
 
         # Putting this before breaks tf compilation.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

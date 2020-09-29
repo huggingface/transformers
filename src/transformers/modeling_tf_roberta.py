@@ -440,6 +440,9 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -522,11 +525,6 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -582,6 +580,12 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
+
+        if not return_dict:
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -815,6 +819,10 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
 
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFMaskedLMOutput(
             loss=loss,
             logits=prediction_scores,
@@ -917,6 +925,10 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
         logits = self.classifier(sequence_output, training=training)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1035,6 +1047,10 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
 
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFMultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1115,6 +1131,10 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
         logits = self.classifier(sequence_output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1208,6 +1228,10 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             loss = self.compute_loss(labels, (start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=loss,

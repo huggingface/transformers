@@ -670,6 +670,8 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
                     if output_hidden_states:
                         all_hidden_states = all_hidden_states + (hidden,)
 
+        if not return_dict:
+            return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
 
 
@@ -742,6 +744,8 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden,)
 
+        if not return_dict:
+            return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
 
 
@@ -899,11 +903,6 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -940,6 +939,17 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if not return_dict:
+            idx = 0
+            outputs = (decoder_outputs[0],)
+            if output_hidden_states:
+                idx += 1
+                outputs = outputs + (encoder_outputs[1] + decoder_outputs[idx],)
+            if output_attentions:
+                idx += 1
+                outputs = outputs + (encoder_outputs[2] + decoder_outputs[idx],)
+            return outputs
 
         return TFBaseModelOutput(
             last_hidden_state=decoder_outputs[0],
@@ -1288,6 +1298,10 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
 
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
+        if not return_dict:
+            output = (prediction_scores,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFMaskedLMOutput(
             loss=loss,
             logits=prediction_scores,
@@ -1359,6 +1373,10 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         logits = self.classifier(pooled_output, training=training)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1472,6 +1490,10 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFMultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1545,6 +1567,10 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         logits = self.classifier(sequence_output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1631,6 +1657,10 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions, "end_position": end_positions}
             loss = self.compute_loss(labels, (start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=loss,
