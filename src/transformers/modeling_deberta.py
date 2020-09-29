@@ -23,7 +23,7 @@ from torch import _softmax_backward_data, nn
 from torch.nn import CrossEntropyLoss
 
 from .activations import ACT2FN
-from .configuration_deberta import DeBERTaConfig
+from .configuration_deberta import DebertaConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel
@@ -32,8 +32,8 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "DeBERTaConfig"
-_TOKENIZER_FOR_DOC = "DeBERTaTokenizer"
+_CONFIG_FOR_DOC = "DebertaConfig"
+_TOKENIZER_FOR_DOC = "DebertaTokenizer"
 
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-base",
@@ -339,7 +339,7 @@ class DebertaLayer(nn.Module):
             return layer_output
 
 
-class DeBERTaEncoder(nn.Module):
+class DebertaEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
     def __init__(self, config):
@@ -474,7 +474,7 @@ class DisentangledSelfAttention(torch.nn.Module):
     Parameters:
         config (:obj:`str`):
             A model config class instance with the configuration to build a new model. The schema is similar to `BertConfig`, \
-            for more details, please refer :class:`~transformers.DeBERTaConfig`
+            for more details, please refer :class:`~transformers.DebertaConfig`
 
     """
 
@@ -661,7 +661,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         return score
 
 
-class DeBERTaEmbeddings(nn.Module):
+class DebertaEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -736,12 +736,12 @@ class DeBERTaEmbeddings(nn.Module):
         return embeddings
 
 
-class DeBERTaPreTrainedModel(PreTrainedModel):
+class DebertaPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = DeBERTaConfig
+    config_class = DebertaConfig
     base_model_prefix = "deberta"
     authorized_missing_keys = ["position_ids"]
 
@@ -767,7 +767,7 @@ DEBERTA_START_DOCSTRING = r"""    The DeBERTa model was proposed in
 
 
     Parameters:
-        config (:class:`~transformers.DeBERTaConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.DebertaConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -777,7 +777,7 @@ DEBERTA_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.DeBERTaTokenizer`.
+            Indices can be obtained using :class:`transformers.DebertaTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
@@ -817,12 +817,12 @@ DEBERTA_INPUTS_DOCSTRING = r"""
     "The bare DeBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     DEBERTA_START_DOCSTRING,
 )
-class DeBERTaModel(DeBERTaPreTrainedModel):
+class DebertaModel(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embeddings = DeBERTaEmbeddings(config)
-        self.encoder = DeBERTaEncoder(config)
+        self.embeddings = DebertaEmbeddings(config)
+        self.encoder = DebertaEncoder(config)
         self.z_steps = 0
         self.config = config
         self.init_weights()
@@ -932,14 +932,14 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     DEBERTA_START_DOCSTRING,
 )
-class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
+class DebertaForSequenceClassification(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
         self.num_labels = num_labels
 
-        self.deberta = DeBERTaModel(config)
+        self.deberta = DebertaModel(config)
         self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim
 

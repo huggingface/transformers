@@ -25,7 +25,7 @@ from .configuration_auto import (
     BertGenerationConfig,
     CamembertConfig,
     CTRLConfig,
-    DeBERTaConfig,
+    DebertaConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -62,7 +62,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
-from .tokenization_deberta import DeBERTaTokenizer
+from .tokenization_deberta import DebertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
@@ -127,7 +127,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
-        (DeBERTaConfig, (DeBERTaTokenizer, None)),
+        (DebertaConfig, (DebertaTokenizer, None)),
         (LayoutLMConfig, (LayoutLMTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
     ]

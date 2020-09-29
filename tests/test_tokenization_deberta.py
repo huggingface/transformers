@@ -19,21 +19,21 @@ import unittest
 from typing import Tuple
 
 from transformers.testing_utils import require_torch
-from transformers.tokenization_deberta import DeBERTaTokenizer
+from transformers.tokenization_deberta import DebertaTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 @require_torch
-class DeBERTaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = DeBERTaTokenizer
+    tokenizer_class = DebertaTokenizer
 
     def setUp(self):
         super().setUp()
 
     def get_tokenizer(self, name="microsoft/deberta-base", **kwargs):
-        return DeBERTaTokenizer.from_pretrained(name, **kwargs)
+        return DebertaTokenizer.from_pretrained(name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"

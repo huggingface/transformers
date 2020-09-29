@@ -26,37 +26,37 @@ models will be made publicly available at https://github.com/microsoft/DeBERTa.*
 The original code can be found `here <https://github.com/microsoft/DeBERTa>`__.
 
 
-DeBERTaConfig
+DebertaConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DeBERTaConfig
+.. autoclass:: transformers.DebertaConfig
     :members:
 
 
-DeBERTaTokenizer
+DebertaTokenizer
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DeBERTaTokenizer
+.. autoclass:: transformers.DebertaTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-DeBERTaModel
+DebertaModel
 ~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DeBERTaModel
+.. autoclass:: transformers.DebertaModel
     :members:
 
 
-DeBERTaPreTrainedModel
+DebertaPreTrainedModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DeBERTaPreTrainedModel
+.. autoclass:: transformers.DebertaPreTrainedModel
     :members:
 
 
-DeBERTaForSequenceClassification
+DebertaForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DeBERTaForSequenceClassification
+.. autoclass:: transformers.DebertaForSequenceClassification
     :members:

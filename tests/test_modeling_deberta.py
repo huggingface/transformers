@@ -30,21 +30,21 @@ if is_torch_available():
     import torch
 
     from transformers import (  # XxxForMaskedLM,; XxxForQuestionAnswering,; XxxForTokenClassification,
-        DeBERTaConfig,
-        DeBERTaForSequenceClassification,
-        DeBERTaModel,
+        DebertaConfig,
+        DebertaForSequenceClassification,
+        DebertaModel,
     )
     from transformers.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
-class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
+class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            DeBERTaModel,
-            DeBERTaForSequenceClassification,
-        )  # , DeBERTaForMaskedLM, DeBERTaForQuestionAnswering, DeBERTaForTokenClassification)
+            DebertaModel,
+            DebertaForSequenceClassification,
+        )  # , DebertaForMaskedLM, DebertaForQuestionAnswering, DebertaForTokenClassification)
         if is_torch_available()
         else ()
     )
@@ -54,7 +54,7 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     is_encoder_decoder = False
 
-    class DeBERTaModelTester(object):
+    class DebertaModelTester(object):
         def __init__(
             self,
             parent,
@@ -128,7 +128,7 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-            config = DeBERTaConfig(
+            config = DebertaConfig(
                 vocab_size=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
@@ -153,7 +153,7 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
         def create_and_check_deberta_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = DeBERTaModel(config=config)
+            model = DebertaModel(config=config)
             model.to(torch_device)
             model.eval()
             sequence_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)[0]
@@ -171,7 +171,7 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
-            model = DeBERTaForSequenceClassification(config)
+            model = DebertaForSequenceClassification(config)
             model.to(torch_device)
             model.eval()
             loss, logits = model(
@@ -199,8 +199,8 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = DeBERTaModelTest.DeBERTaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeBERTaConfig, hidden_size=37)
+        self.model_tester = DebertaModelTest.DebertaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DebertaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -231,12 +231,12 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DeBERTaModel.from_pretrained(model_name)
+            model = DebertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class DeBERTaModelIntegrationTest(unittest.TestCase):
+class DebertaModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="Model not available yet")
     def test_inference_masked_lm(self):
         pass
@@ -247,8 +247,8 @@ class DeBERTaModelIntegrationTest(unittest.TestCase):
         np.random.seed(0)
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
-        DeBERTaModel.base_model_prefix = "bert"
-        model = DeBERTaModel.from_pretrained("microsoft/deberta-base")
+        DebertaModel.base_model_prefix = "bert"
+        model = DebertaModel.from_pretrained("microsoft/deberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -264,7 +264,7 @@ class DeBERTaModelIntegrationTest(unittest.TestCase):
         np.random.seed(0)
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
-        model = DeBERTaForSequenceClassification.from_pretrained("microsoft/deberta-base")
+        model = DebertaForSequenceClassification.from_pretrained("microsoft/deberta-base")
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 2))

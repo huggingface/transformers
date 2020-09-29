@@ -26,10 +26,10 @@ DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class DeBERTaConfig(PretrainedConfig):
+class DebertaConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.DeBERTaConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.DeBERTaModel`.
+    :class:`~transformers.DebertaConfig` is the configuration class to store the configuration of a
+    :class:`~transformers.DebertaModel`.
 
     Arguments:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):

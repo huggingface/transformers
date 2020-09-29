@@ -56,7 +56,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "microsoft/deberta-large": {"do_lower_case": False},
 }
 
-__all__ = ["DeBERTaTokenizer"]
+__all__ = ["DebertaTokenizer"]
 
 
 @lru_cache()
@@ -472,7 +472,7 @@ class GPT2Tokenizer(object):
         torch.save(self.gpt2_encoder, path)
 
 
-class DeBERTaTokenizer(PreTrainedTokenizer):
+class DebertaTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a DeBERTa tokenizer, which runs end-to-end tokenization: punctuation
     splitting + wordpiece
