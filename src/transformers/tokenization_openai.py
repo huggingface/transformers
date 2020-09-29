@@ -121,6 +121,10 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         self.cache = {}
 
     @property
+    def do_lower_case(self):
+        return True
+
+    @property
     def vocab_size(self):
         return len(self.encoder)
 
@@ -265,3 +269,7 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         super().__init__(vocab_file, merges_file, unk_token=unk_token, **kwargs)
+
+    @property
+    def do_lower_case(self):
+        return True

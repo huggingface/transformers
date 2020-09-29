@@ -193,7 +193,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         tokens_to_add = []
         for token in new_tokens:
             assert isinstance(token, str)
-            if not special_tokens and self.init_kwargs.get("do_lower_case", False):
+            if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
             if (
                 token != self.unk_token
@@ -268,7 +268,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
         # TODO: should this be in the base class?
-        if self.init_kwargs.get("do_lower_case", False):
+        if hasattr(self, "do_lower_case") and self.do_lower_case:
             # convert non-special tokens to lowercase
             escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
@@ -722,7 +722,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return " ".join(tokens)
 
     def decode(
-        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True,
+        spaces_between_special_tokens: bool = True,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary
@@ -737,6 +738,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to clean up the tokenization spaces.
+            spaces_between_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to add spaces around special tokens.
+                The behavior of Fast tokenizers is to have this to `False`.
+                This is setup to True in slow tokenizers for backward compatibility.
 
         Returns:
             :obj:`str`: The decoded sentence.
@@ -760,7 +765,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-        text = " ".join(sub_texts)
+
+        if spaces_between_special_tokens:
+            text = " ".join(sub_texts)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)

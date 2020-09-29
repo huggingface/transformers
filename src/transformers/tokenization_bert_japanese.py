@@ -150,6 +150,10 @@ class BertJapaneseTokenizer(BertTokenizer):
             else:
                 raise ValueError("Invalid subword_tokenizer_type '{}' is specified.".format(subword_tokenizer_type))
 
+    @property
+    def do_lower_case(self):
+        return self.word_tokenizer.do_lower_case
+
     def _tokenize(self, text):
         if self.do_word_tokenize:
             tokens = self.word_tokenizer.tokenize(text, never_split=self.all_special_tokens)

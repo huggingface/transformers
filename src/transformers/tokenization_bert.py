@@ -204,6 +204,10 @@ class BertTokenizer(PreTrainedTokenizer):
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
     @property
+    def do_lower_case(self):
+        return self.basic_tokenizer.do_lower_case
+
+    @property
     def vocab_size(self):
         return len(self.vocab)
 

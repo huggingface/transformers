@@ -1551,11 +1551,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # tokenizer's Tokenizer directly from it's serialization JSON
         if cls.slow_tokenizer_class is not None:
             slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(
-                resolved_vocab_files.copy(),
+                copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
-                init_configuration.copy(),
+                copy.deepcopy(init_configuration),
                 *init_inputs,
-                **(kwargs.copy()),
+                **(copy.deepcopy(kwargs)),
             )
         else:
             slow_tokenizer = None
@@ -2741,7 +2741,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         ]
 
     def decode(
-        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True,
+        **kwargs
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary

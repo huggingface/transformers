@@ -420,9 +420,9 @@ class TokenizerTesterMixin:
                 # new_toks = ["[ABC]", "[DEF]"]  # TODO(thom) add this one back when Rust toks are ready: , "GHI IHG"]
                 new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
                 tokenizer.add_tokens(new_toks)
-                input = "[ABC] [DEF] [ABC] [DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
+                input = "[ABC][DEF][ABC][DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
                 encoded = tokenizer.encode(input, add_special_tokens=False)
-                decoded = tokenizer.decode(encoded)
+                decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
                 self.assertEqual(decoded, input)
 
     def test_pretrained_model_lists(self):
@@ -955,10 +955,10 @@ class TokenizerTesterMixin:
     def test_padding_to_multiple_of(self):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            if tokenizer.pad_token is None:
-                self.skipTest("No padding token.")
-            else:
-                with self.subTest(f"{tokenizer.__class__.__name__}"):
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if tokenizer.pad_token is None:
+                    self.skipTest("No padding token.")
+                else:
                     empty_tokens = tokenizer("", padding=True, pad_to_multiple_of=8)
                     normal_tokens = tokenizer("This is a sample input", padding=True, pad_to_multiple_of=8)
                     for key, value in empty_tokens.items():
@@ -1385,12 +1385,14 @@ class TokenizerTesterMixin:
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
-            string_sequence = "Testing the prepare_for_model method."
-            ids = tokenizer.encode(string_sequence, add_special_tokens=False)
-            input_dict = tokenizer.encode_plus(string_sequence)
-            prepared_input_dict = tokenizer.prepare_for_model(ids)
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                string_sequence = "Testing the prepare_for_model method."
+                ids = tokenizer.encode(string_sequence, add_special_tokens=False)
+                prepared_input_dict = tokenizer.prepare_for_model(ids, add_special_tokens=True)
 
-            self.assertEqual(input_dict, prepared_input_dict)
+                input_dict = tokenizer.encode_plus(string_sequence, add_special_tokens=True)
+
+                self.assertEqual(input_dict, prepared_input_dict)
 
     @require_torch
     @require_tf

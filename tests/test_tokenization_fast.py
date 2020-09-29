@@ -755,7 +755,7 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
             add_special_tokens=True,
         )
 
-        do_lower_case = tokenizer_r.init_kwargs.get("do_lower_case")
+        do_lower_case = tokenizer_r.get("do_lower_case", False)
         expected_results = (
             [
                 ((0, 0), "[CLS]"),
