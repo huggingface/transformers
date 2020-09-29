@@ -365,7 +365,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     ) -> BatchEncoding:
 
         if not isinstance(batch_text_or_text_pairs, list):
-            raise ValueError(
+            raise TypeError(
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )
 
