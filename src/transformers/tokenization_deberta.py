@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 Microsoft.
+# Copyright 2020 Microsoft and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -307,7 +307,7 @@ def load_vocab(name=None, tag=None, no_cache=False, cache_dir=None):
 
 
 class GPT2Tokenizer(object):
-    """ A wrapper of GPT2 tokenizer with similar interface as BERT tokenizer
+    """    A wrapper of GPT2 tokenizer with similar interface as BERT tokenizer
 
   Args:
     vocab_file (:obj:`str`, optional):
@@ -490,7 +490,7 @@ class GPT2Tokenizer(object):
 
 class DeBERTaTokenizer(PreTrainedTokenizer):
     r"""
-    Constructs a :class:`~transformers.DeBERTaTokenizer`, which runs end-to-end tokenization: punctuation
+    Constructs a DeBERTa tokenizer, which runs end-to-end tokenization: punctuation
     splitting + wordpiece
 
     Args:

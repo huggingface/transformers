@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 Microsoft
+# Copyright 2020 Microsoft and the Hugging Face Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -755,19 +755,15 @@ class DeBERTaPreTrainedModel(PreTrainedModel):
 
 
 DEBERTA_START_DOCSTRING = r"""    The DeBERTa model was proposed in
-    `DeBERTa: Decoding-enhanced BERT with Disentangled Attention`_
+    `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`_
     by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of BERT/RoBERTa with two improvements, i.e.
     disentangled attention and enhanced mask decoder. With those two improvements, it out perform BERT/RoBERTa on a majority
     of tasks with 80GB pre-trianing data.
 
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.```
 
-    .. _`DeBERTa: Decoding-enhanced BERT with Disentangled Attention`:
-        https://arxiv.org/abs/2006.03654
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
         config (:class:`~transformers.DeBERTaConfig`): Model configuration class with all the parameters of the model.
@@ -843,7 +839,7 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
         """
         raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
-    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/deberta-base",
@@ -959,7 +955,7 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.deberta.set_input_embeddings(new_embeddings)
 
-    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/deberta-base",

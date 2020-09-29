@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020, Microsoft
+# Copyright 2020, Microsoft and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,14 +65,14 @@ class DeBERTaConfig(PretrainedConfig):
         relative_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether use relative position encoding.
         max_relative_positions (:obj:`int`, `optional`, defaults to 1):
-            The range of relative positions [`-max_position_embeddings`, `max_position_embeddings`].
-            Use the same value as `max_position_embeddings`.
+            The range of relative positions :obj:`[-max_position_embeddings, max_position_embeddings]`.
+            Use the same value as :obj:`max_position_embeddings`.
         pad_token_id (:obj:`int`, `optional`, defaults to 0):
             The value used to pad input_ids.
         position_biased_input (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (:obj:`List[str]`, `optional`):
-            The type of relative position attention, it can be a combination of [`p2c`, `c2p`, `p2p`],
+            The type of relative position attention, it can be a combination of :obj:`["p2c", "c2p", "p2p"]`,
             e.g. :obj:`["p2c"]`, :obj:`["p2c", "c2p"]`, :obj:`["p2c", "c2p", 'p2p"]`.
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.

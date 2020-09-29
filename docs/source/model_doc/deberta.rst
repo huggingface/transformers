@@ -4,7 +4,7 @@ DeBERTa
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`_
+The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`__
 by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen
 It is based on Google's BERT model released in 2018 and Facebook's RoBERTa model released in 2019.
 
@@ -23,7 +23,7 @@ on MNLI by +0.9% (90.2% vs. 91.1%), on SQuAD v2.0 by +2.3% (88.4% vs. 90.7%) and
 models will be made publicly available at https://github.com/microsoft/DeBERTa.*
 
 
-The original code can be found `here <https://github.com/microsoft/DeBERTa>`_.
+The original code can be found `here <https://github.com/microsoft/DeBERTa>`__.
 
 
 DeBERTaConfig
