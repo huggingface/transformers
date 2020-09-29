@@ -13,7 +13,7 @@ logger = logging.get_logger(__name__)
 
 
 def copy_layers(src_layers: nn.ModuleList, dest_layers: nn.ModuleList, layers_to_copy: List[int]) -> None:
-    layers_to_copy = nn.ModuleList([l for i, l in enumerate(src_layers) if i in layers_to_copy])
+    layers_to_copy = nn.ModuleList([src_layers[i] for i in layers_to_copy])
     assert len(dest_layers) == len(layers_to_copy), f"{len(dest_layers)} != {len(layers_to_copy)}"
     dest_layers.load_state_dict(layers_to_copy.state_dict())
 
