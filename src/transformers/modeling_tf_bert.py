@@ -855,6 +855,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
     authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -940,6 +941,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
     authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1287,6 +1289,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
 
     authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1370,6 +1373,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
 
     authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
