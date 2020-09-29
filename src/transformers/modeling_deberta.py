@@ -224,7 +224,6 @@ class DebertaLayerNorm(nn.Module):
         return y
 
 
-# Copied from transformers.modeling_bert.BertSelfOutput with Bert->Deberta
 class DebertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -291,7 +290,6 @@ class DebertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOutpu with Bert->Deberta
 class DebertaOutput(nn.Module):
     def __init__(self, config):
         super(DebertaOutput, self).__init__()
