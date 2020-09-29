@@ -507,8 +507,8 @@ class T5Converter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            seq_a=["$0", "</s>"],
-            seq_b=["$1", "</s>"],
+            single=["$0", "</s>"],
+            pair=["$0", "</s>", "$1", "</s>"],
             special_tokens=[
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
