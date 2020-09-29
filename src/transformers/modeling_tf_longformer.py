@@ -1453,6 +1453,11 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1520,7 +1525,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
         # undo padding
         if padding_len > 0:
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
@@ -1827,14 +1831,10 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             return_dict=return_dict,
             training=training,
         )
+
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output, training=training)
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
             loss=loss,
