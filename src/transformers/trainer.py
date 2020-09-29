@@ -246,6 +246,7 @@ class Trainer:
         if model is None and model_init is not None:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -675,12 +676,14 @@ class Trainer:
 
         # Distributed training (should be after apex fp16 initialization)
         if self.args.local_rank != -1:
+            config = model.config
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
                 find_unused_parameters=not getattr(model.config, "gradient_checkpointing", False),
             )
+            model.config = config
         # find_unused_parameters breaks checkpointing as per
         # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
