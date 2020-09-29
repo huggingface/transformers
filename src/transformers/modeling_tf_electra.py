@@ -263,9 +263,6 @@ class TFElectraEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -552,6 +549,11 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -793,9 +795,6 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         discriminator_sequence_output = discriminator_hidden_states[0]
         logits = self.discriminator_predictions(discriminator_sequence_output)
 
-        if not return_dict:
-            return (logits,) + discriminator_hidden_states[1:]
-
         return TFElectraForPreTrainingOutput(
             logits=logits,
             hidden_states=discriminator_hidden_states.hidden_states,
@@ -909,11 +908,6 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         prediction_scores = self.generator_lm_head(prediction_scores, training=training)
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
-        if not return_dict:
-            output = (prediction_scores,) + generator_hidden_states[1:]
-
-            return ((loss,) + output) if loss is not None else output
-
         return TFMaskedLMOutput(
             loss=loss,
             logits=prediction_scores,
@@ -1018,11 +1012,6 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         )
         logits = self.classifier(outputs[0])
         loss = None if labels is None else self.compute_loss(labels, logits)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1147,11 +1136,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-
-            return ((loss,) + output) if loss is not None else output
-
         return TFMultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1228,11 +1212,6 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
         logits = self.classifier(discriminator_sequence_output)
         loss = None if labels is None else self.compute_loss(labels, logits)
-
-        if not return_dict:
-            output = (logits,) + discriminator_hidden_states[1:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1324,14 +1303,6 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             loss = self.compute_loss(labels, (start_logits, end_logits))
-
-        if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-            ) + discriminator_hidden_states[1:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=loss,

@@ -533,6 +533,11 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
+
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
         if input_ids is not None and inputs_embeds is not None:
@@ -634,9 +639,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         if output_attentions:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
-
-        if not return_dict:
-            return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TFTransfoXLModelOutput(
             last_hidden_state=core_out,
@@ -932,9 +934,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
 
         softmax_output = self.crit(pred_hid, labels, training=training)
-
-        if not return_dict:
-            return (softmax_output,) + transformer_outputs[1:]
 
         return TFTransfoXLLMHeadModelOutput(
             prediction_scores=softmax_output,

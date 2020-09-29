@@ -756,6 +756,11 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -813,25 +818,14 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         vision_hidden_states = visual_encoder_outputs[0]
         language_hidden_states = lang_encoder_outputs[0]
 
-        all_attentions = ()
         if output_attentions:
             language_attentions = lang_encoder_outputs[1]
             vision_attentions = visual_encoder_outputs[1]
             cross_encoder_attentions = encoder_outputs[2]
-            all_attentions = (
-                language_attentions,
-                vision_attentions,
-                cross_encoder_attentions,
-            )
-
-        hidden_states = (language_hidden_states, vision_hidden_states) if output_hidden_states else ()
 
         visual_output = vision_hidden_states[-1]
         lang_output = language_hidden_states[-1]
         pooled_output = self.pooler(lang_output)
-
-        if not return_dict:
-            return (lang_output, visual_output, pooled_output) + hidden_states + all_attentions
 
         return TFLxmertModelOutput(
             pooled_output=pooled_output,
@@ -1352,14 +1346,6 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             total_loss += answer_loss
             losses += (answer_loss,)
         # return total_loss, tf.stack(losses)[tf.new_axis, ...], answer_score.detach()
-
-        if not return_dict:
-            output = (
-                lang_prediction_scores,
-                cross_relationship_score,
-                answer_score,
-            ) + lxmert_output[3:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return TFLxmertForPreTrainingOutput(
             loss=total_loss,

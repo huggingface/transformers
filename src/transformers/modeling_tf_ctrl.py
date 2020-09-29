@@ -300,6 +300,11 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         use_cache = use_cache if use_cache is not None else self.use_cache
         return_dict = return_dict if return_dict is not None else self.return_dict
 
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
+
         # If using past key value states, only the last tokens
         # should be given as an input
         if past is not None:
@@ -413,9 +418,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -662,10 +664,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             logits = logits[:, :-1]
             labels = labels[:, 1:]
             loss = self.compute_loss(labels, logits)
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutputWithPast(
             loss=loss,

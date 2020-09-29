@@ -462,6 +462,11 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -621,9 +626,6 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         hidden_states = hidden_states if output_hidden_states else None
         attentions = attentions if output_attentions else None
 
-        if not return_dict:
-            return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
-
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
@@ -730,12 +732,8 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(inputs, **kwargs)
-
         output = transformer_outputs[0]
         outputs = self.pred_layer(output)
-
-        if not return_dict:
-            return (outputs,) + transformer_outputs[1:]
 
         return TFFlaubertWithLMHeadModelOutput(
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
