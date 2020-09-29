@@ -393,11 +393,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -527,6 +522,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
+
+        if not return_dict:
+            return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
 
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
@@ -790,6 +788,9 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         output = transformer_outputs[0]
         outputs = self.pred_layer(output)
 
+        if not return_dict:
+            return (outputs,) + transformer_outputs[1:]
+
         return TFXLMWithLMHeadModelOutput(
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
         )
@@ -867,6 +868,10 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         logits = self.sequence_summary(output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1015,6 +1020,10 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
 
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
+        if not return_dict:
+            output = (reshaped_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFMultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1098,6 +1107,10 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         logits = self.classifier(sequence_output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1193,6 +1206,10 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             loss = self.compute_loss(labels, (start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=loss,

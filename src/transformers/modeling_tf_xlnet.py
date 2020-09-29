@@ -612,11 +612,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        if return_dict:
-            logger.warning(
-                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
-            )
-
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
@@ -782,6 +777,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
         if output_attentions:
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
+
+        if not return_dict:
+            return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
 
         return TFXLNetModelOutput(
             last_hidden_state=output, mems=new_mems, hidden_states=hidden_states, attentions=attentions
@@ -1282,6 +1280,10 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             labels = labels[:, 1:]
             loss = self.compute_loss(labels, logits)
 
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFXLNetLMHeadModelOutput(
             loss=loss,
             logits=logits,
@@ -1370,6 +1372,10 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         logits = self.logits_proj(output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFXLNetForSequenceClassificationOutput(
             loss=loss,
@@ -1511,6 +1517,10 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
+        if not return_dict:
+            output = (reshaped_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
         return TFXLNetForMultipleChoiceOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1593,6 +1603,10 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         output = transformer_outputs[0]
         logits = self.classifier(output)
         loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFXLNetForTokenClassificationOutput(
             loss=loss,
@@ -1691,6 +1705,10 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             loss = self.compute_loss(labels, (start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return TFXLNetForQuestionAnsweringSimpleOutput(
             loss=loss,
