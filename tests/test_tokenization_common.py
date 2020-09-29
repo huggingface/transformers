@@ -302,6 +302,9 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(fast=False, do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if hasattr(tokenizer, "do_lower_case") and tokenizer.do_lower_case:
+                    continue
+
                 special_token = tokenizer.all_special_tokens[0]
 
                 text = special_token + " aaaaa bbbbbb low cccccccccdddddddd l " + special_token
@@ -312,7 +315,7 @@ class TokenizerTesterMixin:
                 toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
 
                 added = tokenizer.add_tokens(new_toks)
-                self.assertEqual(added, 4)
+                self.assertIn(added, [2, 4])
 
                 toks = tokenizer.tokenize(text)
                 toks2 = tokenizer.tokenize(text2)
@@ -426,7 +429,7 @@ class TokenizerTesterMixin:
                 input = "[ABC][DEF][ABC][DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
                 encoded = tokenizer.encode(input, add_special_tokens=False)
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
-                self.assertEqual(decoded, input)
+                self.assertIn(decoded, [input, input.lower()])
 
     def test_pretrained_model_lists(self):
         weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())

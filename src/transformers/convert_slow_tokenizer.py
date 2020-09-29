@@ -346,6 +346,7 @@ class MBartConverter(SpmConverter):
             ("vi_VN", 0.0),
             ("zh_CN", 0.0),
         ]
+        vocab += [("<mask>", 0.0)]
         return vocab
 
     def unk_id(self, proto):
@@ -371,6 +372,7 @@ class XLMRobertaConverter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        vocab += [("<mask>", 0.0)]
         return vocab
 
     def unk_id(self, proto):
@@ -449,6 +451,13 @@ class PegasusConverter(SpmConverter):
 
 
 class T5Converter(SpmConverter):
+    def vocab(self, proto):
+        num_extra_ids = self.original_tokenizer._extra_ids
+        vocab = [(piece.piece, piece.score) for piece in proto.pieces]
+        vocab += [("<extra_id_{}>".format(i), 0.0)
+                    for i in range(num_extra_ids - 1, -1, -1)]
+        return vocab
+
     def post_processor(self):
         return TemplateProcessing(
             seq_a=["$0", "</s>"],
@@ -469,6 +478,7 @@ CONVERTERS = {
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
     "GPT2Tokenizer": GPT2Converter,
+    "LxmertTokenizer": BertConverter,
     "MBartTokenizer": MBartConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,

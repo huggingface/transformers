@@ -646,6 +646,8 @@ class SpecialTokensMixin:
         # which are not yet in the vocabulary. Necesssary for serialization/de-serialization
         # TODO clean this up at some point (probably by sitching to fast tokenizers)
         for key, value in kwargs.items():
+            if value is None:
+                continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
