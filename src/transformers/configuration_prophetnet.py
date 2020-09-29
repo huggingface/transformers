@@ -40,18 +40,17 @@ class ProphetNetConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=1024,
         encoder_ffn_dim=4096,
-        encoder_layers=12,
-        encoder_attention_heads=16,
+        num_encoder_layers=12,
+        num_encoder_attention_heads=16,
         decoder_ffn_dim=4096,
-        decoder_layers=12,
-        decoder_attention_heads=16,
+        num_decoder_layers=12,
+        num_decoder_attention_heads=16,
         encoder_layerdrop=0.1,
         decoder_layerdrop=0.1,
         attention_dropout=0.1,
         dropout=0.1,
         max_position_embeddings=512,
         init_std=0.02,
-        num_labels=3,
         is_encoder_decoder=True,
         pad_token_id=0,
         bos_token_id=102,
@@ -64,7 +63,6 @@ class ProphetNetConfig(PretrainedConfig):
         **common_kwargs
     ):
         super().__init__(
-            num_labels=num_labels,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -74,13 +72,13 @@ class ProphetNetConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = self.num_hidden_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
+        self.num_encoder_layers = num_encoder_layers
+        self.num_encoder_attention_heads = num_encoder_attention_heads
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
+        self.num_decoder_layers = num_decoder_layers
+        self.num_decoder_attention_heads = num_decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
@@ -99,4 +97,4 @@ class ProphetNetConfig(PretrainedConfig):
 
     @property
     def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
+        return self.num_encoder_attention_heads

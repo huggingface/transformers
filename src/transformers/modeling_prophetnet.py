@@ -204,7 +204,7 @@ class SelfAttention(nn.Module):
         self,
         query,
         key: Optional[Tensor],
-        key_padding_mask: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
         attn_mask: Optional[Tensor] = None,
         output_attentions=False,
@@ -215,7 +215,7 @@ class SelfAttention(nn.Module):
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # reuse k,v and encoder_padding_mask
+        if layer_state is not None:  # reuse k,v and encoder_attention_mask
             saved_state = layer_state.get(self.cache_key, {})
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
@@ -243,13 +243,13 @@ class SelfAttention(nn.Module):
             v = self._shape(v, -1, bsz)
 
         if saved_state is not None:
-            k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
+            k, v, attention_mask = self._use_saved_state(k, v, saved_state, attention_mask, static_kv, bsz)
 
         # Update cache
         layer_state[self.cache_key] = {
             "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
             "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_key_padding_mask": key_padding_mask if not static_kv else None,
+            "prev_attention_mask": attention_mask if not static_kv else None,
         }
 
         assert k is not None
@@ -262,16 +262,16 @@ class SelfAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
-        if key_padding_mask is not None and key_padding_mask.dim() == 0:
-            key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (
+        if attention_mask is not None and attention_mask.dim() == 0:
+            attention_mask = None
+        assert attention_mask is None or attention_mask.size()[:2] == (
             bsz,
             src_len,
         )
 
-        if key_padding_mask is not None:  # don't attend to padding symbols
+        if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
+            reshaped = attention_mask.unsqueeze(1).unsqueeze(2)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
         attn_weights = F.softmax(attn_weights, dim=-1)
@@ -292,7 +292,7 @@ class SelfAttention(nn.Module):
             attn_weights = None
         return attn_output, attn_weights
 
-    def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
+    def _use_saved_state(self, k, v, saved_state, attention_mask, static_kv, bsz):
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
         if "prev_key" in saved_state:
             _prev_key = saved_state["prev_key"]
@@ -313,38 +313,36 @@ class SelfAttention(nn.Module):
                 assert v is not None
                 v = torch.cat([prev_value, v], dim=1)
         assert k is not None and v is not None
-        prev_key_padding_mask: Optional[Tensor] = saved_state.get("prev_key_padding_mask", None)
-        key_padding_mask = self._cat_prev_key_padding_mask(
-            key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
-        )
-        return k, v, key_padding_mask
+        prev_attention_mask: Optional[Tensor] = saved_state.get("prev_attention_mask", None)
+        attention_mask = self._cat_prev_attention_mask(attention_mask, prev_attention_mask, bsz, k.size(1), static_kv)
+        return k, v, attention_mask
 
     @staticmethod
-    def _cat_prev_key_padding_mask(
-        key_padding_mask: Optional[Tensor],
-        prev_key_padding_mask: Optional[Tensor],
+    def _cat_prev_attention_mask(
+        attention_mask: Optional[Tensor],
+        prev_attention_mask: Optional[Tensor],
         batch_size: int,
         src_len: int,
         static_kv: bool,
     ) -> Optional[Tensor]:
         # saved key padding masks have shape (bsz, seq_len)
-        if prev_key_padding_mask is not None:
+        if prev_attention_mask is not None:
             if static_kv:
-                new_key_padding_mask = prev_key_padding_mask
+                new_attention_mask = prev_attention_mask
             else:
-                new_key_padding_mask = torch.cat([prev_key_padding_mask, key_padding_mask], dim=1)
+                new_attention_mask = torch.cat([prev_attention_mask, attention_mask], dim=1)
 
-        elif key_padding_mask is not None:
+        elif attention_mask is not None:
             filler = torch.zeros(
                 batch_size,
-                src_len - key_padding_mask.size(1),
-                dtype=key_padding_mask.dtype,
-                device=key_padding_mask.device,
+                src_len - attention_mask.size(1),
+                dtype=attention_mask.dtype,
+                device=attention_mask.device,
             )
-            new_key_padding_mask = torch.cat([filler, key_padding_mask], dim=1)
+            new_attention_mask = torch.cat([filler, attention_mask], dim=1)
         else:
-            new_key_padding_mask = prev_key_padding_mask
-        return new_key_padding_mask
+            new_attention_mask = prev_attention_mask
+        return new_attention_mask
 
 
 class EncoderLayer(nn.Module):
@@ -357,7 +355,7 @@ class EncoderLayer(nn.Module):
         self.embed_dim = config.hidden_size
         self.self_attn = SelfAttention(
             self.embed_dim,
-            config.encoder_attention_heads,
+            config.num_encoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
@@ -368,12 +366,12 @@ class EncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
-    def forward(self, hidden_states, encoder_padding_mask, output_attentions=False):
+    def forward(self, hidden_states, attention_mask, output_attentions=False):
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
             query=hidden_states,
             key=hidden_states,
-            key_padding_mask=encoder_padding_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -586,7 +584,7 @@ class NgramMultiheadAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        key_padding_mask=None,
+        attention_mask=None,
         layer_state=None,
         need_weights=True,
         static_kv=False,
@@ -602,7 +600,7 @@ class NgramMultiheadAttention(nn.Module):
         assert embed_dim == self.embed_dim
         assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
 
-        if layer_state is not None:  # reuse k,v and encoder_padding_mask
+        if layer_state is not None:  # reuse k,v and encoder_attention_mask
             saved_state = layer_state.get(self.cache_key, {})
         else:
             saved_state = None
@@ -789,7 +787,7 @@ class ProphetNetDecoderLayer(nn.Module):
         )
         self.encoder_attn = SelfAttention(
             self.embed_dim,
-            config.decoder_attention_heads,
+            config.num_decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
         )
@@ -804,7 +802,7 @@ class ProphetNetDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states,
-        encoder_hidden_states,
+        encoder_hidden_states=None,
         encoder_attn_mask=None,
         layer_state=None,
         self_attn_mask=None,
@@ -835,14 +833,18 @@ class ProphetNetDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         residual = hidden_states
+
+        # TODO(PVP): make encoder_attn optional
+        # TODO(PVP): refactor module into multiple smaller modules
         hidden_states, _ = self.encoder_attn(
             query=hidden_states,
             key=encoder_hidden_states,
-            key_padding_mask=encoder_attn_mask,
+            attention_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
@@ -930,7 +932,7 @@ def cal_relative_positions_buckets(num_buckets, max_distance, real_positions):
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     """
     Same to Transformer Encoder.
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
+    Transformer encoder consisting of *config.num_encoder_layers* self attention layers. Each layer
     is a :class:`EncoderLayer`.
 
     Args:
@@ -953,7 +955,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             config.max_position_embeddings + 1 + self.padding_idx, embed_dim, self.padding_idx
         )
 
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
     def forward(self, input_ids, attention_mask=None, output_attentions=False, return_dict=False):
@@ -972,7 +974,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         for encoder_layer in self.layers:
             if self.output_hidden_states:
                 encoder_states = encoder_states + (x,)
-            x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
+            x, attn = encoder_layer(x, attention_mask=attention_mask, output_attentions=output_attentions)
             if output_attentions:
                 all_attentions = all_attentions + (x,)
 
@@ -992,7 +994,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     N-stream decoder. One main stream, self.ngram predicting streams.
     Next self.ngram tokens are predicted.
 
-    N-stream decoder consisting of *config.decoder_layers* layers. Each layer
+    N-stream decoder consisting of *config.num_decoder_layers* layers. Each layer
     is a :class:`ProphetNetDecoderLayer`.
     Args:
         config: ProphetNetConfig
@@ -1018,7 +1020,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         )
         self.ngram_input_embed = nn.Embedding(self.ngram, embed_dim, None)
 
-        self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
     def cal_and_buffer_finetune_relative_positions(self, real_positions):
@@ -1082,8 +1084,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def forward(
         self,
         input_ids,
-        encoder_hidden_states,
-        encoder_padding_mask,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
@@ -1097,7 +1099,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 `(batch, tgt_len)`, for teacher forcing
             encoder_hidden_states: output from the encoder, used for
                 encoder-side attention
-            encoder_padding_mask: for ignoring pad tokens
+            encoder_attention_mask: for ignoring pad tokens
             decoder_cached_states (dict or None): dictionary used for storing state during generation
             use_cache: inference or training procedure.
 
@@ -1108,8 +1110,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 - attentions
 
         """
-        if encoder_padding_mask is not None:
-            encoder_padding_mask = invert_mask(encoder_padding_mask)
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = invert_mask(encoder_attention_mask)
 
         main_stream_pos_embed, real_positions = self.embed_positions(
             input_ids, use_cache=use_cache, past_key_values=past_key_values
@@ -1149,7 +1151,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if self.emb_layer_norm:
             hidden_states = self.emb_layer_norm(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
+
+        if encoder_hidden_states is not None:
+            encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # decoder layers
         all_hidden_states = ()
@@ -1161,8 +1165,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             layer_state = past_key_values[idx] if past_key_values is not None else None
             hidden_states, layer_self_attn, layer_past = decoder_layer(
                 hidden_states,
-                encoder_hidden_states,
-                encoder_attn_mask=encoder_padding_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attn_mask=encoder_attention_mask,
                 layer_state=layer_state,
                 self_attn_mask=self_attn_mask,
                 output_attentions=output_attentions,

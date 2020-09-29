@@ -14,16 +14,452 @@
 # limitations under the License.
 
 
+import copy
+import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import slow, torch_device
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_torch, slow, torch_device
+
+from .test_configuration_common import ConfigTester
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ProphetNetForConditionalGeneration, ProphetNetTokenizer
+    from transformers import ProphetNetConfig, ProphetNetForConditionalGeneration, ProphetNetModel, ProphetNetTokenizer
+
+
+class ProphetNetModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        batch_size=13,
+        hidden_size=16,
+        encoder_seq_length=7,
+        decoder_seq_length=9,
+        # For common tests
+        is_training=True,
+        use_attention_mask=True,
+        use_labels=True,
+        decoder_start_token_id=0,
+        encoder_ffn_dim=32,
+        num_encoder_layers=5,
+        num_encoder_attention_heads=4,
+        decoder_ffn_dim=32,
+        num_decoder_layers=4,
+        num_decoder_attention_heads=4,
+        max_position_embeddings=30,
+        is_encoder_decoder=True,
+        pad_token_id=0,
+        bos_token_id=102,
+        eos_token_id=102,
+        ngram=2,
+        num_buckets=32,
+        relative_max_distance=128,
+        disable_ngram_loss=False,
+        scope=None,
+    ):
+
+        self.parent = parent
+        self.batch_size = batch_size
+        self.encoder_seq_length = encoder_seq_length
+        self.decoder_seq_length = decoder_seq_length
+        # For common tests
+        self.seq_length = self.decoder_seq_length
+        self.is_training = is_training
+        self.use_attention_mask = use_attention_mask
+        self.use_labels = use_labels
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_encoder_layers = num_encoder_layers
+        self.num_decoder_layers = num_decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.num_encoder_attention_heads = num_encoder_attention_heads
+        self.num_decoder_attention_heads = num_decoder_attention_heads
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.ngram = ngram
+        self.num_buckets = num_buckets
+        self.relative_max_distance = relative_max_distance
+        self.disable_ngram_loss = disable_ngram_loss
+        self.max_position_embeddings = max_position_embeddings
+        self.is_encoder_decoder = is_encoder_decoder
+
+        self.scope = None
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        decoder_attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+
+        lm_labels = None
+        if self.use_labels:
+            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        config = ProphetNetConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_encoder_layers=self.num_encoder_layers,
+            num_decoder_layers=self.num_decoder_layers,
+            decoder_ffn_dim=self.decoder_ffn_dim,
+            encoder_ffn_dim=self.encoder_ffn_dim,
+            num_encoder_attention_heads=self.num_encoder_attention_heads,
+            num_decoder_attention_heads=self.num_decoder_attention_heads,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+            ngram=self.ngram,
+            num_buckets=self.num_buckets,
+            relative_max_distance=self.relative_max_distance,
+            disable_ngram_loss=self.disable_ngram_loss,
+            max_position_embeddings=self.max_position_embeddings,
+            is_encoder_decoder=self.is_encoder_decoder,
+        )
+
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
+    def check_prepare_lm_labels_via_shift_left(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # make sure that lm_labels are correctly padded from the right
+        lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
+
+        # add casaul pad token mask
+        triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
+        lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
+        decoder_input_ids = model._shift_right(lm_labels)
+
+        for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(zip(decoder_input_ids, lm_labels)):
+            # first item
+            self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
+            if i < decoder_input_ids_slice.shape[-1]:
+                if i < decoder_input_ids.shape[-1] - 1:
+                    # items before diagonal
+                    self.parent.assertListEqual(
+                        decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()
+                    )
+                # pad items after diagonal
+                if i < decoder_input_ids.shape[-1] - 2:
+                    self.parent.assertListEqual(
+                        decoder_input_ids_slice[i + 2 :].tolist(), lm_labels_slice[i + 1 : -1].tolist()
+                    )
+            else:
+                # all items after square
+                self.parent.assertListEqual(decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist())
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        decoder_output = result.last_hidden_state
+        decoder_past = result.past_key_values
+        encoder_output = result.encoder_last_hidden_state
+
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        # There should be `num_layers` key value embeddings stored in decoder_past
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
+        self.parent.assertEqual(len(decoder_past[0]), 4)
+
+    def create_and_check_with_lm_head(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetForConditionalGeneration(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            labels=lm_labels,
+        )
+        self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
+    def create_and_check_decoder_model_past(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetModel(config=config).get_decoder().to(torch_device).eval()
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past_key_value_states = outputs.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_decoder_model_attention_mask_past(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetModel(config=config).get_decoder()
+        model.to(torch_device)
+        model.eval()
+
+        # create attention mask
+        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        half_seq_length = input_ids.shape[-1] // 2
+        attn_mask[:, half_seq_length:] = 0
+
+        # first forward pass
+        output, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
+
+        # append to next input_ids and attn_mask
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        attn_mask = torch.cat(
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
+        )
+
+        # get two different outputs
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_generate_with_past_key_value_states(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetForConditionalGeneration(config=config).to(torch_device).eval()
+        torch.manual_seed(0)
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+
+    def create_and_check_model_fp16_forward(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetModel(config=config).to(torch_device).half().eval()
+        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+    def create_and_check_encoder_decoder_shared_weights(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        for model_class in [ProphetNetModel, ProphetNetForConditionalGeneration]:
+            torch.manual_seed(0)
+            model = model_class(config=config).to(torch_device).eval()
+            # load state dict copies weights but does not tie them
+            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
+
+            torch.manual_seed(0)
+            tied_config = copy.deepcopy(config)
+            tied_config.tie_encoder_decoder = True
+            tied_model = model_class(config=tied_config).to(torch_device).eval()
+
+            model_result = model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            tied_model_result = tied_model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            # check that models has less parameters
+            self.parent.assertLess(
+                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+            )
+            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
+
+            # check that outputs are equal
+            self.parent.assertTrue(
+                torch.allclose(
+                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                )
+            )
+
+            # check that outputs after saving and loading are equal
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tied_model.save_pretrained(tmpdirname)
+                tied_model = model_class.from_pretrained(tmpdirname)
+                tied_model.to(torch_device)
+                tied_model.eval()
+
+                # check that models has less parameters
+                self.parent.assertLess(
+                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                )
+                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
+
+                tied_model_result = tied_model(
+                    input_ids=input_ids,
+                    decoder_input_ids=decoder_input_ids,
+                    attention_mask=attention_mask,
+                    decoder_attention_mask=decoder_attention_mask,
+                )
+
+                # check that outputs are equal
+                self.parent.assertTrue(
+                    torch.allclose(
+                        model_result[0][0, :, random_slice_idx],
+                        tied_model_result[0][0, :, random_slice_idx],
+                        atol=1e-4,
+                    )
+                )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "use_cache": False,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
+    test_pruning = False
+    test_torchscript = False
+    test_resize_embeddings = False
+    is_encoder_decoder = True
+
+    def setUp(self):
+        self.model_tester = ProphetNetModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ProphetNetConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
 
 class ProphetNetModelIntegrationTest(unittest.TestCase):
