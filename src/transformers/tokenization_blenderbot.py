@@ -71,7 +71,7 @@ def get_pairs(word):
 class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer. Peculiarities:
-    
+
     - Byte-Pair-Encoding
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
