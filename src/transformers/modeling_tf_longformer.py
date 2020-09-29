@@ -1225,7 +1225,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 class TFLongformerMainLayer(tf.keras.layers.Layer):
     config_class = LongformerConfig
 
-    def __init__(self, config, add_pooling_layer=True, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         if isinstance(config.attention_window, int):
@@ -1247,7 +1247,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         self.attention_window = config.attention_window
         self.embeddings = TFLongformerEmbeddings(config, name="embeddings")
         self.encoder = TFLongformerEncoder(config, name="encoder")
-        self.pooler = TFLongformerPooler(config, name="pooler") if add_pooling_layer else None
+        self.pooler = TFLongformerPooler(config, name="pooler")
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -1371,7 +1371,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             training=training,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = self.pooler(sequence_output)
 
         # undo padding
         if padding_len > 0:
@@ -1618,12 +1618,13 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
-    authorized_unexpected_keys = [r"pooler"]
+
+    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
         self.lm_head = TFLongformerLMHead(config, self.longformer.embeddings, name="lm_head")
 
     def get_output_embeddings(self):
@@ -1702,13 +1703,14 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
+
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
