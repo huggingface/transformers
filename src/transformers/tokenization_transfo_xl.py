@@ -107,10 +107,40 @@ def detokenize_numbers(text: str) -> str:
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
-    Transformer-XL tokenizer adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
+    Construct a Transformer-XL tokenizer adapted from Vocab class in `the original code
+    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        special (:obj:`List[str]`, `optional`):
+            A list of special tokens (to be treated by the original implementation of this tokenizer).
+        min_freq (:obj:`int`, `optional`, defaults to 0):
+            The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
+            will be mapped to :obj:`unk_token`).
+        max_size (:obj:`int`, `optional`):
+            The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
+            after excluding the tokens according to the :obj:`min_freq` rule.
+        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to lowercase the input when tokenizing.
+        delimiter (:obj:`str`, `optional`):
+            The delimiter used btween tokens.
+        vocab_file (:obj:`str`, `optional`):
+            File containing the vocabulary (from the original implementation).
+        pretrained_vocab_file (:obj:`str`, `optional`):
+            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
+        never_split (xxx, `optional`):
+            Fill me with intesting stuff.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
+            The end of sequence token.
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
+            A list of additional special tokens (for the HuggingFace functionality).
+        language (:obj:`str`, `optional`, defaults to :obj:`"en"`):
+            The language of this tokenizer (used for mose preprocessing).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

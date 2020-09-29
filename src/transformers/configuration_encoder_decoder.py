@@ -25,22 +25,24 @@ logger = logging.get_logger(__name__)
 
 class EncoderDecoderConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.EncoderDecoderConfig` is the configuration class to store the configuration of a `EncoderDecoderModel`.
+    :class:`~transformers.EncoderDecoderConfig` is the configuration class to store the configuration of a
+    :class:`~transformers.EncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to the
+    specified arguments, defining the encoder and decoder configs.
 
-    It is used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder configs.
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig`
-    and can be used to control the model outputs.
-    See the documentation for :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
     Args:
         kwargs (`optional`):
-            Remaining dictionary of keyword arguments. Notably:
-                encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-                    An instance of a configuration object that defines the encoder config.
-                decoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-                    An instance of a configuration object that defines the decoder config.
+            Dictionary of keyword arguments. Notably:
 
-    Example::
+                - **encoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                  object that defines the encoder config.
+                - **decoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                  object that defines the decoder config.
+
+    Examples::
 
         >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 

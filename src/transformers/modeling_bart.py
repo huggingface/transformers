@@ -76,18 +76,18 @@ BART_START_DOCSTRING = r"""
 BART_GENERATION_EXAMPLE = r"""
     Summarization example::
 
-        from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
+        >>> from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
 
-        # see ``examples/summarization/bart/run_eval.py`` for a longer example
-        model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+        >>> # see ``examples/summarization/bart/run_eval.py`` for a longer example
+        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
-        ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
 
-        # Generate Summary
-        summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 
 """
 
@@ -97,17 +97,17 @@ BART_INPUTS_DOCSTRING = r"""
                Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
+        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
-            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
+            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the encoder.
             Used in the cross-attention of the decoder.
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
@@ -120,11 +120,11 @@ BART_INPUTS_DOCSTRING = r"""
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
             ``past_key_values``).
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -154,9 +154,10 @@ def _prepare_bart_decoder_inputs(
     if decoder_padding_mask is not None and decoder_padding_mask.shape[1] > 1:
         # never mask leading token, even if it is pad
         decoder_padding_mask[:, 0] = decoder_padding_mask[:, 1]
-    causal_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(
-        dtype=causal_mask_dtype, device=decoder_input_ids.device
-    )
+    tmp = fill_with_neg_inf(torch.zeros(tgt_len, tgt_len))
+    mask = torch.arange(tmp.size(-1))
+    tmp.masked_fill_(mask < (mask + 1).view(tmp.size(-1), 1), 0)
+    causal_mask = tmp.to(dtype=causal_mask_dtype, device=decoder_input_ids.device)
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
 
@@ -306,7 +307,7 @@ class BartEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
-        self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(
         self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
@@ -550,8 +551,7 @@ class BartDecoder(nn.Module):
 
         if use_cache:
             input_ids = input_ids[:, -1:]
-            positions = positions[:, -1:]  # happens after we embed them
-            # assert input_ids.ne(self.padding_idx).any()
+            positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
@@ -589,10 +589,11 @@ class BartDecoder(nn.Module):
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers) - 1):  # if config.add_final_layer_norm (mBART)
-                x = self.layer_norm(x)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
+
+        if self.layer_norm:  # if config.add_final_layer_norm (mBART)
+            x = self.layer_norm(x)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
@@ -862,7 +863,7 @@ class BartModel(PretrainedBartModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
-        output_type=BaseModelOutputWithPast,
+        output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1012,7 +1013,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         **unused,
     ):
         r"""
-            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Labels for computing the masked language modeling loss.
                 Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
@@ -1022,21 +1023,21 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         Conditional generation example::
 
-                # Mask filling only works for bart-large
-                from transformers import BartTokenizer, BartForConditionalGeneration
-                tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-                TXT = "My friends are <mask> but they eat too many carbs."
+                >>> # Mask filling only works for bart-large
+                >>> from transformers import BartTokenizer, BartForConditionalGeneration
+                >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+                >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-                model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-                input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-                logits = model(input_ids).logits
+                >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
+                >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+                >>> logits = model(input_ids).logits
 
-                masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-                probs = logits[0, masked_index].softmax(dim=0)
-                values, predictions = probs.topk(5)
+                >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+                >>> probs = logits[0, masked_index].softmax(dim=0)
+                >>> values, predictions = probs.topk(5)
 
-                tokenizer.decode(predictions).split()
-                # ['good', 'great', 'all', 'really', 'very']
+                >>> tokenizer.decode(predictions).split()
+                >>> # ['good', 'great', 'all', 'really', 'very']
         """
         if "lm_labels" in unused:
             warnings.warn(
@@ -1177,7 +1178,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -1264,11 +1265,11 @@ class BartForQuestionAnswering(PretrainedBartModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.

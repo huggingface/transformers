@@ -134,6 +134,18 @@ Follow these steps to start contributing:
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.)
 
+   To run the full test suite, you might need the additional dependency on `datasets` which requires a separate source
+   install:
+
+   ```bash
+   $ git clone https://github.com/huggingface/datasets
+   $ cd datasets
+   $ pip install -e .
+   ```
+
+   If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
+   library.
+
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
@@ -158,12 +170,19 @@ Follow these steps to start contributing:
    $ make style
    ```
 
-   `transformers` also uses `flake8` to check for coding mistakes. Quality
+   `transformers` also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
    control runs in CI, however you can also run the same checks with:
 
    ```bash
    $ make quality
    ```
+   You can do the automatic style corrections and code verifications that can't be automated in one go:
+
+   ```bash
+   $ make fixup
+   ```
+
+   This target is also optimized to only work with files modified by the PR you're working on.
 
    If you're modifying documents under `docs/source`, make sure to validate that
    they can still be built. This check also runs in CI. To run a local check

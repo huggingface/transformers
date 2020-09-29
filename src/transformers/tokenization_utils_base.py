@@ -1093,7 +1093,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 :obj:`return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
-            is_pretokenized (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the input is already pre-tokenized (e.g., split into words), in which case the tokenizer
                 will skip the pre-tokenization step. This is useful for NER or token classification.
             pad_to_multiple_of (:obj:`int`, `optional`):
@@ -1221,12 +1221,13 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
+        Prepare model inputs for translation. For best performance, translate one sentence at a time.
 
         Arguments:
-            src_texts: (:obj:`list`):
-                list of documents to summarize or source language texts
-            tgt_texts: (:obj:`list`, `optional`):
-                list of tgt language texts or summaries.
+            src_texts (:obj:`List[str]`):
+                List of documents to summarize or source language texts.
+            tgt_texts (:obj:`list`, `optional`):
+                List of summaries or target language texts.
             max_length (:obj:`int`, `optional`):
                 Controls the maximum length for encoder inputs (documents to summarize or source language texts)
                 If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
@@ -1265,6 +1266,8 @@ PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
+            **kwargs:
+                Additional keyword arguments passed along to :obj:`self.__call__`.
 
         Return:
             :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
@@ -1485,7 +1488,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, use_cdn=False
+                            pretrained_model_name_or_path, filename=file_name, use_cdn=False, mirror=None
                         )
 
                     vocab_files[file_id] = full_file_name
@@ -1647,11 +1650,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 )
                 tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
 
-        # Check all our special tokens are registrered as "no split" token (we don't cut them) and are in the vocab
+        # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
         added_tokens = tokenizer.sanitize_special_tokens()
         if added_tokens:
             logger.warning(
-                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained."
+                "Special tokens have been added in the vocabulary, make sure the associated word embedding are fine-tuned or trained."
             )
 
         return tokenizer
@@ -1914,7 +1917,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -1935,12 +1938,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 The sequence or batch of sequences to be encoded.
                 Each sequence can be a string or a list of strings (pretokenized string).
                 If the sequences are provided as list of strings (pretokenized), you must set
-                :obj:`is_pretokenized=True` (to lift the ambiguity with a batch of sequences).
+                :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded.
                 Each sequence can be a string or a list of strings (pretokenized string).
                 If the sequences are provided as list of strings (pretokenized), you must set
-                :obj:`is_pretokenized=True` (to lift the ambiguity with a batch of sequences).
+                :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
         # Input type checking for clearer error
         assert isinstance(text, str) or (
@@ -1979,8 +1982,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         )
 
         is_batched = bool(
-            (not is_pretokenized and isinstance(text, (list, tuple)))
-            or (is_pretokenized and isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple)))
+            (not is_split_into_words and isinstance(text, (list, tuple)))
+            or (
+                is_split_into_words and isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            )
         )
 
         if is_batched:
@@ -1992,7 +1997,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation=truncation,
                 max_length=max_length,
                 stride=stride,
-                is_pretokenized=is_pretokenized,
+                is_split_into_words=is_split_into_words,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
@@ -2013,7 +2018,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation=truncation,
                 max_length=max_length,
                 stride=stride,
-                is_pretokenized=is_pretokenized,
+                is_split_into_words=is_split_into_words,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
@@ -2036,7 +2041,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2083,7 +2088,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            is_pretokenized=is_pretokenized,
+            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
@@ -2105,7 +2110,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2135,7 +2140,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2177,7 +2182,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            is_pretokenized=is_pretokenized,
+            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
@@ -2205,7 +2210,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2491,6 +2496,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
 
         # Truncation: Handle max sequence length
+        overflowing_tokens = []
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -2499,9 +2505,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation_strategy=truncation_strategy,
                 stride=stride,
             )
-            if return_overflowing_tokens:
-                encoded_inputs["overflowing_tokens"] = overflowing_tokens
-                encoded_inputs["num_truncated_tokens"] = total_len - max_length
+
+        if return_overflowing_tokens:
+            encoded_inputs["overflowing_tokens"] = overflowing_tokens
+            encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
         if add_special_tokens:
@@ -2526,7 +2533,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             logger.warning(
                 "Token indices sequence length is longer than the specified maximum sequence length "
                 "for this model ({} > {}). Running this sequence through the model will result in "
-                "indexing errors".format(len(ids), self.model_max_length)
+                "indexing errors".format(len(encoded_inputs["input_ids"]), self.model_max_length)
             )
 
         # Padding

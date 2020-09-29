@@ -33,10 +33,10 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RobertaConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.RobertaModel`.
-    It is used to instantiate an RoBERTa model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.RobertaModel` or a
+    :class:`~transformers.TFRobertaModel`. It is used to instantiate a RoBERTa model according to the specified
+    arguments, defining the model architecture.
+
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -45,7 +45,7 @@ class RobertaConfig(BertConfig):
     The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`.
     It reuses the same defaults. Please check the parent class for more information.
 
-    Example::
+    Examples::
 
         >>> from transformers import RobertaConfig, RobertaModel
 

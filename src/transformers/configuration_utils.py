@@ -130,6 +130,7 @@ class PretrainedConfig(object):
         - **eos_token_id** (:obj:`int`, `optional`)) -- The id of the `end-of-stream` token.
         - **decoder_start_token_id** (:obj:`int`, `optional`)) -- If an encoder-decoder model starts decoding with
           a different token than `bos`, the id of that token.
+        - **sep_token_id** (:obj:`int`, `optional`)) -- The id of the `separation` token.
 
     PyTorch specific parameters
         - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
@@ -190,10 +191,13 @@ class PretrainedConfig(object):
             self.num_labels = kwargs.pop("num_labels", 2)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
+        self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.sep_token_id = kwargs.pop("sep_token_id", None)
+
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # task specific arguments
@@ -336,7 +340,9 @@ class PretrainedConfig(object):
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False)
+            config_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+            )
 
         try:
             # Load from URL or cache if already cached

@@ -1,11 +1,11 @@
 MarianMT
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 **Bugs:** If you see something strange,
 file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__ and assign
 @sshleifer. Translations should be similar, but not identical to, output in the test set linked to in each model card.
 
 Implementation Notes
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 - Each model is about 298 MB on disk, there are 1,000+ models.
 - The list of supported language pairs can be found `here <https://huggingface.co/Helsinki-NLP>`__.
 - models were originally trained by `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian <https://marian-nmt.github.io/>`_ C++ library, which supports fast training and translation.
@@ -19,14 +19,14 @@ Implementation Notes
 - Code to bulk convert models can be found in ``convert_marian_to_pytorch.py``
 
 Naming
-~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 - All  model names use the following format: ``Helsinki-NLP/opus-mt-{src}-{tgt}``
 - The language codes used to name models are inconsistent. Two digit codes can usually be found `here <https://developers.google.com/admin-sdk/directory/v1/languages>`_, three digit codes require googling "language code {code}".
 - Codes formatted like ``es_AR`` are usually ``code_{region}``. That one is spanish documents from Argentina.
 
 
 Multilingual Models
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All  model names use the following format: ``Helsinki-NLP/opus-mt-{src}-{tgt}``:
     - if ``src`` is in all caps, the model supports multiple input languages, you can figure out which ones by looking at the model card, or the Group Members `mapping <https://gist.github.com/sshleifer/6d20e7761931b08e73c3219027b97b8a>`_ .
@@ -87,7 +87,7 @@ Code to see available pretrained models:
     multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
 
 MarianMTModel
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
 Model API is identical to BartForConditionalGeneration.
@@ -95,13 +95,13 @@ Available models are listed at `Model List <https://huggingface.co/models?search
 This class inherits nearly all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
 
 MarianConfig
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: transformers.MarianConfig
     :members:
 
 
 MarianTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.MarianTokenizer
     :members: prepare_seq2seq_batch

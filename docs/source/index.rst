@@ -1,17 +1,17 @@
 Transformers
-================================================================================================================================================
+=======================================================================================================================
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose 
-architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural 
-Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between 
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
+architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural
+Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
 TensorFlow 2.0 and PyTorch.
 
 This is the documentation of our repository `transformers <https://github.com/huggingface/transformers>`_.
 
 Features
----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
@@ -36,7 +36,7 @@ Choose the right framework for every part of a model's lifetime:
 - Seamlessly pick the right framework for training, evaluation, production
 
 Contents
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 The documentation is organized in five parts:
 
@@ -46,7 +46,10 @@ The documentation is organized in five parts:
 - **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
 - **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
   transformers model
-- **PACKAGE REFERENCE** contains the documentation of each public class and function.
+- The three last section contain the documentation of each public class and function, grouped in:
+    - **MAIN CLASSES** for the main classes exposing the important APIs of the library.
+    - **MODELS** for the classes and functions related to each model implemented in the library.
+    - **INTERNAL HELPERS** for the classes and functions we use internally.
 
 The library currently contains PyTorch and Tensorflow implementations, pre-trained model weights, usage scripts and
 conversion utilities for the following models:
@@ -127,11 +130,20 @@ conversion utilities for the following models:
 23. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
     <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
 24. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_ (from Facebook) released with the paper  `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov,
-    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.  
+    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 25. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
     Cross-Modality Encoder Representations from Transformers for Open-Domain Question
     Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
-26. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+26. `Funnel Transformer <https://github.com/laiguokun/Funnel-Transformer>`_ (from CMU/Google Brain) released with the paper
+    `Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
+    <https://arxiv.org/abs/2006.03236>`_ by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
+    `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
+    <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+28. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with the paper
+    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+    <https://arxiv.org/abs/1912.13318>`_ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
+29. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -166,6 +178,7 @@ conversion utilities for the following models:
     converting_tensorflow_models
     migration
     contributing
+    testing
     serialization
 
 .. toctree::
@@ -178,45 +191,60 @@ conversion utilities for the following models:
 
 .. toctree::
     :maxdepth: 2
-    :caption: Package Reference
+    :caption: Main Classes
 
     main_classes/configuration
-    main_classes/output
-    main_classes/model
-    main_classes/tokenizer
-    main_classes/pipelines
-    main_classes/trainer
-    main_classes/optimizer_schedules
-    main_classes/processors
     main_classes/logging
-    model_doc/auto
-    model_doc/encoderdecoder
-    model_doc/bert
-    model_doc/gpt
-    model_doc/transformerxl
-    model_doc/gpt2
-    model_doc/xlm
-    model_doc/xlnet
-    model_doc/roberta
-    model_doc/distilbert
-    model_doc/ctrl
-    model_doc/camembert
+    main_classes/model
+    main_classes/optimizer_schedules
+    main_classes/output
+    main_classes/pipelines
+    main_classes/processors
+    main_classes/tokenizer
+    main_classes/trainer
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Models
+
     model_doc/albert
-    model_doc/xlmroberta
-    model_doc/flaubert
+    model_doc/auto
     model_doc/bart
-    model_doc/t5
-    model_doc/electra
+    model_doc/bert
+    model_doc/bertgeneration
+    model_doc/camembert
+    model_doc/ctrl
     model_doc/dialogpt
-    model_doc/reformer
-    model_doc/marian
-    model_doc/longformer
-    model_doc/retribert
-    model_doc/mobilebert
+    model_doc/distilbert
     model_doc/dpr
-    model_doc/pegasus
-    model_doc/mbart
+    model_doc/electra
+    model_doc/encoderdecoder
+    model_doc/flaubert
+    model_doc/fsmt
+    model_doc/funnel
+    model_doc/layoutlm
+    model_doc/longformer
     model_doc/lxmert
+    model_doc/marian
+    model_doc/mbart
+    model_doc/mobilebert
+    model_doc/gpt
+    model_doc/gpt2
+    model_doc/pegasus
+    model_doc/rag
+    model_doc/reformer
+    model_doc/retribert
+    model_doc/roberta
+    model_doc/t5
+    model_doc/transformerxl
+    model_doc/xlm
+    model_doc/xlmroberta
+    model_doc/xlnet
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Internal Helpers
+
     internal/modeling_utils
-    internal/tokenization_utils
     internal/pipelines_utils
+    internal/tokenization_utils
