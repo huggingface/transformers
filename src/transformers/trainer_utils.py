@@ -223,7 +223,6 @@ class TrainerState:
     """
     A class containing the `Trainer` fields that will be saved along the model and optimizer.
     """
-
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
 

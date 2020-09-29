@@ -810,14 +810,14 @@ class Trainer:
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
                         if self.args.load_best_model_at_end:
-                            self._save_model(model, trial, metrics=metrics)
+                            self._save_training(model, trial, metrics=metrics)
 
                     if (
                         not self.args.load_best_model_at_end
                         and self.args.save_steps > 0
                         and self.global_step % self.args.save_steps == 0
                     ):
-                        self._save_model(model, trial)
+                        self._save_training(model, trial)
 
                 epoch_pbar.update(1)
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
@@ -829,7 +829,7 @@ class Trainer:
                 metrics = self.evaluate()
                 self._report_to_hp_search(trial, epoch, metrics)
                 if self.args.load_best_model_at_end:
-                    self._save_model(model, trial, metrics=metrics)
+                    self._save_training(model, trial, metrics=metrics)
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -864,7 +864,7 @@ class Trainer:
 
         return TrainOutput(self.global_step, tr_loss.item() / self.global_step)
 
-    def _save_model(self, model, trial, metrics=None):
+    def _save_training(self, model, trial, metrics=None):
         # In all cases (even distributed/parallel), self.model is always a reference
         # to the model we want to save.
         if hasattr(model, "module"):
@@ -1271,7 +1271,6 @@ class Trainer:
                 checkpoints_sorted[-1],
                 checkpoints_sorted[best_model_index],
             )
-            print(checkpoints_sorted)
         return checkpoints_sorted
 
     def _rotate_checkpoints(self, use_mtime=False) -> None:
