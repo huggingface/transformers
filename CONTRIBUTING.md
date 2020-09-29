@@ -176,12 +176,13 @@ Follow these steps to start contributing:
    ```bash
    $ make quality
    ```
-
    You can do the automatic style corrections and code verifications that can't be automated in one go:
 
    ```bash
    $ make fixup
    ```
+
+   This target is also optimized to only work with files modified by the PR you're working on.
 
    If you're modifying documents under `docs/source`, make sure to validate that
    they can still be built. This check also runs in CI. To run a local check
