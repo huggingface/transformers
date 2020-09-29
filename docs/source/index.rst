@@ -223,9 +223,6 @@ conversion utilities for the following models:
     model_doc/fsmt
     model_doc/funnel
     model_doc/layoutlm
-<<<<<<< HEAD
-    model_doc/rag
-=======
     model_doc/longformer
     model_doc/lxmert
     model_doc/marian
@@ -248,7 +245,6 @@ conversion utilities for the following models:
     :maxdepth: 2
     :caption: Internal Helpers
 
->>>>>>> master
     internal/modeling_utils
     internal/pipelines_utils
     internal/tokenization_utils
