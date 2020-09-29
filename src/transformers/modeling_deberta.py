@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch DeBERTa model. """
 
-import copy
 import math
 from collections import Sequence
 
@@ -59,6 +58,7 @@ class ContextPooler(nn.Module):
         pooled_output = ACT2FN[self.config.pooler_hidden_act](pooled_output)
         return pooled_output
 
+    @property
     def output_dim(self):
         return self.config.hidden_size
 
@@ -204,34 +204,7 @@ class StableDropout(torch.nn.Module):
             return self.drop_prob
 
 
-def MaskedLayerNorm(layerNorm, input, mask=None):
-    """Masked LayerNorm which will apply mask over the output of LayerNorm to avoid inaccurate updatings to the LayerNorm module.
-    Args:
-      layernorm (:obj:`~DeBERTa.deberta.BertLayerNorm`): LayerNorm module or function
-      input (:obj:`torch.tensor`): The input tensor
-      mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicate the output of that element will be ignored, i.e. set to `0`
-
-    Example::
-
-      # Create a tensor b x n x d
-      x = torch.randn([1,10,100])
-      m = torch.tensor([[1,1,1,0,0,0,0,0,0,0]], dtype=torch.int)
-      LayerNorm = DeBERTa.deberta.BertLayerNorm(100)
-      y = MaskedLayerNorm(LayerNorm, x, m)
-
-    """
-    output = layerNorm(input).to(input)
-    if mask is None:
-        return output
-    if mask.dim() != input.dim():
-        if mask.dim() == 4:
-            mask = mask.squeeze(1).squeeze(1)
-        mask = mask.unsqueeze(2)
-    mask = mask.to(output.dtype)
-    return output * mask
-
-
-class BertLayerNorm(nn.Module):
+class DebertaLayerNorm(nn.Module):
     """LayerNorm module in the TF style (epsilon inside the square root)."""
 
     def __init__(self, size, eps=1e-12):
@@ -240,38 +213,37 @@ class BertLayerNorm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(size))
         self.variance_epsilon = eps
 
-    def forward(self, x):
-        input_type = x.dtype
-        x = x.float()
-        u = x.mean(-1, keepdim=True)
-        s = (x - u).pow(2).mean(-1, keepdim=True)
-        x = (x - u) / torch.sqrt(s + self.variance_epsilon)
-        x = x.to(input_type)
-        y = self.weight * x + self.bias
+    def forward(self, hidden_states):
+        input_type = hidden_states.dtype
+        hidden_states = hidden_states.float()
+        mean = hidden_states.mean(-1, keepdim=True)
+        variance = (hidden_states - mean).pow(2).mean(-1, keepdim=True)
+        hidden_states = (hidden_states - mean) / torch.sqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states.to(input_type)
+        y = self.weight * hidden_states + self.bias
         return y
 
 
-class BertSelfOutput(nn.Module):
+# Copied from transformers.modeling_bert.BertSelfOutput with Bert->Deberta
+class DebertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = StableDropout(config.hidden_dropout_prob)
-        self.config = config
 
-    def forward(self, hidden_states, input_states, mask=None):
+    def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states += input_states
-        hidden_states = MaskedLayerNorm(self.LayerNorm, hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-class BertAttention(nn.Module):
+class DebertaAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.self = DisentangledSelfAttention(config)
-        self.output = BertSelfOutput(config)
+        self.output = DebertaSelfOutput(config)
         self.config = config
 
     def forward(
@@ -303,13 +275,15 @@ class BertAttention(nn.Module):
             return attention_output
 
 
-class BertIntermediate(nn.Module):
+# Copied from transformers.modeling_bert.BertIntermediate with Bert->Deberta
+class DebertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = (
-            ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
-        )
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -317,28 +291,28 @@ class BertIntermediate(nn.Module):
         return hidden_states
 
 
-class BertOutput(nn.Module):
+# Copied from transformers.modeling_bert.BertOutpu with Bert->Deberta
+class DebertaOutput(nn.Module):
     def __init__(self, config):
-        super(BertOutput, self).__init__()
+        super(DebertaOutput, self).__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
-    def forward(self, hidden_states, input_states, mask=None):
+    def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states += input_states
-        hidden_states = MaskedLayerNorm(self.LayerNorm, hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-class BertLayer(nn.Module):
+class DebertaLayer(nn.Module):
     def __init__(self, config):
-        super(BertLayer, self).__init__()
-        self.attention = BertAttention(config)
-        self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+        super(DebertaLayer, self).__init__()
+        self.attention = DebertaAttention(config)
+        self.intermediate = DebertaIntermediate(config)
+        self.output = DebertaOutput(config)
 
     def forward(
         self,
@@ -372,8 +346,7 @@ class DeBERTaEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        layer = BertLayer(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([DebertaLayer(config) for _ in range(config.num_hidden_layers)])
         self.relative_attention = getattr(config, "relative_attention", False)
         if self.relative_attention:
             self.max_relative_positions = getattr(config, "max_relative_positions", -1)
@@ -520,7 +493,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         self.in_proj = torch.nn.Linear(config.hidden_size, self.all_head_size * 3, bias=False)
         self.q_bias = torch.nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
         self.v_bias = torch.nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
-        self.pos_att_type = [x.strip() for x in getattr(config, "pos_att_type", "none").lower().split("|")]  # c2p|p2c
+        self.pos_att_type = config.pos_att_type
 
         self.relative_attention = getattr(config, "relative_attention", False)
         self.talking_head = getattr(config, "talking_head", False)
@@ -600,18 +573,12 @@ class DisentangledSelfAttention(torch.nn.Module):
             k, v = [linear(qkvw[i], qkvb[i], hidden_states) for i in range(1, 3)]
             query_layer, key_layer, value_layer = [self.transpose_for_scores(x) for x in [q, k, v]]
 
-        query_layer += self.transpose_for_scores(self.q_bias.unsqueeze(0).unsqueeze(0))
-        value_layer += self.transpose_for_scores(self.v_bias.unsqueeze(0).unsqueeze(0))
+        query_layer += self.transpose_for_scores(self.q_bias[None, None, :])
+        value_layer += self.transpose_for_scores(self.v_bias[None, None, :])
 
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        scale_factor = 1
-        if "c2p" in self.pos_att_type:
-            scale_factor += 1
-        if "p2c" in self.pos_att_type:
-            scale_factor += 1
-        if "p2p" in self.pos_att_type:
-            scale_factor += 1
+        scale_factor = 1 + len(self.pos_att_type)
         scale = math.sqrt(query_layer.size(-1) * scale_factor)
         query_layer = query_layer / scale
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -716,7 +683,7 @@ class DeBERTaEmbeddings(nn.Module):
 
         if self.embedding_size != config.hidden_size:
             self.embed_proj = nn.Linear(self.embedding_size, config.hidden_size, bias=False)
-        self.LayerNorm = BertLayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = StableDropout(config.hidden_dropout_prob)
         self.output_to_half = False
         self.config = config
@@ -756,7 +723,16 @@ class DeBERTaEmbeddings(nn.Module):
         if self.embedding_size != self.config.hidden_size:
             embeddings = self.embed_proj(embeddings)
 
-        embeddings = MaskedLayerNorm(self.LayerNorm, embeddings, mask)
+        embeddings = self.LayerNorm(embeddings)
+
+        if mask.dim() != input.dim():
+            if mask.dim() == 4:
+                mask = mask.squeeze(1).squeeze(1)
+            mask = mask.unsqueeze(2)
+        mask = mask.to(embeddings.dtype)
+
+        embeddings = embeddings * mask
+
         embeddings = self.dropout(embeddings)
         return embeddings
 
