@@ -37,6 +37,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BertTokenizer
     rust_tokenizer_class = BertTokenizerFast
     test_rust_tokenizer = True
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()

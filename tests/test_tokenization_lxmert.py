@@ -28,6 +28,7 @@ class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LxmertTokenizer
     rust_tokenizer_class = LxmertTokenizerFast
     test_rust_tokenizer = True
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()

@@ -33,6 +33,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()

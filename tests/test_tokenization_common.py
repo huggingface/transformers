@@ -58,6 +58,7 @@ class TokenizerTesterMixin:
     tokenizer_class = None
     rust_tokenizer_class = None
     test_rust_tokenizer = False
+    space_between_special_tokens = False
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -427,9 +428,13 @@ class TokenizerTesterMixin:
                 new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
                 tokenizer.add_tokens(new_toks)
                 input = "[ABC][DEF][ABC][DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
+                if self.space_between_special_tokens:
+                    output = "[ABC] [DEF] [ABC] [DEF]"
+                else:
+                    output = input
                 encoded = tokenizer.encode(input, add_special_tokens=False)
-                decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
-                self.assertIn(decoded, [input, input.lower()])
+                decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
+                self.assertIn(decoded, [output, output.lower()])
 
     def test_pretrained_model_lists(self):
         weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())

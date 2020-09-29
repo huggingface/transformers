@@ -179,7 +179,7 @@ from .tokenization_utils_base import (
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
 
 # Trainer
 from .trainer_utils import EvalPrediction, set_seed
