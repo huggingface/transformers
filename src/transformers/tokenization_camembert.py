@@ -37,7 +37,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": None,
+    "camembert-base": 512,
 }
 
 SHARED_MODEL_IDENTIFIERS = [
@@ -120,7 +120,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            max_len=512,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -225,6 +224,11 @@ class CamembertTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.fairseq_tokens_to_ids) + len(self.sp_model)
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, text):
         return self.sp_model.EncodeAsPieces(text)

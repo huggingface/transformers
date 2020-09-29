@@ -227,7 +227,7 @@ class SpmConverter(Converter):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         return Precompiled(precompiled_charsmap)
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return None
 
     def converted(self) -> Tokenizer:
@@ -290,7 +290,9 @@ class CamembertConverter(SpmConverter):
             ("</s>NOTUSED", 0.0),
             ("<unk>", 0.0),
         ]
-        vocab += [(piece.piece, piece.score) for piece in proto.pieces]
+        # We down-grade the original SentencePiece by -100 to avoid using it and use our added token instead
+        vocab += [(piece.piece, piece.score if i != 0 else piece.score - 100) for i, piece in enumerate(proto.pieces)]
+        vocab += [("<mask>", 0.0)]
         return vocab
 
     def unk_id(self, proto):
@@ -435,24 +437,24 @@ class PegasusConverter(SpmConverter):
     def unk_id(self, proto):
         return proto.trainer_spec.unk_id + self.offset
 
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         eos = self.original_tokenizer.eos_token
         return TemplateProcessing(
             seq_a=["$0", eos],
             seq_b=["$1", eos],
             special_tokens=[
-                (eos, tokenizer.get_vocab()[eos]),
+                (eos, self.original_tokenizer.get_vocab()[eos]),
             ],
         )
 
 
 class T5Converter(SpmConverter):
-    def post_processor(self, tokenizer):
+    def post_processor(self):
         return TemplateProcessing(
             seq_a=["$0", "</s>"],
             seq_b=["$1", "</s>"],
             special_tokens=[
-                ("</s>", tokenizer.get_vocab()["</s>"]),
+                ("</s>", self.original_tokenizer.get_vocab()["</s>"]),
             ],
         )
 
@@ -460,7 +462,12 @@ class T5Converter(SpmConverter):
 CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BertTokenizer": BertConverter,
+    "BartTokenizer": RobertaConverter,
     "CamembertTokenizer": CamembertConverter,
+    "DistilBertTokenizer": BertConverter,
+    "DPRReaderTokenizer": BertConverter,
+    "DPRQuestionEncoderTokenizer": BertConverter,
+    "DPRContextEncoderTokenizer": BertConverter,
     "GPT2Tokenizer": GPT2Converter,
     "MBartTokenizer": MBartConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,

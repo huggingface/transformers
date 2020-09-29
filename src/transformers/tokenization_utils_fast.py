@@ -20,6 +20,7 @@ import copy
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
+from numpy.lib.arraysetops import isin
 
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
@@ -494,7 +495,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def decode(
         self,
-        token_ids: List[int],
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         **kwargs
@@ -506,7 +507,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
 
         Args:
-            token_ids (:obj:`List[int]`):
+            token_ids (:obj:`Union[int, List[int]]`):
                 List of tokenized input ids. Can be obtained using the ``__call__`` method.
             skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to remove special tokens in the decoding.
@@ -516,6 +517,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Returns:
             :obj:`str`: The decoded sentence.
         """
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
         if clean_up_tokenization_spaces:

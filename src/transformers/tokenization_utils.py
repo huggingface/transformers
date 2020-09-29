@@ -771,6 +771,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         if spaces_between_special_tokens:
             text = " ".join(sub_texts)
+        else:
+            text = "".join(sub_texts)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
