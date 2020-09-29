@@ -304,6 +304,7 @@ class Trainer:
 
         self.global_step = None
         self.epoch = None
+        self.total_flos = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
