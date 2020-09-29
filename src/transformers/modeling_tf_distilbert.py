@@ -384,8 +384,6 @@ class TFTransformer(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
         return TFBaseModelOutput(
             last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
         )
@@ -450,6 +448,11 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
+
+        if return_dict:
+            logger.warning(
+                "The return_dict parameter is deprecated and will be removed in a future version. The returned value is a dictionary by default."
+            )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -691,10 +694,6 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
 
         loss = None if labels is None else self.compute_loss(labels, prediction_logits)
 
-        if not return_dict:
-            output = (prediction_logits,) + distilbert_output[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return TFMaskedLMOutput(
             loss=loss,
             logits=prediction_logits,
@@ -778,10 +777,6 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
 
         loss = None if labels is None else self.compute_loss(labels, logits)
 
-        if not return_dict:
-            output = (logits,) + distilbert_output[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return TFSequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -855,10 +850,6 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         logits = self.classifier(sequence_output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -977,12 +968,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         pooled_output = self.dropout(pooled_output, training=training)  # (bs, dim)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
-
-        if not return_dict:
-            output = (reshaped_logits,) + distilbert_output[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
             loss=loss,
@@ -1058,23 +1044,18 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             return_dict=return_dict,
             training=training,
         )
-
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
         hidden_states = self.dropout(hidden_states, training=training)  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
-
         loss = None
+
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             loss = self.compute_loss(labels, (start_logits, end_logits))
-
-        if not return_dict:
-            output = (start_logits, end_logits) + distilbert_output[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=loss,
