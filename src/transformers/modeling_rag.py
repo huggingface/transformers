@@ -814,7 +814,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        input_ids,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         context_input_ids=None,
         do_deduplication=None,  # defaults to True
         num_return_sequences=None,  # defaults to 1
@@ -830,6 +831,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`input_ids` is not passed, then
                 :obj:`context_input_ids` has to be provided.
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices.
+                Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **maked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
             context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
                 Input IDs post-processed from the retrieved documents and the question encoder input_ids by the
                 retriever.
@@ -859,7 +868,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         # TODO(patrick) - clean up generate here
         if self.retriever is not None and context_input_ids is None:
-            question_hidden_states = self.question_encoder(input_ids)[0]
+            question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             context_input_ids = self.retriever(
                 input_ids,
                 question_hidden_states.cpu().detach().to(torch.float32).numpy(),
@@ -873,7 +882,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         hypos = []
         kwargs["num_beams"] = num_beams
-        kwargs["num_return_sequences"] = num_return_sequences
+        kwargs["num_return_sequences"] = num_beams
         kwargs["attention_mask"] = None
 
         for index in range(len(input_ids)):
@@ -907,7 +916,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         )
 
         # bos_token_id is None for T5
-        use_bos = self.config.bos_token_id is not None and target[:, 0].eq(self.config.bos_token_id).all()
+        bos_token_id = self.config.bos_token_id or self.config.generator.bos_token_id
+        use_bos = bos_token_id is not None and target[:, 0].eq(bos_token_id).all()
 
         def _mask_pads(ll, smooth_obj):
             pad_mask = target.eq(self.config.generator.pad_token_id)
@@ -1180,6 +1190,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
         doc_scores=None,
@@ -1205,6 +1216,14 @@ class RagTokenForGeneration(RagPreTrainedModel):
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`input_ids` is not passed, then
                 :obj:`context_input_ids` has to be provided.
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices.
+                Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **maked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
             context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
                 Input IDs post-processed from the retrieved documents and the question encoder :obj:`input_ids` by the
                 retriever.
@@ -1293,7 +1312,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         # retrieve docs
         if self.retriever is not None and context_input_ids is None:
-            question_hidden_states = self.question_encoder(input_ids)[0]
+            question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             out = self.retriever(
                 input_ids,
                 question_hidden_states.cpu().detach().to(torch.float32).numpy(),

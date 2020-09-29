@@ -57,6 +57,8 @@ class T5Config(PretrainedConfig):
             Size of the intermediate feed forward layer in each :obj:`T5Block`.
         num_layers (:obj:`int`, `optional`, defaults to 6):
             Number of hidden layers in the Transformer encoder.
+        num_decoder_layers (:obj:`int`, `optional`):
+            Number of hidden layers in the Transformer decoder. Will use the same value as :obj:`num_layers` if not set.
         num_heads (:obj:`int`, `optional`, defaults to 8):
             Number of attention heads for each attention layer in
             the Transformer encoder.
@@ -80,6 +82,7 @@ class T5Config(PretrainedConfig):
         d_kv=64,
         d_ff=2048,
         num_layers=6,
+        num_decoder_layers=None,
         num_heads=8,
         relative_attention_num_buckets=32,
         dropout_rate=0.1,
@@ -102,6 +105,9 @@ class T5Config(PretrainedConfig):
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
+        self.num_decoder_layers = (
+            num_decoder_layers if num_decoder_layers is not None else self.num_layers
+        )  # default = symmetry
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.dropout_rate = dropout_rate

@@ -138,10 +138,6 @@ def is_copy_consistent(filename, overwrite=False):
                 obj1, obj2 = search_patterns.groups()
                 theoretical_code = re.sub(obj1, obj2, theoretical_code)
 
-        # Blackify each version before comparing them.
-        observed_code = blackify(observed_code)
-        theoretical_code = blackify(theoretical_code)
-
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
             found_diff = True

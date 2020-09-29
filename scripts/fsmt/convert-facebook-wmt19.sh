@@ -1,4 +1,4 @@
-#/usr/bin/env bash
+#!/usr/bin/env bash
 
 # this script acquires data and converts it to fsmt model
 # it covers:
