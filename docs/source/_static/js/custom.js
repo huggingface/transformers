@@ -4,7 +4,7 @@ const stableVersion = "v3.3.0"
 // Dictionary doc folder to label
 const versionMapping = {
     "master": "master",
-    "": "v3.3.0",
+    "": "v3.3.0/v3.3.1",
     "v3.2.0": "v3.2.0",
     "v3.1.0": "v3.1.0 (stable)",
     "v3.0.2": "v3.0.0/v3.0.1/v3.0.2",
