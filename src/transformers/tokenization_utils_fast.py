@@ -20,7 +20,6 @@ import copy
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
-from numpy.lib.arraysetops import isin
 
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast

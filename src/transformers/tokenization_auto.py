@@ -45,11 +45,11 @@ from .configuration_auto import (
     XLNetConfig,
 )
 from .configuration_utils import PretrainedConfig
-from .tokenization_albert import AlbertTokenizer
+from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
-from .tokenization_camembert import CamembertTokenizer
+from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
@@ -58,18 +58,18 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_marian import MarianTokenizer
-from .tokenization_mbart import MBartTokenizer
+from .tokenization_mbart import MBartTokenizer, MBartTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from .tokenization_pegasus import PegasusTokenizer
-from .tokenization_reformer import ReformerTokenizer
+from .tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
+from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from .tokenization_t5 import T5Tokenizer
+from .tokenization_t5 import T5Tokenizer, T5TokenizerFast
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlm import XLMTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
-from .tokenization_xlnet import XLNetTokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from .tokenization_xlnet import XLNetTokenizer, XLNetTokenizerFast
 from .utils import logging
 
 
@@ -79,26 +79,26 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
-        (T5Config, (T5Tokenizer, None)),
+        (T5Config, (T5Tokenizer, T5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
-        (AlbertConfig, (AlbertTokenizer, None)),
-        (CamembertConfig, (CamembertTokenizer, None)),
-        (PegasusConfig, (PegasusTokenizer, None)),
-        (MBartConfig, (MBartTokenizer, None)),
-        (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
+        (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
+        (CamembertConfig, (CamembertTokenizer, CamembertTokenizerFast)),
+        (PegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
+        (MBartConfig, (MBartTokenizer, MBartTokenizerFast)),
+        (XLMRobertaConfig, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)),
         (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
-        (ReformerConfig, (ReformerTokenizer, None)),
+        (ReformerConfig, (ReformerTokenizer, ReformerTokenizerFast)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
         (TransfoXLConfig, (TransfoXLTokenizer, None)),
-        (XLNetConfig, (XLNetTokenizer, None)),
+        (XLNetConfig, (XLNetTokenizer, XLNetTokenizerFast)),
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),

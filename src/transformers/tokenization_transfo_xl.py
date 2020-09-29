@@ -22,9 +22,8 @@ import glob
 import os
 import pickle
 import re
-import warnings
 from collections import Counter, OrderedDict
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -32,7 +31,6 @@ import sacremoses as sm
 
 from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
 
@@ -172,9 +170,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             if vocab_file is not None:
                 self.build_vocab()
         except Exception:
-            raise ValueError(
-                "Unable to parse file {}. Unknown format."
-            )
+            raise ValueError("Unable to parse file {}. Unknown format.")
 
         if vocab_file is not None:
             self.build_vocab()

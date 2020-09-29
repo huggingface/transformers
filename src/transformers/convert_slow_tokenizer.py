@@ -2,7 +2,7 @@ from typing import Dict, List, Tuple
 
 from sentencepiece import SentencePieceProcessor
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
-from tokenizers.models import BPE, Unigram, WordPiece, WordLevel
+from tokenizers.models import BPE, Unigram, WordPiece
 
 # from transformers.tokenization_openai import OpenAIGPTTokenizer
 from transformers.utils import sentencepiece_model_pb2 as model
@@ -449,8 +449,7 @@ class T5Converter(SpmConverter):
     def vocab(self, proto):
         num_extra_ids = self.original_tokenizer._extra_ids
         vocab = [(piece.piece, piece.score) for piece in proto.pieces]
-        vocab += [("<extra_id_{}>".format(i), 0.0)
-                    for i in range(num_extra_ids - 1, -1, -1)]
+        vocab += [("<extra_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
         return vocab
 
     def post_processor(self):
