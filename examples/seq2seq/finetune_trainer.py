@@ -27,6 +27,7 @@ from utils import (
     assert_all_frozen,
     calculate_bleu,
     calculate_rouge,
+    freeze_embeds,
     freeze_params,
     lmap,
     save_json,
@@ -189,19 +190,6 @@ class DataTrainingArguments:
     src_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
     tgt_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
     eval_beams: Optional[int] = field(default=None, metadata={"help": "# num_beams to use for evaluation."})
-
-
-def freeze_embeds(model: torch.nn.Module):
-    """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-    try:
-        freeze_params(model.model.shared)
-        for d in [model.model.encoder, model.model.decoder]:
-            freeze_params(d.embed_positions)
-            freeze_params(d.embed_tokens)
-    except AttributeError:
-        freeze_params(model.shared)
-        for d in [model.encoder, model.decoder]:
-            freeze_params(d.embed_tokens)
 
 
 def main():
