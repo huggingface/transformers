@@ -188,6 +188,12 @@ class TrainerIntegrationTest(unittest.TestCase):
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
 
+    def test_training_arguments_are_left_untouched(self):
+        trainer = get_regression_trainer()
+        trainer.train()
+        args = TrainingArguments("./regression")
+        self.assertEqual(args.to_dict(), trainer.args.to_dict())
+
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
         trainer = get_regression_trainer(learning_rate=0.1)
