@@ -102,8 +102,8 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with
             labels in ``[0, ..., config.vocab_size]``
         use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -339,9 +339,9 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
-        past_key_values=None,  # TODO: (PVP) implement `use_cache`
+        past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
         labels=None,
-        use_cache=None,  # TODO: (PVP) implement `use_cache`
+        use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -434,7 +434,7 @@ class EncoderDecoderModel(PreTrainedModel):
             "encoder_outputs": encoder_outputs,
         }
 
-        # Ideally all models should have a `use_cache`
+        # Ideally all models should have a :obj:`use_cache`
         # leave following to ifs until all have it implemented
         if "use_cache" in decoder_inputs:
             input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]

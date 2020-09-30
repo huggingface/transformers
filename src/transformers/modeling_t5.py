@@ -726,7 +726,9 @@ class T5Stack(T5PreTrainedModel):
             mask_seq_length = seq_length
 
         if use_cache is True:
-            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
+            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
+                self
+            )
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
@@ -899,8 +901,8 @@ T5_INPUTS_DOCSTRING = r"""
             unset, :obj:`decoder_input_embeds` takes the value of :obj:`input_embeds`.
 
         use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
 
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned

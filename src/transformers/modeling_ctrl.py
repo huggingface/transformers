@@ -251,11 +251,11 @@ CTRL_START_DOCSTRING = r"""
 CTRL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if ``past_key_values`` is ``None`` else
+            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
             ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
 
-            If ``past_key_values`` is used, only input IDs that do not have their past calculated should be passed as
+            If :obj:`past_key_values` is used, only input IDs that do not have their past calculated should be passed as
             ``input_ids``.
 
             Indices can be obtained using :class:`~transformers.CTRLTokenizer`.
@@ -265,7 +265,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         past_key_values (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see ``past_key_values`` output below). Can be used to speed up sequential decoding.
+            (see :obj:`past_key_values` output below). Can be used to speed up sequential decoding.
             The ``input_ids`` which have their past given to this model should not be passed as input ids as they have
             already been computed.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -301,8 +301,8 @@ CTRL_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
         use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.

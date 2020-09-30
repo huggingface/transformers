@@ -114,12 +114,12 @@ BART_INPUTS_DOCSTRING = r"""
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
-            If ``past_key_values`` are used, the user can optionally input only the last
+            If :obj:`past_key_values` are used, the user can optionally input only the last
             ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
             :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
-            ``past_key_values``).
+            If :obj:`use_cache` is True, :obj:`past_key_values` are returned and can be used to speed up decoding (see
+            :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
