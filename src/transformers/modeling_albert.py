@@ -347,7 +347,6 @@ class AlbertLayer(nn.Module):
         self.ffn = nn.Linear(config.hidden_size, config.intermediate_size)
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
