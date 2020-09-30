@@ -276,7 +276,7 @@ class ModelTesterMixin:
 
             try:
                 # TODO(PATRICK) - remove "Bart" not in model.__class__ if Bart pos arguments can be re-ordered
-                if model.config.is_encoder_decoder and "Bart" not in model.__class__.__name__:
+                if model.config.is_encoder_decoder and "T5" in model.__class__.__name__:
                     input_ids = inputs["input_ids"]
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
