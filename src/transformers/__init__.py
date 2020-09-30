@@ -201,7 +201,7 @@ from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 # Trainer
-from .trainer_utils import EvalPrediction, set_seed
+from .trainer_utils import EvalPrediction, TrainerState, set_seed
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging

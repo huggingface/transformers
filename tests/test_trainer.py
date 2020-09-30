@@ -22,6 +22,7 @@ if is_torch_available():
         LineByLineTextDataset,
         PreTrainedModel,
         Trainer,
+        TrainerState,
     )
 
 
@@ -155,7 +156,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(model.b, b))
 
     def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True):
-        file_list = [WEIGHTS_NAME, "training_args.bin", "log_history.json", "optimizer.pt", "scheduler.pt"]
+        file_list = [WEIGHTS_NAME, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
             file_list.append("config.json")
         for step in range(freq, total, freq):
@@ -168,7 +169,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True
     ):
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
-        log_history = json.load(open(os.path.join(checkpoint, "log_history.json")))
+        log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
 
         values = [d[metric] for d in log_history]
         best_value = max(values) if greater_is_better else min(values)

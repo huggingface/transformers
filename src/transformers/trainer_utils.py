@@ -224,9 +224,16 @@ class TrainerState:
     A class containing the `Trainer` fields that will be saved along the model and optimizer.
     """
 
+    epoch: Optional[float] = None
+    global_step: int = 0
     total_flos: int = 0
+    log_history: List[str] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
+
+    def __post_init__(self):
+        if self.log_history is None:
+            self.log_history = []
 
     def save_to_json(self, json_path: str):
         """ Save the content of this instance in JSON format inside :obj:`json_path`."""
