@@ -634,15 +634,16 @@ class Trainer:
         num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
         num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
         if self.args.max_steps > 0:
-            self.max_steps = self.args.max_steps
-            self.num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
+            max_steps = self.args.max_steps
+            num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
                 self.args.max_steps % num_update_steps_per_epoch > 0
             )
         else:
-            self.max_steps = int(num_update_steps_per_epoch * self.args.num_train_epochs)
-            self.num_train_epochs = self.args.num_train_epochs
+            max_steps = int(num_update_steps_per_epoch * self.args.num_train_epochs)
+            num_train_epochs = self.args.num_train_epochs
+        num_train_epochs = int(np.ceil(num_train_epochs))
 
-        self.create_optimizer_and_scheduler(num_training_steps=self.max_steps)
+        self.create_optimizer_and_scheduler(num_training_steps=max_steps)
         self.state = TrainerState()
 
         # Check if saved optimizer or scheduler states exist
@@ -700,11 +701,11 @@ class Trainer:
             )
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_examples(train_dataloader))
-        logger.info("  Num Epochs = %d", self.num_train_epochs)
+        logger.info("  Num Epochs = %d", num_train_epochs)
         logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        logger.info("  Total optimization steps = %d", self.max_steps)
+        logger.info("  Total optimization steps = %d", max_steps)
 
         self.state.epoch = 0
         epochs_trained = 0
@@ -721,13 +722,18 @@ class Trainer:
             logger.info("  Continuing training from global step %d", self.state.global_step)
             logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
 
+        # This should be the same if the state has been saved but in case the training arguments changed, it's safer
+        # to set this after the load.
+        self.state.max_steps = max_steps
+        self.state.num_train_epochs = num_train_epochs
+
         tr_loss = torch.tensor(0.0).to(self.args.device)
         self._total_flos = self.state.total_flos
         logging_loss_scalar = 0.0
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
-        train_pbar = trange(epochs_trained, int(np.ceil(self.num_train_epochs)), desc="Epoch", disable=disable_tqdm)
-        for epoch in range(epochs_trained, int(np.ceil(self.num_train_epochs))):
+        train_pbar = trange(epochs_trained, num_train_epochs, desc="Epoch", disable=disable_tqdm)
+        for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
@@ -814,7 +820,7 @@ class Trainer:
                         self._save_training(model, trial)
 
                 epoch_pbar.update(1)
-                if self.state.global_step >= self.max_steps:
+                if self.state.global_step >= max_steps:
                     break
             epoch_pbar.close()
             train_pbar.update(1)
@@ -834,7 +840,7 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
-            if self.state.global_step >= self.max_steps:
+            if self.state.global_step >= max_steps:
                 break
 
         train_pbar.close()
