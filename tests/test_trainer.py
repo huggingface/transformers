@@ -1,3 +1,4 @@
+import dataclasses
 import os
 import tempfile
 import unittest
@@ -7,7 +8,7 @@ import numpy as np
 
 from transformers import AutoTokenizer, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import get_tests_dir, require_non_multigpu, require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 
 if is_torch_available():
@@ -374,14 +375,17 @@ class TrainerIntegrationTest(unittest.TestCase):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
-    # Having mutliple GPUs will lower the batch size and fail the reproducible training since the resuming will
-    # be in the second epoch.
-    @require_non_multigpu
     def test_can_resume_training(self):
+        if torch.cuda.device_count() > 2:
+            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+            # won't be the same since the training dataloader is shuffled).
+            return
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
@@ -391,14 +395,19 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             trainer.train(model_path=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
+            self.assertEqual(state, state1)
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1, pretrained=False)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
@@ -410,8 +419,10 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             trainer.train(model_path=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
+            self.assertEqual(state, state1)
 
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
