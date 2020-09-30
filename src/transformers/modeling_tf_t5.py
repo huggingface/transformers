@@ -117,8 +117,9 @@ class TFT5LayerFF(tf.keras.layers.Layer):
 class TFT5Attention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
-    def __init__(self, config, has_relative_attention_bias=False, **kwargs):
+    def __init__(self, config, has_relative_attention_bias=False, is_birectional=False, **kwargs):
         super().__init__(**kwargs)
+        self.is_birectional = is_birectional
         self.layer_id = next(TFT5Attention.NEW_ID)
         self.is_decoder = config.is_decoder
         self.use_cache = config.use_cache
@@ -202,7 +203,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
             relative_position,
-            bidirectional=not self.is_decoder,
+            bidirectional=self.is_birectional,
             num_buckets=self.relative_attention_num_buckets,
         )
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
@@ -322,6 +323,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         self.SelfAttention = TFT5Attention(
             config,
             has_relative_attention_bias=has_relative_attention_bias,
+            is_birectional=not config.is_decoder,
             name="SelfAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
@@ -361,6 +363,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
         self.EncDecAttention = TFT5Attention(
             config,
             has_relative_attention_bias=has_relative_attention_bias,
+            is_birectional=True,
             name="EncDecAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
