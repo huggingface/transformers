@@ -48,7 +48,9 @@ jobs:
     - name: Are GPUs recognized by our DL frameworks
       run: |
         source .env/bin/activate
-        python -c "import torch; print(torch.cuda.is_available())"
+        python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+        python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+
 
     - name: Run all tests on GPU
       env:
