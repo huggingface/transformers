@@ -370,14 +370,14 @@ class TrainerIntegrationTest(unittest.TestCase):
     
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
             
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1)
             trainer.model = RegressionPreTrainedModel.from_pretrained(checkpoint)
             trainer.model = trainer.model.to(trainer.args.device)
 
@@ -388,14 +388,14 @@ class TrainerIntegrationTest(unittest.TestCase):
         
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False)
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1, pretrained=False)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
             
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1, pretrained=False)
             state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
             trainer.model.load_state_dict(state_dict)
 
