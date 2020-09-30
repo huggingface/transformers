@@ -257,6 +257,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
         raise
 
     import transformers
+
     from .modeling_tf_utils import load_tf_weights
 
     logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
