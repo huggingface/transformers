@@ -8,7 +8,7 @@ import numpy as np
 
 from transformers import AutoTokenizer, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import get_tests_dir, require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_non_multigpu, require_torch, slow
 
 
 if is_torch_available():
@@ -367,37 +367,40 @@ class TrainerIntegrationTest(unittest.TestCase):
             trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False)
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
-    
+
+    # Having mutliple GPUs will lower the batch size and fail the reproducible training since the resuming will
+    # be in the second epoch.
+    @require_non_multigpu
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
-            
+
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
-            
+
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1)
-            trainer.model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer.model = trainer.model.to(trainer.args.device)
+            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
 
             trainer.train(model_path=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-        
+
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1, pretrained=False)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
-            
+
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
-            
+
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, learning_rate=0.1, pretrained=False)
+            model = RegressionModel()
             state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            trainer.model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
 
             trainer.train(model_path=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
