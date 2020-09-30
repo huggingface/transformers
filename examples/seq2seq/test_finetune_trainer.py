@@ -16,7 +16,7 @@ MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
 def test_finetune_trainer():
-    output_dir = run_trainer(2, "12", MBART_TINY, 1)
+    output_dir = run_trainer(1, "12", MBART_TINY, 1)
     logs = load_json(os.path.join(output_dir, "log_history.json"))
     eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
     first_step_stats = eval_metrics[0]
@@ -25,8 +25,9 @@ def test_finetune_trainer():
 
 @slow
 def test_finetune_trainer_slow():
-    # TODO(SS): This will fail on devices with more than 1 GPU. There is a missing call to __init__process_group somewhere
-    output_dir = run_trainer(eval_steps=1, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=4)
+    # TODO(SS): This will fail on devices with more than 1 GPU.
+    # There is a missing call to __init__process_group somewhere
+    output_dir = run_trainer(eval_steps=2, max_len="32", model_name=MARIAN_MODEL, num_train_epochs=3)
 
     # Check metrics
     logs = load_json(os.path.join(output_dir, "log_history.json"))
@@ -83,14 +84,14 @@ def run_trainer(eval_steps: int, max_len: str, model_name: str, num_train_epochs
         "--logging_steps",
         0,
         "--save_steps",
-        "100",
+        str(eval_steps),
         "--eval_steps",
         str(eval_steps),
         "--sortish_sampler",
         "--label_smoothing",
         "0.1",
-        "--eval_beams",
-        "2",
+        # "--eval_beams",
+        # "2",
         "--task",
         "translation",
         "--tgt_lang",
