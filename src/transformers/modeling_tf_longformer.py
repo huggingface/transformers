@@ -644,7 +644,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                     diagonal_chunked_attention_scores,
                     shift=[1, window_overlap],
                     axis=[2, 3],
-                )[:, :, :window_overlap, :window_overlap],
+                )[:, :, window_overlap:, :window_overlap],
                 tf.zeros((batch_size * num_heads, 1, window_overlap, window_overlap)),
             ],
             axis=1,
