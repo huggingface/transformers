@@ -37,13 +37,13 @@ pip install transformers[tf-cpu]
 To check 🤗 Transformers is properly installed, run the following command:
 
 ```bash
-python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('I hate you'))"
+python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('we love you'))"
 ```
 
 It should download a pretrained model then print something like
 
 ```bash
-[{'label': 'NEGATIVE', 'score': 0.9991129040718079}]
+[{'label': 'POSITIVE', 'score': 0.9998704791069031}]
 ```
 
 (Note that TensorFlow will print additional stuff before that last statement.)

@@ -21,10 +21,8 @@ class MakeStudentTester(unittest.TestCase):
         student, *_ = create_student_by_copying_alternating_layers(TINY_T5, tempfile.mkdtemp(), e=1, d=1)
         self.assertEqual(student.config.num_hidden_layers, 1)
 
-    def test_invalid_t5(self):
-        # T5 students must have the same e==d because there is only one config property
-        with self.assertRaises(AssertionError):
-            student, *_ = create_student_by_copying_alternating_layers(TINY_T5, tempfile.mkdtemp(), e=1, d=None)
+    def test_asymmetric_t5(self):
+        student, *_ = create_student_by_copying_alternating_layers(TINY_T5, tempfile.mkdtemp(), e=1, d=None)
 
     def test_same_decoder_small_encoder(self):
         student, *_ = create_student_by_copying_alternating_layers(TINY_BART, tempfile.mkdtemp(), e=1, d=None)

@@ -29,6 +29,8 @@ Note that the model is *uncased* so that all capital input letters are converted
 
 ## Usage:
 
+*Note*: the model uses the *dummy* retriever as a default. Better results are obtained by using the full retriever, 
+by setting `config.index_name="legacy"` and `config.use_dummy_dataset=False`.
 The model can be fine-tuned as follows:
 
 ```python

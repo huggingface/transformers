@@ -116,12 +116,14 @@ def create_student_by_copying_alternating_layers(
             d = teacher_d
         init_kwargs.update({"encoder_layers": e, "decoder_layers": d})
     except AttributeError:  # T5
-        teacher_e, teacher_d = teacher.config.num_layers, teacher.config.num_hidden_layers
-        assert e == d, "T5 Students must be symmetric"
-        init_kwargs["num_layers"] = e
+        teacher_e, teacher_d = teacher.config.num_layers, teacher.config.num_decoder_layers
+        if e is None:
+            e = teacher_e
+        if d is None:
+            d = teacher_d
+        init_kwargs.update({"num_layers": e, "num_decoder_layers": d})
 
-    # Kwargs to instantiate student = teacher kwargs with updated layer numbers + **extra_config_kwargs
-
+    # Kwargs to instantiate student: teacher kwargs with updated layer numbers + **extra_config_kwargs
     init_kwargs.update(extra_config_kwargs)
 
     # Copy weights
