@@ -176,7 +176,8 @@ def run_generate():
         max_source_length=args.max_source_length,
         num_return_sequences=args.num_return_sequences,
         prefix=args.prefix,
-        dataset_kwargs=dataset_kwargs ** generate_kwargs,
+        dataset_kwargs=dataset_kwargs,
+        **generate_kwargs,
     )
 
     if args.local_rank <= 0:
