@@ -1060,9 +1060,9 @@ class TFT5Model(TFT5PreTrainedModel):
             head_mask = inputs[6] if len(inputs) > 6 else head_mask
             inputs_embeds = inputs[7] if len(inputs) > 7 else inputs_embeds
             decoder_inputs_embeds = inputs[8] if len(inputs) > 8 else decoder_inputs_embeds
-            use_cache = inputs[9] if len(inputs) > 10 else use_cache
-            output_attentions = inputs[10] if len(inputs) > 11 else output_attentions
-            output_hidden_states = inputs[11] if len(inputs) > 12 else output_hidden_states
+            use_cache = inputs[9] if len(inputs) > 9 else use_cache
+            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
+            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
             return_dict = inputs[12] if len(inputs) > 12 else return_dict
             assert len(inputs) <= 13, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
