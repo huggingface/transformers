@@ -416,3 +416,14 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                    |                                                            |                                                                                                                                       |
 |                    |                                                            | (see `details <https://github.com/microsoft/unilm/tree/master/layoutlm>`__)                                                           |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| DeBERTa            | ``microsoft/deberta-base``                                 | | 12-layer, 768-hidden, 12-heads, ~125M parameters                                                                                    |
+|                    |                                                            | | DeBERTa using the BERT-base architecture                                                                                            |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``microsoft/deberta-large``                                | | 24-layer, 1024-hidden, 16-heads, ~390M parameters                                                                                   |
+|                    |                                                            | | DeBERTa using the BERT-large architecture                                                                                           |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
++--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+

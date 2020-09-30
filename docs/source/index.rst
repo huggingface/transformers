@@ -214,6 +214,7 @@ conversion utilities for the following models:
     model_doc/bertgeneration
     model_doc/camembert
     model_doc/ctrl
+    model_doc/deberta
     model_doc/dialogpt
     model_doc/distilbert
     model_doc/dpr
