@@ -996,7 +996,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float], iterator: tqdm = None) -> None:
+    def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         """
         Log :obj:`logs` on the various objects watching training.
 
@@ -1016,7 +1016,7 @@ class Trainer:
                 "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
                 FutureWarning,
             )
-            return self._log(logs)
+            return self._log(logs, iterator=iterator)
 
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
