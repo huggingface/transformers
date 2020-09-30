@@ -60,7 +60,7 @@ from .utils import logging
 _use_native_amp = False
 _use_apex = False
 
-PT_LR_SCHEDULER_WARNING = "Please also save or load the state of the optimizer when saving or loading the scheduler."
+PT_LR_SCHEDULER_WARNING = "Please also save or load the state of the optimzer when saving or loading the scheduler."
 
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
@@ -499,7 +499,7 @@ class Trainer:
                 project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.run_name
             )
             # keep track of model topology and gradients, unsupported on TPU
-            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false" and is_wandb_available():
+            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )
@@ -675,14 +675,12 @@ class Trainer:
 
         # Distributed training (should be after apex fp16 initialization)
         if self.args.local_rank != -1:
-            config = model.config
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
                 find_unused_parameters=not getattr(model.config, "gradient_checkpointing", False),
             )
-            model.config = config
         # find_unused_parameters breaks checkpointing as per
         # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 

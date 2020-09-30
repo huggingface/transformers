@@ -27,7 +27,6 @@ def test_finetune_trainer():
 def test_finetune_trainer_slow():
     # TODO(SS): This will fail on devices with more than 1 GPU. There is a missing call to __init__process_group somewhere
     output_dir = run_trainer(eval_steps=1, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=4)
-    os.environ["WANDB_DISABLED"] = "true"
 
     # Check metrics
     logs = load_json(os.path.join(output_dir, "log_history.json"))
@@ -46,7 +45,6 @@ def test_finetune_trainer_slow():
 
 
 def run_trainer(eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
-    os.environ["WANDB_DISABLED"] = "true"
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     output_dir = tempfile.mkdtemp(prefix="test_output")
     argv = [
