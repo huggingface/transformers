@@ -328,13 +328,15 @@ class EncoderDecoderModel(PreTrainedModel):
     def forward(
         self,
         input_ids=None,
-        inputs_embeds=None,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_inputs_embeds=None,
+        encoder_outputs=None,
+        past_key_values=None,  # TODO: (PVP) implement `use_cache`
         labels=None,
+        use_cache=None,  # TODO: (PVP) implement `use_cache`
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
         **kwargs,
     ):
@@ -377,21 +379,23 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
 
-        hidden_states = encoder_outputs[0]
+        encoder_hidden_states = encoder_outputs[0]
 
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
-            inputs_embeds=decoder_inputs_embeds,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             **kwargs_decoder,
         )

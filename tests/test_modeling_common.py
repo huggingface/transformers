@@ -187,7 +187,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
             attentions = outputs[-1]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -275,8 +275,8 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)
 
             try:
-                # TODO(PATRICK) - remove "Bart" not in model.__class__ if Bart pos arguments can be re-ordered
-                if model.config.is_encoder_decoder and "T5" in model.__class__.__name__:
+                if model.config.is_encoder_decoder:
+                    model.config.use_cache = False  # TODO: this should be deleted after bug #7474 is solved
                     input_ids = inputs["input_ids"]
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
