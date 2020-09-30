@@ -235,7 +235,7 @@ class T5ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_value_states = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -244,7 +244,7 @@ class T5ModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -274,7 +274,7 @@ class T5ModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -293,7 +293,7 @@ class T5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)[
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
             "last_hidden_state"
         ]
 
@@ -305,7 +305,7 @@ class T5ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_value_states(
+    def create_and_check_generate_with_past_key_values(
         self,
         config,
         input_ids,
@@ -470,9 +470,9 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
-    def test_generate_with_past_key_value_states(self):
+    def test_generate_with_past_key_values(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_value_states(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

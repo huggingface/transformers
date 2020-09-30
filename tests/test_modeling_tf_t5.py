@@ -135,7 +135,7 @@ class TFT5ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_value_states = outputs
+        output, past_key_values = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -144,7 +144,7 @@ class TFT5ModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
 
         output_from_no_past = model(next_input_ids)[0]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -166,7 +166,7 @@ class TFT5ModelTester:
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
-        _, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True)
+        _, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -189,7 +189,7 @@ class TFT5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[0]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).numpy().item()

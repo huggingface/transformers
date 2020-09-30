@@ -136,6 +136,28 @@ class TFModelTesterMixin:
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "inputs",
+                    "attention_mask",
+                    "decoder_input_ids",
+                    "decoder_attention_mask",
+                    "encoder_outputs",
+                ]
+                self.assertListEqual(arg_names[:5], expected_arg_names)
+            else:
+                expected_arg_names = ["inputs"]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

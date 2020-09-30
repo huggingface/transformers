@@ -227,10 +227,6 @@ FSMT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        encoder_outputs (:obj:`Tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the input_ids right, following the paper.
@@ -240,6 +236,10 @@ FSMT_INPUTS_DOCSTRING = r"""
             If you want to change padding behavior, you should read
             :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
+        encoder_outputs (:obj:`Tuple(torch.FloatTensor)`, `optional`):
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
+            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (:obj:`Tuple(torch.FloatTensor)` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.

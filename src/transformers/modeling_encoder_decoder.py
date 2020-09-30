@@ -81,11 +81,6 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`):
-            This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`)
-            is a tensor of hidden-states at the output of the last layer of the encoder.
-            Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for sequence to sequence training to the decoder.
             Indices can be obtained using :class:`~transformers.PretrainedTokenizer`.
@@ -94,6 +89,11 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
+        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`):
+            This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
+            :obj:`last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`)
+            is a tensor of hidden-states at the output of the last layer of the encoder.
+            Used in the cross-attention of the decoder.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`

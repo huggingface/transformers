@@ -178,8 +178,8 @@ class ModelTesterMixin:
                 ]
                 self.assertListEqual(arg_names[:5], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids", "attention_mask"]
-                self.assertListEqual(arg_names[:2], expected_arg_names)
+                expected_arg_names = ["input_ids"]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

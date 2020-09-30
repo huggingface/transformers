@@ -308,7 +308,7 @@ class T5Attention(nn.Module):
         mask=None,
         kv=None,
         position_bias=None,
-        past_key_value_state=None,
+        past_key_value=None,
         head_mask=None,
         query_length=None,
         use_cache=False,
@@ -319,17 +319,17 @@ class T5Attention(nn.Module):
         """
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
-        # past_key_value_state[0] is (bs, n_heads, q_len - 1, dim_per_head)
+        # past_key_value[0] is (bs, n_heads, q_len - 1, dim_per_head)
         bs, qlen, dim = input.size()
 
-        if past_key_value_state is not None:
+        if past_key_value is not None:
             assert self.is_decoder is True, "Encoder cannot cache past key value states"
             assert (
-                len(past_key_value_state) == 2
-            ), "past_key_value_state should have 2 past states: keys and values. Got {} past states".format(
-                len(past_key_value_state)
+                len(past_key_value) == 2
+            ), "past_key_value should have 2 past states: keys and values. Got {} past states".format(
+                len(past_key_value)
             )
-            real_qlen = qlen + past_key_value_state[0].shape[2] if query_length is None else query_length
+            real_qlen = qlen + past_key_value[0].shape[2] if query_length is None else query_length
         else:
             real_qlen = qlen
 
@@ -351,18 +351,18 @@ class T5Attention(nn.Module):
         if kv is None:
             k = shape(self.k(input))  # (bs, n_heads, qlen, dim_per_head)
             v = shape(self.v(input))  # (bs, n_heads, qlen, dim_per_head)
-        elif past_key_value_state is None:
+        elif past_key_value is None:
             k = v = kv
             k = shape(self.k(k))  # (bs, n_heads, qlen, dim_per_head)
             v = shape(self.v(v))  # (bs, n_heads, qlen, dim_per_head)
 
-        if past_key_value_state is not None:
+        if past_key_value is not None:
             if kv is None:
-                k_, v_ = past_key_value_state
+                k_, v_ = past_key_value
                 k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
                 v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
             else:
-                k, v = past_key_value_state
+                k, v = past_key_value
 
         if self.is_decoder and use_cache is True:
             present_key_value_state = ((k, v),)
@@ -381,7 +381,7 @@ class T5Attention(nn.Module):
 
             # if key and values are already calculated
             # we want only the last query position bias
-            if past_key_value_state is not None:
+            if past_key_value is not None:
                 position_bias = position_bias[:, :, -1:, :]
 
             if mask is not None:
@@ -424,7 +424,7 @@ class T5LayerSelfAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         head_mask=None,
-        past_key_value_state=None,
+        past_key_value=None,
         use_cache=False,
         output_attentions=False,
     ):
@@ -434,7 +434,7 @@ class T5LayerSelfAttention(nn.Module):
             mask=attention_mask,
             position_bias=position_bias,
             head_mask=head_mask,
-            past_key_value_state=past_key_value_state,
+            past_key_value=past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
@@ -460,7 +460,7 @@ class T5LayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         head_mask=None,
-        past_key_value_state=None,
+        past_key_value=None,
         use_cache=False,
         query_length=None,
         output_attentions=False,
@@ -472,7 +472,7 @@ class T5LayerCrossAttention(nn.Module):
             kv=kv,
             position_bias=position_bias,
             head_mask=head_mask,
-            past_key_value_state=past_key_value_state,
+            past_key_value=past_key_value,
             use_cache=use_cache,
             query_length=query_length,
             output_attentions=output_attentions,
@@ -503,33 +503,33 @@ class T5Block(nn.Module):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         head_mask=None,
-        past_key_value_state=None,
+        past_key_value=None,
         use_cache=False,
         output_attentions=False,
     ):
 
-        if past_key_value_state is not None:
-            assert self.is_decoder, "Only decoder can use `past_key_value_states`"
-            expected_num_past_key_value_states = 2 if encoder_hidden_states is None else 4
+        if past_key_value is not None:
+            assert self.is_decoder, "Only decoder can use `past_key_values`"
+            expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(
-                expected_num_past_key_value_states,
-                "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "",
-                len(past_key_value_state),
+                expected_num_past_key_values,
+                "2 (past / key) for cross attention" if expected_num_past_key_values == 4 else "",
+                len(past_key_value),
             )
-            assert len(past_key_value_state) == expected_num_past_key_value_states, error_message
+            assert len(past_key_value) == expected_num_past_key_values, error_message
 
-            self_attn_past_key_value_state = past_key_value_state[:2]
-            cross_attn_past_key_value_state = past_key_value_state[2:]
+            self_attn_past_key_value = past_key_value[:2]
+            cross_attn_past_key_value = past_key_value[2:]
         else:
-            self_attn_past_key_value_state, cross_attn_past_key_value_state = None, None
+            self_attn_past_key_value, cross_attn_past_key_value = None, None
 
         self_attention_outputs = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             head_mask=head_mask,
-            past_key_value_state=self_attn_past_key_value_state,
+            past_key_value=self_attn_past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
@@ -550,7 +550,7 @@ class T5Block(nn.Module):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 head_mask=head_mask,
-                past_key_value_state=cross_attn_past_key_value_state,
+                past_key_value=cross_attn_past_key_value,
                 query_length=query_length,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -678,7 +678,7 @@ class T5Stack(T5PreTrainedModel):
         encoder_attention_mask=None,
         inputs_embeds=None,
         head_mask=None,
-        past_key_value_states=None,
+        past_key_values=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -693,17 +693,18 @@ class T5Stack(T5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(
+                f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            if self.is_decoder:
-                raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-            else:
-                raise ValueError("You have to specify either input_ids or inputs_embeds")
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
@@ -711,13 +712,16 @@ class T5Stack(T5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        if past_key_value_states is not None:
+        if past_key_values is not None:
+            assert (
+                seq_length == 1
+            ), f"{err_msg_prefix}Input shape is {input_shape}, but should be {(batch_size, 1)} when passing past_key_values"
             assert seq_length == 1, "Input shape is {}, but should be {} when using past_key_value_sates".format(
                 input_shape, (batch_size, 1)
             )
             # required mask seq length can be calculated via length of past
             # key value states and seq_length = 1 for the last token
-            mask_seq_length = past_key_value_states[0][0].shape[2] + seq_length
+            mask_seq_length = past_key_values[0][0].shape[2] + seq_length
         else:
             mask_seq_length = seq_length
 
@@ -732,9 +736,9 @@ class T5Stack(T5PreTrainedModel):
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
 
-        # initialize past_key_value_states with `None` if past does not exist
-        if past_key_value_states is None:
-            past_key_value_states = [None] * len(self.block)
+        # initialize past_key_values with `None` if past does not exist
+        if past_key_values is None:
+            past_key_values = [None] * len(self.block)
 
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
@@ -754,7 +758,7 @@ class T5Stack(T5PreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
-        for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
+        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -766,7 +770,7 @@ class T5Stack(T5PreTrainedModel):
                 encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
                 head_mask=head_mask[i],
-                past_key_value_state=past_key_value_state,
+                past_key_value=past_key_value,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
@@ -850,10 +854,6 @@ T5_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`: `attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
             :obj:`decoder_input_ids` generation.
@@ -866,15 +866,23 @@ T5_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
+        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
+            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`: `attentions`)
+            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
+            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -889,12 +897,10 @@ T5_INPUTS_DOCSTRING = r"""
 
             If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
             unset, :obj:`decoder_input_embeds` takes the value of :obj:`input_embeds`.
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
 
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
+            decoding (see ``past_key_values``).
 
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
@@ -1028,7 +1034,7 @@ class T5Model(T5PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_value_states=past_key_values,
+            past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
@@ -1204,7 +1210,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_value_states=past_key_values,
+            past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
