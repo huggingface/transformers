@@ -335,7 +335,7 @@ class TrainingArguments:
         else:
             self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
         if self.do_eval is None:
-            self.do_eval = evaluation_strategy != EvaluationStrategy.NO
+            self.do_eval = self.evaluation_strategy != EvaluationStrategy.NO
         if self.eval_steps is None:
             self.eval_steps = self.logging_steps
 
