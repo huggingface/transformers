@@ -272,7 +272,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             with self.subTest("{} ({})".format(tok_case.name, pretrained_name)):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
 
-                vocab_size = tokenizer_r.vocab_size
+                vocab_size = len(tokenizer_r)
                 self.assertEqual(tokenizer_r.add_tokens(""), 0)
                 self.assertEqual(tokenizer_r.add_tokens("testoken"), 1)
                 self.assertEqual(tokenizer_r.add_tokens(["testoken1", "testtoken2"]), 2)
@@ -509,7 +509,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
                 self.assertEqual(output_p, output_r)
 
-    def test_padding(self, max_length=15):
+    def test_padding(self, max_length=50):
         for tok_case, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest("{} ({})".format(tok_case.name, pretrained_name)):
                 tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
@@ -954,24 +954,8 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
                 BartTokenizerFast,
                 BartTokenizer,
                 "vocab_file",
-                filter_roberta_detectors,
-                (("cls_token", "<s>"),),
-            ),
-            Tokenizer(
-                "XLMRoberta",
-                XLMRobertaTokenizerFast,
-                XLMRobertaTokenizer,
-                "vocab_file",
-                filter_roberta_detectors,
-                (("cls_token", "<s>"),),
-            ),
-            Tokenizer(
-                "MBart",
-                MBartTokenizerFast,
-                MBartTokenizer,
-                "vocab_file",
-                filter_roberta_detectors,
-                (("cls_token", "<s>"),),
+                None,
+                None,
             ),
         ]
     )
@@ -988,10 +972,6 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
                 tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
                 tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
 
-                # Rust correctly handles the space before the mask while python doesnt
-                self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-
                 # token_type_ids should put 0 everywhere
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
@@ -1001,13 +981,18 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
                     sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
                 )
 
-                tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
-                tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
+                tokens_r_str = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
+                tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
+
+                # Rust correctly handles the space before the mask while python doesnt
+                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
+                self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
+
                 self.assertSequenceEqual(
-                    tokens_r, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
                 self.assertSequenceEqual(
-                    tokens_p, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
 
 
@@ -1072,11 +1057,13 @@ class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
 
     TOKENIZERS_CLASSES = frozenset(
         [
-            Tokenizer("Albert", AlbertTokenizerFast, AlbertTokenizer, "vocab_file", None, None),
-            Tokenizer("Camembert", CamembertTokenizerFast, CamembertTokenizer, "vocab_file", None, None),
-            Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
-            Tokenizer("Pegasus", PegasusTokenizerFast, PegasusTokenizer, "vocab_file", None, None),
+            # Tokenizer("Albert", AlbertTokenizerFast, AlbertTokenizer, "vocab_file", None, None),
+            # Tokenizer("Camembert", CamembertTokenizerFast, CamembertTokenizer, "vocab_file", None, None),
+            # Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
+            # Tokenizer("MBart", MBartTokenizerFast, MBartTokenizer, "vocab_file", None, None,),
+            # Tokenizer("Pegasus", PegasusTokenizerFast, PegasusTokenizer, "vocab_file", None, None),
             Tokenizer("Reformer", ReformerTokenizerFast, ReformerTokenizer, "vocab_file", None, None),
-            Tokenizer("XLNet", XLNetTokenizerFast, XLNetTokenizer, "vocab_file", None, None),
+            # Tokenizer("XLMRoberta", XLMRobertaTokenizerFast, XLMRobertaTokenizer, "vocab_file", None, None),
+            # Tokenizer("XLNet", XLNetTokenizerFast, XLNetTokenizer, "vocab_file", None, None),
         ]
     )

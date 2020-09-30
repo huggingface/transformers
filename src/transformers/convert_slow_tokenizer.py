@@ -429,8 +429,8 @@ class XLMRobertaConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["<s>", "$0", "</s>"],
-            pair=["<s>", "$0", "</s>", "$1", "</s>"],
+            single="<s> $0 </s>",
+            pair="<s> $0 </s> </s> $1 </s>",
             special_tokens=[
                 ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
