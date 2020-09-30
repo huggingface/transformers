@@ -42,7 +42,7 @@ def eval_data_dir(
     task="summarization",
     local_rank=None,
     num_return_sequences=1,
-    dataset_kwargs: Dict=None,
+    dataset_kwargs: Dict = None,
     prefix="",
     **generate_kwargs,
 ) -> Dict:
@@ -158,9 +158,9 @@ def run_generate():
         # In theory, a node could finish and save before another node hits this. If this happens, we can address later.
     dataset_kwargs = {}
     if args.src_lang is not None:
-        dataset_kwargs['src_lang'] = args.src_lang
+        dataset_kwargs["src_lang"] = args.src_lang
     if args.tgt_lang is not None:
-        dataset_kwargs['tgt_lang'] = args.tgt_lang
+        dataset_kwargs["tgt_lang"] = args.tgt_lang
 
     Path(args.save_dir).mkdir(exist_ok=True)
     results, num_replicas = eval_data_dir(
@@ -176,8 +176,7 @@ def run_generate():
         max_source_length=args.max_source_length,
         num_return_sequences=args.num_return_sequences,
         prefix=args.prefix,
-        dataset_kwargs=dataset_kwargs
-        **generate_kwargs,
+        dataset_kwargs=dataset_kwargs ** generate_kwargs,
     )
 
     if args.local_rank <= 0:
