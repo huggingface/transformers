@@ -1017,12 +1017,12 @@ class TFT5Model(TFT5PreTrainedModel):
         self,
         inputs,
         attention_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        head_mask=None,
-        past_key_values=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        head_mask=None,
+        inputs_embeds=None,
         decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
@@ -1040,24 +1040,26 @@ class TFT5Model(TFT5PreTrainedModel):
 
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = TFT5Model.from_pretrained('t5-small')
-            >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-            >>> outputs = model(inputs, decoder_input_ids=inputs)
-            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+
 
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            encoder_outputs = inputs[2] if len(inputs) > 2 else encoder_outputs
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            past_key_values = inputs[5] if len(inputs) > 5 else past_key_values
-            decoder_input_ids = inputs[6] if len(inputs) > 6 else decoder_input_ids
-            decoder_attention_mask = inputs[7] if len(inputs) > 7 else decoder_attention_mask
+            decoder_input_ids = inputs[2] if len(inputs) > 2 else decoder_input_ids
+            decoder_attention_mask = inputs[3] if len(inputs) > 3 else decoder_attention_mask
+            encoder_outputs = inputs[4] if len(inputs) > 4 else encoder_outputs
+            past_key_values = inputs[5] if len(inputs) > 5 else head_mask
+            head_mask = inputs[6] if len(inputs) > 6 else head_mask
+            inputs_embeds = inputs[7] if len(inputs) > 7 else inputs_embeds
             decoder_inputs_embeds = inputs[8] if len(inputs) > 8 else decoder_inputs_embeds
-            use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
-            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
+            use_cache = inputs[9] if len(inputs) > 10 else use_cache
+            output_attentions = inputs[10] if len(inputs) > 11 else output_attentions
+            output_hidden_states = inputs[11] if len(inputs) > 12 else output_hidden_states
             return_dict = inputs[12] if len(inputs) > 12 else return_dict
             assert len(inputs) <= 13, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
@@ -1066,17 +1068,16 @@ class TFT5Model(TFT5PreTrainedModel):
                 input_ids = inputs.get("inputs")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
-            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            head_mask = inputs.get("head_mask", head_mask)
-            past_key_values = inputs.get("past_key_values", past_key_values)
             decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
             decoder_attention_mask = inputs.get("decoder_attention_mask", decoder_attention_mask)
+            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
+            past_key_values = inputs.get("past_key_values", past_key_values)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             decoder_inputs_embeds = inputs.get("decoder_inputs_embeds", decoder_inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
             assert len(inputs) <= 13, "Too many inputs."
 
             if "past_key_value_states" in inputs:
@@ -1117,14 +1118,6 @@ class TFT5Model(TFT5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
-
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
-        if past_key_values is not None:
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids[:, -1:]
-            if decoder_inputs_embeds is not None:
-                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1227,18 +1220,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         self,
         inputs,
         attention_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        head_mask=None,
-        past_key_values=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        head_mask=None,
+        inputs_embeds=None,
         decoder_inputs_embeds=None,
+        labels=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        labels=None,
         training=False,
         **kwargs,
     ):
@@ -1251,35 +1244,35 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         Examples::
 
-            >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
-
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-            >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-            >>> outputs = model(inputs, decoder_input_ids=inputs)
-            >>> prediction_scores = outputs[0]
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-            >>> inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+            >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='tf').input_ids
+            labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='tf').input_ids
+            >>> outputs = model(input_ids=input_ids, labels=labels)
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
+
+            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="tf").input_ids  # Batch size 1
+
             >>> result = model.generate(inputs)
 
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            encoder_outputs = inputs[2] if len(inputs) > 2 else encoder_outputs
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            past_key_values = inputs[5] if len(inputs) > 5 else past_key_values
-            decoder_input_ids = inputs[6] if len(inputs) > 6 else decoder_input_ids
-            decoder_attention_mask = inputs[7] if len(inputs) > 7 else decoder_attention_mask
+            decoder_input_ids = inputs[2] if len(inputs) > 2 else decoder_input_ids
+            decoder_attention_mask = inputs[3] if len(inputs) > 3 else decoder_attention_mask
+            encoder_outputs = inputs[4] if len(inputs) > 4 else encoder_outputs
+            past_key_values = inputs[5] if len(inputs) > 5 else head_mask
+            head_mask = inputs[6] if len(inputs) > 6 else head_mask
+            inputs_embeds = inputs[7] if len(inputs) > 7 else inputs_embeds
             decoder_inputs_embeds = inputs[8] if len(inputs) > 8 else decoder_inputs_embeds
-            use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
-            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
-            return_dict = inputs[12] if len(inputs) > 12 else return_dict
-            labels = inputs[13] if len(inputs) > 13 else labels
+            labels = inputs[9] if len(inputs) > 9 else labels
+            use_cache = inputs[10] if len(inputs) > 10 else use_cache
+            output_attentions = inputs[11] if len(inputs) > 11 else output_attentions
+            output_hidden_states = inputs[12] if len(inputs) > 12 else output_hidden_states
+            return_dict = inputs[13] if len(inputs) > 13 else return_dict
             assert len(inputs) <= 14, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             if "inputs" in inputs:
@@ -1287,18 +1280,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 input_ids = inputs.get("inputs")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
-            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            head_mask = inputs.get("head_mask", head_mask)
-            past_key_values = inputs.get("past_key_values", past_key_values)
             decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
             decoder_attention_mask = inputs.get("decoder_attention_mask", decoder_attention_mask)
+            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
+            past_key_values = inputs.get("past_key_values", past_key_values)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             decoder_inputs_embeds = inputs.get("decoder_inputs_embeds", decoder_inputs_embeds)
+            labels = inputs.get("labels", labels)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            labels = inputs.get("labels", labels)
             assert len(inputs) <= 14, "Too many inputs."
 
             if "past_key_value_states" in inputs:
@@ -1421,6 +1414,10 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             encoder_outputs, past_key_values = past, None
         else:
             encoder_outputs, past_key_values = past[0], past[1]
+
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            inputs = inputs[:, -1:]
 
         return {
             "inputs": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy

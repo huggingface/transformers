@@ -272,10 +272,22 @@ class ModelTesterMixin:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
+            inputs = self._prepare_for_class(inputs_dict, model_class)
 
             try:
-                traced_gpt2 = torch.jit.trace(model, inputs)
+                # TODO(PATRICK) - remove "Bart" not in model.__class__ if Bart pos arguments can be re-ordered
+                if model.config.is_encoder_decoder and "Bart" not in model.__class__.__name__:
+                    input_ids = inputs["input_ids"]
+                    attention_mask = inputs["attention_mask"]
+                    decoder_input_ids = inputs["decoder_input_ids"]
+                    decoder_attention_mask = inputs["decoder_attention_mask"]
+
+                    traced_model = torch.jit.trace(
+                        model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
+                    )
+                else:
+                    input_ids = inputs["input_ids"]
+                    traced_model = torch.jit.trace(model, input_ids)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -283,7 +295,7 @@ class ModelTesterMixin:
                 pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
                 try:
-                    torch.jit.save(traced_gpt2, pt_file_name)
+                    torch.jit.save(traced_model, pt_file_name)
                 except Exception:
                     self.fail("Couldn't save module.")
 

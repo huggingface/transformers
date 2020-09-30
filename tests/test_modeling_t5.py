@@ -439,7 +439,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
+    test_torchscript = True
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -495,10 +495,11 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             torch.onnx.export(
                 model,
-                config_and_inputs[1],
+                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/t5_test.onnx",
                 export_params=True,
                 opset_version=9,
+                input_names=["input_ids", "decoder_input_ids"],
             )
 
 

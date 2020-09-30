@@ -202,8 +202,9 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias=False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False, is_birectional=False):
         super().__init__()
+        self.is_birectional = is_birectional
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
@@ -293,7 +294,7 @@ class T5Attention(nn.Module):
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
             relative_position,  # shape (qlen, klen)
-            bidirectional=not self.is_decoder,
+            bidirectional=self.is_birectional,
             num_buckets=self.relative_attention_num_buckets,
         )
         rp_bucket = rp_bucket.to(self.relative_attention_bias.weight.device)
@@ -411,7 +412,9 @@ class T5Attention(nn.Module):
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.SelfAttention = T5Attention(
+            config, has_relative_attention_bias=has_relative_attention_bias, is_birectional=not config.is_decoder
+        )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -444,7 +447,9 @@ class T5LayerSelfAttention(nn.Module):
 class T5LayerCrossAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.EncDecAttention = T5Attention(
+            config, has_relative_attention_bias=has_relative_attention_bias, is_birectional=True
+        )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -952,14 +957,14 @@ class T5Model(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
         past_key_values=None,
-        use_cache=None,
+        head_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
-        head_mask=None,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -975,10 +980,11 @@ class T5Model(T5PreTrainedModel):
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5Model.from_pretrained('t5-small')
 
-            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            >>> outputs = model(input_ids=input_ids)
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
 
-            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            >>> last_hidden_states = outputs.last_hidden_state
         """
         if "decoder_past_key_value_states" in kwargs:
             warnings.warn(
@@ -1016,20 +1022,6 @@ class T5Model(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
-
-        # If the model is only provided with either input_ids or inputs_embeds,
-        # use them as the inputs of the decoder. self.encoder checks for input_ids XOR inputs_embeds
-        if (decoder_input_ids is None) and (decoder_inputs_embeds is None):
-            decoder_input_ids = input_ids
-            decoder_inputs_embeds = inputs_embeds
-
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
-        if past_key_values is not None:
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids[:, -1:]
-            if decoder_inputs_embeds is not None:
-                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1108,15 +1100,15 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
         past_key_values=None,
-        use_cache=None,
-        labels=None,
+        head_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
-        head_mask=None,
+        labels=None,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1139,14 +1131,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
-            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, labels=input_ids)
+
+            >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
+            labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
+            >>> outputs = model(input_ids=input_ids, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
-            >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model.generate(input_ids)
         """
 
@@ -1250,6 +1242,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
+
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
         return {
             "decoder_input_ids": input_ids,
             "past_key_values": past,
