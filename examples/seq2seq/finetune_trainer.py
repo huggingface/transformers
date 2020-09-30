@@ -22,6 +22,7 @@ from transformers import (
     set_seed,
 )
 from transformers.modeling_bart import shift_tokens_right
+from transformers.trainer_utils import EvaluationStrategy
 from utils import (
     LegacySeq2SeqDataset,
     Seq2SeqDataset,
@@ -350,7 +351,7 @@ def main():
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
-        if training_args.do_eval
+        if training_args.do_eval or training_args.evaluation_strategy != EvaluationStrategy.NO
         else None
     )
     test_dataset = (
