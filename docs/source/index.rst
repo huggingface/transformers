@@ -54,96 +54,101 @@ The documentation is organized in five parts:
 The library currently contains PyTorch and Tensorflow implementations, pre-trained model weights, usage scripts and
 conversion utilities for the following models:
 
-1. `BERT <https://github.com/google-research/bert>`_ (from Google) released with the paper `BERT: Pre-training of Deep
+1. `ALBERT <https://github.com/google-research/ALBERT>`_ (from Google Research), released together with the paper
+   `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations <https://arxiv.org/abs/1909.11942>`_
+   by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, and Radu Soricut.
+2. `BART <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_ (from Facebook) released with the paper
+   `BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension
+   <https://arxiv.org/pdf/1910.13461.pdf>`_ by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman
+   Mohamed, Omer Levy, Ves Stoyanov, and Luke Zettlemoyer.
+3. `BERT <https://github.com/google-research/bert>`_ (from Google) released with the paper `BERT: Pre-training of Deep
    Bidirectional Transformers for Language Understanding <https://arxiv.org/abs/1810.04805>`_ by Jacob Devlin, Ming-Wei
    Chang, Kenton Lee, and Kristina Toutanova.
-2. `GPT <https://github.com/openai/finetune-transformer-lm>`_ (from OpenAI) released with the paper `Improving Language
-   Understanding by Generative Pre-Training <https://blog.openai.com/language-unsupervised>`_ by Alec Radford, Karthik
-   Narasimhan, Tim Salimans, and Ilya Sutskever.
-3. `GPT-2 <https://blog.openai.com/better-language-models>`_ (from OpenAI) released with the paper `Language Models are
-   Unsupervised Multitask Learners <https://blog.openai.com/better-language-models>`_ by Alec Radford, Jeffrey Wu,
-   Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever.
-4. `Transformer-XL <https://github.com/kimiyoung/transformer-xl>`_ (from Google/CMU) released with the paper
-   `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_ by
-   Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, and Ruslan Salakhutdinov.
-5. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized
-   Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang, Zihang
-   Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, and Quoc V. Le.
-6. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual
-   Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
-7. `RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_ (from Facebook), released together with
-   the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_ by Yinhan Liu, Myle
-   Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin
-   Stoyanov.
-8. `DistilBERT <https://huggingface.co/transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together
+4. `BERT For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_
+   (from Google) released with the paper `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
+   <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+5. `CamemBERT <https://huggingface.co/transformers/model_doc/camembert.html>`_ (from FAIR, Inria, Sorbonne Université)
+   released together with the paper `CamemBERT: a Tasty French Language Model <https://arxiv.org/abs/1911.03894>`_ by
+   Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suarez, Yoann Dupont, Laurent Romary, Eric Villemonte de la
+   Clergerie, Djame Seddah, and Benoît Sagot.
+6. `CTRL <https://github.com/pytorch/fairseq/tree/master/examples/ctrl>`_ (from Salesforce), released together with the
+   paper `CTRL: A Conditional Transformer Language Model for Controllable Generation
+   <https://www.github.com/salesforce/ctrl>`_ by Nitish Shirish Keskar, Bryan McCann, Lav R. Varshney, Caiming Xiong,
+   and Richard Socher.
+7. `DeBERTa <https://huggingface.co/transformers/model_doc/deberta.html>`_ (from Microsoft Research) released with the
+   paper `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`_ by Pengcheng
+   He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen.
+8. `DialoGPT <https://github.com/microsoft/DialoGPT>`_ (from Microsoft Research) released with the paper `DialoGPT:
+   Large-Scale Generative Pre-training for Conversational Response Generation <https://arxiv.org/abs/1911.00536>`_ by
+   Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu,
+   and Bill Dolan.
+9. `DistilBERT <https://huggingface.co/transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together
    with the paper `DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter
    <https://arxiv.org/abs/1910.01108>`_ by Victor Sanh, Lysandre Debut, and Thomas Wolf. The same method has been
    applied to compress GPT2 into
    `DistilGPT2 <https://github.com/huggingface/transformers/tree/master/examples/distillation>`_.
-9. `CTRL <https://github.com/pytorch/fairseq/tree/master/examples/ctrl>`_ (from Salesforce), released together with the
-   paper `CTRL: A Conditional Transformer Language Model for Controllable Generation
-   <https://www.github.com/salesforce/ctrl>`_ by Nitish Shirish Keskar, Bryan McCann, Lav R. Varshney, Caiming Xiong,
-   and Richard Socher.
-10. `CamemBERT <https://huggingface.co/transformers/model_doc/camembert.html>`_ (from FAIR, Inria, Sorbonne Université)
-    released together with the paper `CamemBERT: a Tasty French Language Model <https://arxiv.org/abs/1911.03894>`_ by
-    Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suarez, Yoann Dupont, Laurent Romary, Eric Villemonte de la
-    Clergerie, Djame Seddah, and Benoît Sagot.
-11. `ALBERT <https://github.com/google-research/ALBERT>`_ (from Google Research), released together with the paper
-    `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations <https://arxiv.org/abs/1909.11942>`_
-    by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, and Radu Soricut.
-12. `T5 <https://github.com/google-research/text-to-text-transfer-transformer>`_ (from Google) released with the paper
-    `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
-    <https://arxiv.org/abs/1910.10683>`_ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
-    Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu.
-13. `XLM-RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/xlmr>`_ (from Facebook AI), released together
-    with the paper `Unsupervised Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`_ by
-    Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard
-    Grave, Myle Ott, Luke Zettlemoyer, and Veselin Stoyanov.
-14. `MMBT <https://github.com/facebookresearch/mmbt/>`_ (from Facebook), released together with the paper a `Supervised
-    Multimodal Bitransformers for Classifying Images and Text <https://arxiv.org/pdf/1909.02950.pdf>`_ by Douwe Kiela,
-    Suvrat Bhooshan, Hamed Firooz, and Davide Testuggine.
-15. `FlauBERT <https://github.com/getalp/Flaubert>`_ (from CNRS) released with the paper `FlauBERT: Unsupervised
+10. `DPR <https://github.com/facebookresearch/DPR>`_ (from Facebook) released with the paper `Dense Passage Retrieval
+    for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_ by Vladimir Karpukhin, Barlas Oğuz, Sewon
+    Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
+11. `ELECTRA <https://github.com/google-research/electra>`_ (from Google Research/Stanford University) released with
+    the paper `ELECTRA: Pre-training text encoders as discriminators rather than generators
+    <https://arxiv.org/abs/2003.10555>`_ by Kevin Clark, Minh-Thang Luong, Quoc V. Le, and Christopher D. Manning.
+12. `FlauBERT <https://github.com/getalp/Flaubert>`_ (from CNRS) released with the paper `FlauBERT: Unsupervised
     Language Model Pre-training for French <https://arxiv.org/abs/1912.05372>`_ by Hang Le, Loïc Vial, Jibril Frej,
     Vincent Segonne, Maximin Coavoux, Benjamin Lecouteux, Alexandre Allauzen, Benoît Crabbé, Laurent Besacier, and
     Didier Schwab.
-16. `BART <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_ (from Facebook) released with the paper
-    `BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension
-    <https://arxiv.org/pdf/1910.13461.pdf>`_ by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman
-    Mohamed, Omer Levy, Ves Stoyanov, and Luke Zettlemoyer.
-17. `ELECTRA <https://github.com/google-research/electra>`_ (from Google Research/Stanford University) released with
-    the paper `ELECTRA: Pre-training text encoders as discriminators rather than generators
-    <https://arxiv.org/abs/2003.10555>`_ by Kevin Clark, Minh-Thang Luong, Quoc V. Le, and Christopher D. Manning.
-18. `DialoGPT <https://github.com/microsoft/DialoGPT>`_ (from Microsoft Research) released with the paper `DialoGPT:
-    Large-Scale Generative Pre-training for Conversational Response Generation <https://arxiv.org/abs/1911.00536>`_ by
-    Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu,
-    and Bill Dolan.
-19. `Reformer <https://github.com/google/trax/tree/master/trax/models/reformer>`_ (from Google Research) released with
-    the paper `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_ by Nikita Kitaev, Łukasz
-    Kaiser, and Anselm Levskaya.
-20. `MarianMT <https://marian-nmt.github.io/>`_ (developed by the Microsoft Translator Team) machine translation models
-    trained using `OPUS <http://opus.nlpl.eu/>`_ pretrained_models data by Jörg Tiedemann.
-21. `Longformer <https://github.com/allenai/longformer>`_ (from AllenAI) released with the paper `Longformer: The
-    Long-Document Transformer <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
-22. `DPR <https://github.com/facebookresearch/DPR>`_ (from Facebook) released with the paper `Dense Passage Retrieval
-    for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_ by Vladimir Karpukhin, Barlas Oğuz, Sewon
-    Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-23. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
-    <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
-24. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_ (from Facebook) released with the paper  `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov,
-    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
-25. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
-    Cross-Modality Encoder Representations from Transformers for Open-Domain Question
-    Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
-26. `Funnel Transformer <https://github.com/laiguokun/Funnel-Transformer>`_ (from CMU/Google Brain) released with the paper
+13. `Funnel Transformer <https://github.com/laiguokun/Funnel-Transformer>`_ (from CMU/Google Brain) released with the paper
     `Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
     <https://arxiv.org/abs/2006.03236>`_ by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
-27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
-    `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
-    <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
-28. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with the paper
-    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+14. `GPT <https://github.com/openai/finetune-transformer-lm>`_ (from OpenAI) released with the paper `Improving Language
+    Understanding by Generative Pre-Training <https://blog.openai.com/language-unsupervised>`_ by Alec Radford, Karthik
+    Narasimhan, Tim Salimans, and Ilya Sutskever.
+15. `GPT-2 <https://blog.openai.com/better-language-models>`_ (from OpenAI) released with the paper `Language Models are
+    Unsupervised Multitask Learners <https://blog.openai.com/better-language-models>`_ by Alec Radford, Jeffrey Wu,
+    Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever.
+16. `LayoutLM <https://github.com/microsoft/unilm/tree/master/layoutlm>`_ (from Microsoft Research Asia) released with
+    the paper `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
     <https://arxiv.org/abs/1912.13318>`_ by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
-29. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+17. `Longformer <https://github.com/allenai/longformer>`_ (from AllenAI) released with the paper `Longformer: The
+    Long-Document Transformer <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
+18. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
+    Cross-Modality Encoder Representations from Transformers for Open-Domain Question
+    Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
+19. `MarianMT <https://marian-nmt.github.io/>`_ (developed by the Microsoft Translator Team) machine translation models
+    trained using `OPUS <http://opus.nlpl.eu/>`_ pretrained_models data by Jörg Tiedemann.
+20. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_ (from Facebook) released with the paper
+    `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan
+    Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov, Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
+21. `MMBT <https://github.com/facebookresearch/mmbt/>`_ (from Facebook), released together with the paper a `Supervised
+    Multimodal Bitransformers for Classifying Images and Text <https://arxiv.org/pdf/1909.02950.pdf>`_ by Douwe Kiela,
+    Suvrat Bhooshan, Hamed Firooz, and Davide Testuggine.
+22. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS:
+    Pre-training with Extracted Gap-sentences for Abstractive Summarization <https://arxiv.org/abs/1912.08777>`_ by
+    Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
+23. `Reformer <https://github.com/google/trax/tree/master/trax/models/reformer>`_ (from Google Research) released with
+    the paper `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_ by Nikita Kitaev, Łukasz
+    Kaiser, and Anselm Levskaya.
+24. `RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_ (from Facebook), released together with
+    the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_ by Yinhan Liu, Myle
+    Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin
+    Stoyanov.
+25. `T5 <https://github.com/google-research/text-to-text-transfer-transformer>`_ (from Google) released with the paper
+    `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
+    <https://arxiv.org/abs/1910.10683>`_ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+    Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu.
+26. `Transformer-XL <https://github.com/kimiyoung/transformer-xl>`_ (from Google/CMU) released with the paper
+    `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_ by
+    Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, and Ruslan Salakhutdinov.
+27. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual
+    Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
+28. `XLM-RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/xlmr>`_ (from Facebook AI), released together
+    with the paper `Unsupervised Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`_ by
+    Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard
+    Grave, Myle Ott, Luke Zettlemoyer, and Veselin Stoyanov.
+29. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized
+    Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang, Zihang
+    Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, and Quoc V. Le.
+30. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
