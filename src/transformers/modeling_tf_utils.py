@@ -29,7 +29,6 @@ from tensorflow.python.keras.saving import hdf5_format
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 from .utils import logging
 
 
@@ -695,6 +694,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         model = cls(config, *model_args, **model_kwargs)
 
         if from_pt:
+            from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
+
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 

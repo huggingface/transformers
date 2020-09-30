@@ -257,6 +257,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
         raise
 
     import transformers
+    from .modeling_tf_utils import load_tf_weights
 
     logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
 
@@ -271,7 +272,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
 
-    tf_model.load_weights(tf_checkpoint_path, by_name=True)
+    load_tf_weights(tf_model, tf_checkpoint_path)
 
     return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
 
