@@ -154,9 +154,6 @@ class TFModelTesterMixin:
                     "encoder_outputs",
                 ]
                 self.assertListEqual(arg_names[:5], expected_arg_names)
-            else:
-                expected_arg_names = ["inputs"]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
