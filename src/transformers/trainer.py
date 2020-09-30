@@ -675,14 +675,12 @@ class Trainer:
 
         # Distributed training (should be after apex fp16 initialization)
         if self.args.local_rank != -1:
-            config = model.config
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
                 find_unused_parameters=not getattr(model.config, "gradient_checkpointing", False),
             )
-            model.config = config
         # find_unused_parameters breaks checkpointing as per
         # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
