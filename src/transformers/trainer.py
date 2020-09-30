@@ -60,7 +60,7 @@ from .utils import logging
 _use_native_amp = False
 _use_apex = False
 
-PT_LR_SCHEDULER_WARNING = "Please also save or load the state of the optimzer when saving or loading the scheduler."
+PT_LR_SCHEDULER_WARNING = "Please also save or load the state of the optimizer when saving or loading the scheduler."
 
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
@@ -499,7 +499,7 @@ class Trainer:
                 project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.run_name
             )
             # keep track of model topology and gradients, unsupported on TPU
-            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
+            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false" and is_wandb_available():
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )
