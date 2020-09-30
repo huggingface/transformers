@@ -1046,7 +1046,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+            >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
 
 
         """
@@ -1247,16 +1247,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         Examples::
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small', return_dict=True)
             >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
 
-            >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='tf').input_ids
+            >>> inputs = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='tf').input_ids
             labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='tf').input_ids
-            >>> outputs = model(input_ids=input_ids, labels=labels)
+            >>> outputs = model(inputs, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
 
-            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="tf").input_ids  # Batch size 1
+            >>> inputs = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="tf").input_ids  # Batch size 1
 
             >>> result = model.generate(inputs)
 
