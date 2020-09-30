@@ -1,19 +1,19 @@
 import os
-import argparse
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pytest
+from torch.utils.data import DataLoader
+
 from pack_dataset import pack_data_dir
 from save_len_file import save_len_file
 from test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
-from torch.utils.data import DataLoader
-
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
 from transformers.testing_utils import slow
 from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
+
 
 BERT_BASE_CASED = "bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"
@@ -197,7 +197,7 @@ def test_distributed_sortish_sampler_splits_indices_between_procs():
         PEGASUS_XSUM,
     ],
 )
-def test_dataset_kwargs_for_t5_tokenizer(tok_name):
+def test_dataset_kwargs(tok_name):
     tokenizer = AutoTokenizer.from_pretrained(tok_name)
     if tok_name == MBART_TINY:
         train_dataset = Seq2SeqDataset(
@@ -206,21 +206,15 @@ def test_dataset_kwargs_for_t5_tokenizer(tok_name):
             type_path="train",
             max_source_length=4,
             max_target_length=8,
-            src_lang='EN',
-            tgt_lang='FR'
+            src_lang="EN",
+            tgt_lang="FR",
         )
         kwargs = train_dataset.dataset_kwargs
-        assert 'src_lang' in kwargs and 'tgt_lang' in kwargs
+        assert "src_lang" in kwargs and "tgt_lang" in kwargs
     else:
         train_dataset = Seq2SeqDataset(
-            tokenizer,
-            data_dir=make_test_data_dir(),
-            type_path="train",
-            max_source_length=4,
-            max_target_length=8
+            tokenizer, data_dir=make_test_data_dir(), type_path="train", max_source_length=4, max_target_length=8
         )
         kwargs = train_dataset.dataset_kwargs
-        assert 'add_prefix_space' not in  kwargs if tok_name != BART_TINY else 'add_prefix_space' in kwargs
+        assert "add_prefix_space" not in kwargs if tok_name != BART_TINY else "add_prefix_space" in kwargs
         assert len(kwargs) == 1 if tok_name == BART_TINY else len(kwargs) == 0
-
-

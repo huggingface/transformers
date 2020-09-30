@@ -51,6 +51,7 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
     return loss, nll_loss
 
+
 def lmap(f: Callable, x: Iterable) -> List:
     """list(map(f, x))"""
     return list(map(f, x))
@@ -106,7 +107,7 @@ class AbstractSeq2SeqDataset(Dataset):
             self.src_lens = self.src_lens[:n_obs]
         self.pad_token_id = self.tokenizer.pad_token_id
         self.dataset_kwargs = dataset_kwargs
-        dataset_kwargs.update({'add_prefix_space' : True} if isinstance(self.tokenizer, BartTokenizer) else {})
+        dataset_kwargs.update({"add_prefix_space": True} if isinstance(self.tokenizer, BartTokenizer) else {})
 
     def __len__(self):
         return len(self.src_lens)
@@ -186,7 +187,7 @@ class LegacySeq2SeqDataset(AbstractSeq2SeqDataset):
             padding="max_length" if pad_to_max_length else None,
             truncation=True,
             return_tensors=return_tensors,
-            **self.dataset_kwargs
+            **self.dataset_kwargs,
         )
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
@@ -223,7 +224,7 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
             max_length=self.max_source_length,
             max_target_length=self.max_target_length,
             return_tensors="pt",
-            **self.dataset_kwargs
+            **self.dataset_kwargs,
         ).data
         batch_encoding["ids"] = torch.tensor([x["id"] for x in batch])
         return batch_encoding
