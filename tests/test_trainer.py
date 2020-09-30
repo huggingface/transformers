@@ -367,6 +367,42 @@ class TrainerIntegrationTest(unittest.TestCase):
             trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False)
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
+    
+    def test_can_resume_training(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            
+            # Reinitialize trainer and load model
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            trainer.model = RegressionPreTrainedModel.from_pretrained(checkpoint)
+            trainer.model = trainer.model.to(trainer.args.device)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+        
+        # With a regular model that is not a PreTrainedModel
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            
+            # Reinitialize trainer and load model
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            trainer.model.load_state_dict(state_dict)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
 
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
