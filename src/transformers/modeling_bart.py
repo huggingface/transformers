@@ -269,6 +269,9 @@ class EncoderLayer(nn.Module):
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
+        if torch.isinf(x).any() or torch.isnan(x).any():
+            clamp_value = torch.finfo(x.dtype).max - 1000
+            x = torch.clamp(x, min=-clamp_value, max=clamp_value)
         return x, attn_weights
 
 
