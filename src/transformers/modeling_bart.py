@@ -108,7 +108,7 @@ BART_INPUTS_DOCSTRING = r"""
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
             :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the encoder.
             Used in the cross-attention of the decoder.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
