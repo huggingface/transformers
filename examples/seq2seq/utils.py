@@ -264,7 +264,9 @@ class Seq2SeqDataCollator:
     def __init__(self, tokenizer, data_args, tpu_num_cores=None):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
-        assert self.pad_token_id is not None, "self.pad_token_id must be defined"
+        assert (
+            self.pad_token_id is not None
+        ), f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
         self.data_args = data_args
         self.tpu_num_cores = tpu_num_cores
         self.add_prefix_space = isinstance(tokenizer, BartTokenizer)
