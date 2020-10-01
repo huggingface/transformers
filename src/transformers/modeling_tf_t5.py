@@ -943,7 +943,7 @@ T5_INPUTS_DOCSTRING = r"""
             associated vectors than the model's internal embedding lookup matrix.
 
             If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
-            unset, :obj:`decoder_input_embeds` takes the value of :obj:`input_embeds`.
+            unset, :obj:`decoder_inputs_embeds` takes the value of :obj:`inputs_embeds`.
         head_mask: (:obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:

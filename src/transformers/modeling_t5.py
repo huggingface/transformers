@@ -888,7 +888,7 @@ T5_INPUTS_DOCSTRING = r"""
             associated vectors than the model's internal embedding lookup matrix.
 
             If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
-            unset, :obj:`decoder_input_embeds` takes the value of :obj:`input_embeds`.
+            unset, :obj:`decoder_inputs_embeds` takes the value of :obj:`inputs_embeds`.
 
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
