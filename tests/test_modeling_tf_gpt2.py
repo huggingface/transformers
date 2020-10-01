@@ -211,7 +211,9 @@ class TFGPT2ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-12)
 
-    def create_and_check_gpt2_model_past_large_inputs(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt2_model_past_large_inputs(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = TFGPT2Model(config=config)
 
         # first forward pass

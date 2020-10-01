@@ -199,7 +199,9 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
-    def create_and_check_t5_decoder_model_past_large_inputs(self, config, input_ids, decoder_input_ids, attention_mask):
+    def create_and_check_t5_decoder_model_past_large_inputs(
+        self, config, input_ids, decoder_input_ids, attention_mask
+    ):
         model = TFT5Model(config=config).get_decoder()
 
         input_ids = input_ids[:1, :]
