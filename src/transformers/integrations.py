@@ -124,8 +124,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
             trainer._tune_save_checkpoint()
-            ray.tune.report(objective=trainer.objective)
-        return trainer.objective
+            ray.tune.report(objective=trainer.objective, **metrics, done=True)
 
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
