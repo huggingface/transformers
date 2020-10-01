@@ -14,6 +14,7 @@
 # limitations under the License.
 """ TF 2.0 Funnel model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -1184,7 +1185,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
     @replace_return_docstrings(output_type=TFFunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1192,6 +1193,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs
     ):
         r"""
         Returns:
@@ -1209,8 +1211,14 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.funnel.return_dict
 
+        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
+            warnings.warn(
+                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
+            )
+            inputs = kwargs["input_ids"]
+
         discriminator_hidden_states = self.funnel(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             inputs_embeds,
