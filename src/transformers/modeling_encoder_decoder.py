@@ -96,6 +96,14 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
+        decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
+            representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
+            indices into associated vectors than the model's internal embedding lookup matrix.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss for the decoder.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
@@ -340,6 +348,8 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
         output_attentions=None,
@@ -386,6 +396,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -400,6 +411,7 @@ class EncoderDecoderModel(PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

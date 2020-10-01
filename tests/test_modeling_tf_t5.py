@@ -199,6 +199,36 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
+    def create_and_check_t5_decoder_model_past_large_inputs(self, config, input_ids, decoder_input_ids, attention_mask):
+        model = TFT5Model(config=config).get_decoder()
+
+        input_ids = input_ids[:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+
+        output, past_key_values = outputs
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+
+        output_from_no_past = model(next_input_ids)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
+
+        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, input_mask, token_labels) = config_and_inputs
@@ -240,6 +270,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_t5_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_t5_decoder_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

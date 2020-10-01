@@ -117,9 +117,9 @@ class TFT5LayerFF(tf.keras.layers.Layer):
 class TFT5Attention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
-    def __init__(self, config, has_relative_attention_bias=False, is_birectional=False, **kwargs):
+    def __init__(self, config, has_relative_attention_bias=False, is_bidirectional=False, **kwargs):
         super().__init__(**kwargs)
-        self.is_birectional = is_birectional
+        self.is_bidirectional = is_bidirectional
         self.layer_id = next(TFT5Attention.NEW_ID)
         self.is_decoder = config.is_decoder
         self.use_cache = config.use_cache
@@ -203,7 +203,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
             relative_position,
-            bidirectional=self.is_birectional,
+            bidirectional=self.is_bidirectional,
             num_buckets=self.relative_attention_num_buckets,
         )
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
@@ -290,7 +290,7 @@ class TFT5Attention(tf.keras.layers.Layer):
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -1:, :]
+                position_bias = position_bias[:, :, -qlen:, :]
 
             if mask is not None:
                 position_bias = position_bias + mask  # (bs, n_heads, qlen, klen)
@@ -323,7 +323,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         self.SelfAttention = TFT5Attention(
             config,
             has_relative_attention_bias=has_relative_attention_bias,
-            is_birectional=not config.is_decoder,
+            is_bidirectional=not config.is_decoder,
             name="SelfAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
@@ -363,7 +363,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
         self.EncDecAttention = TFT5Attention(
             config,
             has_relative_attention_bias=has_relative_attention_bias,
-            is_birectional=True,
+            is_bidirectional=True,
             name="EncDecAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
@@ -660,16 +660,10 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         batch_size, seq_length = input_shape
 
-        if past_key_values is not None:
-            err_msg_prefix = "Decoder " if self.is_decoder else ""
-            assert (
-                seq_length == 1
-            ), f"{err_msg_prefix}Input shape is {input_shape}, but should be {(batch_size, 1)} when using past_key_value_sates"
-            # required mask seq length can be calculated via length of past
-            # key value states and seq_length = 1 for the last token
-            mask_seq_length = shape_list(past_key_values[0][0])[2] + seq_length
-        else:
-            mask_seq_length = seq_length
+        # required mask seq length can be calculated via length of past
+        mask_seq_length = (
+            shape_list(past_key_values[0][0])[2] + seq_length if past_key_values is not None else seq_length
+        )
 
         if attention_mask is None:
             attention_mask = tf.fill((batch_size, mask_seq_length), 1)
@@ -700,7 +694,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 causal_mask = tf.cast(causal_mask, dtype=tf.float32)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
                 if past_key_values[0] is not None:
-                    extended_attention_mask = extended_attention_mask[:, :, -1:, :]
+                    extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
 

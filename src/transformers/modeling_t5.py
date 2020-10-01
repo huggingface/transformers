@@ -202,9 +202,9 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias=False, is_birectional=False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False, is_bidirectional=False):
         super().__init__()
-        self.is_birectional = is_birectional
+        self.is_bidirectional = is_bidirectional
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
@@ -294,7 +294,7 @@ class T5Attention(nn.Module):
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
             relative_position,  # shape (qlen, klen)
-            bidirectional=self.is_birectional,
+            bidirectional=self.is_bidirectional,
             num_buckets=self.relative_attention_num_buckets,
         )
         rp_bucket = rp_bucket.to(self.relative_attention_bias.weight.device)
@@ -382,7 +382,7 @@ class T5Attention(nn.Module):
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -1:, :]
+                position_bias = position_bias[:, :, -qlen:, :]
 
             if mask is not None:
                 position_bias = position_bias + mask  # (bs, n_heads, qlen, klen)
@@ -413,7 +413,7 @@ class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.SelfAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, is_birectional=not config.is_decoder
+            config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=not config.is_decoder
         )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -448,7 +448,7 @@ class T5LayerCrossAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.EncDecAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, is_birectional=True
+            config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=True
         )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -712,18 +712,8 @@ class T5Stack(T5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        if past_key_values is not None:
-            assert (
-                seq_length == 1
-            ), f"{err_msg_prefix}Input shape is {input_shape}, but should be {(batch_size, 1)} when passing past_key_values"
-            assert seq_length == 1, "Input shape is {}, but should be {} when using past_key_value_sates".format(
-                input_shape, (batch_size, 1)
-            )
-            # required mask seq length can be calculated via length of past
-            # key value states and seq_length = 1 for the last token
-            mask_seq_length = past_key_values[0][0].shape[2] + seq_length
-        else:
-            mask_seq_length = seq_length
+        # required mask seq length can be calculated via length of past
+        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
         if use_cache is True:
             assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
