@@ -1,5 +1,5 @@
 ---
-- language: pt
+language: pt
 ---
 
 # PTT5-SMALL-SUM
