@@ -101,25 +101,25 @@ BART_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
-            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the encoder.
-            Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
+        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
+            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the encoder.
+            Used in the cross-attention of the decoder.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
-            If ``past_key_values`` are used, the user can optionally input only the last
+            If :obj:`past_key_values` are used, the user can optionally input only the last
             ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
             :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
-            ``past_key_values``).
+            If :obj:`use_cache` is True, :obj:`past_key_values` are returned and can be used to speed up decoding (see
+            :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
@@ -874,8 +874,8 @@ class BartModel(PretrainedBartModel):
         input_ids,
         attention_mask=None,
         decoder_input_ids=None,
-        encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
+        encoder_outputs: Optional[Tuple] = None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -1004,9 +1004,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
         past_key_values=None,
         labels=None,
         use_cache=None,
@@ -1171,9 +1171,9 @@ class BartForSequenceClassification(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -1257,9 +1257,9 @@ class BartForQuestionAnswering(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
         start_positions=None,
         end_positions=None,
         use_cache=None,

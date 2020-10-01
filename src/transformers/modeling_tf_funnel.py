@@ -14,6 +14,7 @@
 # limitations under the License.
 """ TF 2.0 Funnel model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -173,16 +174,16 @@ class TFFunnelAttentionStructure:
         # dividide.
         self.pooling_mult = None
 
-    def init_attention_inputs(self, input_embeds, attention_mask=None, token_type_ids=None, training=False):
+    def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None, training=False):
         """ Returns the attention inputs associated to the inputs of the model. """
-        # input_embeds has shape batch_size x seq_len x d_model
+        # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
-        self.seq_len = seq_len = input_embeds.shape[1]
-        position_embeds = self.get_position_embeds(seq_len, dtype=input_embeds.dtype, training=training)
+        self.seq_len = seq_len = inputs_embeds.shape[1]
+        position_embeds = self.get_position_embeds(seq_len, dtype=inputs_embeds.dtype, training=training)
         token_type_mat = self.token_type_ids_to_mat(token_type_ids) if token_type_ids is not None else None
         cls_mask = (
-            tf.pad(tf.ones([seq_len - 1, seq_len - 1], dtype=input_embeds.dtype), [[1, 0], [1, 0]])
+            tf.pad(tf.ones([seq_len - 1, seq_len - 1], dtype=inputs_embeds.dtype), [[1, 0], [1, 0]])
             if self.separate_cls
             else None
         )
@@ -1184,7 +1185,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
     @replace_return_docstrings(output_type=TFFunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1192,6 +1193,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs
     ):
         r"""
         Returns:
@@ -1209,8 +1211,14 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.funnel.return_dict
 
+        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
+            warnings.warn(
+                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
+            )
+            inputs = kwargs["input_ids"]
+
         discriminator_hidden_states = self.funnel(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             inputs_embeds,

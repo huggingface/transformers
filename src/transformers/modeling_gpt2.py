@@ -365,7 +365,7 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            ``past_key_values`` input) to speed up sequential decoding.
+            :obj:`past_key_values` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -407,11 +407,11 @@ GPT2_START_DOCSTRING = r"""
 GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if ``past_key_values`` is ``None`` else
+            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
             ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
 
-            If ``past_key_values`` is used, only ``input_ids`` that do not have their past calculated should be passed
+            If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be passed
             as ``input_ids``.
 
             Indices can be obtained using :class:`~transformers.GPT2Tokenizer`.
@@ -421,7 +421,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         past_key_values (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model
-            (see ``past_key_values`` output below). Can be used to speed up sequential decoding.
+            (see :obj:`past_key_values` output below). Can be used to speed up sequential decoding.
             The ``input_ids`` which have their past given to this model should not be passed as ``input_ids`` as they
             have already been computed.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -457,11 +457,11 @@ GPT2_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
 
-            If ``past_key_values`` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
-            ``past_key_values``).
+            If :obj:`past_key_values` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
+            :obj:`past_key_values`).
         use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.

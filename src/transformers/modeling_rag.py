@@ -52,7 +52,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
-            (see ``past_key_values`` input) to speed up sequential decoding.
+            (see :obj:`past_key_values` input) to speed up sequential decoding.
         retrieved_doc_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs, hidden_size)`, `optional`, returned when `output_retrieved=True`):
             Embedded documents retrieved by the retriever.
             Is used with ``question_encoder_last_hidden_state`` to compute the ``doc_scores``.
@@ -137,7 +137,7 @@ class RetrievAugLMOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
-            (see ``past_key_values`` input) to speed up sequential decoding.
+            (see :obj:`past_key_values` input) to speed up sequential decoding.
         retrieved_doc_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs, hidden_size)`, `optional`, returned when `output_retrieved=True`):
             Embedded documents retrieved by the retriever.
             Is used with ``question_encoder_last_hidden_state`` to compute the ``doc_scores``.
@@ -447,8 +447,8 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             to the forward pass. :obj:`context_attention_mask` are returned by
             :meth:`~transformers.RagRetriever.__call__`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
