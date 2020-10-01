@@ -91,6 +91,7 @@ def run_trainer(eval_steps: int, max_len: str, model_name: str, num_train_epochs
         "0.1",
         # "--eval_beams",
         # "2",
+        "--adafactor",
         "--task",
         "translation",
         "--tgt_lang",

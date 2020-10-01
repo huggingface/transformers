@@ -52,6 +52,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
+    adafactor: bool = field(default=False, metadata={"help": "whether to use adafactor"})
 
 
 @dataclass
