@@ -100,8 +100,7 @@ class LayoutLMEmbeddings(nn.Module):
             right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
             lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
         except IndexError as e:
-            print("The :obj:`bbox`coordinate values should be within 0-1000 range.")
-            raise e
+            raise IndexError("The :obj:`bbox`coordinate values should be within 0-1000 range.") from e
 
         h_position_embeddings = self.h_position_embeddings(bbox[:, :, 3] - bbox[:, :, 1])
         w_position_embeddings = self.w_position_embeddings(bbox[:, :, 2] - bbox[:, :, 0])
