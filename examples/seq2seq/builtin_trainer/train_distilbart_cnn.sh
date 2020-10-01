@@ -19,8 +19,7 @@ python finetune_trainer.py \
     --num_train_epochs=2 \
     --save_steps 3000 --eval_steps 3000 \
     --logging_first_step \
-    --max_target_length $MAX_TGT_LEN --val_max_target_length $MAX_TGT_LEN --test_max_target_length $MAX_TGT_LEN \
+    --max_target_length 56 --val_max_target_length $MAX_TGT_LEN --test_max_target_length $MAX_TGT_LEN \
     --do_train --do_eval --do_predict --evaluate_during_training \
     --predict_with_generate \
-    --run_name distilbart-cnn-12-6 \
     "$@"

@@ -19,5 +19,4 @@ python finetune_trainer.py \
     --do_train --do_eval --do_predict --evaluate_during_training\
     --predict_with_generate --logging_first_step \
     --task translation --label_smoothing 0.1 \
-    --run_name marian_en_ro_6_3 \
     "$@"
