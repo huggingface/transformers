@@ -216,7 +216,6 @@ class TFT5Attention(tf.keras.layers.Layer):
         mask=None,
         kv=None,
         position_bias=None,
-        cache=None,
         past_key_value=None,
         head_mask=None,
         query_length=None,
