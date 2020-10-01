@@ -20,6 +20,7 @@ TGT = [
 ]
 
 
+
 def test_disaggregated_scores_are_determinstic():
     no_aggregation = calculate_rouge(PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2", "rougeL"])
     assert isinstance(no_aggregation, defaultdict)

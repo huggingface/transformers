@@ -375,6 +375,9 @@ def get_git_info():
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
+def aggregate_rouge_scores(no_aggregation):
+    import pandas as pd
+    return {k: pd.DataFrame(k).fmeasure.mean() for k in no_aggregation}
 
 def extract_rouge_mid_statistics(dct):
     new_dict = {}
@@ -390,7 +393,7 @@ def calculate_rouge(
     use_stemmer=True,
     rouge_keys=ROUGE_KEYS,
     return_precision_and_recall=False,
-    bootstrap_aggregation=True,
+    aggregate_determinstic=True,
     newline_sep=True,
 ) -> Dict:
     """Calculate rouge using rouge_scorer package.
@@ -402,13 +405,14 @@ def calculate_rouge(
         strip word suffixes to improve matching.
         rouge_keys:  which metrics to compute, defaults to rouge1, rouge2, rougeL, rougeLsum
         return_precision_and_recall: (False) whether to also return precision and recall.
-        bootstrap_aggregation: whether to do the typical bootstrap resampling of scores. Defaults to True, if False
+        aggregate_determinstic: if False do the typical bootstrap resampling of scores. Otherwise take the average.
+            Defaults to True, if False
             this function returns a collections.defaultdict[metric: list of values for each observation for each subscore]``
         newline_sep:(default=True) whether to add newline between sentences. This is essential for calculation rougeL
         on multi sentence summaries (CNN/DM dataset).
 
     Returns:
-         Dict[score: value] if aggregate else defaultdict(list) keyed by rouge_keys
+         Dict[score: value] if a
 
     """
     scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
@@ -421,16 +425,16 @@ def calculate_rouge(
         scores = scorer.score(pred, tgt)
         aggregator.add_scores(scores)
 
-    if bootstrap_aggregation:
+    if aggregate_determinstic:
+        aggregate_rouge_scores(aggregator._scores)
+
+
+    else:
         result = aggregator.aggregate()
         if return_precision_and_recall:
             return extract_rouge_mid_statistics(result)  # here we return dict
         else:
             return {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
-
-    else:
-        return aggregator._scores  # here we return defaultdict(list)
-
 
 # Utilities for freezing parameters and checking whether they are frozen
 
