@@ -82,21 +82,26 @@ def get_pairs(word):
 
 class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
-    Constructs a Blenderbot-90M tokenizer. Peculiarities:
-
-    - Byte-Pair-Encoding
+    Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
 
     Args:
-        vocab_file (:obj:`str`): Path to the vocabulary file.
-        merges_file (:obj:`str`): Path to the merges file.
-        bos_token (:obj:`string`, `optional`, defaults to "__start__"): The beginning of sentence token.
-        eos_token (:obj:`string`, `optional`, defaults to "__end__"): The end of sentence token.
-        unk_token (:obj:`string`, `optional`, defaults to "__unk__"): The unknown token. A token that is not in the
-            vocabulary cannot be converted to an ID and is set to be this token instead.
-        pad_token (:obj:`string`, `optional`, defaults to "__pad__"): The pad token.
+        vocab_file (:obj:`str`):
+            File containing the vocabulary.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        bos_token (:obj:`string`, `optional`, defaults to "__start__"):
+            The beginning of sentence token.
+        eos_token (:obj:`string`, `optional`, defaults to "__end__"):
+            The end of sentence token.
+        unk_token (:obj:`string`, `optional`, defaults to "__unk__"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this token instead.
+        pad_token (:obj:`string`, `optional`, defaults to "__pad__"):
+            The pad token.
+        **kwargs
+            passed to  :class:`~transformers.PreTrainedTokenizer`
     """
 
     vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
