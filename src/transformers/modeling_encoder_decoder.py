@@ -411,7 +411,7 @@ class EncoderDecoderModel(PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
-            decoder_inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=decoder_inputs_embeds,
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
