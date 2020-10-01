@@ -392,7 +392,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
             "de points bleus."
         )
 
-        input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
+        input_ids = tok(model.config.prefix + en_text, return_tensors="tf").input_ids
 
         output = model.generate(
             input_ids=input_ids,

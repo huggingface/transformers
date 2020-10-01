@@ -175,7 +175,12 @@ class TFModelTesterMixin:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(inputs_dict)
-                output = outputs[list(outputs.keys())[-1]] if isinstance(outputs, dict) else outputs[-1]
+
+                if self.is_encoder_decoder:
+                    output = outputs["encoder_hidden_states"] if isinstance(outputs, dict) else outputs[-1]
+                else:
+                    output = outputs["hidden_states"] if isinstance(outputs, dict) else outputs[-1]
+
                 hidden_states = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
                 self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
@@ -208,7 +213,12 @@ class TFModelTesterMixin:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(inputs_dict)
-                output = outputs[list(outputs.keys())[-1]] if isinstance(outputs, dict) else outputs[-1]
+
+                if self.is_encoder_decoder:
+                    output = outputs["encoder_attentions"] if isinstance(outputs, dict) else outputs[-1]
+                else:
+                    output = outputs["attentions"] if isinstance(outputs, dict) else outputs[-1]
+
                 attentions = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
