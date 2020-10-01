@@ -111,7 +111,7 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 1. Easy-to-use state-of-the-art models:
     - High performance on NLU and NLG tasks.
     - Low barrier to entry for educators and practitioners.
-    - Few user-facing abastractions with just three classes to learn.
+    - Few user-facing abstractions with just three classes to learn.
     - A unified API for using all our pretrained models.
 
 1. Lower compute costs, smaller carbon footprint:
