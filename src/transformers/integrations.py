@@ -141,7 +141,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             num_gpus_per_trial = int(math.ceil(num_gpus_per_trial / n_jobs))
         kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
 
-    if "reporter" not in kwargs:
+    if "progress_reporter" not in kwargs:
         from ray.tune import CLIReporter
 
         kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
