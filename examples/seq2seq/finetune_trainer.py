@@ -52,6 +52,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
+    adafactor: bool = field(default=False, metadata={"help": "whether to use adafactor"})
 
 
 @dataclass
@@ -123,6 +124,8 @@ class DataTrainingArguments:
     src_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
     tgt_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
     eval_beams: Optional[int] = field(default=None, metadata={"help": "# num_beams to use for evaluation."})
+
+
 
 
 def main():
