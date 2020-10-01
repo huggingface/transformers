@@ -258,6 +258,7 @@ def main():
     )
     trainer = Seq2SeqTrainer(
         model=model,
+        config=config,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
