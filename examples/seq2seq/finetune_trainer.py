@@ -276,6 +276,7 @@ def main():
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
         if trainer.is_world_process_zero():
+            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
