@@ -22,13 +22,10 @@ TGT = [
 
 
 def test_disaggregated_scores_are_determinstic():
-    no_aggregation = calculate_rouge(PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2", "rougeL"])
-    assert isinstance(no_aggregation, defaultdict)
-    no_aggregation_just_r2 = calculate_rouge(PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2"])
-    assert (
-        pd.DataFrame(no_aggregation["rouge2"]).fmeasure.mean()
-        == pd.DataFrame(no_aggregation_just_r2["rouge2"]).fmeasure.mean()
-    )
+    no_aggregation = calculate_rouge(PRED, TGT, aggregate_determinstic=True, rouge_keys=["rouge2", "rougeL"])
+    assert isinstance(no_aggregation, dict)
+    no_aggregation_just_r2 = calculate_rouge(PRED, TGT, aggregate_determinstic=True, rouge_keys=["rouge2"])
+    assert no_aggregation_just_r2['rouge2'] == no_aggregation['rouge2']
 
 
 def test_newline_cnn_improvement():
@@ -76,6 +73,6 @@ def test_rouge_cli():
     metrics = calculate_rouge_path(data_dir.joinpath("test.source"), data_dir.joinpath("test.target"))
     assert isinstance(metrics, dict)
     metrics_default_dict = calculate_rouge_path(
-        data_dir.joinpath("test.source"), data_dir.joinpath("test.target"), bootstrap_aggregation=False
+        data_dir.joinpath("test.source"), data_dir.joinpath("test.target"),
     )
-    assert isinstance(metrics_default_dict, defaultdict)
+    assert isinstance(metrics_default_dict, dict)

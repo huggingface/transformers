@@ -377,7 +377,7 @@ ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
 def aggregate_rouge_scores(no_aggregation):
     import pandas as pd
-    return {k: pd.DataFrame(k).fmeasure.mean() for k in no_aggregation}
+    return {k: pd.DataFrame(v).fmeasure.mean() for k,v in no_aggregation.items()}
 
 def extract_rouge_mid_statistics(dct):
     new_dict = {}
@@ -426,7 +426,7 @@ def calculate_rouge(
         aggregator.add_scores(scores)
 
     if aggregate_determinstic:
-        aggregate_rouge_scores(aggregator._scores)
+        return aggregate_rouge_scores(aggregator._scores)
 
 
     else:
