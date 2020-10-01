@@ -1,7 +1,6 @@
 ---
 language: "mn"
 tags:
-- bert
 - mongolian
 - cased
 ---
