@@ -7,8 +7,9 @@ from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import Trainer
 from transformers.file_utils import is_torch_tpu_available
+from transformers.optimization import Adafactor, AdamW, get_linear_schedule_with_warmup
 from transformers.trainer import get_tpu_sampler
-from transformers.optimization import AdamW, get_linear_schedule_with_warmup, Adafactor
+
 
 try:
     from .utils import label_smoothed_nll_loss
@@ -49,8 +50,10 @@ class Seq2SeqTrainer(Trainer):
             ]
             if self.args.adafactor:
                 self.optimizer = Adafactor(
-                    optimizer_grouped_parameters, lr=self.args.learning_rate, scale_parameter=False,
-                    relative_step=False
+                    optimizer_grouped_parameters,
+                    lr=self.args.learning_rate,
+                    scale_parameter=False,
+                    relative_step=False,
                 )
 
             else:

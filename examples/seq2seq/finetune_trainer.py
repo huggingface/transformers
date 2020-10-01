@@ -126,8 +126,6 @@ class DataTrainingArguments:
     eval_beams: Optional[int] = field(default=None, metadata={"help": "# num_beams to use for evaluation."})
 
 
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
