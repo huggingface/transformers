@@ -261,6 +261,38 @@ class GPT2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_gpt2_model_past_large_inputs(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        model = GPT2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+
+        output, past = outputs.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_token_types = ids_tensor([self.batch_size, 3], self.type_vocab_size)
+
+        # append to next input_ids and token_type_ids
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
+
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2LMHeadModel(config)
         model.to(torch_device)
@@ -356,6 +388,10 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gpt2_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_model_attention_mask_past(*config_and_inputs)
+
+    def test_gpt2_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_model_past_large_inputs(*config_and_inputs)
 
     def test_gpt2_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
