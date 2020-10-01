@@ -66,48 +66,46 @@ def get_pairs(word):
 
 class BertweetTokenizer(PreTrainedTokenizer):
     """
-    Constructs a BERTweet tokenizer. Peculiarities:
+    Constructs a BERTweet tokenizer, using Byte-Pair-Encoding.
 
-    - Byte-Pair-Encoding
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        normalization (:obj:`boolean`, defaults to False)
-            Whether to apply a normalization pre-process.
-        bos_token (:obj:`string`, `optional`, defaults to "<s>"):
+        normalization (:obj:`bool`, `optional`, defaults to :obj:`False`)
+            Whether or not to apply a normalization preprocess.
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the beginning
                 of sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the end
                 of sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`string`, `optional`, defaults to "</s>"):
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
             for sequence classification or for a text and a question for question answering.
             It is also used as the last token of a sequence built with special tokens.
-        cls_token (:obj:`string`, `optional`, defaults to "<s>"):
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole
             sequence instead of per-token classification). It is the first token of the sequence when built with
             special tokens.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`string`, `optional`, defaults to "<mask>"):
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
     """
@@ -182,19 +180,19 @@ class BertweetTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A BERTweet sequence has the following format:
+         A BERTweet sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -207,16 +205,16 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` methods.
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True if the token list is already formatted with special tokens for the model
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -238,18 +236,17 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
         BERTweet does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
             :obj:`List[int]`: List of zeros.
-
         """
 
         sep = [self.sep_token_id]
@@ -389,10 +386,12 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory):
         """
-        Save the vocabulary and special tokens file to a directory.
+        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+
         Args:
             save_directory (:obj:`str`):
                 The directory in which to save the vocabulary.
+
         Returns:
             :obj:`Tuple(str)`: Paths to the files saved.
         """

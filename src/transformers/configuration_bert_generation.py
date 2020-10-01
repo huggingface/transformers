@@ -19,18 +19,18 @@ from .configuration_utils import PretrainedConfig
 
 class BertGenerationConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BertGenerationPreTrainedModel`.
-    It is used to instantiate a BertGenerationConfig model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a
+    :class:`~transformers.BertGenerationPreTrainedModel`. It is used to instantiate a BertGeneration model according to
+    the specified arguments, defining the model architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
     for more information.
 
-
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50358):
-            Vocabulary size of the BertGeneration model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertGeneration`.
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.BertGeneration`.
         hidden_size (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 24):
@@ -38,7 +38,7 @@ class BertGenerationConfig(PretrainedConfig):
         num_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            Dimensionality of the "intermediate" (often called feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
@@ -56,7 +56,7 @@ class BertGenerationConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
 
-    Example::
+    Examples::
 
         >>> from transformers import BertGenerationConfig, BertGenerationEncoder
 

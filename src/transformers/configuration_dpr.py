@@ -32,8 +32,12 @@ class DPRConfig(PretrainedConfig):
     :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
     `DPRModel`.
 
-    This is the configuration class to store the configuration of a `DPRContextEncoder`, `DPRQuestionEncoder`, or a `DPRReader`.
-    It is used to instantiate the components of the DPR model.
+    This is the configuration class to store the configuration of a :class:`~transformers.DPRContextEncoder`,
+    :class:`~transformers.DPRQuestionEncoder`, or a :class:`~transformers.DPRReader`. It is used to instantiate the
+    components of the DPR model.
+
+    This class is a subclass of :class:`~transformers.BertConfig`. Please check the
+    superclass for the documentation of all kwargs.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
