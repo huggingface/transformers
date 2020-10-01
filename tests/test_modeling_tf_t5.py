@@ -346,10 +346,17 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         translation_config = task_specific_config.get("translation_en_to_fr", {})
         model.config.update(translation_config)
 
-        original_input = 'This image section from an infrared recording by the Spitzer telescope shows a "family portrait" of countless generations of stars: the oldest stars are seen as blue dots, while more difficult to identify are the pink-coloured "new-borns" in the star delivery room.'
-        expected_translation = "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre un « portrait familial » de générations innombrables de étoiles : les plus anciennes sont observées sous forme de pointes bleues, alors que les « nouveau-nés » de couleur rose dans la salle des accouchements doivent être plus difficiles "
+        en_text = ' This image section from an infrared recording by the Spitzer telescope shows a "family portrait" of countless generations of stars: the oldest stars are seen as blue dots. '
 
-        input_ids = tok.encode(model.config.prefix + original_input, return_tensors="tf")
+        new_truncated_translation = (
+            "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre "
+            "un "
+            "« portrait familial » de générations innombrables d’étoiles : les plus anciennes sont observées "
+            "sous forme "
+            "de points bleus."
+        )
+
+        input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
 
         output = model.generate(
             input_ids=input_ids,
@@ -362,7 +369,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         )
         translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-        self.assertEqual(translation, expected_translation)
+        self.assertEqual(translation, new_truncated_translation)
 
     @slow
     def test_translation_en_to_ro(self):
