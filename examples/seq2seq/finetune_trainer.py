@@ -262,10 +262,6 @@ def main():
     # set num_beams for evaluation
     if data_args.eval_beams is None:
         data_args.eval_beams = model.config.num_beams
-    assert data_args.eval_beams >= 1, f"got eval_beams={model.config.num_beams}. Need an integer >= 1"  # TODO: remove?
-
-    # set max length for generation
-    # model.config.max_generate_length = data_args.val_max_target_length
 
     # set decoder_start_token_id for MBart
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
@@ -392,7 +388,6 @@ def main():
 
         test_output = trainer.predict(test_dataset=test_dataset)
         test_metrics = {k.replace("eval", "test"): v for k, v in test_output.metrics.items()}
-        eval_results["test"] = test_metrics
 
         if trainer.is_world_process_zero():
             logger.info("***** Test results *****")
@@ -400,6 +395,7 @@ def main():
                 logger.info("  %s = %s", key, value)
 
             save_json(test_metrics, os.path.join(training_args.output_dir, "test_results.json"))
+            eval_results.update(test_metrics)
 
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
@@ -407,7 +403,9 @@ def main():
                 )
                 test_preds = lmap(str.strip, test_preds)
                 write_txt_file(test_preds, os.path.join(training_args.output_dir, "test_generations.txt"))
-            # why no eval_results.update(result?)
+
+    if trainer.is_world_process_zero():
+        save_json(eval_results, "all_results.json")
     return eval_results
 
 

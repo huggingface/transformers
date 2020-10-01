@@ -91,7 +91,7 @@ class SummarizationModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         if self.hparams.freeze_embeds:
-            freeze_embeds()
+            freeze_embeds(self.model)
         if self.hparams.freeze_encoder:
             freeze_params(self.model.get_encoder())
             assert_all_frozen(self.model.get_encoder())
@@ -106,7 +106,6 @@ class SummarizationModule(BaseTransformer):
             Seq2SeqDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
         )
         self.eval_beams = self.model.config.num_beams if self.hparams.eval_beams is None else self.hparams.eval_beams
-        assert self.eval_beams >= 1, f"got self.eval_beams={self.eval_beams}. Need an integer > 1"
         if self.hparams.eval_max_gen_length is not None:
             self.eval_max_length = self.hparams.eval_max_gen_length
         else:
