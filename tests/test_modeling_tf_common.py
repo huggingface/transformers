@@ -136,6 +136,29 @@ class TFModelTesterMixin:
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "inputs",
+                    "attention_mask",
+                    "decoder_input_ids",
+                    "decoder_attention_mask",
+                    "encoder_outputs",
+                ]
+                self.assertListEqual(arg_names[:5], expected_arg_names)
+
+            else:
+                expected_arg_names = ["inputs"]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -152,7 +175,12 @@ class TFModelTesterMixin:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(inputs_dict)
-                output = outputs[list(outputs.keys())[-1]] if isinstance(outputs, dict) else outputs[-1]
+
+                if self.is_encoder_decoder:
+                    output = outputs["encoder_hidden_states"] if isinstance(outputs, dict) else outputs[-1]
+                else:
+                    output = outputs["hidden_states"] if isinstance(outputs, dict) else outputs[-1]
+
                 hidden_states = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
                 self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
@@ -185,7 +213,12 @@ class TFModelTesterMixin:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(inputs_dict)
-                output = outputs[list(outputs.keys())[-1]] if isinstance(outputs, dict) else outputs[-1]
+
+                if self.is_encoder_decoder:
+                    output = outputs["encoder_attentions"] if isinstance(outputs, dict) else outputs[-1]
+                else:
+                    output = outputs["attentions"] if isinstance(outputs, dict) else outputs[-1]
+
                 attentions = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)

@@ -221,12 +221,45 @@ def distributed_broadcast_scalars(
 @dataclass
 class TrainerState:
     """
-    A class containing the `Trainer` fields that will be saved along the model and optimizer.
+    A class containing the `Trainer` inner state that will be saved along the model and optimizer.
+
+    .. note::
+
+        In all this class, one step is to be understood as one update step. When using gradient accumulation, one
+        update step may require several forward and backward passes: if you use :obj:`gradient_accumulation_steps=n`,
+        then one update step requires going throuch `n` batches.
+
+    Args:
+        epoch (:obj:`float`, `optional`):
+            Only set during training, will represent the epoch the training is at (the decimal part being the
+            percentage of the current epoch completed).
+        global_step (:obj:`int`, `optional`, defaults to 0):
+            During training, represents the number of update steps completed.
+        max_steps (:obj:`int`, `optional`, defaults to 0):
+            The number of update steps to do during the current training.
+        total_flos (:obj:`int`, `optional`, defaults to 0):
+            The total number of floating operations done by the model since the beginning of training.
+        log_history (:obj:`List[Dict[str, float]]`, `optional`):
+            The list of logs done since the beginning of training.
+        best_metric (:obj:`float`, `optional`):
+            When tracking the best model, the value of the best metric encountered so far.
+        best_model_checkpoint (:obj:`str`, `optional`):
+            When tracking the best model, the value of the name of the checkpoint for the best model encountered so
+            far.
     """
 
+    epoch: Optional[float] = None
+    global_step: int = 0
+    max_steps: int = 0
+    num_train_epochs: int = 0
     total_flos: int = 0
+    log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
+
+    def __post_init__(self):
+        if self.log_history is None:
+            self.log_history = []
 
     def save_to_json(self, json_path: str):
         """ Save the content of this instance in JSON format inside :obj:`json_path`."""

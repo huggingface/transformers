@@ -847,7 +847,7 @@ def get_from_cache(
         else:
             matching_files = [
                 file
-                for file in fnmatch.filter(os.listdir(cache_dir), filename + ".*")
+                for file in fnmatch.filter(os.listdir(cache_dir), filename.split(".")[0] + ".*")
                 if not file.endswith(".json") and not file.endswith(".lock")
             ]
             if len(matching_files) > 0:
