@@ -15,7 +15,6 @@
 """ PyTorch SqueezeBert model. """
 
 
-from .utils import logging
 import math
 
 import torch
@@ -35,6 +34,7 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
