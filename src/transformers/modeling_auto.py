@@ -27,6 +27,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
+    DebertaConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -92,6 +93,7 @@ from .modeling_camembert import (
     CamembertModel,
 )
 from .modeling_ctrl import CTRLLMHeadModel, CTRLModel
+from .modeling_deberta import DebertaForSequenceClassification, DebertaModel
 from .modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -233,6 +235,7 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
+        (DebertaConfig, DebertaModel),
         (DPRConfig, DPRQuestionEncoder),
     ]
 )
@@ -362,6 +365,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
         (FunnelConfig, FunnelForSequenceClassification),
+        (DebertaConfig, DebertaForSequenceClassification),
     ]
 )
 

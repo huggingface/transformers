@@ -15,7 +15,7 @@
 """ BART configuration """
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .utils import logging
 
 
@@ -31,77 +31,76 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
 
+
 BART_CONFIG_ARGS_DOC = r"""
     Args:
-        vocab_size (:obj:`int`, optional, defaults to 50265):
-            defines the different tokens that can be represented by `inputs_ids` passed to the forward method.
-        d_model (:obj:`int`, optional, defaults to 1024):
+        vocab_size (:obj:`int`, `optional`, defaults to 50265):
+            Defines the different tokens that can be represented by `inputs_ids` passed to the forward method.
+        d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        encoder_layers (:obj:`int`, optional, defaults to 12):
+        encoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of encoder layers, 16 for pegasus, 6 for bart-base and marian
-        decoder_layers (:obj:`int`, optional, defaults to 12):
+        decoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of decoder layers, 16 for pegasus, 6 for bart-base and marian
-        encoder_attention_heads (:obj:`int`, optional, defaults to 16):
+        encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (:obj:`int`, optional, defaults to 16):
+        decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
-        encoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
-        activation_function (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-        dropout (:obj:`float`, optional, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (:obj:`float`, optional, defaults to 0.0):
+        activation_function (:obj:`str`, defaults to "gelu"):
+            The non-linear activation function used between layers. "gelu", "relu", "swish" and "gelu_new" are supported.
+        dropout (:obj:`float`, `optional`, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        activation_dropout (:obj:`float`, optional, defaults to 0.0):
+        activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (:obj:`float`, optional, defaults to 0.0):
+        classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, optional, defaults to 1024):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        init_std (:obj:`float`, optional, defaults to 0.02):
+        init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        add_bias_logits (:obj:`bool`, optional, defaults to :obj:`False`):
-            True for marian only.
-        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
-            Call layernorm before attention ops. True for pegasus, mbart, blenderbot-3B.
-        do_blenderbot_90_layernorm (:obj:`bool`, optional, defaults to :obj:`False`):
-           blenderbot-90 calls layernorm_embedding one line earlier. see https://tinyurl.com/y66r9gnh
-        normalize_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
-            Call layernorm after embeddings. Only True for Bart.
-        static_position_embeddings (:obj:`bool`, optional, defaults to :obj:`False`):
-            Don't learn positional embeddings, use sinusoidal. True for marian, pegasus.
-        add_final_layer_norm (:obj:`bool`, optional, defaults to :obj:`False`):
+        add_bias_logits (:obj:`bool`, `optional`, defaults to :obj:`False`):
+             :obj:`True` for marian only.
+        normalize_before (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Call layernorm before attention ops.  :obj:`True` for pegasus, mbart, blenderbot-3B.
+        do_blenderbot_90_layernorm (:obj:`bool`, `optional`, defaults to :obj:`False`):
+           if :obj:`True`, call layernorm_embedding one line earlier. see `discussion <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_
+        normalize_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Call layernorm after embeddings. Only  :obj:`True` for Bart.
+        static_position_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Don't learn positional embeddings, use sinusoidal.  :obj:`True` for marian, pegasus.
+        add_final_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Why not add another layernorm?
-        scale_embedding (:obj:`bool`, optional, defaults to :obj:`False`):
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Scale embeddings by diving by sqrt(d_model).
-        eos_token_id (:obj:`int`, optional, defaults to 2)
+        eos_token_id (:obj:`int`, `optional`, defaults to 2)
             End of stream token id.
-        pad_token_id (:obj:`int`, optional, defaults to 1)
+        pad_token_id (:obj:`int`, `optional`, defaults to 1)
             Padding token id.
-        bos_token_id (:obj:`int`, optional, defaults to 0)
+        bos_token_id (:obj:`int`, `optional`, defaults to 0)
             Beginning of stream token id.
-        encoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
+        encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        decoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
+        decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        extra_pos_embeddings: (:obj:`int`, optional, defaults to 2):
+        extra_pos_embeddings: (:obj:`int`, `optional`, defaults to 2):
             How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
-        num_labels: (:obj:`int`, optional, defaults to 3):
+        num_labels: (:obj:`int`, `optional`, defaults to 3):
             for SequenceClassification
-        is_encoder_decoder (:obj:`bool`, optional, defaults to :obj:`True`):
+        is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether this is an encoder/decoder model
         force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
-
 """
 
 
-@add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
+@add_start_docstrings(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
     r"""
     Configuration class for Bart. Parameters are renamed from the fairseq implementation

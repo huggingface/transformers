@@ -23,6 +23,16 @@ logger = logging.getLogger(__name__)
 
 
 class BlenderbotTokenizer(RobertaTokenizer):
+    r"""
+    Construct a Blenderbot tokenizer.
+
+    :class:`~transformers.Blenderbot` is nearly identical to :class:`~transformers.RobertaTokenizer` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesnt add BOS
+    token to the beginning of sequences.
+
+    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
+    parameters.
+    """
     vocab_files_names = {
         "vocab_file": "vocab.json",
         "merges_file": "merges.txt",
@@ -46,6 +56,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Will be ignored
 
         Returns:
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
@@ -84,6 +96,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         eos_token (:obj:`string`, `optional`, defaults to "__end__"): The end of sentence token.
         unk_token (:obj:`string`, `optional`, defaults to "__unk__"): The unknown token. A token that is not in the
             vocabulary cannot be converted to an ID and is set to be this token instead.
+        pad_token (:obj:`string`, `optional`, defaults to "__pad__"): The pad token.
     """
 
     vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
@@ -91,7 +104,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
         "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
     }
-
     max_model_input_sizes = {"facebook/blenderbot-90M": 512}
 
     def __init__(

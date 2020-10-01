@@ -68,8 +68,12 @@ except (ImportError, AssertionError):
 try:
     import datasets  # noqa: F401
 
-    _datasets_available = True
-    logger.debug(f"Succesfully imported datasets version {datasets.__version__}")
+    # Check we're not importing a "datasets" directory somewhere
+    _datasets_available = hasattr(datasets, "__version__") and hasattr(datasets, "load_dataset")
+    if _datasets_available:
+        logger.debug(f"Succesfully imported datasets version {datasets.__version__}")
+    else:
+        logger.debug("Imported a datasets object but this doesn't seem to be the 🤗 datasets library.")
 
 except ImportError:
     _datasets_available = False

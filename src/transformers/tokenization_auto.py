@@ -26,6 +26,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
+    DebertaConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -63,6 +64,7 @@ from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
+from .tokenization_deberta import DebertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
@@ -129,6 +131,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
+        (DebertaConfig, (DebertaTokenizer, None)),
         (LayoutLMConfig, (LayoutLMTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
     ]

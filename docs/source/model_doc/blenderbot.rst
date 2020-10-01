@@ -17,15 +17,36 @@ The authors' code can be found `here <https://github.com/facebookresearch/ParlAI
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~
 
-Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture
+Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
+It inherits completely from :obj:`transformers.BartForConditionalGeneration`
 
+    Model Usage:
+
+        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotForConditionalGeneration
+        >>> mname = 'facebook/blenderbot-90M'
+        >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
+        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
+        >>> reply_ids = model.generate(**inputs)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
+
+
+    See Config Values:
+
+        >>> from transformers import BlenderbotConfig
+        >>> config_90 = BlenderbotConfig.from_pretrained("facebook/blenderbot-90M")
+        >>> config_90.to_diff_dict()  # show interesting Values.
+        >>> configuration_3B = BlenderbotConfig("facebook/blenderbot-3B")
+        >>> configuration_3B.to_diff_dict()
+
+BlenderbotForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` and `generate`
 
 BlenderbotConfig
 ~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BlenderbotConfig
-    :members:
-
+See :obj:`transformers.BartConfig`
 
 BlenderbotTokenizer
 ~~~~~~~~~~~~~~~~~~~~~
@@ -38,11 +59,4 @@ BlenderbotSmallTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BlenderbotSmallTokenizer
-    :members: bpe, convert_tokens_to_string, save_vocabulary
-
-
-BlenderbotForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BlenderbotForConditionalGeneration
-    :members: generate, forward
+    :members: build_inputs_with_special_tokens

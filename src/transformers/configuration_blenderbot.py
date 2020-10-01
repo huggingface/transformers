@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
-from .configuration_bart import BartConfig
+from .configuration_bart import BART_CONFIG_ARGS_DOC, BartConfig
+from .file_utils import add_start_docstrings
 
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -23,49 +24,20 @@ BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@add_start_docstrings(BART_CONFIG_ARGS_DOC)
 class BlenderbotConfig(BartConfig):
     """
-    This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotForConditionalGeneration`.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the `blenderbot <https://huggingface.co/blenderbot>`__ architecture.
+    This class overrides :class:`~transformers.BartConfig`. Please check the superclass for the appropriate documentation alongside usage examples.
+    To see the default values, run the Usage example below. For a deeper understanding of how the config affects layernorm placement, see https://tinyurl.com/y66r9gnh
 
-    Configuration objects inherit from  :class:`~transformers.BartConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.BartConfig`
-    for more information. The
+    Usage:
 
-    Args:
-        d_model: (:obj:`int`, default to 2560), dimension of the embeddings vector
-        encoder_layers: (:obj:`int`, default to 2), number of layers in the encoder
-        encoder_ffn_size: (:obj:`int`, default to 10240), size of hidden layers in the FFN in the encoder
-        decoder_layers: (:obj:`int`, default to 24), number of layers in the decoder
-        decoder_ffn_size: (:obj:`int`, default to 10240), size of hidden layers in the FFN in the decoder
-        dropout: (:obj:`float`, default to 0.1), embedding dropout
-        activation_dropout: (:obj:`float`, default to 0.0), dropout after activation function
-        encoder_layerdrop: (:obj:`float`, default to 0.0,
-        decoder_layerdrop: (:obj:`float`, default to 0.0),
-        encoder_attention_heads:(:obj:`int`, default to 32),  number of multi heads attention in the encoder
-        decoder_attention_heads:(:obj:`int`, default to 32),  number of multi heads attention in the encoder
-        max_positions_embeddings:(:obj:`int`, default to 128), size of the position embeddings
-        activation: (:obj:`string`, default to 'gelu'), activation function to use
-        attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
-        relu_dropout: (:obj:`float`, default to 0.0), relu dropout
-        vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
-        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
-            Call layernorm before attention ops. True for pegasus, mbart, blenderbot-3B
-        do_blenderbot_90_layernorm (:obj:`bool`, optional, defaults to :obj:`False`):
-           blenderbot-90 calls layernorm_embedding one line earlier. see https://tinyurl.com/y66r9gnh
-        init_std: (obj: float, default to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        is_encoder_decoder: (obj:`boolean`, default to True)
-        pad_token_id: (obj:`int`, default to 1): token id used to pad sequences.
-        bos_token_id: (obj:`int`, default to 0): begginning of sequence token id.
-        eos_token_id: (obj:`int`, default to 2): end of sequence token id.
-        add_final_layer_norm: (obj:`boolean`, default to False): if set to true a final Layernorm is added
-        scale_embedding: (obj:`boolean`, default to False):  Scale embeddings by diving by sqrt(d_model)
-        normalize_embedding: (obj:`boolean`, default to False): apply Layernorm to the embedding layer output
-        static_position_embeddings: (:obj:`boolean`, default to False): if set to True  positional embeddings are learnt otherwise use sinusoidal
+        >>> from transformers import BlenderbotConfig
+        >>> config_90 = BlenderbotConfig.from_pretrained("facebook/blenderbot-90M")
+        >>> config_90.to_diff_dict()  # show interesting Values.
+        >>> configuration_3B = BlenderbotConfig("facebook/blenderbot-3B")
+        >>> configuration_3B.to_diff_dict()
 
-    Attributes:
-        pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained checkpoints.
     """
 
     model_type = "blenderbot"

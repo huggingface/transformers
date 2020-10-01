@@ -24,6 +24,7 @@ from .configuration_bert_generation import BertGenerationConfig
 from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
+from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
 from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
@@ -80,6 +81,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -103,6 +105,7 @@ CONFIG_MAPPING = OrderedDict(
         ("reformer", ReformerConfig),
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
+        ("deberta", DebertaConfig),
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
         ("bert", BertConfig),
@@ -153,6 +156,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("encoder-decoder", "Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
+        ("deberta", "DeBERTa"),
         ("layoutlm", "LayoutLM"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
