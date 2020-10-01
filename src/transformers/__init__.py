@@ -375,6 +375,7 @@ if is_torch_available():
     from .modeling_gpt2 import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
+        GPT2ForSequenceClassification,
         GPT2LMHeadModel,
         GPT2Model,
         GPT2PreTrainedModel,
