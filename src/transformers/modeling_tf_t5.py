@@ -1099,23 +1099,23 @@ class TFT5Model(TFT5PreTrainedModel):
                 past_key_values = kwargs.pop("past_key_value_states")
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                [
-                    input_ids,
-                    attention_mask,
-                    None,
-                    None,
-                    inputs_embeds,
-                    head_mask,
-                    None,
-                    False,
-                    output_attentions,
-                    output_hidden_states,
-                ],
+                input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=None,
+                encoder_attention_mask=None,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                past_key_values=None,
+                use_cache=False,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 training=training,
             )
 
@@ -1123,20 +1123,19 @@ class TFT5Model(TFT5PreTrainedModel):
 
         # Decode
         decoder_outputs = self.decoder(
-            [
-                decoder_input_ids,
-                decoder_attention_mask,
-                hidden_states,
-                attention_mask,
-                decoder_inputs_embeds,
-                head_mask,
-                past_key_values,
-                use_cache,
-                output_attentions,
-                output_hidden_states,
-            ],
+            decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
+
         past = (
             (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
         )
@@ -1144,12 +1143,6 @@ class TFT5Model(TFT5PreTrainedModel):
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + encoder_outputs
-
-        # If put before, this breaks the tf compilation.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
         # TF refuses to compile anymore.
@@ -1315,24 +1308,19 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 past_key_values = kwargs.pop("past_key_value_states")
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-            # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                [
-                    input_ids,
-                    attention_mask,
-                    None,
-                    None,
-                    inputs_embeds,
-                    head_mask,
-                    None,
-                    False,
-                    output_attentions,
-                    output_hidden_states,
-                ],
+                input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 training=training,
             )
 
@@ -1352,18 +1340,16 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         # Decode
         decoder_outputs = self.decoder(
-            [
-                decoder_input_ids,
-                decoder_attention_mask,
-                hidden_states,
-                attention_mask,
-                decoder_inputs_embeds,
-                head_mask,
-                past_key_values,
-                use_cache,
-                output_attentions,
-                output_hidden_states,
-            ],
+            decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 
