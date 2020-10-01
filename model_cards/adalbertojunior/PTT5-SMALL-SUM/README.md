@@ -1,3 +1,7 @@
+---
+- language: pt
+---
+
 # PTT5-SMALL-SUM
 
 ## Model description
@@ -31,4 +35,3 @@ predicted_span = tokenizer.decode(generated_ids, skip_special_tokens=True, clean
 
 
 ```
-
