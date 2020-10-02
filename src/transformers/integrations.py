@@ -2,6 +2,11 @@
 import math
 import os
 
+from .file_utils import is_torch_tpu_available
+from .trainer_callback import TrainerCallback
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
+from .utils import logging
+
 
 try:
     import comet_ml  # noqa: F401
@@ -36,15 +41,6 @@ try:
 except (ImportError):
     _has_ray = False
 
-
-# No ML framework or transformer imports above this point
-
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # isort:skip
-from .utils import logging  # isort:skip
-
-logger = logging.get_logger(__name__)
-
-
 try:
     from torch.utils.tensorboard import SummaryWriter  # noqa: F401
 
@@ -57,9 +53,10 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+logger = logging.get_logger(__name__)
+
+
 # Integration functions:
-
-
 def is_wandb_available():
     return _has_wandb
 
@@ -184,3 +181,97 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     trainer.tb_writer = _tb_writer
     return best_run
+
+
+class WandbCallback(TrainerCallback):
+    def __init__(self):
+        self._initialized = False
+
+    def setup(self, args, state, model):
+        """
+        Setup the optional Weights & Biases (`wandb`) integration.
+
+        One can subclass and override this method to customize the setup if needed. Find more information
+        `here <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
+
+        Environment:
+            WANDB_WATCH:
+                (Optional, ["gradients", "all", "false"]) "gradients" by default, set to "false" to disable gradient logging
+                or "all" to log gradients and parameters
+            WANDB_PROJECT:
+                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project
+            WANDB_DISABLED:
+                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
+        """
+        self._initialized = True
+        if state.is_world_process_zero:
+            logger.info(
+                'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
+            )
+            combined_dict = {**args.to_sanitized_dict()}
+            if hasattr(model, "config"):
+                combined_dict = {**model.config.to_dict(), **combined_dict}
+            wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=args.run_name)
+            # keep track of model topology and gradients, unsupported on TPU
+            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
+                wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model)
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            wandb.log(logs, step=state.global_step)
+
+
+class CometCallback(TrainerCallback):
+    def __init__(self):
+        self._initialized = False
+
+    def setup(self, args, state, model):
+        """
+        Setup the optional Comet.ml integration.
+
+        Environment:
+            COMET_MODE:
+                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME:
+                (Optional): str - Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY:
+                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+
+        For a number of configurable items in the environment,
+        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
+        """
+        self._initialized = True
+        if state.is_world_process_zero:
+            comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
+            args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+            experiment = None
+            if comet_mode == "ONLINE":
+                experiment = comet_ml.Experiment(**args)
+                logger.info("Automatic Comet.ml online logging enabled")
+            elif comet_mode == "OFFLINE":
+                args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
+                experiment = comet_ml.OfflineExperiment(**args)
+                logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
+            if experiment is not None:
+                experiment._set_model_graph(model, framework="transformers")
+                experiment._log_parameters(args, prefix="args/", framework="transformers")
+                if hasattr(model, "config"):
+                    experiment._log_parameters(model.config, prefix="config/", framework="transformers")
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model)
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            experiment = comet_ml.config.get_global_experiment()
+            if experiment is not None:
+                experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
