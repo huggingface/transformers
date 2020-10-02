@@ -7,6 +7,7 @@ from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import Trainer
 from transformers.file_utils import is_torch_tpu_available
+from transformers.optimization import Adafactor, AdamW, get_linear_schedule_with_warmup
 from transformers.trainer import get_tpu_sampler
 
 
@@ -20,11 +21,50 @@ logger = logging.getLogger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
-    def __init__(self, data_args, *args, **kwargs):
+    def __init__(self, config, data_args, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.config = config
         self.data_args = data_args
         self.max_gen_length = data_args.val_max_target_length
-        self.pad_token_id = self.model.config.pad_token_id
+        self.pad_token_id = self.config.pad_token_id
+        self.vocab_size = self.config.vocab_size
+
+    def create_optimizer_and_scheduler(self, num_training_steps: int):
+        """
+        Setup the optimizer and the learning rate scheduler.
+
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
+        """
+        if self.optimizer is None:
+            no_decay = ["bias", "LayerNorm.weight"]
+            optimizer_grouped_parameters = [
+                {
+                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "weight_decay": self.args.weight_decay,
+                },
+                {
+                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "weight_decay": 0.0,
+                },
+            ]
+            if self.args.adafactor:
+                self.optimizer = Adafactor(
+                    optimizer_grouped_parameters,
+                    lr=self.args.learning_rate,
+                    scale_parameter=False,
+                    relative_step=False,
+                )
+
+            else:
+                self.optimizer = AdamW(
+                    optimizer_grouped_parameters, lr=self.args.learning_rate, eps=self.args.adam_epsilon
+                )
+
+        if self.lr_scheduler is None:
+            self.lr_scheduler = get_linear_schedule_with_warmup(
+                self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+            )
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -53,7 +93,7 @@ class Seq2SeqTrainer(Trainer):
         if self.args.label_smoothing == 0:
             # Same behavior as modeling_bart.py
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
-            assert logits.shape[-1] == self.model.config.vocab_size
+            assert logits.shape[-1] == self.vocab_size
             loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)

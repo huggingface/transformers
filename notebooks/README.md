@@ -9,6 +9,7 @@ Pull Request so it can be included under the Community notebooks.
 
 ## Hugging Face's notebooks 🤗
 
+
 | Notebook     |      Description      |   |
 |:----------|:-------------|------:|
 | [Getting Started Tokenizers](https://github.com/huggingface/transformers/blob/master/notebooks/01-training-tokenizers.ipynb)  | How to train and use your very own tokenizer  |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/master/notebooks/01-training-tokenizers.ipynb) |
@@ -25,6 +26,7 @@ Pull Request so it can be included under the Community notebooks.
 
 | Notebook     |      Description      |      Author      |      |
 |:----------|:-------------|:-------------|------:|
+| [Train T5 in Tensoflow 2 ](https://github.com/snapthat/TF-T5-text-to-text) | How to train T5 for any task using Tensorflow 2. This notebook demonstrates a Question & Answer task implemented in Tensorflow 2 using SQUAD | [Muhammad Harris](https://github.com/HarrisDePerceptron) |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-Datasets%20Training.ipynb) |
 | [Train T5 on TPU](https://github.com/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb)  | How to train T5 on SQUAD with Transformers and Nlp | [Suraj Patil](https://github.com/patil-suraj) |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb#scrollTo=QLGiFCDqvuil) |
 | [Fine-tune T5 for Classification and Multiple Choice](https://github.com/patil-suraj/exploring-T5/blob/master/t5_fine_tuning.ipynb)  | How to fine-tune T5 for classification and multiple choice tasks using a text-to-text format with PyTorch Lightning |  [Suraj Patil](https://github.com/patil-suraj) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/t5_fine_tuning.ipynb) |
 | [Fine-tune DialoGPT on New Datasets and Languages](https://github.com/ncoop57/i-am-a-nerd/blob/master/_notebooks/2020-05-12-chatbot-part-1.ipynb)  | How to fine-tune the DialoGPT model on a new dataset for open-dialog conversational chatbots |  [Nathan Cooper](https://github.com/ncoop57) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ncoop57/i-am-a-nerd/blob/master/_notebooks/2020-05-12-chatbot-part-1.ipynb) |
