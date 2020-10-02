@@ -47,7 +47,7 @@ class ProphetNetModelTester:
         use_labels=True,
         decoder_start_token_id=0,
         encoder_ffn_dim=32,
-        num_encoder_layers=5,
+        num_encoder_layers=4,
         num_encoder_attention_heads=4,
         decoder_ffn_dim=32,
         num_decoder_layers=4,
@@ -57,7 +57,7 @@ class ProphetNetModelTester:
         pad_token_id=0,
         bos_token_id=102,
         eos_token_id=102,
-        ngram=2,
+        ngram=1,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -76,10 +76,12 @@ class ProphetNetModelTester:
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.num_hidden_layers = num_decoder_layers
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
         self.encoder_ffn_dim = encoder_ffn_dim
+        self.num_attention_heads = num_decoder_attention_heads
         self.num_encoder_attention_heads = num_encoder_attention_heads
         self.num_decoder_attention_heads = num_decoder_attention_heads
         self.eos_token_id = eos_token_id
@@ -512,7 +514,6 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
             attention_mask=None,
             encoder_outputs=None,
             decoder_input_ids=decoder_prev_ids,
-            use_cache=False,
         )
         output_predited_logis = output[0]
         expected_shape = torch.Size((1, 12, 30522))
@@ -533,7 +534,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
         # decoder outputs
         decoder_outputs = model.model.decoder(
-            decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None, use_cache=False
+            decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
         )
         predicting_streams = decoder_outputs[0][1:]
         predicting_streams_logits = [model.lm_head(x) for x in predicting_streams]

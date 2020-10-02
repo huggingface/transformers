@@ -153,14 +153,11 @@ class LearnedPositionalEmbedding(nn.Embedding):
         ), "If positions is pre-computed then padding_idx should not be set."
 
         if positions is None:
-            if use_cache:
+            if past_key_values is not None:
                 # positions is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                # TODO(PVP) - refactor here
-                num_prev_input_ids = (
-                    past_key_values[0]["self"]["prev_key"].shape[2] if past_key_values is not None else 0
-                )
-                num_input_ids = input_ids.size(1) + num_prev_input_ids
+                prev_num_input_ids = past_key_values[0]["self"]["prev_key"].shape[2]
+                num_input_ids = input_ids.size(1) + prev_num_input_ids
                 positions = input_ids.data.new(1, 1).fill_(int(self.padding_idx + num_input_ids))
             else:
                 mask = input_ids.data.ne(self.padding_idx).int()
@@ -986,19 +983,22 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        encoder_states, all_attentions = (), ()
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (x,)
             x, attn = encoder_layer(x, attention_mask=attention_mask, output_attentions=output_attentions)
             if output_attentions:
-                all_attentions = all_attentions + (x,)
+                all_attentions = all_attentions + (attn,)
 
         if output_hidden_states:
             encoder_states = encoder_states + (x,)
 
-        # T x B x C -> B x T x C
-        encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
+            # T x B x C -> B x T x C
+            encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
+
         x = x.transpose(0, 1)
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
@@ -1081,8 +1081,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         )
         if attention_mask is not None:
             extended_attention_mask = (1.0 - attention_mask[:, None, :]) * -10000.0
-            return extended_causal_mask + extended_attention_mask
-        return extended_causal_mask
+            extended_attention_mask = extended_causal_mask + extended_attention_mask
+        else:
+            extended_attention_mask = extended_causal_mask
+        return extended_causal_mask.repeat(self.config.num_decoder_attention_heads, 1, 1)
 
     def prepare_attention_mask_ngram(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
@@ -1114,8 +1116,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * -10000.0
             extended_attention_mask = extended_attention_mask.expand((self.ngram, batch_size, seq_length, seq_length))
             extended_attention_mask = torch.cat([extended_attention_mask, extended_attention_mask], dim=-1)
-            return extended_ngram_causal_mask + extended_attention_mask
-        return extended_ngram_causal_mask
+            extended_ngram_attention_mask = extended_ngram_causal_mask + extended_attention_mask
+        else:
+            extended_ngram_attention_mask = extended_ngram_causal_mask
+        return extended_ngram_attention_mask.repeat(1, self.config.num_decoder_attention_heads, 1, 1)
 
     def forward(
         self,
@@ -1163,7 +1167,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             input_ids, use_cache=use_cache, past_key_values=past_key_values
         )
 
-        if use_cache:
+        if past_key_values is not None:
             i_buckets_main_stream, i_bucket_relative_stream = None, None
         else:
             i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(
@@ -1179,7 +1183,12 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         hidden_states = hidden_states.transpose(0, 1)
 
         ngram_input_embed = self.ngram_input_embed.weight
-        if use_cache:
+
+        if past_key_values is not None:
+            assert (
+                hidden_states.size(0) == 1
+            ), "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
+
             B = hidden_states.size(1)
             ngram_hidden_states = [
                 (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, B, 1)
@@ -1206,9 +1215,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
-        next_decoder_cache = []
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        present_key_values = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1227,20 +1236,17 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 real_positions=real_positions,
             )
             if use_cache:
-                next_decoder_cache.append(layer_past.copy())
+                present_key_values += (layer_past,)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
         hidden_states_list = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
-        if use_cache:
-            next_cache = next_decoder_cache
-        else:
-            next_cache = None
+
         if not return_dict:
-            return hidden_states_list, next_cache, all_hidden_states, list(all_self_attns)
+            return tuple(v for v in [hidden_states_list, present_key_values, all_hidden_states, all_self_attns])
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states_list,
-            past_key_values=next_cache,
+            past_key_values=present_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )

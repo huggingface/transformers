@@ -187,7 +187,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
             attentions = outputs[-1]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -215,6 +215,10 @@ class ModelTesterMixin:
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                     decoder_attention_idx += 1
+
+                import ipdb
+
+                ipdb.set_trace()
                 self.assertEqual(out_len, correct_outlen)
 
                 decoder_attentions = outputs[decoder_attention_idx]
