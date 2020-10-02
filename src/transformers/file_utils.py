@@ -194,6 +194,40 @@ def is_faiss_available():
     return _faiss_available
 
 
+DATASETS_IMPORT_ERROR = """
+This {0} requires the 🤗 Datasets library but it was not found on your enviromnent. You can install it with:
+```
+pip install datasets
+```
+In a notebook or a colab, you can install it by executing a cell with
+```
+!pip install datasets
+```
+then restarting your kernel.
+
+Note that if you have a local folder named `datasets` or a local python file named `datasets.py` in your current
+working directory, python may try to import this instead of the 🤗 Datasets library. You should rename this folder or
+that python file if that's the case.
+"""
+
+
+FAISS_IMPORT_ERROR = """
+This {0} requires the faiss library but it was not found on your enviromnent. Checkout the instructions on the
+installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
+that match your enviromnent.
+"""
+
+
+def requires_datasets(self):
+    if not is_datasets_available():
+        raise ImportError(DATASETS_IMPORT_ERROR)
+
+
+def requires_faiss(self):
+    if not is_faiss_available():
+        raise ImportError(DATASETS_IMPORT_ERROR)
+
+
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
         fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
