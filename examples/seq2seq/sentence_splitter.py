@@ -11,7 +11,7 @@ except (ImportError, ModuleNotFoundError):
     NLTK_AVAILABLE = False
 
 if NLTK_AVAILABLE:
-    with FileLock("a_random_string") as lock:
+    with FileLock(".lock") as lock:
         nltk.download("punkt", quiet=True)
 
 
