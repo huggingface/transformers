@@ -122,10 +122,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip("This test is flaky")
-    def test_model_outputs_equivalence(self):
-        pass
-
 
 @unittest.skipUnless(torch_device != "cpu", "3B test too slow on CPU.")
 @require_torch
