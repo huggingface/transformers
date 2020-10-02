@@ -59,9 +59,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     decoder_layerdrop: Optional[float] = field(
         default=None, metadata={"help": "Decoder layer dropout probability. Goes into model.config."}
     )
-    dropout: Optional[float] = field(
-        default=None, metadata={"help": "Dropout probability. Goes into model.config."}
-    )
+    dropout: Optional[float] = field(default=None, metadata={"help": "Dropout probability. Goes into model.config."})
     attention_dropout: Optional[float] = field(
         default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
     )

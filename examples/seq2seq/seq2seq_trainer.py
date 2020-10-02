@@ -6,10 +6,10 @@ from torch import nn
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import Trainer
+from transformers.configuration_fsmt import FSMTConfig
 from transformers.file_utils import is_torch_tpu_available
 from transformers.optimization import Adafactor, AdamW, get_linear_schedule_with_warmup
 from transformers.trainer import get_tpu_sampler
-from transformers.configuration_fsmt import FSMTConfig
 
 
 try:
@@ -137,9 +137,7 @@ class Seq2SeqTrainer(Trainer):
                     max_length=self.max_gen_length,
                 )
                 # in case the batch is shorter than max length, the output should be padded
-                generated_tokens = self._pad_tensors_to_max_len(
-                    generated_tokens, self.max_gen_length
-                )
+                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, self.max_gen_length)
 
             labels_out = inputs.get("labels")
             # Call forward again to get loss # TODO: avoidable?
