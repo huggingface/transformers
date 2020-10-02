@@ -190,6 +190,15 @@ class TrainingArguments:
         default=None,
         metadata={"help": "Run evaluation during training at each logging step."},
     )
+    patience: int = field(
+        default=-1,
+        metadata={
+            "help": (
+                "If > 0: stops training after evaluating this many times consecutively with non-decreasing loss."
+                "Requires evaluate_during_training."
+            )
+        },
+    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
