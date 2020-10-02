@@ -740,6 +740,11 @@ if is_tf_available():
     # Trainer
     from .trainer_tf import TFTrainer
 
+else:
+    # Import the same objects as dummies to get them in the namespace.
+    # They will raise an import error if the user tries to instantiate / use them.
+    from .utils.dummy_tf_objects import *
+
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(

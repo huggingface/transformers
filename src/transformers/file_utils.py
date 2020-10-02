@@ -195,7 +195,7 @@ def is_faiss_available():
 
 
 DATASETS_IMPORT_ERROR = """
-{0} requires the 🤗 Datasets library but it was not found on your enviromnent. You can install it with:
+{0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
 ```
 pip install datasets
 ```
@@ -212,9 +212,15 @@ that python file if that's the case.
 
 
 FAISS_IMPORT_ERROR = """
-{0} requires the faiss library but it was not found on your enviromnent. Checkout the instructions on the
+{0} requires the faiss library but it was not found in your enviromnent. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
 that match your enviromnent.
+"""
+
+
+TENSORFLOW_IMPORT_ERROR = """
+{0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
 """
 
 
@@ -228,6 +234,12 @@ def requires_faiss(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_faiss_available():
         raise ImportError(FAISS_IMPORT_ERROR.format(name))
+
+
+def requires_tf(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_tf_available():
+        raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
