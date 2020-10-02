@@ -23,6 +23,7 @@ modified_only_fixup:
 
 extra_quality_checks:
 	python utils/check_copies.py
+	python utils/check_dummies.py
 	python utils/check_repo.py
 
 # this target runs checks on all files
@@ -46,6 +47,7 @@ fixup: modified_only_fixup extra_quality_checks
 
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
+	python utils/check_dummies.py --fix_and_overwrite
 
 # Run tests for the library
 

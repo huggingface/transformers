@@ -218,6 +218,12 @@ that match your enviromnent.
 """
 
 
+PYTORCH_IMPORT_ERROR = """
+{0} requires the PyTorch library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your enviromnent.
+"""
+
+
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
@@ -234,6 +240,12 @@ def requires_faiss(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_faiss_available():
         raise ImportError(FAISS_IMPORT_ERROR.format(name))
+
+
+def requires_pytorch(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_tf_available():
+        raise ImportError(PYTORCH_IMPORT_ERROR.format(name))
 
 
 def requires_tf(obj):
