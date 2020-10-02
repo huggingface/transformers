@@ -624,7 +624,6 @@ class TFTrainer:
                 if self.args.patience > 0:
                     # Keep track of best loss to determine if we should stop early
 
-                    print("epoch loss:" + str(training_loss.numpy()))
                     eval_loss = training_loss.numpy()
                     if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
                         patience_evals_without_improvement = 0
@@ -633,11 +632,9 @@ class TFTrainer:
                         patience_evals_without_improvement += 1
                         if patience_evals_without_improvement >= self.args.patience:
                             patience_should_stop = True
-                            print((f"Patience threshold ({self.args.patience}) exceeded, stopping training"))
                             logger.info(f"Patience threshold ({self.args.patience}) exceeded, stopping training")
 
                 if patience_should_stop:
-                    print("breaking")
                     break
 
             end_time = datetime.datetime.now()
