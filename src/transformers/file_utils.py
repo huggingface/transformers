@@ -133,6 +133,15 @@ try:
 except ImportError:
     _faiss_available = False
 
+try:
+    import sklearn.metrics  # noqa: F401
+
+    import scipy.stats  # noqa: F401
+
+    _has_sklearn = True
+except (AttributeError, ImportError):
+    _has_sklearn = False
+
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
@@ -194,6 +203,10 @@ def is_faiss_available():
     return _faiss_available
 
 
+def is_sklearn_available():
+    return _has_sklearn
+
+
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
 ```
@@ -224,6 +237,18 @@ installation page: https://pytorch.org/get-started/locally/ and follow the ones 
 """
 
 
+SKLEARN_IMPORT_ERROR = """
+{0} requires the scikit-learn library but it was not found in your enviromnent. You can install it with:
+```
+pip install -U scikit-learn
+```
+In a notebook or a colab, you can install it by executing a cell with
+```
+!pip install -U scikit-learn
+```
+"""
+
+
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
@@ -246,6 +271,12 @@ def requires_pytorch(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_tf_available():
         raise ImportError(PYTORCH_IMPORT_ERROR.format(name))
+
+
+def requires_sklearn(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_tf_available():
+        raise ImportError(SKLEARN_IMPORT_ERROR.format(name))
 
 
 def requires_tf(obj):
