@@ -965,10 +965,14 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
-    def forward(self, input_ids, attention_mask=None, output_attentions=None, output_hidden_states=None, return_dict=False):
+    def forward(
+        self, input_ids, attention_mask=None, output_attentions=None, output_hidden_states=None, return_dict=False
+    ):
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if attention_mask is not None:
             # invert
@@ -1063,16 +1067,18 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
     def prepare_attention_mask(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
-# TODO (PVP) - remove if not needed anymore
-#        if (
-#            not hasattr(self, "_causal_mask")
-#            or self._causal_mask is None
-#            or self._causal_mask.device != hidden_states.device
-#            or self._causal_mask.size(0) < dim
-#        ):
-#            self._causal_mask = torch.triu(fill_with_neg_inf(hidden_states.new(dim, dim)), 1)
+        # TODO (PVP) - remove if not needed anymore
+        #        if (
+        #            not hasattr(self, "_causal_mask")
+        #            or self._causal_mask is None
+        #            or self._causal_mask.device != hidden_states.device
+        #            or self._causal_mask.size(0) < dim
+        #        ):
+        #            self._causal_mask = torch.triu(fill_with_neg_inf(hidden_states.new(dim, dim)), 1)
         causal_mask = torch.triu(fill_with_neg_inf(hidden_states.new(seq_length, seq_length)), 1)
-        extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand((batch_size, ) + causal_mask.shape)
+        extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
+            (batch_size,) + causal_mask.shape
+        )
         if attention_mask is not None:
             extended_attention_mask = (1.0 - attention_mask[:, None, :]) * -10000.0
             return extended_causal_mask + extended_attention_mask
@@ -1080,14 +1086,16 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
     def prepare_attention_mask_ngram(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
-# TODO (PVP) - remove if not needed anymore
-#        if (
-#            not hasattr(self, "_ngram_causal_mask")
-#            or self._ngram_causal_mask is None
-#            or self._ngram_causal_mask.device != hidden_states.device
-#        ):
+        # TODO (PVP) - remove if not needed anymore
+        #        if (
+        #            not hasattr(self, "_ngram_causal_mask")
+        #            or self._ngram_causal_mask is None
+        #            or self._ngram_causal_mask.device != hidden_states.device
+        #        ):
         ngram_causal_mask = (
-            ngram_attention_bias(self.max_target_positions, self.ngram).type(hidden_states.dtype).to(hidden_states.device)
+            ngram_attention_bias(self.max_target_positions, self.ngram)
+            .type(hidden_states.dtype)
+            .to(hidden_states.device)
         )
         ngram_causal_mask = torch.cat(
             [
@@ -1097,7 +1105,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             dim=-1,
         )
 
-        extended_ngram_causal_mask = ngram_causal_mask[:, None, :, :].expand(ngram_causal_mask.shape[:1] + (batch_size, ) + ngram_causal_mask.shape[1:])
+        extended_ngram_causal_mask = ngram_causal_mask[:, None, :, :].expand(
+            ngram_causal_mask.shape[:1] + (batch_size,) + ngram_causal_mask.shape[1:]
+        )
 
         # TODO (PVP, QWeizhen) - Check if this is correct
         if attention_mask is not None:
@@ -1139,9 +1149,11 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 - attentions
 
         """
-        use_cache == use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if encoder_attention_mask is not None:
             # invert mask
@@ -1176,7 +1188,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             self_attn_mask = None
             ngram_mask_matrix = None
         else:
-            import ipdb; ipdb.set_trace()
             ngram_hidden_states = [
                 (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1)
                 for ngram in range(self.ngram)
@@ -1284,7 +1295,9 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     ):
         use_cache == use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         assert decoder_input_ids is not None
 

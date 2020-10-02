@@ -508,7 +508,11 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
             torch_device
         )
         output = model(
-            input_ids=encoder_ids, attention_mask=None, encoder_outputs=None, decoder_input_ids=decoder_prev_ids
+            input_ids=encoder_ids,
+            attention_mask=None,
+            encoder_outputs=None,
+            decoder_input_ids=decoder_prev_ids,
+            use_cache=False,
         )
         output_predited_logis = output[0]
         expected_shape = torch.Size((1, 12, 30522))
@@ -529,7 +533,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
         # decoder outputs
         decoder_outputs = model.model.decoder(
-            decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
+            decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None, use_cache=False
         )
         predicting_streams = decoder_outputs[0][1:]
         predicting_streams_logits = [model.lm_head(x) for x in predicting_streams]
