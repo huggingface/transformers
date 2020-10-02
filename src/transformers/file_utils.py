@@ -195,7 +195,7 @@ def is_faiss_available():
 
 
 DATASETS_IMPORT_ERROR = """
-`{0}` requires the 🤗 Datasets library but it was not found on your enviromnent. You can install it with:
+{0} requires the 🤗 Datasets library but it was not found on your enviromnent. You can install it with:
 ```
 pip install datasets
 ```
@@ -212,20 +212,20 @@ that python file if that's the case.
 
 
 FAISS_IMPORT_ERROR = """
-`{0}` requires the faiss library but it was not found on your enviromnent. Checkout the instructions on the
+{0} requires the faiss library but it was not found on your enviromnent. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
 that match your enviromnent.
 """
 
 
 def requires_datasets(obj):
-    name = obj.__name__ if isinstance(obj, type) else obj.__class__.__name__
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
         raise ImportError(DATASETS_IMPORT_ERROR.format(name))
 
 
 def requires_faiss(obj):
-    name = obj.__name__ if isinstance(obj, type) else obj.__class__.__name__
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_faiss_available():
         raise ImportError(FAISS_IMPORT_ERROR.format(name))
 
