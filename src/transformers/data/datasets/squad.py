@@ -2,7 +2,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union
 
 import torch
 from torch.utils.data.dataset import Dataset
@@ -106,7 +106,11 @@ class SquadDataset(Dataset):
         dataset_format: Optional[str] = "pt",
     ):
         self.args = args
+        self.tokenizer = tokenizer
+        self.limit_length = limit_length
         self.is_language_sensitive = is_language_sensitive
+        self.cache_dir = cache_dir
+        self.dataset_format = dataset_format
         self.processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
         if isinstance(mode, str):
             try:
@@ -125,6 +129,8 @@ class SquadDataset(Dataset):
                 version_tag,
             ),
         )
+        # Making this variable global so that we can access it later
+        self.cached_features_file = cached_features_file
 
         # Make sure only the first process in distributed training processes the dataset,
         # and the others will use the cache.
@@ -153,33 +159,35 @@ class SquadDataset(Dataset):
                 else:
                     self.examples = self.processor.get_train_examples(args.data_dir)
 
-                self.features, self.dataset = squad_convert_examples_to_features(
-                    examples=self.examples,
-                    tokenizer=tokenizer,
-                    max_seq_length=args.max_seq_length,
-                    doc_stride=args.doc_stride,
-                    max_query_length=args.max_query_length,
-                    is_training=mode == Split.train,
-                    threads=args.threads,
-                    return_dataset=dataset_format,
-                )
-
-                start = time.time()
-                torch.save(
-                    {"features": self.features, "dataset": self.dataset, "examples": self.examples},
-                    cached_features_file,
-                )
-                # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
-                logger.info(
-                    "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
-                )
+                # Setting features & dataset to None so that we know if we have to 
+                # load it from cache or create in the __getitem__ method
+                self.features = None
+                self.dataset = None
 
     def __len__(self):
-        return len(self.features)
+        return len(self.examples)
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         # Convert to Tensors and build dataset
-        feature = self.features[i]
+
+        # The example to features has to be inputted as a list, thus 
+        example = [self.examples[i]]
+
+        if self.features == None:
+            feature = squad_convert_examples_to_features(
+                examples = example,
+                tokenizer = self.tokenizer,
+                max_seq_length = self.args.max_seq_length,
+                max_query_length = self.args.max_query_length,
+                doc_stride = self.args.doc_stride,
+                is_training = self.mode == Split.train,
+                threads = self.args.threads
+            )
+            # It's returned as a list with the length of 1, 
+            # so we only need to take the first index
+            feature = feature[0]
+        else:
+            feature = self.features[i]
 
         input_ids = torch.tensor(feature.input_ids, dtype=torch.long)
         attention_mask = torch.tensor(feature.attention_mask, dtype=torch.long)
@@ -210,3 +218,31 @@ class SquadDataset(Dataset):
             inputs.update({"start_positions": start_positions, "end_positions": end_positions})
 
         return inputs
+
+    def create_features(self, return_generator:bool = True) -> Tuple:
+        """
+        Create features immediatly instead of doing the task during training.
+        If return_generator is true, then features will be returned as generators
+        """
+        self.features, self.dataset = squad_convert_examples_to_features(
+            examples = self.examples,
+            tokenizer = self.tokenizer,
+            max_seq_length = self.args.max_seq_length,
+            doc_stride = self.args.doc_stride,
+            max_query_length = self.args.max_query_length,
+            is_training = self.mode == Split.train,
+            threads = self.args.threads,
+            return_dataset = self.dataset_format,
+        )
+
+        start = time.time()
+        torch.save(
+            {"features": self.features, "dataset": self.dataset, "examples": self.examples},
+            self.cached_features_file,
+        )
+        # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
+        logger.info(
+            "Saving features into cached file %s [took %.3f s]", self.cached_features_file, time.time() - start
+        )
+
+        return self.features, self.dataset
