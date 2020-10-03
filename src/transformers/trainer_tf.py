@@ -637,7 +637,7 @@ class TFTrainer:
         scaled_loss = per_example_loss / tf.cast(nb_instances_in_global_batch, dtype=per_example_loss.dtype)
         gradients = tape.gradient(scaled_loss, self.model.trainable_variables)
         gradients = [
-                g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
+            g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
         ]
 
         if self.args.gradient_accumulation_steps > 1:
