@@ -30,6 +30,7 @@ LAYERS_TO_COPY = {
         9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
         12: list(range(12)),
     },
+    4: {3: [0, 1, 3], 2: [0, 3]},
     16: {  # maps  num layers in student -> which teacher layers to copy
         1: [0],
         2: [0, 8],
