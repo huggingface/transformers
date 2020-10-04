@@ -55,6 +55,7 @@ IGNORE_NON_DOCUMENTED = [
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
     "T5Stack",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (documented) model (should it be a TFPreTrainedModel ?)
+    "BlenderbotForConditionalGeneration",
 ]
 
 # Update this dict with any special correspondance model name (used in modeling_xxx.py) to doc file.

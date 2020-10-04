@@ -45,6 +45,7 @@ BlenderbotForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` and `generate`
 
+
 BlenderbotConfig
 ~~~~~~~~~~~~~~~~~~~~~
 See :obj:`transformers.BartConfig`
