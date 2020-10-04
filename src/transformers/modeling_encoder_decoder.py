@@ -69,10 +69,6 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -81,11 +77,6 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`):
-            This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`)
-            is a tensor of hidden-states at the output of the last layer of the encoder.
-            Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for sequence to sequence training to the decoder.
             Indices can be obtained using :class:`~transformers.PretrainedTokenizer`.
@@ -94,6 +85,21 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
+        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`):
+            This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
+            :obj:`last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`)
+            is a tensor of hidden-states at the output of the last layer of the encoder.
+            Used in the cross-attention of the decoder.
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
@@ -103,6 +109,15 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with
             labels in ``[0, ..., config.vocab_size]``
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.Seq2SeqLMOutput` instead of a
             plain tuple.
@@ -328,13 +343,17 @@ class EncoderDecoderModel(PreTrainedModel):
     def forward(
         self,
         input_ids=None,
-        inputs_embeds=None,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
+        inputs_embeds=None,
         decoder_inputs_embeds=None,
         labels=None,
+        use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
         **kwargs,
     ):
@@ -378,20 +397,24 @@ class EncoderDecoderModel(PreTrainedModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
 
-        hidden_states = encoder_outputs[0]
+        encoder_hidden_states = encoder_outputs[0]
 
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
-            inputs_embeds=decoder_inputs_embeds,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
             labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             **kwargs_decoder,
         )
@@ -423,7 +446,7 @@ class EncoderDecoderModel(PreTrainedModel):
             "encoder_outputs": encoder_outputs,
         }
 
-        # Ideally all models should have a `use_cache`
+        # Ideally all models should have a :obj:`use_cache`
         # leave following to ifs until all have it implemented
         if "use_cache" in decoder_inputs:
             input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]

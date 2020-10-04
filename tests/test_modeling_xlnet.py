@@ -511,7 +511,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
 
     def test_xlnet_base_model_use_cache(self):
-        # checking that in auto-regressive mode, `use_cache` gives the same results
+        # checking that in auto-regressive mode, :obj:`use_cache` gives the same results
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_model_use_cache(*config_and_inputs)

@@ -9,7 +9,7 @@ def calculate_rouge_path(pred_path, tgt_path, save_path=None, **kwargs):
     tgt_lns = [x.strip() for x in open(tgt_path).readlines()][: len(pred_lns)]
     metrics = calculate_rouge(pred_lns, tgt_lns, **kwargs)
     if save_path is not None:
-        save_json(metrics, save_path)
+        save_json(metrics, save_path, indent=None)
     return metrics  # these print nicely
 
 
