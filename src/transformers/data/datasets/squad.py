@@ -181,7 +181,8 @@ class SquadDataset(Dataset):
                 max_query_length = self.args.max_query_length,
                 doc_stride = self.args.doc_stride,
                 is_training = self.mode == Split.train,
-                threads = self.args.threads
+                threads = self.args.threads,
+                tqdm_enabled = False
             )
             # It's returned as a list with the length of 1, 
             # so we only need to take the first index
