@@ -32,7 +32,7 @@ LAYERS_TO_COPY = {
     },
     16: {  # maps  num layers in student -> which teacher layers to copy
         1: [0],
-        2: [0, 8],
+        2: [0, 15],
         3: [0, 8, 15],
         4: [0, 5, 10, 15],
         6: [0, 3, 6, 9, 12, 15],
