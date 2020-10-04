@@ -469,7 +469,7 @@ ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
 
 def aggregate_rouge_scores(no_aggregation):
     import pandas as pd
-    return {k: pd.DataFrame(v).fmeasure.mean() for k,v in no_aggregation.items()}
+    return {k: np.round(pd.DataFrame(v).fmeasure.mean()*100,2) for k,v in no_aggregation.items()}
 
 def extract_rouge_mid_statistics(dct):
     new_dict = {}
@@ -536,6 +536,10 @@ def freeze_params(model: nn.Module):
     for par in model.parameters():
         par.requires_grad = False
 
+def unfreeze_params(model: nn.Module):
+    """Set requires_grad=False for each of model.parameters()"""
+    for par in model.parameters():
+        par.requires_grad = True
 
 def freeze_embeds(model):
     """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
