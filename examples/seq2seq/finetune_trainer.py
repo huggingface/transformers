@@ -53,6 +53,16 @@ class Seq2SeqTrainingArguments(TrainingArguments):
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
     adafactor: bool = field(default=False, metadata={"help": "whether to use adafactor"})
+    encoder_layerdrop: Optional[float] = field(
+        default=None, metadata={"help": "Encoder layer dropout probability. Goes into model.config."}
+    )
+    decoder_layerdrop: Optional[float] = field(
+        default=None, metadata={"help": "Decoder layer dropout probability. Goes into model.config."}
+    )
+    dropout: Optional[float] = field(default=None, metadata={"help": "Dropout probability. Goes into model.config."})
+    attention_dropout: Optional[float] = field(
+        default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
+    )
 
 
 @dataclass
@@ -179,6 +189,13 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
     )
+
+    extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+    for p in extra_model_params:
+        if getattr(training_args, p, None):
+            assert hasattr(config, p), f"({config.__class__.__name__}) doesn't have a `{p}` attribute"
+            setattr(config, p, getattr(training_args, p))
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
