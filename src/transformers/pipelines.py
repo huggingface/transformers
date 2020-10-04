@@ -1100,7 +1100,7 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         if not multi_class:
             #softmax over contradiction vs neutral vs entailment
-            entailment = F.softmax(reshaped_outputs, -1)[...,-1]
+            entailment = torch.nn.functional.softmax(reshaped_outputs, -1)[...,-1]
             # noramlise entailment probabilities to sum to one
             scores = entailment / entailment.sum(-1, keepdims=True)
         else:
