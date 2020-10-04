@@ -38,13 +38,13 @@ from .modeling_utils import (
 )
 from .modeling_bert import (
     BertLayerNorm,
-    BertPreTrainedModel, 
     BertIntermediate, 
     BertOutput, 
     BertModel
 )
 
 from .modeling_outputs import (
+    BaseModelOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -70,6 +70,7 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
+
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
@@ -337,7 +338,47 @@ class MPNetEncoder(nn.Module):
         return ret    
 
 
-class MPNetModel(BertModel):
+MPNet_START_DOCSTRING = r"""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+    Parameters:
+        config (:class:`~transformers.MPNetConfig`): Model configuration class with all the parameters of the
+            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+MPNET_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+            Indices can be obtained using :class:`transformers.RobertaTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            `What are position IDs? <../glossary.html#position-ids>`_
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+"""
+
+
+
+
+class MPNetModel(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
 
@@ -356,6 +397,43 @@ class MPNetModel(BertModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    def _prune_heads(self, heads_to_prune):
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_tuple=None,
+        **kwargs,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+
+        input_shape = input_ids.size()
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=input_ids.device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, input_ids.device)
+
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds
+        )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+        )
 
 class MPNetForMaskedLM(MPNetPreTrainedModel):
 
