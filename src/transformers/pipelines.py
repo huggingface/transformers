@@ -1099,9 +1099,10 @@ class ZeroShotClassificationPipeline(Pipeline):
             multi_class = True
 
         if not multi_class:
-            # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., -1]
-            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
+            #softmax over contradiction vs neutral vs entailment
+            entailment = F.softmax(reshaped_outputs, -1)[...,-1]
+            # noramlise entailment probabilities to sum to one
+            scores = entailment / entailment.sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
             entail_contr_logits = reshaped_outputs[..., [0, -1]]
