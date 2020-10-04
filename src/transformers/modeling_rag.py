@@ -537,7 +537,7 @@ class RagModel(RagPreTrainedModel):
 
             >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="pt")
             >>> input_ids = input_dict["input_ids"]
-            >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
+            >>> outputs = model(input_ids=input_ids)
 
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
