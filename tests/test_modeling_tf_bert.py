@@ -322,7 +322,9 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     def test_custom_load_tf_weights(self):
-        model, output_loading_info = TFBertForTokenClassification.from_pretrained("jplu/tiny-tf-bert-random", use_cdn=False, output_loading_info=True)
-        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ['mlm___cls', 'nsp___cls'])
+        model, output_loading_info = TFBertForTokenClassification.from_pretrained(
+            "jplu/tiny-tf-bert-random", use_cdn=False, output_loading_info=True
+        )
+        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
