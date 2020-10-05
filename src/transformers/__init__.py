@@ -57,6 +57,7 @@ from .configuration_rag import RagConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
@@ -184,6 +185,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_utils import PreTrainedTokenizer
@@ -452,6 +454,17 @@ if is_torch_available():
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
         RobertaModel,
+    )
+    from .modeling_squeezebert import (
+        SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        SqueezeBertForMaskedLM,
+        SqueezeBertForMultipleChoice,
+        SqueezeBertForQuestionAnswering,
+        SqueezeBertForSequenceClassification,
+        SqueezeBertForTokenClassification,
+        SqueezeBertModel,
+        SqueezeBertModule,
+        SqueezeBertPreTrainedModel,
     )
     from .modeling_t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
