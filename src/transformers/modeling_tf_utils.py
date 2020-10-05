@@ -750,7 +750,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         if output_loading_info:
-            loading_info = {"missing_keys": missing_keys, "unexpected_layers_weights": unexpected_keys}
+            loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
 
             return model, loading_info
 
