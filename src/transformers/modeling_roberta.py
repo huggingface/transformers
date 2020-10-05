@@ -847,6 +847,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
         checkpoint="roberta-base",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="<mask>",
     )
     def forward(
         self,
