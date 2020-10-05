@@ -227,6 +227,7 @@ class TFTrainer:
                 adam_beta2=self.args.adam_beta2,
                 adam_epsilon=self.args.adam_epsilon,
                 weight_decay_rate=self.args.weight_decay,
+                power=self.args.poly_power,
             )
 
     def setup_wandb(self):
@@ -530,10 +531,6 @@ class TFTrainer:
                 logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
 
             tf.summary.experimental.set_step(self.global_step)
-
-            if self.args.fp16:
-                policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-                tf.keras.mixed_precision.experimental.set_policy(policy)
 
             with self.tb_writer.as_default():
                 tf.summary.text("args", self.args.to_json_string())

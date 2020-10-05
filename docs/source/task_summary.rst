@@ -1,5 +1,5 @@
 Summary of the tasks
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different
 configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage
@@ -38,7 +38,7 @@ Both approaches are showcased here.
     This would produce random output.
 
 Sequence Classification
---------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Sequence classification is the task of classifying sequences according to a given number of classes. An example
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
@@ -89,7 +89,7 @@ of each other. The process is the following:
     >>> import torch
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased-finetuned-mrpc")
-    >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc")
+    >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc", return_dict=True)
 
     >>> classes = ["not paraphrase", "is paraphrase"]
 
@@ -122,7 +122,7 @@ of each other. The process is the following:
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased-finetuned-mrpc")
-    >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc")
+    >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc", return_dict=True)
 
     >>> classes = ["not paraphrase", "is paraphrase"]
 
@@ -152,7 +152,7 @@ of each other. The process is the following:
     is paraphrase: 6%
 
 Extractive Question Answering
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
@@ -213,7 +213,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     >>> import torch
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
-    >>> model = AutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+    >>> model = AutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad", return_dict=True)
 
     >>> text = r"""
     ... 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
@@ -255,7 +255,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
-    >>> model = TFAutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+    >>> model = TFAutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad", return_dict=True)
 
     >>> text = r"""
     ... 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
@@ -297,7 +297,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
 
 
 Language Modeling
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Language modeling is the task of fitting a model to a corpus, which can be domain specific. All popular transformer-based
 models are trained using a variant of language modeling, e.g. BERT with masked language modeling, GPT-2 with
@@ -308,7 +308,7 @@ domain-specific: using a language model trained over a very large corpus, and th
 or on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
 
 Masked Language Modeling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
@@ -378,7 +378,7 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> import torch
 
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
-    >>> model = AutoModelWithLMHead.from_pretrained("distilbert-base-cased")
+    >>> model = AutoModelWithLMHead.from_pretrained("distilbert-base-cased", return_dict=True)
 
     >>> sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
 
@@ -394,7 +394,7 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
-    >>> model = TFAutoModelWithLMHead.from_pretrained("distilbert-base-cased")
+    >>> model = TFAutoModelWithLMHead.from_pretrained("distilbert-base-cased", return_dict=True)
 
     >>> sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
 
@@ -421,7 +421,7 @@ This prints five sequences, with the top 5 tokens predicted by the model:
 
 
 Causal Language Modeling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
@@ -439,7 +439,7 @@ Here is an example of using the tokenizer and model and leveraging the :func:`~t
     >>> from torch.nn import functional as F
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    >>> model = AutoModelWithLMHead.from_pretrained("gpt2")
+    >>> model = AutoModelWithLMHead.from_pretrained("gpt2", return_dict=True)
 
     >>> sequence = f"Hugging Face is based in DUMBO, New York City, and "
 
@@ -463,7 +463,7 @@ Here is an example of using the tokenizer and model and leveraging the :func:`~t
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    >>> model = TFAutoModelWithLMHead.from_pretrained("gpt2")
+    >>> model = TFAutoModelWithLMHead.from_pretrained("gpt2", return_dict=True)
 
     >>> sequence = f"Hugging Face is based in DUMBO, New York City, and "
 
@@ -493,7 +493,7 @@ This outputs a (hopefully) coherent next token following the original sequence, 
 In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
 
 Text Generation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`__ for example).
 
@@ -517,7 +517,7 @@ Here is an example of text generation using ``XLNet`` and its tokenzier.
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    >>> model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
     >>> # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
@@ -542,7 +542,7 @@ Here is an example of text generation using ``XLNet`` and its tokenzier.
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    >>> model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
     >>> # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
@@ -576,7 +576,7 @@ For more information on how to apply different decoding strategies for text gene
 
 
 Named Entity Recognition
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a
 token as a person, an organisation or a location.
@@ -659,7 +659,7 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> from transformers import AutoModelForTokenClassification, AutoTokenizer
     >>> import torch
 
-    >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+    >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
     >>> label_list = [
@@ -687,7 +687,7 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> from transformers import TFAutoModelForTokenClassification, AutoTokenizer
     >>> import tensorflow as tf
 
-    >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+    >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
     >>> label_list = [
@@ -723,7 +723,7 @@ following array should be the output:
     [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
 
 Summarization
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Summarization is the task of summarizing a document or an article into a shorter text.
 
@@ -781,7 +781,7 @@ In this example we use Google`s T5 model. Even though it was pre-trained only on
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = AutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
@@ -790,7 +790,7 @@ In this example we use Google`s T5 model. Even though it was pre-trained only on
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
@@ -798,7 +798,7 @@ In this example we use Google`s T5 model. Even though it was pre-trained only on
     >>> outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
 
 Translation
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Translation is the task of translating a text from one language to another.
 
@@ -834,7 +834,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = AutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="pt")
@@ -842,7 +842,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="tf")

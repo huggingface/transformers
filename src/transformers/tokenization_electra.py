@@ -51,9 +51,10 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class ElectraTokenizer(BertTokenizer):
     r"""
-    Constructs an Electra tokenizer.
+    Construct an ELECTRA tokenizer.
+
     :class:`~transformers.ElectraTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
@@ -67,10 +68,10 @@ class ElectraTokenizer(BertTokenizer):
 
 class ElectraTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a "Fast" Electra Fast tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" ELECTRA tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.ElectraTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.ElectraTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.

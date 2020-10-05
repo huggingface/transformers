@@ -1,7 +1,10 @@
+#!/usr/bin/env python
+
 import argparse
 import glob
 import logging
 import os
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -13,7 +16,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 from utils import (
@@ -24,15 +26,20 @@ from utils import (
     calculate_bleu,
     calculate_rouge,
     flatten_list,
+    freeze_embeds,
     freeze_params,
     get_git_info,
     label_smoothed_nll_loss,
     lmap,
     pickle_save,
     save_git_info,
-    save_json,
     use_task_specific_params,
 )
+
+
+# need the parent dir module
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 
 
 logger = logging.getLogger(__name__)
@@ -84,7 +91,7 @@ class SummarizationModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         if self.hparams.freeze_embeds:
-            self.freeze_embeds()
+            freeze_embeds(self.model)
         if self.hparams.freeze_encoder:
             freeze_params(self.model.get_encoder())
             assert_all_frozen(self.model.get_encoder())
@@ -99,28 +106,11 @@ class SummarizationModule(BaseTransformer):
             Seq2SeqDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
         )
         self.eval_beams = self.model.config.num_beams if self.hparams.eval_beams is None else self.hparams.eval_beams
-        assert self.eval_beams >= 1, f"got self.eval_beams={self.eval_beams}. Need an integer > 1"
         if self.hparams.eval_max_gen_length is not None:
             self.eval_max_length = self.hparams.eval_max_gen_length
         else:
             self.eval_max_length = self.model.config.max_length
         self.val_metric = self.default_val_metric if self.hparams.val_metric is None else self.hparams.val_metric
-
-    def freeze_embeds(self):
-        """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        if self.model_type == "t5":
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
-                freeze_params(d.embed_tokens)
-        elif self.model_type == "fsmt":
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
-        else:
-            freeze_params(self.model.model.shared)
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -189,7 +179,7 @@ class SummarizationModule(BaseTransformer):
         losses.update(generative_metrics)
         all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         all_metrics["step_count"] = self.step_count
-        self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
+        self.metrics[prefix].append(all_metrics)  # callback writes this to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
         return {
             "log": all_metrics,
@@ -197,10 +187,6 @@ class SummarizationModule(BaseTransformer):
             f"{prefix}_loss": loss,
             f"{prefix}_{self.val_metric}": metric_tensor,
         }
-
-    def save_metrics(self, latest_metrics, type_path) -> None:
-        self.metrics[type_path].append(latest_metrics)
-        save_json(self.metrics, self.metrics_save_path)
 
     def calc_generative_metrics(self, preds, target) -> Dict:
         return calculate_rouge(preds, target)

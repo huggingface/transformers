@@ -5,7 +5,7 @@ To create the package for pypi.
 
 1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
 
-2. Unpin specific versions from setup.py (like isort).
+2. Unpin specific versions from setup.py that use a git install.
 
 2. Commit these changes with the message: "Release: VERSION"
 
@@ -89,15 +89,16 @@ extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil", "parameterized"]
+extras["retrieval"] = ["faiss-cpu", "datasets"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
-extras["quality"] = ["black >= 20.8b1", "isort >= 5", "flake8 >= 3.8.3"]
+extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
-    version="3.1.0",
+    version="3.3.1",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

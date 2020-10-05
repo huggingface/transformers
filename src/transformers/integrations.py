@@ -1,13 +1,7 @@
 # Integrations with other Python libraries
+import math
 import os
 
-import numpy as np
-
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 try:
     import comet_ml  # noqa: F401
@@ -15,7 +9,6 @@ try:
     _has_comet = True
 except (ImportError):
     _has_comet = False
-
 
 try:
     import wandb
@@ -30,18 +23,6 @@ except (ImportError, AttributeError):
     _has_wandb = False
 
 try:
-    from torch.utils.tensorboard import SummaryWriter  # noqa: F401
-
-    _has_tensorboard = True
-except ImportError:
-    try:
-        from tensorboardX import SummaryWriter  # noqa: F401
-
-        _has_tensorboard = True
-    except ImportError:
-        _has_tensorboard = False
-
-try:
     import optuna  # noqa: F401
 
     _has_optuna = True
@@ -54,6 +35,29 @@ try:
     _has_ray = True
 except (ImportError):
     _has_ray = False
+
+
+# No ML framework or transformer imports above this point
+
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # isort:skip
+from .utils import logging  # isort:skip
+
+logger = logging.get_logger(__name__)
+
+
+try:
+    from torch.utils.tensorboard import SummaryWriter  # noqa: F401
+
+    _has_tensorboard = True
+except ImportError:
+    try:
+        from tensorboardX import SummaryWriter  # noqa: F401
+
+        _has_tensorboard = True
+    except ImportError:
+        _has_tensorboard = False
+
+# Integration functions:
 
 
 def is_wandb_available():
@@ -120,8 +124,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
             trainer._tune_save_checkpoint()
-            ray.tune.report(objective=trainer.objective)
-        return trainer.objective
+            ray.tune.report(objective=trainer.objective, **metrics, done=True)
 
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
@@ -135,10 +138,10 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         n_jobs = int(kwargs.pop("n_jobs", 1))
         num_gpus_per_trial = trainer.args.n_gpu
         if num_gpus_per_trial / n_jobs >= 1:
-            num_gpus_per_trial = int(np.ceil(num_gpus_per_trial / n_jobs))
+            num_gpus_per_trial = int(math.ceil(num_gpus_per_trial / n_jobs))
         kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
 
-    if "reporter" not in kwargs:
+    if "progress_reporter" not in kwargs:
         from ray.tune import CLIReporter
 
         kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
