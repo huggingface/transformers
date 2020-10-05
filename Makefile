@@ -16,7 +16,7 @@ modified_only_fixup:
 		isort $(modified_py_files); \
 		flake8 $(modified_py_files); \
 	else \
-		echo "No core .py files were modified"; \
+		echo "No library .py files were modified"; \
 	fi
 
 # Check that source code meets quality standards
