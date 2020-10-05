@@ -1,6 +1,6 @@
 import unittest
 
-from transformers import AutoConfig, is_flax_available, BertConfig
+from transformers import AutoConfig, BertConfig, is_flax_available
 from transformers.modeling_flax_bert import FlaxBertModel
 from transformers.modeling_flax_roberta import FlaxRobertaModel
 from transformers.testing_utils import require_flax, slow

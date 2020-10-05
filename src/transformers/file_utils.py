@@ -34,12 +34,13 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-ENV_VARS_TRUE_VALUES = ("1", "ON", "YES", "AUTO")
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES"}
+ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
 try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
     USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
-    if USE_TORCH in ENV_VARS_TRUE_VALUES and USE_TF not in ("1", "ON", "YES"):
+    if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
         import torch
 
         _torch_available = True  # pylint: disable=invalid-name
@@ -54,7 +55,7 @@ try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
     USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 
-    if USE_TF in ENV_VARS_TRUE_VALUES and USE_TORCH not in ("1", "ON", "YES"):
+    if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
         import tensorflow as tf
 
         assert hasattr(tf, "__version__") and int(tf.__version__[0]) >= 2
@@ -70,7 +71,7 @@ except (ImportError, AssertionError):
 try:
     USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
-    if USE_JAX in ENV_VARS_TRUE_VALUES:
+    if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
         import flax
         import jax
         from jax.config import config
