@@ -83,7 +83,7 @@ You can then finish the addition step by adding imports for your classes in the 
 - [ ] Edit the PyTorch to TF 2.0 conversion script to add your model in the `convert_pytorch_checkpoint_to_tf2.py`
   file.
 - [ ] Add a mention of your model in the doc: `README.md` and the documentation itself
-  in `docs/source/index.rst` and `docs/source/pretrained_models.rst`.
+  in `docs/source/pretrained_models.rst`. Rune `make fix-copies` to update `docs/source/index.rst` with your changes.
 - [ ] Upload the pretrained weights, configurations and vocabulary files.
 - [ ] Create model card(s) for your models on huggingface.co. For those last two steps, check the
   [model sharing documentation](https://huggingface.co/transformers/model_sharing.html).
