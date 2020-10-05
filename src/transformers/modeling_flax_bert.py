@@ -6,7 +6,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen import compact
-from transformers import BertConfig
+from transformers import BertConfig, AutoTokenizer, TensorType
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 
 
@@ -219,7 +219,7 @@ class BertPooler(nn.Module):
         return jax.lax.tanh(out)
 
 
-class BertModel(nn.Module):
+class BertModule(nn.Module):
     vocab_size: int
     hidden_size: int
     type_vocab_size: int
@@ -253,7 +253,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
     BERT implementation using JAX/Flax as backend
     """
 
-    model_class = BertModel
+    model_class = BertModule
     config_class = BertConfig
     base_model_prefix = "bert"
 
@@ -327,7 +327,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
         return jax_state
 
     def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
-        model = BertModel(
+        model = BertModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
             type_vocab_size=config.type_vocab_size,
@@ -342,7 +342,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
         super().__init__(config, model, state, seed)
 
     @property
-    def module(self) -> BertModel:
+    def module(self) -> BertModule:
         return self._module
 
     @property
@@ -350,7 +350,6 @@ class FlaxBertModel(FlaxPreTrainedModel):
         return self._config
 
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-        @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
             return self.model.apply(
                 {"param": self.params},
@@ -370,8 +369,3 @@ class FlaxBertModel(FlaxPreTrainedModel):
             attention_mask = np.ones_like(input_ids)
 
         return predict(input_ids, token_type_ids, position_ids, attention_mask)
-
-
-if __name__ == "__main__":
-    model = FlaxBertModel.from_pretrained("bert-base-cased")
-    input()
