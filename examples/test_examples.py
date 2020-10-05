@@ -116,7 +116,7 @@ class ExamplesTests(TestCasePlus):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
-            result = run_pl_glue.main()
+            result = run_pl_glue.main()[0]
             # for now just testing that the script can run to completion
             self.assertGreater(result["acc"], 0.25)
             #
