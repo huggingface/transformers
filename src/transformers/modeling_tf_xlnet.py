@@ -1065,7 +1065,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             decoding. The token ids which have their past given to this model should not be passed as
             :obj:`input_ids` as they have already been computed.
 
-            :obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
+            :obj::obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
         perm_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`):
             Mask to indicate the attention pattern for each input token with values selected in ``[0, 1]``:
 

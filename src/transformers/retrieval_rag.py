@@ -22,15 +22,23 @@ from typing import Iterable, List, Optional, Tuple
 import numpy as np
 
 from .configuration_rag import RagConfig
-from .file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url
+from .file_utils import (
+    cached_path,
+    is_datasets_available,
+    is_faiss_available,
+    is_remote_url,
+    requires_datasets,
+    requires_faiss,
+)
 from .tokenization_rag import RagTokenizer
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
-if is_datasets_available() and is_faiss_available():
+if is_datasets_available():
     from datasets import load_dataset
 
+if is_faiss_available():
     import faiss
 
 
@@ -273,6 +281,8 @@ class RagRetriever:
     _init_retrieval = True
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer):
+        requires_datasets(self)
+        requires_faiss(self)
         super().__init__()
         self.index = (
             LegacyIndex(
@@ -301,6 +311,8 @@ class RagRetriever:
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, **kwargs):
+        requires_datasets(cls)
+        requires_faiss(cls)
         config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder

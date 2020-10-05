@@ -4,8 +4,8 @@ LayoutLM
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-The LayoutLM model was proposed in `LayoutLM: Pre-training of Text and Layout for Document Image Understanding <https://arxiv.org/abs/1912.13318>`__
-by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, and Ming Zhou. It's a simple but effective pre-training method 
+The LayoutLM model was proposed in the paper `LayoutLM: Pre-training of Text and Layout for Document Image Understanding <https://arxiv.org/abs/1912.13318>`__
+by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, and Ming Zhou. It's a simple but effective pre-training method
 of text and layout for document image understanding and information extraction tasks, such as form understanding and receipt understanding.
 
 The abstract from the paper is the following:
