@@ -15,6 +15,8 @@
 
 from typing import List, Optional
 
+from tokenizers import processors
+
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
@@ -253,6 +255,8 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         self.cur_lang_code = self.convert_tokens_to_ids("en_XX")
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
 
+        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -426,8 +430,26 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )
+
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. Prefix [tgt_lang_code], suffix =[eos]."""
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )

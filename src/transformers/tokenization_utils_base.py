@@ -2498,6 +2498,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
 
+        if return_token_type_ids is not None and not add_special_tokens:
+            raise ValueError(
+                "Asking to return token_type_ids while setting add_special_tokens to False "
+                "results in an undefined behavior. Please set add_special_tokens to True or "
+                "set return_token_type_ids to None."
+            )
+
         # Load from model defaults
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.model_input_names
@@ -2530,7 +2537,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
         else:
             sequence = ids + pair_ids if pair else ids
-            token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
+            token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
 
         # Build output dictionnary
         encoded_inputs["input_ids"] = sequence

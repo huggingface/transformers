@@ -349,8 +349,8 @@ class CamembertConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["<s>", "$0", "</s>"],
-            pair=["<s>", "$0", "</s>", "$1", "</s>"],
+            single="<s> $A </s>",
+            pair="<s> $A </s> </s> $B </s>",
             special_tokens=[
                 ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
@@ -402,8 +402,8 @@ class MBartConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["$0", "</s>", "en_XX"],
-            pair=["$0", "</s>", "en_XX", "$1", "</s>"],
+            single="$A </s> en_XX",
+            pair="$A $B </s> en_XX",
             special_tokens=[
                 ("en_XX", self.original_tokenizer.convert_tokens_to_ids("en_XX")),
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
@@ -429,8 +429,8 @@ class XLMRobertaConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single="<s> $0 </s>",
-            pair="<s> $0 </s> </s> $1 </s>",
+            single="<s> $A </s>",
+            pair="<s> $A </s> </s> $B </s>",
             special_tokens=[
                 ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
@@ -459,8 +459,8 @@ class XLNetConverter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["$0", "<sep>", "<cls>"],
-            pair=["$0", "<sep>", "<cls>", "$1", "<sep>"],
+            single="$A:0 <sep>:0 <cls>:2",
+            pair="$A:0 <sep>:0 $B:1 <sep>:1 <cls>:2",
             special_tokens=[
                 ("<sep>", self.original_tokenizer.convert_tokens_to_ids("<sep>")),
                 ("<cls>", self.original_tokenizer.convert_tokens_to_ids("<cls>")),
@@ -473,27 +473,25 @@ class ReformerConverter(SpmConverter):
 
 
 class PegasusConverter(SpmConverter):
-    offset = 103
-
     def vocab(self, proto):
         vocab = [
             (self.original_tokenizer.pad_token, 0),
             (self.original_tokenizer.eos_token, 0),
         ]
-        vocab += [(f"unk_{i}", -100) for i in range(2, 2 + self.offset)]
+        vocab += [(f"unk_{i}", -100) for i in range(2, 2 + self.original_tokenizer.offset)]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[2:]]
         return vocab
 
     def unk_id(self, proto):
-        return proto.trainer_spec.unk_id + self.offset
+        return proto.trainer_spec.unk_id + self.original_tokenizer.offset
 
     def post_processor(self):
         eos = self.original_tokenizer.eos_token
         return processors.TemplateProcessing(
-            single=["$0", eos],
-            pair=["$0", eos, "$1", eos],
+            single=["$A", eos],
+            pair=["$A", "$B", eos],
             special_tokens=[
-                (eos, self.original_tokenizer.convert_tokens_to_ids(eos)),
+                (eos, self.original_tokenizer.eos_token_id),
             ],
         )
 
@@ -507,8 +505,8 @@ class T5Converter(SpmConverter):
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["$0", "</s>"],
-            pair=["$0", "</s>", "$1", "</s>"],
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
             special_tokens=[
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],

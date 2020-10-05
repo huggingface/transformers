@@ -19,9 +19,35 @@ from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 
 
+SPIECE_UNDERLINE = "▁"
+
+####################################################
+# Mapping from the keyword arguments names of Tokenizer `__init__`
+# to file names for serializing Tokenizer instances
+####################################################
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+
+####################################################
+# Mapping from the keyword arguments names of Tokenizer `__init__`
+# to pretrained vocabulary URL for all the model shortcut names.
+####################################################
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/spiece.model"}
+}
+
+####################################################
+# Mapping from model shortcut names to max length of inputs
+####################################################
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "google/pegasus-xsum": 512,
+}
+
+
 class PegasusTokenizer(ReformerTokenizer):
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = {"vocab_file": "spiece.model"}
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -144,6 +170,8 @@ class PegasusTokenizer(ReformerTokenizer):
 class PegasusTokenizerFast(ReformerTokenizerFast):
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = {"vocab_file": "spiece.model"}
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = PegasusTokenizer
 
     # def num_special_tokens_to_add(self, pair=False):
