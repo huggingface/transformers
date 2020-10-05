@@ -357,7 +357,7 @@ class ProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_local_process_zero and self.training_bar is not None:
-            _ = logs.pop("total_flos")
+            _ = logs.pop("total_flos", None)
             self.training_bar.write(str(logs))
 
     def on_train_end(self, args, state, control, **kwargs):
@@ -368,6 +368,6 @@ class ProgressCallback(TrainerCallback):
 
 class PrinterCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
-        _ = logs.pop("total_flos")
+        _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
             print(logs)
