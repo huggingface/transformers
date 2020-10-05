@@ -152,6 +152,9 @@ class GenerationMixin:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes
                 it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                initial input_ids for the decoder of encoder-decoder type models. If :obj:`None` then only
+                decoder_start_token_id is passed as the first token to the decoder.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (:obj:`int`, `optional`, defaults to 10):
