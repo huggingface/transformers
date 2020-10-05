@@ -1,4 +1,4 @@
-FROM nvidia/cuda:10.1-cudnn7-runtime-ubuntu18.04
+FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
 LABEL maintainer="Hugging Face"
 LABEL repository="transformers"
 
@@ -16,6 +16,11 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
     mkl \
     torch
+
+RUN git clone https://github.com/NVIDIA/apex
+RUN cd apex && \
+    python3 setup.py install && \
+    pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
 
 WORKDIR /workspace
 COPY . transformers/
