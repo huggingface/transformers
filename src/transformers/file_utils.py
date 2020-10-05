@@ -74,6 +74,7 @@ try:
         import flax
         import jax
         from jax.config import config
+
         # TODO(marcvanzee): Flax Linen requires JAX omnistaging. Remove this
         # once JAX enables it by default.
         config.enable_omnistaging()
