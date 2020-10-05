@@ -1,5 +1,5 @@
 Perplexity of fixed-length models
-=================================
+=======================================================================================================================
 
 Perplexity (PPL) is one of the most common metrics for evaluating language
 models. Before diving in, we should note that the metric applies specifically
@@ -31,7 +31,7 @@ relationship to Bits Per Character (BPC) and data compression, check out this
 <https://thegradient.pub/understanding-evaluation-metrics-for-language-models/>`_.
 
 Calculating PPL with fixed-length models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If we weren't limited by a model's context size, we would evaluate the
 model's perplexity by autoregressively factorizing a sequence and
@@ -83,7 +83,7 @@ time. This allows computation to procede much faster while still giving the
 model a large context to make predictions at each step.
 
 Example: Calculating perplexity with GPT-2 in 🤗 Transformers
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Let's demonstrate this process with GPT-2.
 
@@ -123,7 +123,7 @@ are 512 preceding tokens available to condition on).
     stride = 512
 
     lls = []
-    for i in tqdm(range(1, encodings.input_ids.size(1), stride)):
+    for i in tqdm(range(0, encodings.input_ids.size(1), stride)):
         begin_loc = max(i + stride - max_length, 0)
         end_loc = i + stride
         input_ids = encodings.input_ids[:,begin_loc:end_loc].to(device)

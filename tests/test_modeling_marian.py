@@ -24,19 +24,21 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        AutoTokenizer,
-        MarianConfig,
         AutoConfig,
         AutoModelWithLMHead,
-        MarianTokenizer,
+        AutoTokenizer,
+        MarianConfig,
         MarianMTModel,
+        MarianTokenizer,
     )
     from transformers.convert_marian_to_pytorch import (
+        ORG_NAME,
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
-        ORG_NAME,
     )
+    from transformers.modeling_bart import shift_tokens_right
     from transformers.pipelines import TranslationPipeline
 
 
@@ -97,7 +99,7 @@ class MarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_translation_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
+        model_inputs = self.tokenizer.prepare_seq2seq_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
             torch_device
         )
         self.assertEqual(self.model.device, model_inputs.input_ids.device)
@@ -114,29 +116,32 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
         expected_ids = [38, 121, 14, 697, 38848, 0]
 
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt).to(torch_device)
+        model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt).to(torch_device)
+
         self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
         desired_keys = {
             "input_ids",
             "attention_mask",
-            "decoder_input_ids",
-            "decoder_attention_mask",
+            "labels",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
+        model_inputs["decoder_input_ids"] = shift_tokens_right(model_inputs.labels, self.tokenizer.pad_token_id)
+        model_inputs["return_dict"] = True
+        model_inputs["use_cache"] = False
         with torch.no_grad():
-            logits, *enc_features = self.model(**model_inputs)
-        max_indices = logits.argmax(-1)
+            outputs = self.model(**model_inputs)
+        max_indices = outputs.logits.argmax(-1)
         self.tokenizer.batch_decode(max_indices)
 
     def test_unk_support(self):
         t = self.tokenizer
-        ids = t.prepare_translation_batch(["||"]).to(torch_device).input_ids[0].tolist()
+        ids = t.prepare_seq2seq_batch(["||"]).to(torch_device).input_ids[0].tolist()
         expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
         self.assertEqual(expected, ids)
 
     def test_pad_not_split(self):
-        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"]).input_ids[0].tolist()
+        input_ids_w_pad = self.tokenizer.prepare_seq2seq_batch(["I am a small frog <pad>"]).input_ids[0].tolist()
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
         self.assertListEqual(expected_w_pad, input_ids_w_pad)
 
@@ -205,6 +210,17 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+class TestMarian_en_zh(MarianIntegrationTest):
+    src = "en"
+    tgt = "zh"
+    src_text = ["My name is Wolfgang and I live in Berlin"]
+    expected_text = ["我叫沃尔夫冈 我住在柏林"]
+
+    @slow
+    def test_batch_generation_eng_zho(self):
+        self._assert_generated_batch_equal_expected()
+
+
 class TestMarian_en_ROMANCE(MarianIntegrationTest):
     """Multilingual on target side."""
 
@@ -229,7 +245,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         normalized = self.tokenizer.normalize("")
         self.assertIsInstance(normalized, str)
         with self.assertRaises(ValueError):
-            self.tokenizer.prepare_translation_batch([""])
+            self.tokenizer.prepare_seq2seq_batch([""])
 
     def test_pipeline(self):
         device = 0 if torch_device == "cuda" else -1

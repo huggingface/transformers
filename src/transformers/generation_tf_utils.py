@@ -14,21 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
 import numpy as np
 import tensorflow as tf
 
+from .utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 class TFGenerationMixin:
     """
-    A class contraining all of the functions supporting generation, to be used as a mixin in TFPreTrainedModel.
+    A class contraining all of the functions supporting generation, to be used as a mixin in
+    :class:`~transfomers.TFPreTrainedModel`.
     """
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
+        """
+        Implement in subclasses of :class:`~transfomers.TFPreTrainedModel` for custom behavior to prepare inputs in the
+        generate method.
+        """
         return {"inputs": inputs}
 
     def _use_cache(self, outputs, use_cache):
@@ -62,87 +67,83 @@ class TFGenerationMixin:
         decoder_start_token_id=None,
         use_cache=None,
     ):
-        r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
-        and beam-search.
+        r"""
+        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
+        beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
-        Adapted in part from `Facebook's XLM beam search code`_.
+        Adapted in part from `Facebook's XLM beam search code
+        <https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529>`__.
 
-        .. _`Facebook's XLM beam search code`:
-           https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529
+        Apart from :obj:`input_ids` and :obj:`attention_mask`, all the arguments below will default to the value of the
+        attribute of the same name inside the :class:`~transformers.PretrainedConfig` of the model. The default values
+        indicated are the default values of those config.
 
+        Most of these parameters are explained in more detail in `this blog post
+        <https://huggingface.co/blog/how-to-generate>`__.
 
         Parameters:
 
-            input_ids: (`optional`) `tf.Tensor` of `dtype=tf.int32` of shape `(batch_size, sequence_length)`
-                The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `tf.Tensor` of shape `(1,)`.
+            input_ids (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
+                it as an empty :obj:`tf.Tensor` of shape :obj:`(1,)`.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            min_length (:obj:`int`, `optional`, defaults to 10):
+                The minimum length of the sequence to be generated.
+            do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use sampling ; use greedy decoding otherwise.
+            early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to stop the beam search when at least ``num_beams`` sentences are finished per batch or not.
+            num_beams (:obj:`int`, `optional`, defaults to 1):
+                Number of beams for beam search. 1 means no beam search.
+            temperature (:obj:`float`, `optional`, defaults to 1.0):
+                The value used to module the next token probabilities.
+            top_k (:obj:`int`, `optional`, defaults to 50):
+                The number of highest probability vocabulary tokens to keep for top-k-filtering.
+            top_p (:obj:`float`, `optional`, defaults to 1.0):
+                If set to float < 1, only the most probable tokens with probabilities that add up to ``top_p`` or
+                higher are kept for generation.
+            repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
+                The parameter for repetition penalty. 1.0 means no penalty. See `this paper
+                <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            bos_token_id (:obj:`int`, `optional`):
+                The id of the `beginning-of-sequence` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            length_penalty (:obj:`float`, `optional`, defaults to 1.0):
+                Exponential penalty to the length. 1.0 means no penalty.
 
-            max_length: (`optional`) int
-                The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
+                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
+                order to encourage the model to produce longer sequences.
+            no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
+                If set to int > 0, all ngrams of that size can only occur once.
+            bad_words_ids(:obj:`List[int]`, `optional`):
+                List of token ids that are not allowed to be generated. In order to get the tokens of the words that
+                should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+            num_return_sequences(:obj:`int`, `optional`, defaults to 1):
+                The number of independently computed returned sequences for each element in the batch.
+            attention_mask (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values are in ``[0, 1]``, 1 for
+                tokens that are not masked, and 0 for masked tokens.
 
-            min_length: (`optional`) int
-                The min length of the sequence to be generated.  Between 0 and infinity. Default to 0.
-            do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-
-            early_stopping: (`optional`) bool
-                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-
-            num_beams: (`optional`) int
-                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
-
-            temperature: (`optional`) float
-                The value used to module the next token probabilities. Must be strictely positive. Default to 1.0.
-
-            top_k: (`optional`) int
-                The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
-
-            top_p: (`optional`) float
-                The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
-
-            repetition_penalty: (`optional`) float
-                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
-
-            bos_token_id: (`optional`) int
-                Beginning of sentence token if no prompt is provided. Default to specicic model bos_token_id or None if it does not exist.
-
-            pad_token_id: (`optional`) int
-                Pad token. Defaults to pad_token_id as defined in the models config.
-
-            eos_token_id: (`optional`) int
-                EOS token. Defaults to eos_token_id as defined in the models config.
-
-            length_penalty: (`optional`) float
-                Exponential penalty to the length. Default to 1.
-
-            no_repeat_ngram_size: (`optional`) int
-                If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
-
-            bad_words_ids: (`optional`) list of lists of int
-                `bad_words_ids` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
-
-            num_return_sequences: (`optional`) int
-                The number of independently computed returned sequences for each element in the batch. Default to 1.
-
-            attention_mask (`optional`) obj: `tf.Tensor` with `dtype=tf.int32` of same shape as `input_ids`
-                Mask to avoid performing attention on padding token indices.
-                Mask values selected in ``[0, 1]``:
-                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-                Defaults to `None`.
+                If not provided, will default to a tensor the same shape as :obj:`input_ids` that masks the pad token.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-
-            decoder_start_token_id=None: (`optional`) int
-                If an encoder-decoder model starts decoding with a different token than BOS.
-                Defaults to `None` and is changed to `BOS` later.
-
-            use_cache: (`optional`) bool
-                If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+            decoder_start_token_id (:obj:`int`, `optional`):
+                If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
+            use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not the model should use the past last key/values attentions (if applicable to the model) to
+                speed up decoding.
+            model_specific_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
         Return:
 
-            output: `tf.Tensor` of `dtype=tf.int32` shape `(batch_size * num_return_sequences, sequence_length)`
-                sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
+            :obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
 
         Examples::
 
@@ -163,7 +164,7 @@ class TFGenerationMixin:
             model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)  # generate 3 candidates using sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
@@ -176,7 +177,7 @@ class TFGenerationMixin:
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
-            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
+            input_context = 'My cute dog'
             bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
@@ -283,7 +284,7 @@ class TFGenerationMixin:
             pad_token_id = eos_token_id
 
         # current position and vocab size
-        cur_len = shape_list(input_ids)[1]
+        cur_len = shape_list(input_ids)[1]  # unused
         vocab_size = self.config.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
@@ -328,7 +329,13 @@ class TFGenerationMixin:
         if self.config.is_encoder_decoder:
 
             # create empty decoder_input_ids
-            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32,) * decoder_start_token_id
+            input_ids = (
+                tf.ones(
+                    (effective_batch_size * num_beams, 1),
+                    dtype=tf.int32,
+                )
+                * decoder_start_token_id
+            )
             cur_len = 1
 
             assert (
@@ -365,10 +372,8 @@ class TFGenerationMixin:
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
                 length_penalty=length_penalty,
@@ -391,10 +396,8 @@ class TFGenerationMixin:
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 vocab_size=vocab_size,
                 encoder_outputs=encoder_outputs,
@@ -417,18 +420,16 @@ class TFGenerationMixin:
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         vocab_size,
         encoder_outputs,
         attention_mask,
         use_cache,
     ):
-        """ Generate sequences for each example without beam search (num_beams == 1).
-            All returned sequence are generated independantly.
+        """Generate sequences for each example without beam search (num_beams == 1).
+        All returned sequence are generated independantly.
         """
 
         # length of generated sentences / unfinished sentences
@@ -581,9 +582,7 @@ class TFGenerationMixin:
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
-        decoder_start_token_id,
         eos_token_id,
         batch_size,
         num_return_sequences,
@@ -594,8 +593,7 @@ class TFGenerationMixin:
         attention_mask,
         use_cache,
     ):
-        """ Generate sequences for each example with beam search.
-        """
+        """Generate sequences for each example with beam search."""
 
         # generated hypotheses
         generated_hyps = [
@@ -615,6 +613,7 @@ class TFGenerationMixin:
 
         # cache compute states
         past = encoder_outputs
+        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # done sentences
         done = [False for _ in range(batch_size)]
@@ -936,8 +935,8 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
         if len(tokens) == 0:
             # if bad word tokens is just one token always ban it
             return True
-        if len(tokens) > len(prev_input_ids):
-            # if bad word tokens are longer then prev input_ids they can't be equal
+        if len(tokens) > len(prev_tokens):
+            # if bad word tokens are longer than prev tokens they can't be equal
             return False
 
         if prev_tokens[-len(tokens) :] == tokens:
@@ -966,14 +965,14 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
 
 
 def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (batch size, vocabulary size)
-            if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-            if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-            Make sure we keep at least min_tokens_to_keep per batch example in the output
-        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
+    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    Args:
+        logits: logits distribution shape (batch size, vocabulary size)
+        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        Make sure we keep at least min_tokens_to_keep per batch example in the output
+    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     logits_shape = shape_list(logits)
 
@@ -1007,7 +1006,8 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove = tf.roll(sorted_indices_to_remove, 1, axis=-1)
         sorted_indices_to_remove = tf.concat(
-            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]], -1,
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]],
+            -1,
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
@@ -1033,9 +1033,9 @@ def set_tensor_by_indices_to_value(tensor, indices, value):
 
 def sample_without_replacement(logits, num_samples):
     """
-        categorical sampling witouth replacement is currently not implemented
-        the gumbel-max trick will do for now
-        see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    categorical sampling witouth replacement is currently not implemented
+    the gumbel-max trick will do for now
+    see https://github.com/tensorflow/tensorflow/issues/9260 for more info
     """
     z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
     _, indices = tf.nn.top_k(logits + z, num_samples)

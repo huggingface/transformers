@@ -14,13 +14,11 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-
-import logging
-
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -57,10 +55,10 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class DistilBertTokenizer(BertTokenizer):
     r"""
-    Constructs a  DistilBertTokenizer.
+    Construct a DistilBERT tokenizer.
 
-    :class:`~transformers.DistilBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DistilBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
@@ -75,10 +73,10 @@ class DistilBertTokenizer(BertTokenizer):
 
 class DistilBertTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" DistilBertTokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" DistilBERT tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.

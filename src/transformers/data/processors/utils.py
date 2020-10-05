@@ -17,14 +17,14 @@
 import csv
 import dataclasses
 import json
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
 from ...file_utils import is_tf_available, is_torch_available
+from ...utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -194,8 +194,12 @@ class SingleSentenceClassificationProcessor(DataProcessor):
     def add_examples(
         self, texts_or_text_and_labels, labels=None, ids=None, overwrite_labels=False, overwrite_examples=False
     ):
-        assert labels is None or len(texts_or_text_and_labels) == len(labels)
-        assert ids is None or len(texts_or_text_and_labels) == len(ids)
+        assert labels is None or len(texts_or_text_and_labels) == len(
+            labels
+        ), f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
+        assert ids is None or len(texts_or_text_and_labels) == len(
+            ids
+        ), f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}"
         if ids is None:
             ids = [None] * len(texts_or_text_and_labels)
         if labels is None:
@@ -265,7 +269,9 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 logger.info("Tokenizing example %d", ex_index)
 
             input_ids = tokenizer.encode(
-                example.text_a, add_special_tokens=True, max_length=min(max_length, tokenizer.max_len),
+                example.text_a,
+                add_special_tokens=True,
+                max_length=min(max_length, tokenizer.max_len),
             )
             all_input_ids.append(input_ids)
 

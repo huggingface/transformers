@@ -1,11 +1,11 @@
 ---
-language: english
+language: en
 tags:
 - exbert
 license: apache-2.0
 datasets:
-- SNLI
-- MultiNLI
+- snli
+- multi_nli
 ---
 
 # BERT base model (uncased) for Sentence Embeddings

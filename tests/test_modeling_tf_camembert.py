@@ -20,8 +20,9 @@ from transformers.testing_utils import require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
+
     from transformers import TFCamembertModel
 
 
@@ -32,15 +33,17 @@ class TFCamembertModelIntegrationTest(unittest.TestCase):
         model = TFCamembertModel.from_pretrained("jplu/tf-camembert-base")
 
         input_ids = tf.convert_to_tensor(
-            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]], dtype=tf.int32,
+            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]],
+            dtype=tf.int32,
         )  # J'aime le camembert !"
 
-        output = model(input_ids)[0]
+        output = model(input_ids)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 10, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.convert_to_tensor(
-            [[[-0.0254, 0.0235, 0.1027], [0.0606, -0.1811, -0.0418], [-0.1561, -0.1127, 0.2687]]], dtype=tf.float32,
+            [[[-0.0254, 0.0235, 0.1027], [0.0606, -0.1811, -0.0418], [-0.1561, -0.1127, 0.2687]]],
+            dtype=tf.float32,
         )
         # camembert = torch.hub.load('pytorch/fairseq', 'camembert.v0')
         # camembert.eval()

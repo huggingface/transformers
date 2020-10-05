@@ -1,5 +1,5 @@
 ---
-language: french
+language: fr
 ---
 
 # tf-allociné

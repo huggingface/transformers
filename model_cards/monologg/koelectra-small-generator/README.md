@@ -1,5 +1,5 @@
 ---
-language: Korean
+language: ko
 ---
 
 # KoELECTRA (Small Generator)

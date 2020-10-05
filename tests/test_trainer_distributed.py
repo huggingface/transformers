@@ -60,7 +60,8 @@ if is_torch_available():
 
 if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArguments,))
-    training_args = parser.parse_args_into_dataclasses(sys.argv + ["--output_dir", "./examples"])[0]
+    sys.argv += ["--output_dir", "./examples"]
+    training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
         "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
