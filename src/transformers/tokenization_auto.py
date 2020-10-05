@@ -62,7 +62,7 @@ from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_bertweet import BertweetTokenizer
-from .tokenization_blenderbot import BlenderbotTokenizer
+from .tokenization_blenderbot import BlenderbotSmallTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_deberta import DebertaTokenizer
@@ -110,7 +110,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
-        (BlenderbotConfig, (BlenderbotTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, None)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),

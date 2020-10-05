@@ -84,6 +84,8 @@ class BartConfig(PretrainedConfig):
             Don't learn positional embeddings, use sinusoidal.
         add_final_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Why not add another layernorm?
+        do_blenderbot_90_layernorm (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Blenderbot-90m checkpoint uses `layernorm_embedding` one line earlier in the decoder.
         scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Scale embeddings by diving by sqrt(d_model).
         eos_token_id (:obj:`int`, `optional`, defaults to 2)
@@ -137,6 +139,7 @@ class BartConfig(PretrainedConfig):
         eos_token_id=2,
         normalize_before=False,
         add_final_layer_norm=False,
+        do_blenderbot_90_layernorm=False,
         scale_embedding=False,
         normalize_embedding=True,
         static_position_embeddings=False,
@@ -198,9 +201,12 @@ class BartConfig(PretrainedConfig):
         self.classif_dropout = classifier_dropout
 
         # pos embedding offset
-        self.extra_pos_embeddings = self.pad_token_id + 1
+        self.extra_pos_embeddings = extra_pos_embeddings
+        # bart has a hack that offsets positional embeddings by 2, other models don't do this
 
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
+
+        self.do_blenderbot_90_layernorm = do_blenderbot_90_layernorm
 
     @property
     def num_attention_heads(self) -> int:

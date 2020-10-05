@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and Huggingface, 2020
 #
 # This source code is licensed under the MIT license found in the;
 # you may not use this file except in compliance with the License.
@@ -14,17 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
-from .configuration_bart import BART_CONFIG_ARGS_DOC, BartConfig
-from .file_utils import add_start_docstrings
+from .configuration_bart import BartConfig
 
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/config.json",
-    "facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-/config.json",
+    "facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/config.json",
 }
 
 
-@add_start_docstrings(BART_CONFIG_ARGS_DOC)
 class BlenderbotConfig(BartConfig):
     """
     This class overrides :class:`~transformers.BartConfig`. Please check the superclass for the appropriate documentation alongside usage examples.

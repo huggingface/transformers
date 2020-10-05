@@ -28,8 +28,14 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotTokenizer
-    from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
+    from transformers import (
+        AutoModelForSeq2SeqLM,
+        AutoTokenizer,
+        BlenderbotConfig,
+        BlenderbotForConditionalGeneration,
+        BlenderbotSmallTokenizer,
+        BlenderbotTokenizer,
+    )
 
 TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
 FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
@@ -168,14 +174,14 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model = BlenderbotForConditionalGeneration.from_pretrained(self.ckpt).to(torch_device)
+        model = AutoModelForSeq2SeqLM.from_pretrained(self.ckpt).to(torch_device)
         if torch_device == "cuda":
             model = model.half()
         return model
 
     @cached_property
     def tokenizer(self):
-        return BlenderbotSmallTokenizer.from_pretrained(self.ckpt)
+        return AutoTokenizer.from_pretrained(self.ckpt)
 
     @slow
     def test_90_generation_from_long_input(self):
@@ -186,6 +192,8 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         ]
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
+        assert isinstance(self.tokenizer, BlenderbotSmallTokenizer)
+        assert self.model.config.do
         generated_ids = self.model.generate(**model_inputs)[0]
         reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
 
