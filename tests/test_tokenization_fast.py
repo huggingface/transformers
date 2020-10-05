@@ -10,8 +10,6 @@ from transformers import (
     AlbertTokenizerFast,
     BartTokenizer,
     BartTokenizerFast,
-    BertGenerationTokenizer,
-    BertGenerationTokenizerFast,
     BertTokenizer,
     BertTokenizerFast,
     CamembertTokenizer,
@@ -1060,9 +1058,6 @@ class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = frozenset(
         [
             Tokenizer("Albert", AlbertTokenizerFast, AlbertTokenizer, "vocab_file", None, None),
-            Tokenizer(
-                "BertGeneration", BertGenerationTokenizerFast, BertGenerationTokenizer, "vocab_file", None, None
-            ),
             Tokenizer("Camembert", CamembertTokenizerFast, CamembertTokenizer, "vocab_file", None, None),
             Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
             Tokenizer(

@@ -20,7 +20,6 @@ from shutil import copyfile
 from typing import List
 
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
 
@@ -141,76 +140,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
-
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
-        if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
-            return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
-
-
-class BertGenerationTokenizerFast(PreTrainedTokenizerFast):
-    """
-    Construct a BertGeneration tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
-
-    Args:
-        vocab_file (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The end of sequence token.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The begin of sequence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    prefix_tokens: List[int] = []
-
-    def __init__(
-        self,
-        vocab_file,
-        bos_token="<s>",
-        eos_token="</s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        sep_token="<::::>",
-        **kwargs
-    ):
-        # Add extra_ids to the special token list
-        super().__init__(
-            vocab_file=vocab_file,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            sep_token=sep_token,
-            **kwargs,
-        )
-
-        self.vocab_file = vocab_file
 
     def save_vocabulary(self, save_directory):
         """
