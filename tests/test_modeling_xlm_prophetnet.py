@@ -61,9 +61,9 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         decoder_outputs = model.model.decoder(
             decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
         )
-        predicting_streams = decoder_outputs[0][1:]
-        predicting_streams_logits = [model.lm_head(x) for x in predicting_streams]
-        next_first_stream_logits = predicting_streams_logits[0]
+        predicting_streams = decoder_outputs[0][:, 1:]
+        predicting_streams_logits = model.lm_head(predicting_streams)
+        next_first_stream_logits = predicting_streams_logits[:, 0]
         self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow

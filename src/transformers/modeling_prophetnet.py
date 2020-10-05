@@ -1069,14 +1069,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
     def prepare_attention_mask(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
-        # TODO (PVP) - remove if not needed anymore
-        #        if (
-        #            not hasattr(self, "_causal_mask")
-        #            or self._causal_mask is None
-        #            or self._causal_mask.device != hidden_states.device
-        #            or self._causal_mask.size(0) < dim
-        #        ):
-        #            self._causal_mask = torch.triu(fill_with_neg_inf(hidden_states.new(dim, dim)), 1)
+
         causal_mask = torch.triu(fill_with_neg_inf(hidden_states.new(seq_length, seq_length)), 1)
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
             (batch_size,) + causal_mask.shape
@@ -1090,12 +1083,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
     def prepare_attention_mask_ngram(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
-        # TODO (PVP) - remove if not needed anymore
-        #        if (
-        #            not hasattr(self, "_ngram_causal_mask")
-        #            or self._ngram_causal_mask is None
-        #            or self._ngram_causal_mask.device != hidden_states.device
-        #        ):
+
         ngram_causal_mask = (
             ngram_attention_bias(self.max_target_positions, self.ngram)
             .type(hidden_states.dtype)
@@ -1243,7 +1231,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-        #        last_hidden_state = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
         last_hidden_state = hidden_states.transpose(0, 1).view(
             (batch_size, self.ngram + 1, sequence_length) + hidden_states.shape[2:]
         )
@@ -1410,18 +1397,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        if not return_dict:
-            predicting_streams = outputs[0][:, 1:]
-        else:
-            predicting_streams = outputs.last_hidden_state[:, 1:]
-            # print('outputs')
-            # print(outputs)
-            # print('outputs.decoder_hidden_states')
-            # print(outputs.last_hidden_state)
-
-        #        logits = logits.view((-1,) + logits.shape[2:])
-        #        logits = torch.cat([self.lm_head(stream) for stream in predicting_streams], dim=0)
-        # lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
+        predicting_streams = outputs[0][:, 1:]
 
         if labels is not None:
             # fine-tune
