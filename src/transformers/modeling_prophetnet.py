@@ -725,7 +725,9 @@ class NgramMultiheadAttention(nn.Module):
         attn = torch.cat([attn_main, attn_ngram], 0).view(-1, bsz, embed_dim)
 
         if output_attentions:
-            attn_weights = attn_weights_ngram.view(self.ngram, bsz, self.num_heads, real_tgt_len, -1).transpose(0, 1)  # .view(bsz, self.num_heads, tgt_len, src_len)r
+            attn_weights = attn_weights_ngram.view(self.ngram, bsz, self.num_heads, real_tgt_len, -1).transpose(
+                0, 1
+            )  # .view(bsz, self.num_heads, tgt_len, src_len)r
         else:
             attn_weights = None
 
@@ -1240,12 +1242,17 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 present_key_values += (layer_past,)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
-#        hidden_states_list = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
-        last_hidden_state = hidden_states.transpose(0, 1).view((batch_size, self.ngram + 1, sequence_length) + hidden_states.shape[2:])
+
+        #        last_hidden_state = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
+        last_hidden_state = hidden_states.transpose(0, 1).view(
+            (batch_size, self.ngram + 1, sequence_length) + hidden_states.shape[2:]
+        )
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         if not return_dict:
-            return tuple(v for v in [last_hidden_state, present_key_values, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v for v in [last_hidden_state, present_key_values, all_hidden_states, all_self_attns] if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=last_hidden_state,
             past_key_values=present_key_values,
@@ -1404,20 +1411,23 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             return_dict=return_dict,
         )
         if not return_dict:
-            predicting_streams = outputs[0][1:]
+            predicting_streams = outputs[0][:, 1:]
         else:
-            predicting_streams = outputs.last_hidden_state[1:]
+            predicting_streams = outputs.last_hidden_state[:, 1:]
             # print('outputs')
             # print(outputs)
             # print('outputs.decoder_hidden_states')
             # print(outputs.last_hidden_state)
-        logits = self.lm_head(predicting_streams)
-#        logits_1 = torch.cat([self.lm_head(stream) for stream in predicting_streams], dim=0)
-#        logits = torch.cat([self.lm_head(stream) for stream in predicting_streams], dim=0)
+
+        #        logits = logits.view((-1,) + logits.shape[2:])
+        #        logits = torch.cat([self.lm_head(stream) for stream in predicting_streams], dim=0)
         # lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
 
         if labels is not None:
             # fine-tune
+            loss_logits = self.lm_head(predicting_streams)
+            logits = loss_logits[:, 0]
+
             expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(
                 self.padding_idx
             )
@@ -1425,9 +1435,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 if i > 0 and self.disable_ngram_loss:
                     break
                 expend_targets[i, :, :] = labels
-#            logits = torch.cat(predicting_streams_logits, dim=0)
             lprobs = F.log_softmax(
-                logits.view(-1, logits.size(-1)),
+                loss_logits.view(-1, logits.size(-1)),
                 dim=-1,
                 dtype=torch.float32,
             )
@@ -1455,10 +1464,10 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 )
         else:
             # inference
+            logits = self.lm_head(predicting_streams[:, 0])
+
             if not return_dict:
-                outputs_logits = (logits,) + outputs[
-                    1:
-                ]  # Add cache, hidden states and attention if they are here
+                outputs_logits = (logits,) + outputs[1:]  # Add cache, hidden states and attention if they are here
                 return outputs_logits
             else:
                 return Seq2SeqLMOutput(

@@ -55,8 +55,8 @@ class ProphetNetModelTester:
         max_position_embeddings=30,
         is_encoder_decoder=True,
         pad_token_id=0,
-        bos_token_id=102,
-        eos_token_id=102,
+        bos_token_id=1,
+        eos_token_id=2,
         ngram=1,
         num_buckets=32,
         relative_max_distance=128,
@@ -537,9 +537,9 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         decoder_outputs = model.model.decoder(
             decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
         )
-        predicting_streams = decoder_outputs[0][1:]
-        predicting_streams_logits = [model.lm_head(x) for x in predicting_streams]
-        next_first_stream_logits = predicting_streams_logits[0]
+        predicting_streams = decoder_outputs[0][:, 1:]
+        predicting_streams_logits = model.lm_head(predicting_streams)
+        next_first_stream_logits = predicting_streams_logits[:, 0]
         self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
