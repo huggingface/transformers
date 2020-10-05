@@ -29,7 +29,6 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
-from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_torch_tpu_available
@@ -47,7 +46,15 @@ from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .tokenization_utils_base import PreTrainedTokenizerBase
-from .trainer_callback import CallbackHandler, DefaultFlowCallback, TrainerCallback, TrainerControl, TrainerState
+from .trainer_callback import (
+    CallbackHandler,
+    DefaultFlowCallback,
+    PrinterCallback,
+    ProgressCallback,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+)
 from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
@@ -99,10 +106,10 @@ if is_torch_tpu_available():
     import torch_xla.distributed.parallel_loader as pl
 
 if is_tensorboard_available():
-    try:
-        from torch.utils.tensorboard import SummaryWriter
-    except ImportError:
-        from tensorboardX import SummaryWriter
+    from .integrations import TensorBoardCallback
+
+    DEFAULT_CALLBACKS.append(TensorBoardCallback)
+
 
 if is_wandb_available():
     from .integrations import WandbCallback
@@ -154,8 +161,8 @@ class Trainer:
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        tb_writer (:obj:`SummaryWriter`, `optional`):
-            Object to write to TensorBoard.
+        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
+            A list of callbacks to customize the training loop.
         optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
@@ -175,7 +182,6 @@ class Trainer:
         model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
-        tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         **kwargs,
     ):
@@ -204,10 +210,21 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        if callbacks is None:
-            callbacks = DEFAULT_CALLBACKS
+        callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
         self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
-        self.tb_writer = tb_writer
+        self.add_callback(PrinterCallback if self.args.disable_tqdm else ProgressCallback)
+
+        # Deprecated arguments
+        if "tb_writer" in kwargs:
+            warnings.warn(
+                "Passing `tb_writer` as a keyword argument is deprecated and won't be possible in a "
+                + "future version. Use `TensorBoardCallback(tb_writer=...)` instead and pass it to the `callbacks`"
+                + "argument",
+                FutureWarning,
+            )
+            tb_writer = kwargs.pop("tb_writer")
+            self.remove_callback(TensorBoardCallback)
+            self.add_callback(TensorBoardCallback(tb_writer=tb_writer))
         if "prediction_loss_only" in kwargs:
             warnings.warn(
                 "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a "
@@ -217,13 +234,6 @@ class Trainer:
             )
             self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-
-        if tb_writer is None and is_tensorboard_available() and self.is_world_process_zero():
-            self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
-        if not is_tensorboard_available():
-            logger.warning(
-                "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
-            )
 
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
@@ -267,6 +277,12 @@ class Trainer:
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+    def add_callback(self, callback):
+        self.callback_handler.add_callback(callback)
+
+    def remove_callback(self, callback):
+        self.callback_handler.remove_callback(callback)
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -547,10 +563,6 @@ class Trainer:
         # find_unused_parameters breaks checkpointing as per
         # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
-        if self.tb_writer is not None:
-            self.tb_writer.add_text("args", self.args.to_json_string())
-            self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
-
         # Train!
         if is_torch_tpu_available():
             total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
@@ -587,21 +599,21 @@ class Trainer:
         self.callback_handler.model = self.model
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
+        self.callback_handler.train_dataloader = train_dataloader
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
         self.state.num_train_epochs = num_train_epochs
+        self.state.is_local_process_zero = self.is_local_process_zero()
         self.state.is_world_process_zero = self.is_world_process_zero()
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
+        self._logging_loss_scalar = 0
         self._total_flos = self.state.total_flos
-        logging_loss_scalar = 0.0
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
 
-        disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
-        train_pbar = trange(epochs_trained, num_train_epochs, desc="Epoch", disable=disable_tqdm)
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -620,13 +632,11 @@ class Trainer:
 
             self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
 
-            epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
-                    epoch_pbar.update(1)
                     continue
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
@@ -662,48 +672,13 @@ class Trainer:
                     self.state.epoch = epoch + (step + 1) / len(epoch_iterator)
                     self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
 
-                    if self.control.should_log:
-                        logs: Dict[str, float] = {}
-                        tr_loss_scalar = tr_loss.item()
-                        logs["loss"] = (tr_loss_scalar - logging_loss_scalar) / self.args.logging_steps
-                        # backward compatibility for pytorch schedulers
-                        logs["learning_rate"] = (
-                            self.lr_scheduler.get_last_lr()[0]
-                            if version.parse(torch.__version__) >= version.parse("1.4")
-                            else self.lr_scheduler.get_lr()[0]
-                        )
-                        logging_loss_scalar = tr_loss_scalar
+                    self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
 
-                        self.log(logs)
-                        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
-
-                    metrics = None
-                    if self.control.should_evaluate:
-                        metrics = self.evaluate()
-                        self._report_to_hp_search(trial, epoch, metrics)
-                        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
-
-                    if self.control.should_save:
-                        self._save_training(model, trial, metrics=metrics)
-                        self.control = self.callback_handler.on_save(self.args, self.state, self.control)
-
-                epoch_pbar.update(1)
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
-            epoch_pbar.close()
-            train_pbar.update(1)
-
-            metrics = None
-            if self.control.should_evaluate:
-                metrics = self.evaluate()
-                self._report_to_hp_search(trial, epoch, metrics)
-                self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
-
-            if self.control.should_save:
-                self._save_training(model, trial, metrics=metrics)
-                self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+            self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -717,9 +692,6 @@ class Trainer:
             if self.control.should_training_stop:
                 break
 
-        train_pbar.close()
-        if self.tb_writer:
-            self.tb_writer.close()
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
@@ -740,7 +712,32 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
-    def _save_training(self, model, trial, metrics=None):
+    def _maybe_log_save_evalute(self, tr_loss, model, trial, epoch):
+        if self.control.should_log:
+            logs: Dict[str, float] = {}
+            tr_loss_scalar = tr_loss.item()
+            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / self.args.logging_steps
+            # backward compatibility for pytorch schedulers
+            logs["learning_rate"] = (
+                self.lr_scheduler.get_last_lr()[0]
+                if version.parse(torch.__version__) >= version.parse("1.4")
+                else self.lr_scheduler.get_lr()[0]
+            )
+            self._logging_loss_scalar = tr_loss_scalar
+
+            self.log(logs)
+
+        metrics = None
+        if self.control.should_evaluate:
+            metrics = self.evaluate()
+            self._report_to_hp_search(trial, epoch, metrics)
+            self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
+
+        if self.control.should_save:
+            self._save_checkpoint(model, trial, metrics=metrics)
+            self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+
+    def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases (even distributed/parallel), self.model is always a reference
         # to the model we want to save.
         if hasattr(model, "module"):
@@ -873,7 +870,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
+    def log(self, logs: Dict[str, float]) -> None:
         """
         Log :obj:`logs` on the various objects watching training.
 
@@ -882,42 +879,22 @@ class Trainer:
         Args:
             logs (:obj:`Dict[str, float]`):
                 The values to log.
-            iterator (:obj:`tqdm`, `optional`):
-                A potential tqdm progress bar to write the logs on.
         """
         if hasattr(self, "_log"):
             warnings.warn(
                 "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
                 FutureWarning,
             )
-            return self._log(logs, iterator=iterator)
+            return self._log(logs)
 
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self._total_flos is not None:
             self.store_flos()
             logs["total_flos"] = self.state.total_flos
-        if self.tb_writer:
-            for k, v in logs.items():
-                if isinstance(v, (int, float)):
-                    self.tb_writer.add_scalar(k, v, self.state.global_step)
-                else:
-                    logger.warning(
-                        "Trainer is attempting to log a value of "
-                        '"%s" of type %s for key "%s" as a scalar. '
-                        "This invocation of Tensorboard's writer.add_scalar() "
-                        "is incorrect so we dropped this attribute.",
-                        v,
-                        type(v),
-                        k,
-                    )
-            self.tb_writer.flush()
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
-        if iterator is not None:
-            iterator.write(output)
-        else:
-            print(output)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
@@ -1234,8 +1211,9 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        disable_tqdm = not self.is_local_process_zero() or self.args.disable_tqdm
-        for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
+        self.callback_handler.eval_dataloader = dataloader
+
+        for inputs in dataloader:
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             batch_size = inputs[list(inputs.keys())[0]].shape[0]
             if loss is not None:
@@ -1244,6 +1222,7 @@ class Trainer:
                 preds = logits if preds is None else nested_concat(preds, logits, dim=0)
             if labels is not None:
                 label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
+            self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop

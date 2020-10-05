@@ -125,8 +125,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
-    _tb_writer = trainer.tb_writer
-    trainer.tb_writer = None
+
+    _tb_writer = trainer.pop_callback(TensorBoardCallback)
     trainer.model = None
     # Setup default `resources_per_trial` and `reporter`.
     if "resources_per_trial" not in kwargs and trainer.args.n_gpu > 0:
@@ -179,12 +179,52 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     analysis = ray.tune.run(_objective, config=trainer.hp_space(None), num_samples=n_trials, **kwargs)
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
-    trainer.tb_writer = _tb_writer
+    if _tb_writer is not None:
+        trainer.add_callback(_tb_writer)
     return best_run
+
+
+class TensorBoardCallback(TrainerCallback):
+    def __init__(self, tb_writer=None):
+        assert (
+            _has_tensorboard
+        ), "TensorBoardCallback requires tensorbaord to be installed. Either update your PyTorch version or install tensorboardX."
+        self.tb_writer = tb_writer
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.tb_writer is None and state.is_world_process_zero:
+            self.tb_writer = SummaryWriter(log_dir=args.logging_dir)
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        if self.tb_writer is not None:
+            self.tb_writer.add_text("args", args.to_json_string())
+            self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if self.tb_writer:
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    self.tb_writer.add_scalar(k, v, state.global_step)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" of type %s for key "%s" as a scalar. '
+                        "This invocation of Tensorboard's writer.add_scalar() "
+                        "is incorrect so we dropped this attribute.",
+                        v,
+                        type(v),
+                        k,
+                    )
+            self.tb_writer.flush()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.tb_writer:
+            self.tb_writer.close()
 
 
 class WandbCallback(TrainerCallback):
     def __init__(self):
+        assert _has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
         self._initialized = False
 
     def setup(self, args, state, model):
@@ -229,6 +269,7 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     def __init__(self):
+        assert _has_comet, "CometCallback requires wandb to be installed. Run `pip install comet-ml`."
         self._initialized = False
 
     def setup(self, args, state, model):

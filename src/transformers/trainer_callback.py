@@ -18,8 +18,14 @@ import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from tqdm.auto import tqdm
+
 from .trainer_utils import EvaluationStrategy
 from .training_args import TrainingArguments
+from .utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -50,6 +56,9 @@ class TrainerState:
         best_model_checkpoint (:obj:`str`, `optional`):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
             far.
+        is_local_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
+        several machines) main process.
         is_world_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not this process is the global main process (when training in a distributed fashion on
             several machines, this is only going to be :obj:`True` for one process).
@@ -63,6 +72,7 @@ class TrainerState:
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
+    is_local_process_zero: bool = True
     is_world_process_zero: bool = True
 
     def __post_init__(self):
@@ -134,44 +144,100 @@ class TrainerControl:
 
 class TrainerCallback:
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_epoch_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
 
     def on_log(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        return control
+        pass
+
+    def on_prediction_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        pass
 
 
 class CallbackHandler(TrainerCallback):
     """ Internal class that just calls the list of callbacks in order. """
 
     def __init__(self, callbacks, model, optimizer, lr_scheduler):
-        self.callbacks = [cb() if isinstance(cb, type) else cb for cb in callbacks]
+        self.callbacks = []
+        for cb in callbacks:
+            self.add_callback(cb)
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.train_dataloader = None
+        self.eval_dataloader = None
+
+        has_flow_callback = False
+        for cb in self.callbacks:
+            if isinstance(cb, DefaultFlowCallback):
+                has_flow_callback = True
+                break
+        if not has_flow_callback:
+            logger.warn(
+                "The Trainer will not work properly if you don't have a `DefaultFlowCallback` in its callbacks. You\n"
+                + "should add one before training with `trainer.add_callback(DefaultFlowCallback). The current list of"
+                + "callbacks is\n:"
+                + self.callback_list
+            )
+
+    def add_callback(self, callback):
+        cb = callback() if isinstance(callback, type) else callback
+        cb_class = callback if isinstance(callback, type) else callback.__class__
+        if cb_class in [c.__class__ for c in self.callbacks]:
+            logger.warn(
+                f"You are adding a {cb_class} to the callbacks of this Trainer, but there is already one. The current"
+                + "list of callbacks is\n:"
+                + self.callback_list
+            )
+        self.callbacks.append(cb)
+
+    def pop_callback(self, callback):
+        if isinstance(callback, type):
+            for cb in self.callbacks:
+                if isinstance(cb, callback):
+                    self.callbacks.remove(cb)
+                    return cb
+        else:
+            for cb in self.callbacks:
+                if cb == callback:
+                    self.callbacks.remove(cb)
+                    return cb
+
+    def remove_callback(self, callback):
+        if isinstance(callback, type):
+            for cb in self.callbacks:
+                if isinstance(cb, callback):
+                    self.callbacks.remove(cb)
+                    return
+        else:
+            self.callbacks.remove(callback)
+
+    @property
+    def callback_list(self):
+        return "\n".join(self.callbacks)
 
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_init_end", args, state, control)
@@ -211,17 +277,25 @@ class CallbackHandler(TrainerCallback):
         control.should_log = False
         return self.call_event("on_log", args, state, control, logs=logs)
 
+    def on_prediction_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_prediction_step", args, state, control)
+
     def call_event(self, event, args, state, control, **kwargs):
         for callback in self.callbacks:
-            control = getattr(callback, event)(
+            result = getattr(callback, event)(
                 args,
                 state,
                 control,
                 model=self.model,
                 optimizer=self.optimizer,
                 lr_scheduler=self.lr_scheduler,
+                train_dataloader=self.train_dataloader,
+                eval_dataloader=self.eval_dataloader,
                 **kwargs,
             )
+            # A Callback can skip the return of `control` if it doesn't change it.
+            if result is not None:
+                control = result
         return control
 
 
@@ -255,3 +329,45 @@ class DefaultFlowCallback(TrainerCallback):
             if args.load_best_model_at_end:
                 control.should_save = True
         return control
+
+
+class ProgressCallback(TrainerCallback):
+    def __init__(self):
+        self.training_bar = None
+        self.prediction_bar = None
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            self.training_bar = tqdm(total=state.max_steps)
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            self.training_bar.update(1)
+
+    def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
+        if state.is_local_process_zero:
+            if self.prediction_bar is None:
+                self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
+            self.prediction_bar.update(1)
+
+    def on_evaluate(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            self.prediction_bar.close()
+            self.prediction_bar = None
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if state.is_local_process_zero and self.training_bar is not None:
+            _ = logs.pop("total_flos")
+            self.training_bar.write(str(logs))
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            self.training_bar.close()
+            self.training_bar = None
+
+
+class PrinterCallback(TrainerCallback):
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        _ = logs.pop("total_flos")
+        if state.is_local_process_zero:
+            print(logs)
