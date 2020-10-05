@@ -454,8 +454,13 @@ class GenerationMixin:
             # give initial decoder input ids
             if decoder_input_ids is not None:
                 effective_decoder_input_ids = decoder_input_ids.repeat(effective_batch_size * num_beams, 1)
-                input_ids = torch.cat([torch.full((effective_batch_size * num_beams, 1), decoder_start_token_id, dtype=torch.long, device=input_ids.device),
-                                       effective_decoder_input_ids], dim=-1).to(input_ids.device)
+                effective_decoder_start_token_id = torch.full(
+                    (effective_batch_size * num_beams, 1),
+                    decoder_start_token_id,
+                    dtype=torch.long,
+                    device=input_ids.device
+                )
+                input_ids = torch.cat([effective_decoder_start_token_id, effective_decoder_input_ids], dim=-1).to(input_ids.device)
                 cur_len = input_ids.shape[-1]
 
         else:
