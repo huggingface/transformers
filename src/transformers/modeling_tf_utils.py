@@ -301,6 +301,27 @@ def load_tf_weights(model, resolved_archive_file):
     K.batch_set_value(weight_value_tuples)
 
 
+def save_tf_model(model, save_directory):
+    """
+    Save a model to a directory.
+
+    Arguments:
+        model (:obj:`tf.keras.models.Model`):
+            Model to save.
+        save_directory (:obj:`str`):
+            Directory to which to save. Will be created if it doesn't exist.
+    """
+    if os.path.isfile(save_directory):
+        logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+        return
+    os.makedirs(save_directory, exist_ok=True)
+
+    # If we save using the predefined names, we can load using `from_pretrained` if ``model`` is an instance of class `TFPreTrainedModel`.
+    output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
+    model.save_weights(output_model_file)
+    logger.info("Model weights saved in {}".format(output_model_file))
+
+
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     r"""
     Base class for all TF models.
@@ -493,18 +514,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             save_directory (:obj:`str`):
                 Directory to which to save. Will be created if it doesn't exist.
         """
-        if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
-            return
-        os.makedirs(save_directory, exist_ok=True)
+        # Save model
+        save_tf_model(self, save_directory)
 
         # Save configuration file
         self.config.save_pretrained(save_directory)
-
-        # If we save using the predefined names, we can load using `from_pretrained`
-        output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
-        self.save_weights(output_model_file)
-        logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):

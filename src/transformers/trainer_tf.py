@@ -12,7 +12,7 @@ from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 
 from .integrations import is_comet_available, is_wandb_available
-from .modeling_tf_utils import TFPreTrainedModel
+from .modeling_tf_utils import TFPreTrainedModel, save_tf_model
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
@@ -785,6 +785,9 @@ class TFTrainer:
         logger.info("Saving model in {}".format(output_dir))
 
         if not isinstance(self.model, TFPreTrainedModel):
-            raise ValueError("Trainer.model appears to not be a PreTrainedModel")
-
-        self.model.save_pretrained(output_dir)
+            warnings.warn(
+                "Trainer.model appears to not be a PreTrainedModel. The model will still be saved as a usual tf.keras.models.Model model, but no PretrainedConfig will be saved."
+            )
+            save_tf_model(self.model, output_dir)
+        else:
+            self.model.save_pretrained(output_dir)
