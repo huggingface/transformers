@@ -228,8 +228,6 @@ class BertModule(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
-    padding_idx: int
-    emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)
 
     @compact
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
