@@ -56,7 +56,7 @@ from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
-from .tokenization_bert_generation import BertGenerationTokenizer
+from .tokenization_bert_generation import BertGenerationTokenizer, BertGenerationTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
@@ -124,8 +124,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
-        (BertGenerationConfig, (BertGenerationTokenizer, None)),
-        (LayoutLMConfig, (LayoutLMTokenizer, None)),
+        (BertGenerationConfig, (BertGenerationTokenizer, BertGenerationTokenizerFast)),
         (RagConfig, (RagTokenizer, None)),
     ]
 )

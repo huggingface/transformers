@@ -151,7 +151,7 @@ from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
-from .tokenization_bert_generation import BertGenerationTokenizer
+from .tokenization_bert_generation import BertGenerationTokenizer, BertGenerationTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast

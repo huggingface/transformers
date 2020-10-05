@@ -472,6 +472,10 @@ class ReformerConverter(SpmConverter):
     pass
 
 
+class BertGenerationConverter(SpmConverter):
+    pass
+
+
 class PegasusConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -516,6 +520,7 @@ class T5Converter(SpmConverter):
 CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BertTokenizer": BertConverter,
+    "BertGenerationTokenizer": BertGenerationConverter,
     "BartTokenizer": RobertaConverter,
     "CamembertTokenizer": CamembertConverter,
     "DistilBertTokenizer": BertConverter,

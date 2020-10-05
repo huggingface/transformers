@@ -19,7 +19,7 @@ import unittest
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow
-from transformers.tokenization_bert_generation import BertGenerationTokenizer
+from transformers.tokenization_bert_generation import BertGenerationTokenizer, BertGenerationTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -32,6 +32,8 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertGenerationTokenizer
+    rust_tokenizer_class = BertGenerationTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
