@@ -20,17 +20,18 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        GPT2Config,
-        GPT2Model,
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2LMHeadModel,
+        GPT2Config,
         GPT2DoubleHeadsModel,
+        GPT2LMHeadModel,
+        GPT2Model,
     )
 
 
@@ -87,12 +88,12 @@ class GPT2ModelTester:
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
 
-    def prepare_config_and_inputs(self):
+    def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -126,6 +127,7 @@ class GPT2ModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             return_dict=True,
+            gradient_checkpointing=gradient_checkpointing,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -243,7 +245,8 @@ class GPT2ModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
         )
 
         # get two different outputs
@@ -258,6 +261,38 @@ class GPT2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_gpt2_model_past_large_inputs(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        model = GPT2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+
+        output, past = outputs.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_token_types = ids_tensor([self.batch_size, 3], self.type_vocab_size)
+
+        # append to next input_ids and token_type_ids
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
+
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2LMHeadModel(config)
         model.to(torch_device)
@@ -266,6 +301,15 @@ class GPT2ModelTester:
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_forward_and_backwards(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        model = GPT2LMHeadModel(config)
+        model.to(torch_device)
+
+        result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result.loss.backward()
 
     def create_and_check_double_lm_head_model(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
@@ -287,9 +331,9 @@ class GPT2ModelTester:
         }
 
         result = model(**inputs)
-        self.parent.assertEqual(result.lm_loss.shape, ())
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(
-            result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
+            result.logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
@@ -322,7 +366,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     all_generative_model_classes = (
-        (GPT2LMHeadModel,) if is_torch_available() else ()
+        (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     test_missing_keys = False
 
@@ -345,6 +389,10 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_model_attention_mask_past(*config_and_inputs)
 
+    def test_gpt2_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_model_past_large_inputs(*config_and_inputs)
+
     def test_gpt2_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
@@ -352,6 +400,10 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gpt2_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
+
+    def test_gpt2_gradient_checkpointing(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -364,33 +416,34 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
-        model.to(torch_device)
-        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-        expected_output_ids = [
-            464,
-            3290,
-            373,
-            1043,
-            287,
-            257,
-            2214,
-            1474,
-            262,
-            16246,
-            286,
-            2688,
-            290,
-            2688,
-            27262,
-            13,
-            198,
-            198,
-            464,
-            3290,
-        ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        for checkpointing in [True, False]:
+            model = GPT2LMHeadModel.from_pretrained("gpt2", gradient_checkpointing=checkpointing)
+            model.to(torch_device)
+            input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
+            expected_output_ids = [
+                464,
+                3290,
+                373,
+                1043,
+                287,
+                257,
+                2214,
+                1474,
+                262,
+                16246,
+                286,
+                2688,
+                290,
+                2688,
+                27262,
+                13,
+                198,
+                198,
+                464,
+                3290,
+            ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+            output_ids = model.generate(input_ids, do_sample=False)
+            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
     def test_lm_generate_distilgpt2(self):

@@ -1,7 +1,10 @@
+#!/usr/bin/env python
+
 import argparse
 import glob
 import logging
 import os
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -12,49 +15,32 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
-from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import MarianTokenizer, MBartTokenizer, T5ForConditionalGeneration
+from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+from transformers import MBartTokenizer, T5ForConditionalGeneration
+from transformers.modeling_bart import shift_tokens_right
+from utils import (
+    ROUGE_KEYS,
+    LegacySeq2SeqDataset,
+    Seq2SeqDataset,
+    assert_all_frozen,
+    calculate_bleu,
+    calculate_rouge,
+    flatten_list,
+    freeze_embeds,
+    freeze_params,
+    get_git_info,
+    label_smoothed_nll_loss,
+    lmap,
+    pickle_save,
+    save_git_info,
+    use_task_specific_params,
+)
 
 
-try:
-    from .utils import (
-        assert_all_frozen,
-        use_task_specific_params,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        Seq2SeqDataset,
-        TranslationDataset,
-        label_smoothed_nll_loss,
-    )
+# need the parent dir module
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        TranslationDataset,
-        assert_all_frozen,
-        use_task_specific_params,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        label_smoothed_nll_loss,
-    )
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +49,17 @@ class SummarizationModule(BaseTransformer):
     mode = "summarization"
     loss_names = ["loss"]
     metric_names = ROUGE_KEYS
-    val_metric = "rouge2"
+    default_val_metric = "rouge2"
 
     def __init__(self, hparams, **kwargs):
+        if hparams.sortish_sampler and hparams.gpus > 1:
+            hparams.replace_sampler_ddp = False
+        elif hparams.max_tokens_per_batch is not None:
+            if hparams.gpus > 1:
+                raise NotImplementedError("Dynamic Batch size does not work for multi-gpu training")
+            if hparams.sortish_sampler:
+                raise ValueError("--sortish_sampler and --max_tokens_per_batch may not be used simultaneously")
+
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)
@@ -74,6 +68,8 @@ class SummarizationModule(BaseTransformer):
         pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = 0
         self.metrics = defaultdict(list)
+        self.model_type = self.config.model_type
+        self.vocab_size = self.config.tgt_vocab_size if self.model_type == "fsmt" else self.config.vocab_size
 
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
@@ -94,35 +90,27 @@ class SummarizationModule(BaseTransformer):
         }
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
-
         if self.hparams.freeze_embeds:
-            self.freeze_embeds()
+            freeze_embeds(self.model)
         if self.hparams.freeze_encoder:
             freeze_params(self.model.get_encoder())
             assert_all_frozen(self.model.get_encoder())
 
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
-        self.decoder_start_token_id = None
+        self.decoder_start_token_id = None  # default to config
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
-        if isinstance(self.tokenizer, MBartTokenizer) or isinstance(self.tokenizer, MarianTokenizer):
-            self.dataset_class = TranslationDataset
+        self.dataset_class = (
+            Seq2SeqDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
+        )
+        self.eval_beams = self.model.config.num_beams if self.hparams.eval_beams is None else self.hparams.eval_beams
+        if self.hparams.eval_max_gen_length is not None:
+            self.eval_max_length = self.hparams.eval_max_gen_length
         else:
-            self.dataset_class = Seq2SeqDataset
-
-    def freeze_embeds(self):
-        """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        try:
-            freeze_params(self.model.model.shared)
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
-        except AttributeError:
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
-                freeze_params(d.embed_tokens)
+            self.eval_max_length = self.model.config.max_length
+        self.val_metric = self.default_val_metric if self.hparams.val_metric is None else self.hparams.val_metric
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -135,27 +123,25 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-
+        src_ids, src_mask = batch["input_ids"], batch["attention_mask"]
+        tgt_ids = batch["labels"]
         if isinstance(self.model, T5ForConditionalGeneration):
-            decoder_input_ids = self.model._shift_right(target_ids)
-            lm_labels = target_ids
+            decoder_input_ids = self.model._shift_right(tgt_ids)
         else:
-            decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
-            lm_labels = target_ids[:, 1:].clone()  # why clone?
+            decoder_input_ids = shift_tokens_right(tgt_ids, pad_token_id)
 
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
-
+        outputs = self(src_ids, attention_mask=src_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
+        lm_logits = outputs[0]
         if self.hparams.label_smoothing == 0:
-            # Same behavior as modeling_bart.py
-            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
-            lm_logits = outputs[0]
-            assert lm_logits.shape[-1] == self.model.config.vocab_size
-            loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
+            # Same behavior as modeling_bart.py, besides ignoring pad_token_id
+            ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+
+            assert lm_logits.shape[-1] == self.vocab_size
+            loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
-            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
+            lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
             loss, nll_loss = label_smoothed_nll_loss(
-                lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
+                lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
         return (loss,)
 
@@ -168,7 +154,11 @@ class SummarizationModule(BaseTransformer):
 
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
-        logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["decoder_input_ids"].ne(self.pad).sum()
+        logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["labels"].ne(self.pad).sum()
+        logs["bs"] = batch["input_ids"].shape[0]
+        logs["src_pad_tok"] = batch["input_ids"].eq(self.pad).sum()
+        logs["src_pad_frac"] = batch["input_ids"].eq(self.pad).float().mean()
+        # TODO(SS): make a wandb summary metric for this
         return {"loss": loss_tensors[0], "log": logs}
 
     def validation_step(self, batch, batch_idx) -> Dict:
@@ -178,34 +168,44 @@ class SummarizationModule(BaseTransformer):
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]}
-        rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(loss)
-        rouges.update({k: v.item() for k, v in losses.items()})
-        losses.update(rouges)
-        metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
-        metrics["step_count"] = self.step_count
-        self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
+        generative_metrics = {
+            k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
+        }
+        metric_val = (
+            generative_metrics[self.val_metric] if self.val_metric in generative_metrics else losses[self.val_metric]
+        )
+        metric_tensor: torch.FloatTensor = torch.tensor(metric_val).type_as(loss)
+        generative_metrics.update({k: v.item() for k, v in losses.items()})
+        losses.update(generative_metrics)
+        all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
+        all_metrics["step_count"] = self.step_count
+        self.metrics[prefix].append(all_metrics)  # callback writes this to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": rouge_tensor}
-
-    def save_metrics(self, latest_metrics, type_path) -> None:
-        self.metrics[type_path].append(latest_metrics)
-        save_json(self.metrics, self.metrics_save_path)
+        return {
+            "log": all_metrics,
+            "preds": preds,
+            f"{prefix}_loss": loss,
+            f"{prefix}_{self.val_metric}": metric_tensor,
+        }
 
     def calc_generative_metrics(self, preds, target) -> Dict:
         return calculate_rouge(preds, target)
 
     def _generative_step(self, batch: dict) -> dict:
         t0 = time.time()
+
+        # parser.add_argument('--eval_max_gen_length', type=int, default=None, help='never generate more than n tokens')
         generated_ids = self.model.generate(
             batch["input_ids"],
             attention_mask=batch["attention_mask"],
             use_cache=True,
             decoder_start_token_id=self.decoder_start_token_id,
+            num_beams=self.eval_beams,
+            max_length=self.eval_max_length,
         )
         gen_time = (time.time() - t0) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
-        target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
+        target: List[str] = self.ids_to_clean_text(batch["labels"])
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = self.calc_generative_metrics(preds, target)
@@ -233,21 +233,39 @@ class SummarizationModule(BaseTransformer):
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
-        sampler = None
-        if self.hparams.sortish_sampler and type_path == "train":
-            assert self.hparams.gpus <= 1  # TODO: assert earlier
-            sampler = dataset.make_sortish_sampler(batch_size)
-            shuffle = False
 
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            collate_fn=dataset.collate_fn,
-            shuffle=shuffle,
-            num_workers=self.num_workers,
-            sampler=sampler,
-        )
-        return dataloader
+        if self.hparams.sortish_sampler and type_path != "test":
+            sampler = dataset.make_sortish_sampler(batch_size, distributed=self.hparams.gpus > 1)
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=dataset.collate_fn,
+                shuffle=False,
+                num_workers=self.num_workers,
+                sampler=sampler,
+            )
+
+        elif self.hparams.max_tokens_per_batch is not None and type_path != "test":
+            batch_sampler = dataset.make_dynamic_sampler(
+                self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1
+            )
+            return DataLoader(
+                dataset,
+                batch_sampler=batch_sampler,
+                collate_fn=dataset.collate_fn,
+                # shuffle=False,
+                num_workers=self.num_workers,
+                # batch_size=None,
+            )
+        else:
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=dataset.collate_fn,
+                shuffle=shuffle,
+                num_workers=self.num_workers,
+                sampler=None,
+            )
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
@@ -294,6 +312,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
+        parser.add_argument("--max_tokens_per_batch", type=int, default=None)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
@@ -304,6 +323,12 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
+        parser.add_argument("--eval_beams", type=int, default=None, required=False)
+        parser.add_argument(
+            "--val_metric", type=str, default=None, required=False, choices=["bleu", "rouge2", "loss", None]
+        )
+        parser.add_argument("--eval_max_gen_length", type=int, default=None, help="never generate more than n tokens")
+        parser.add_argument("--save_top_k", type=int, default=1, required=False, help="How many checkpoints to save")
         parser.add_argument(
             "--early_stopping_patience",
             type=int,
@@ -318,7 +343,7 @@ class TranslationModule(SummarizationModule):
     mode = "translation"
     loss_names = ["loss"]
     metric_names = ["bleu"]
-    val_metric = "bleu"
+    default_val_metric = "bleu"
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, **kwargs)
@@ -326,7 +351,7 @@ class TranslationModule(SummarizationModule):
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
 
     def calc_generative_metrics(self, preds, target) -> dict:
-        return calculate_bleu_score(preds, target)
+        return calculate_bleu(preds, target)
 
 
 def main(args, model=None) -> SummarizationModule:
@@ -334,11 +359,10 @@ def main(args, model=None) -> SummarizationModule:
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        if args.task == "summarization":
+        if "summarization" in args.task:
             model: SummarizationModule = SummarizationModule(args)
         else:
             model: SummarizationModule = TranslationModule(args)
-
     dataset = Path(args.data_dir).name
     if (
         args.logger_name == "default"
@@ -362,14 +386,17 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
     else:
         es_callback = False
+
+    lower_is_better = args.val_metric == "loss"
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
+        checkpoint_callback=get_checkpoint_callback(
+            args.output_dir, model.val_metric, args.save_top_k, lower_is_better
+        ),
         early_stopping_callback=es_callback,
         logger=logger,
-        # TODO: early stopping callback seems messed up
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:

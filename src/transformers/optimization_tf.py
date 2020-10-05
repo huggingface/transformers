@@ -88,6 +88,7 @@ def create_optimizer(
     adam_beta2: float = 0.999,
     adam_epsilon: float = 1e-8,
     weight_decay_rate: float = 0.0,
+    power: float = 1.0,
     include_in_weight_decay: Optional[List[str]] = None,
 ):
     """
@@ -110,6 +111,8 @@ def create_optimizer(
             The epsilon to use in Adam.
         weight_decay_rate (:obj:`float`, `optional`, defaults to 0):
             The weight decay to use.
+        power (:obj:`float`, `optional`, defaults to 1.0):
+            The power to use for PolynomialDecay.
         include_in_weight_decay (:obj:`List[str]`, `optional`):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters except bias and layer norm parameters.
@@ -119,10 +122,13 @@ def create_optimizer(
         initial_learning_rate=init_lr,
         decay_steps=num_train_steps - num_warmup_steps,
         end_learning_rate=init_lr * min_lr_ratio,
+        power=power,
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(
-            initial_learning_rate=init_lr, decay_schedule_fn=lr_schedule, warmup_steps=num_warmup_steps,
+            initial_learning_rate=init_lr,
+            decay_schedule_fn=lr_schedule,
+            warmup_steps=num_warmup_steps,
         )
     if weight_decay_rate > 0.0:
         optimizer = AdamWeightDecay(
@@ -221,9 +227,9 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             )
         return tf.no_op()
 
-    def apply_gradients(self, grads_and_vars, name=None):
+    def apply_gradients(self, grads_and_vars, name=None, **kwargs):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name,)
+        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""

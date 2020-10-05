@@ -23,11 +23,12 @@ from .modeling_bart import BartForConditionalGeneration
 
 
 class MarianMTModel(BartForConditionalGeneration):
-    config_class = MarianConfig
     r"""
     Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-    Model API is identical to BartForConditionalGeneration.
-    Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
+    Available models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
+
+    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
 
     Examples::
 
@@ -42,9 +43,10 @@ class MarianMTModel(BartForConditionalGeneration):
         >>> tok = MarianTokenizer.from_pretrained(mname)
         >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text])  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
-        >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+        >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
 
     """
+    config_class = MarianConfig
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.

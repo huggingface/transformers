@@ -17,14 +17,14 @@
 import csv
 import dataclasses
 import json
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
 from ...file_utils import is_tf_available, is_torch_available
+from ...utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -269,7 +269,9 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 logger.info("Tokenizing example %d", ex_index)
 
             input_ids = tokenizer.encode(
-                example.text_a, add_special_tokens=True, max_length=min(max_length, tokenizer.max_len),
+                example.text_a,
+                add_special_tokens=True,
+                max_length=min(max_length, tokenizer.max_len),
             )
             all_input_ids.append(input_ids)
 

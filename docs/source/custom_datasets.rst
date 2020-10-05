@@ -1,5 +1,12 @@
 Fine-tuning with custom datasets
-================================
+=======================================================================================================================
+
+.. note::
+
+    The datasets used in this tutorial are available and can be more easily accessed using the
+    `🤗 NLP library <https://github.com/huggingface/nlp>`_. We do not use this library to access the datasets here
+    since this tutorial meant to illustrate how to work with your own data. A brief of introduction can be found
+    at the end of the tutorial in the section ":ref:`nlplib`".
 
 This tutorial will take you through several examples of using 🤗 Transformers models with your own datasets. The
 guide shows one of many valid workflows for using these models and is meant to be illustrative rather than
@@ -14,16 +21,15 @@ We include several examples, each of which demonstrates a different type of comm
   - :ref:`qa_squad`
   - :ref:`resources`
 
-.. note::
-
-    Many of the datasets used in this tutorial are available and can be more easily accessed using the
-    `🤗 NLP library <https://github.com/huggingface/nlp>`_. We do not use this library to access the datasets here
-    since this tutorial meant to illustrate how to work with your own data.
-
 .. _seq_imdb:
 
 Sequence Classification with IMDb Reviews
------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
+
+.. note::
+
+    This dataset can be explored in the Hugging Face model hub (`IMDb <https://huggingface.co/datasets/imdb>`_), and can
+    be alternatively downloaded with the 🤗 NLP library with ``load_dataset("imdb")``.
 
 In this example, we'll show how to download, tokenize, and train a model on the IMDb reviews dataset. This task
 takes the text of a review and requires the model to predict whether the sentiment of the review is positive or
@@ -56,8 +62,8 @@ read this in.
     train_texts, train_labels = read_imdb_split('aclImdb/train')
     test_texts, test_labels = read_imdb_split('aclImdb/test')
 
-We now have a train and test dataset, but let's also also create a validation set which we can use for
-for evaluation and tuning without taining our test set results. Sklearn has a convenient utility for creating such
+We now have a train and test dataset, but let's also also create a validation set which we can use for for
+evaluation and tuning without training our test set results. Sklearn has a convenient utility for creating such
 splits:
 
 .. code-block:: python
@@ -133,7 +139,7 @@ Now that our datasets our ready, we can fine-tune a model either with the 🤗
 .. _ft_trainer:
 
 Fine-tuning with Trainer
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The steps above prepared the datasets in the way that the trainer is expected. Now all we need to do is create a
 model to fine-tune, define the :class:`~transformers.TrainingArguments`/:class:`~transformers.TFTrainingArguments`
@@ -194,7 +200,7 @@ and instantiate a :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer
 .. _ft_native:
 
 Fine-tuning with native PyTorch/TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We can also train use native PyTorch or TensorFlow:
 
@@ -238,7 +244,12 @@ We can also train use native PyTorch or TensorFlow:
 .. _tok_ner:
 
 Token Classification with W-NUT Emerging Entities
--------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
+
+.. note::
+
+    This dataset can be explored in the Hugging Face model hub (`WNUT-17 <https://huggingface.co/datasets/wnut_17>`_), and can
+    be alternatively downloaded with the 🤗 NLP library with ``load_dataset("wnut_17")``.
 
 Next we will look at token classification. Rather than classifying an entire sequence, this task classifies token by
 token. We'll demonstrate how to do this with 
@@ -313,7 +324,7 @@ which we'll use in a moment:
     id2tag = {id: tag for tag, id in tag2id.items()}
 
 To encode the tokens, we'll use a pre-trained DistilBert tokenizer. We can tell the tokenizer that we're dealing
-with ready-split tokens rather than full sentence strings by passing ``is_pretokenized=True``. We'll also pass
+with ready-split tokens rather than full sentence strings by passing ``is_split_into_words=True``. We'll also pass
 ``padding=True`` and ``truncation=True`` to pad the sequences to be the same length. Lastly, we can tell the model
 to return information about the tokens which are split by the wordpiece tokenization process, which we will need in
 a moment.
@@ -322,8 +333,8 @@ a moment.
 
     from transformers import DistilBertTokenizerFast
     tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-cased')
-    train_encodings = tokenizer(train_texts, is_pretokenized=True, return_offsets_mapping=True, padding=True, truncation=True)
-    val_encodings = tokenizer(val_texts, is_pretokenized=True, return_offsets_mapping=True, padding=True, truncation=True)
+    train_encodings = tokenizer(train_texts, is_split_into_words=True, return_offsets_mapping=True, padding=True, truncation=True)
+    val_encodings = tokenizer(val_texts, is_split_into_words=True, return_offsets_mapping=True, padding=True, truncation=True)
 
 Great, so now our tokens are nicely encoded in the format that they need to be in to feed them into our DistilBert
 model below.
@@ -432,7 +443,12 @@ sequence classification example above.
 .. _qa_squad:
 
 Question Answering with SQuAD 2.0
----------------------------------
+-----------------------------------------------------------------------------------------------------------------------
+
+.. note::
+
+    This dataset can be explored in the Hugging Face model hub (`SQuAD V2 <https://huggingface.co/datasets/squad_v2>`_), and can
+    be alternatively downloaded with the 🤗 NLP library with ``load_dataset("squad_v2")``.
 
 Question answering comes in many forms. In this example, we'll look at the particular type of extractive QA that
 involves answering a question about a passage by highlighting the segment of the passage that answers the question.
@@ -639,10 +655,61 @@ multiple model outputs.
 .. _resources:
 
 Additional Resources
---------------------
+-----------------------------------------------------------------------------------------------------------------------
 
   - `How to train a new language model from scratch using Transformers and Tokenizers
     <https://huggingface.co/blog/how-to-train>`_. Blog post showing the steps to load in Esperanto data and train a
     masked language model from scratch.
   - :doc:`Preprocessing <preprocessing>`. Docs page on data preprocessing.
   - :doc:`Training <training>`. Docs page on training and fine-tuning.
+
+.. _nlplib:
+
+Using the 🤗 NLP Datasets & Metrics library
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This tutorial demonstrates how to read in datasets from various raw text formats and prepare them for training with
+🤗 Transformers so that you can do the same thing with your own custom datasets. However, we recommend users use the
+`🤗 NLP library <https://github.com/huggingface/nlp>`_ for working with the 150+ datasets included in the
+`hub <https://huggingface.co/datasets>`_, including the three datasets used in this tutorial. As a very brief overview,
+we will show how to use the NLP library to download and prepare the IMDb dataset from the first example,
+:ref:`seq_imdb`.
+
+Start by downloading the dataset:
+
+.. code-block:: python
+
+    from nlp import load_dataset
+    train = load_dataset("imdb", split="train")
+
+Each dataset has multiple columns corresponding to different features. Let's see what our columns are.
+
+.. code-block:: python
+
+    >>> print(train.column_names)
+    ['label', 'text']
+
+Great. Now let's tokenize the text. We can do this using the ``map`` method. We'll also rename the ``label`` column
+to ``labels`` to match the model's input arguments.
+
+.. code-block:: python
+
+    train = train.map(lambda batch: tokenizer(batch["text"], truncation=True, padding=True), batched=True)
+    train.rename_column_("label", "labels")
+
+Lastly, we can use the ``set_format`` method to determine which columns and in what data format we want to access
+dataset elements.
+
+.. code-block:: python
+
+    ## PYTORCH CODE
+    >>> train.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
+    >>> {key: val.shape for key, val in train[0].items()})
+    {'labels': torch.Size([]), 'input_ids': torch.Size([512]), 'attention_mask': torch.Size([512])}
+    ## TENSORFLOW CODE
+    >>> train.set_format("tensorflow", columns=["input_ids", "attention_mask", "labels"])
+    >>> {key: val.shape for key, val in train[0].items()})
+    {'labels': TensorShape([]), 'input_ids': TensorShape([512]), 'attention_mask': TensorShape([512])}
+
+We now have a fully-prepared dataset. Check out `the 🤗 NLP docs <https://huggingface.co/nlp/processing.html>`_ for
+a more thorough introduction.

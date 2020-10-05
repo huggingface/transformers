@@ -15,8 +15,6 @@
 # limitations under the License.
 """PyTorch OpenAI GPT-2 model."""
 
-
-import logging
 import os
 import warnings
 from dataclasses import dataclass
@@ -43,9 +41,10 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_conv1d_layer,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
@@ -61,10 +60,10 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
-    """ Load tf checkpoints in a pytorch model
-    """
+    """Load tf checkpoints in a pytorch model"""
     try:
         import re
+
         import tensorflow as tf
     except ImportError:
         logger.error(
@@ -323,8 +322,8 @@ class Block(nn.Module):
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = GPT2Config
@@ -335,8 +334,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
         super().__init__(*inputs, **kwargs)
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding, Conv1D)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -354,11 +352,11 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
     Base class for outputs of models predicting if two sentences are consecutive or not.
 
     Args:
-        lm_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided):
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided):
             Language modeling loss.
         mc_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`mc_labels` is provided):
             Multiple choice classification loss.
-        lm_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         mc_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
@@ -367,7 +365,7 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            ``past_key_values`` input) to speed up sequential decoding.
+            :obj:`past_key_values` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -381,9 +379,9 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    lm_loss: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
     mc_loss: Optional[torch.FloatTensor] = None
-    lm_logits: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     mc_logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -392,7 +390,11 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
 
 GPT2_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
@@ -405,57 +407,69 @@ GPT2_START_DOCSTRING = r"""
 GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if ``past_key_values`` is ``None`` else
+            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
             ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
 
-            If ``past_key_values`` is used, only ``input_ids`` that do not have their past calculated should be passed
+            If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be passed
             as ``input_ids``.
 
-            Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.GPT2Tokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-
         past_key_values (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see ``past_key_values`` output below). Can be used to speed up sequential decoding.
-            The ``input_ids`` which have their past given to this model should not be passed as ``input_ids`` as they have already been computed.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model
+            (see :obj:`past_key_values` output below). Can be used to speed up sequential decoding.
+            The ``input_ids`` which have their past given to this model should not be passed as ``input_ids`` as they
+            have already been computed.
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`, defaults to :obj:`None`):
-            `input_ids_length` = `sequence_length if `past` is None else 1
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Indices are selected in ``[0, 1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-            If ``past_key_values`` is used, optionally only the last `inputs_embeds` have to be input (see ``past_key_values``).
-        use_cache (:obj:`bool`):
-            If `use_cache` is True, ``past_key_values`` key value states are returned and can be used to speed up decoding (see ``past_key_values``). Defaults to `True`.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
+
+            If :obj:`past_key_values` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
+            :obj:`past_key_values`).
+        use_cache (:obj:`bool`, `optional`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 
@@ -482,8 +496,8 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wte = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
@@ -609,16 +623,35 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(
-                hidden_states,
-                layer_past=layer_past,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
+            if getattr(self.config, "gradient_checkpointing", False):
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # checkpointing only works with tuple returns, not with lists
+                        return tuple(output for output in module(*inputs, use_cache, output_attentions))
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    hidden_states,
+                    layer_past,
+                    attention_mask,
+                    head_mask[i],
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                )
+            else:
+                outputs = block(
+                    hidden_states,
+                    layer_past=layer_past,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
 
             hidden_states, present = outputs[:2]
             if use_cache is True:
@@ -700,7 +733,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         **kwargs,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
@@ -778,6 +811,17 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+        }
+
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -802,44 +846,44 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
             Index of the classification token in each input sequence.
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`)
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-1, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
-        mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`, defaults to :obj:`None`)
+        mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`)
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
-    Return:
+        Return:
 
-    Examples::
+        Example::
 
-        >>> import torch
-        >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
+            >>> import torch
+            >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2, return_dict=True)
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2, return_dict=True)
 
-        >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+            >>> # Add a [CLS] to the vocabulary (we should train it also!)
+            >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
 
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+            >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
 
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
-        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
+            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+            >>> encoded_choices = [tokenizer.encode(s) for s in choices]
+            >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
 
-        >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+            >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
+            >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
 
-        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        >>> lm_logits = outputs.lm_logits
-        >>> mc_logits = outputs.mc_logits
+            >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+            >>> lm_logits = outputs.lm_logits
+            >>> mc_logits = outputs.mc_logits
 
         """
         if "lm_labels" in kwargs:
@@ -894,9 +938,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return GPT2DoubleHeadsModelOutput(
-            lm_loss=lm_loss,
+            loss=lm_loss,
             mc_loss=mc_loss,
-            lm_logits=lm_logits,
+            logits=lm_logits,
             mc_logits=mc_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,

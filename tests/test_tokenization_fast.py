@@ -12,14 +12,12 @@ from transformers import (
     OpenAIGPTTokenizer,
     PreTrainedTokenizer,
     RobertaTokenizer,
-    TransfoXLTokenizer,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import get_tests_dir
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
-from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +40,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
     TOKENIZERS_CLASSES = frozenset([])
 
     def setUp(self) -> None:
-        with open("tests/fixtures/sample_text.txt", encoding="utf-8") as f_data:
+        with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
     def test_all_tokenizers(self):
@@ -228,7 +226,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
     def assert_special_tokens_map_equal(self, tokenizer_r, tokenizer_p):
         # Assert the set of special tokens match.
         self.assertSequenceEqual(
-            tokenizer_p.special_tokens_map.items(), tokenizer_r.special_tokens_map.items(),
+            tokenizer_p.special_tokens_map.items(),
+            tokenizer_r.special_tokens_map.items(),
         )
 
     def assert_add_tokens(self, tokenizer_r):
@@ -341,12 +340,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
         pretokenized_input_pair = "This is a sample pair".split()
 
         # Test encode for pretokenized inputs
-        output_r = tokenizer_r.encode(pretokenized_input_simple, is_pretokenized=True)
-        output_p = tokenizer_p.encode(pretokenized_input_simple, is_pretokenized=True)
+        output_r = tokenizer_r.encode(pretokenized_input_simple, is_split_into_words=True)
+        output_p = tokenizer_p.encode(pretokenized_input_simple, is_split_into_words=True)
         self.assertEqual(output_p, output_r)
 
         kwargs = {
-            "is_pretokenized": True,
+            "is_split_into_words": True,
             "return_token_type_ids": True,
             "return_attention_mask": True,
             "return_overflowing_tokens": False,
@@ -354,7 +353,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             "return_offsets_mapping": False,  # Not implemented in python tokenizers
         }
         batch_kwargs = {
-            "is_pretokenized": True,
+            "is_split_into_words": True,
             "return_token_type_ids": True,
             "return_attention_mask": True,  # we have an 's' here
             "return_overflowing_tokens": False,
@@ -375,8 +374,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
             self.assertEqual(output_p[key], output_r[key])
 
         # Test encode for pretokenized inputs pairs
-        output_r = tokenizer_r.encode(pretokenized_input_simple, pretokenized_input_pair, is_pretokenized=True)
-        output_p = tokenizer_p.encode(pretokenized_input_simple, pretokenized_input_pair, is_pretokenized=True)
+        output_r = tokenizer_r.encode(pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True)
+        output_p = tokenizer_p.encode(pretokenized_input_simple, pretokenized_input_pair, is_split_into_words=True)
         self.assertEqual(output_p, output_r)
 
         # Test encode_plus for pretokenized inputs
@@ -544,18 +543,26 @@ class CommonFastTokenizerTest(unittest.TestCase):
         assert_batch_padded_input_match(input_r, input_p, max_length)
 
         input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="max_length",
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding="max_length",
         )
         input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="max_length",
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding="max_length",
         )
         assert_batch_padded_input_match(input_r, input_p, max_length)
 
         input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="longest",
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding="longest",
         )
         input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding=True,
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding=True,
         )
         assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
@@ -865,7 +872,11 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
         # Simple input
         self.assertRaises(
-            ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, padding="max_length",
+            ValueError,
+            tokenizer_r.batch_encode_plus,
+            s2,
+            max_length=max_length,
+            padding="max_length",
         )
 
         # Pair input
@@ -876,19 +887,9 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
         # Pair input
         self.assertRaises(
-            ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
+            ValueError,
+            tokenizer_r.batch_encode_plus,
+            p2,
+            max_length=max_length,
+            padding="max_length",
         )
-
-
-class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
-    TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file", None, None)]
-    )
-
-    @require_torch
-    def test_all_tokenizers(self):
-        super().test_all_tokenizers()
-
-    @require_torch
-    def test_pretokenized_tokenizers(self):
-        super().test_pretokenized_tokenizers()

@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from ..file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -29,11 +29,39 @@ if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
+
+    deprecated_args = [
+        "no_inference",
+        "no_cuda",
+        "no_tpu",
+        "no_speed",
+        "no_memory",
+        "no_env_print",
+        "no_multi_process",
+    ]
+
+    def __init__(self, **kwargs):
+        """This __init__ is there for legacy code. When removing
+        deprecated args completely, the class can simply be deleted
+        """
+        for deprecated_arg in self.deprecated_args:
+            if deprecated_arg in kwargs:
+                positive_arg = deprecated_arg[3:]
+                setattr(self, positive_arg, not kwargs.pop(deprecated_arg))
+                logger.warning(
+                    f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or {positive_arg}={kwargs[positive_arg]}"
+                )
+
+        self.torchscript = kwargs.pop("torchscript", self.torchscript)
+        self.torch_xla_tpu_print_metrics = kwargs.pop("torch_xla_tpu_print_metrics", self.torch_xla_tpu_print_metrics)
+        self.fp16_opt_level = kwargs.pop("fp16_opt_level", self.fp16_opt_level)
+        super().__init__(**kwargs)
+
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
     torch_xla_tpu_print_metrics: bool = field(default=False, metadata={"help": "Print Xla/PyTorch tpu metrics"})
     fp16_opt_level: str = field(
@@ -50,7 +78,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     @torch_required
     def _setup_devices(self) -> Tuple["torch.device", int]:
         logger.info("PyTorch: setting up devices")
-        if self.no_cuda:
+        if not self.cuda:
             device = torch.device("cpu")
             n_gpu = 0
         elif is_torch_tpu_available():
@@ -63,7 +91,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
 
     @property
     def is_tpu(self):
-        return is_torch_tpu_available() and not self.no_tpu
+        return is_torch_tpu_available() and self.tpu
 
     @property
     @torch_required

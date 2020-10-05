@@ -6,7 +6,6 @@ Copyright by the AllenNLP authors.
 
 import fnmatch
 import json
-import logging
 import os
 import re
 import shutil
@@ -24,14 +23,16 @@ from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
-import requests
-from filelock import FileLock
 from tqdm.auto import tqdm
 
+import requests
+from filelock import FileLock
+
 from . import __version__
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
@@ -63,6 +64,19 @@ try:
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
+
+try:
+    import datasets  # noqa: F401
+
+    # Check we're not importing a "datasets" directory somewhere
+    _datasets_available = hasattr(datasets, "__version__") and hasattr(datasets, "load_dataset")
+    if _datasets_available:
+        logger.debug(f"Succesfully imported datasets version {datasets.__version__}")
+    else:
+        logger.debug("Imported a datasets object but this doesn't seem to be the 🤗 datasets library.")
+
+except ImportError:
+    _datasets_available = False
 
 try:
     from torch.hub import _get_torch_home
@@ -110,6 +124,25 @@ try:
 except ImportError:
     _has_apex = False
 
+
+try:
+    import faiss  # noqa: F401
+
+    _faiss_available = True
+    logger.debug(f"Succesfully imported faiss version {faiss.__version__}")
+except ImportError:
+    _faiss_available = False
+
+try:
+    import sklearn.metrics  # noqa: F401
+
+    import scipy.stats  # noqa: F401
+
+    _has_sklearn = True
+except (AttributeError, ImportError):
+    _has_sklearn = False
+
+
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 
@@ -124,12 +157,18 @@ CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 
-MULTIPLE_CHOICE_DUMMY_INPUTS = [[[0], [1]], [[0], [1]]]
+MULTIPLE_CHOICE_DUMMY_INPUTS = [
+    [[0, 1, 0, 1], [1, 0, 0, 1]]
+] * 2  # Needs to have 0s and 1s only since XLM uses it for langs too.
 DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
+PRESET_MIRROR_DICT = {
+    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
+    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
+}
 
 
 def is_torch_available():
@@ -144,6 +183,10 @@ def is_torch_tpu_available():
     return _torch_tpu_available
 
 
+def is_datasets_available():
+    return _datasets_available
+
+
 def is_psutil_available():
     return _psutil_available
 
@@ -154,6 +197,92 @@ def is_py3nvml_available():
 
 def is_apex_available():
     return _has_apex
+
+
+def is_faiss_available():
+    return _faiss_available
+
+
+def is_sklearn_available():
+    return _has_sklearn
+
+
+DATASETS_IMPORT_ERROR = """
+{0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
+```
+pip install datasets
+```
+In a notebook or a colab, you can install it by executing a cell with
+```
+!pip install datasets
+```
+then restarting your kernel.
+
+Note that if you have a local folder named `datasets` or a local python file named `datasets.py` in your current
+working directory, python may try to import this instead of the 🤗 Datasets library. You should rename this folder or
+that python file if that's the case.
+"""
+
+
+FAISS_IMPORT_ERROR = """
+{0} requires the faiss library but it was not found in your enviromnent. Checkout the instructions on the
+installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
+that match your enviromnent.
+"""
+
+
+PYTORCH_IMPORT_ERROR = """
+{0} requires the PyTorch library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your enviromnent.
+"""
+
+
+SKLEARN_IMPORT_ERROR = """
+{0} requires the scikit-learn library but it was not found in your enviromnent. You can install it with:
+```
+pip install -U scikit-learn
+```
+In a notebook or a colab, you can install it by executing a cell with
+```
+!pip install -U scikit-learn
+```
+"""
+
+
+TENSORFLOW_IMPORT_ERROR = """
+{0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
+"""
+
+
+def requires_datasets(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_datasets_available():
+        raise ImportError(DATASETS_IMPORT_ERROR.format(name))
+
+
+def requires_faiss(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_faiss_available():
+        raise ImportError(FAISS_IMPORT_ERROR.format(name))
+
+
+def requires_pytorch(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_torch_available():
+        raise ImportError(PYTORCH_IMPORT_ERROR.format(name))
+
+
+def requires_sklearn(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_sklearn_available():
+        raise ImportError(SKLEARN_IMPORT_ERROR.format(name))
+
+
+def requires_tf(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_tf_available():
+        raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
@@ -290,14 +419,15 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> inputs = tokenizer(question, text, return_tensors='pt')
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
-        >>> start_scores = outputs.start_scores
-        >>> end_scores = outputs.end_scores
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -436,6 +566,7 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
 TF_MASKED_LM_SAMPLE = r"""
     Example::
+
         >>> from transformers import {tokenizer_class}, {model_class}
         >>> import tensorflow as tf
 
@@ -516,7 +647,7 @@ def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, o
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
         elif "LMHead" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
-        elif "Model" in model_class:
+        elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
@@ -554,7 +685,7 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
+def hf_bucket_url(model_id: str, filename: str, use_cdn=True, mirror=None) -> str:
     """
     Resolve a model identifier, and a file name, to a HF-hosted url
     on either S3 or Cloudfront (a Content Delivery Network, or CDN).
@@ -570,7 +701,13 @@ def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
     are not shared between the two because the cached file's name contains
     a hash of the url.
     """
-    endpoint = CLOUDFRONT_DISTRIB_PREFIX if use_cdn else S3_BUCKET_PREFIX
+    endpoint = (
+        PRESET_MIRROR_DICT.get(mirror, mirror)
+        if mirror
+        else CLOUDFRONT_DISTRIB_PREFIX
+        if use_cdn
+        else S3_BUCKET_PREFIX
+    )
     legacy_format = "/" not in model_id
     if legacy_format:
         return f"{endpoint}/{model_id}-{filename}"
@@ -744,7 +881,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logger.getEffectiveLevel() == logging.NOTSET),
+        disable=bool(logging.get_verbosity() == logging.NOTSET),
     )
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
@@ -801,7 +938,7 @@ def get_from_cache(
         else:
             matching_files = [
                 file
-                for file in fnmatch.filter(os.listdir(cache_dir), filename + ".*")
+                for file in fnmatch.filter(os.listdir(cache_dir), filename.split(".")[0] + ".*")
                 if not file.endswith(".json") and not file.endswith(".lock")
             ]
             if len(matching_files) > 0:
@@ -972,6 +1109,8 @@ class ModelOutput(OrderedDict):
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
                         self[element[0]] = element[1]
+            elif first_field is not None:
+                self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
                 v = getattr(self, field.name)
@@ -996,6 +1135,18 @@ class ModelOutput(OrderedDict):
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
+
+    def __setattr__(self, name, value):
+        if name in self.keys() and value is not None:
+            # Don't call self.__setitem__ to avoid recursion errors
+            super().__setitem__(name, value)
+        super().__setattr__(name, value)
+
+    def __setitem__(self, key, value):
+        # Will raise a KeyException if needed
+        super().__setitem__(key, value)
+        # Don't call self.__setattr__ to avoid recursion errors
+        super().__setattr__(key, value)
 
     def to_tuple(self) -> Tuple[Any]:
         """

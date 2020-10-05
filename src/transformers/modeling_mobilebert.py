@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import logging
 import math
 import os
 import warnings
@@ -32,7 +31,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import ACT2FN
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import (
     ModelOutput,
@@ -41,7 +40,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bert import BertIntermediate
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -53,9 +51,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
@@ -64,10 +63,10 @@ MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["google/mobilebert-uncased"]
 
 
 def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
-    """ Load tf checkpoints in a pytorch model.
-    """
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
@@ -155,13 +154,11 @@ class NoNorm(nn.Module):
         return input_tensor * self.weight + self.bias
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
 
 
 class MobileBertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -359,10 +356,19 @@ class MobileBertAttention(nn.Module):
         return outputs
 
 
-class MobileBertIntermediate(BertIntermediate):
+class MobileBertIntermediate(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.dense = nn.Linear(config.true_hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
 
 
 class OutputBottleneck(nn.Module):
@@ -662,14 +668,15 @@ class MobileBertPreTrainingHeads(nn.Module):
 
 
 class MobileBertPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = MobileBertConfig
     pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -691,7 +698,8 @@ class MobileBertForPreTrainingOutput(ModelOutput):
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction
+            (classification) loss.
         prediction_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         seq_relationship_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
@@ -718,7 +726,12 @@ class MobileBertForPreTrainingOutput(ModelOutput):
 
 
 MOBILEBERT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
@@ -730,54 +743,65 @@ MOBILEBERT_START_DOCSTRING = r"""
 
 MOBILEBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.MobileBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Indices are selected in ``[0, 1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             if the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
+
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 
@@ -787,17 +811,16 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
 )
 class MobileBertModel(MobileBertPreTrainedModel):
     """
-        https://arxiv.org/pdf/2004.02984.pdf
+    https://arxiv.org/pdf/2004.02984.pdf
     """
 
-    authorized_missing_keys = [r"position_ids"]
-
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
         self.embeddings = MobileBertEmbeddings(config)
         self.encoder = MobileBertEncoder(config)
-        self.pooler = MobileBertPooler(config)
+
+        self.pooler = MobileBertPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -808,14 +831,14 @@ class MobileBertModel(MobileBertPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -896,7 +919,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -944,10 +967,10 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         self.cls.predictions.dense = resized_dense
         self.cls.predictions.dense.to(self.device)
 
-        if output_embeddings is not None:
+        if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -964,31 +987,33 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
-        next_sentence_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+        next_sentence_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
-            Indices should be in ``[0, 1]``.
-            ``0`` indicates sequence B is a continuation of sequence A,
-            ``1`` indicates sequence B is a random sequence.
-    Returns:
+            Indices should be in ``[0, 1]``:
 
-    Examples::
+            - 0 indicates sequence B is a continuation of sequence A,
+            - 1 indicates sequence B is a random sequence.
 
-        >>> from transformers import MobileBertTokenizer, MobileBertForPreTraining
-        >>> import torch
+        Returns:
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
-        >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased", return_dict=True)
+        Examples::
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
+            >>> from transformers import MobileBertTokenizer, MobileBertForPreTraining
+            >>> import torch
 
-        >>> prediction_logits = outptus.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
+            >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+            >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased", return_dict=True)
+
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(input_ids)
+
+            >>> prediction_logits = outptus.prediction_logits
+            >>> seq_relationship_logits = outputs.seq_relationship_logits
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1029,9 +1054,12 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.cls = MobileBertOnlyMLMHead(config)
         self.config = config
 
@@ -1059,10 +1087,10 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         self.cls.predictions.dense = resized_dense
         self.cls.predictions.dense.to(self.device)
 
-        if output_embeddings is not None:
+        if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1086,7 +1114,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         **kwargs
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -1159,7 +1187,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1175,29 +1203,30 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
             Indices should be in ``[0, 1]``.
-            ``0`` indicates sequence B is a continuation of sequence A,
-            ``1`` indicates sequence B is a random sequence.
 
-    Returns:
+            - 0 indicates sequence B is a continuation of sequence A,
+            - 1 indicates sequence B is a random sequence.
 
-    Examples::
+        Returns:
 
-        >>> from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
-        >>> import torch
+        Examples::
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        >>> model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased', return_dict=True)
+            >>> from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
+            >>> import torch
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+            >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+            >>> model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased', return_dict=True)
 
-        >>> outputs = model(**encoding, next_sentence_label=torch.LongTensor([1]))
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+
+            >>> outputs = model(**encoding, next_sentence_label=torch.LongTensor([1]))
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1248,7 +1277,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1269,7 +1298,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
@@ -1307,7 +1336,10 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1317,16 +1349,19 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1348,13 +1383,13 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1423,7 +1458,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1444,10 +1479,10 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1490,7 +1525,10 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1500,17 +1538,20 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mobilebert = MobileBertModel(config)
+        self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1531,7 +1572,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
@@ -1573,5 +1614,8 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
