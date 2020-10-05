@@ -73,12 +73,13 @@ from .data import (
     SquadFeatures,
     SquadV1Processor,
     SquadV2Processor,
+    glue_compute_metrics,
     glue_convert_examples_to_features,
     glue_output_modes,
     glue_processors,
     glue_tasks_num_labels,
-    is_sklearn_available,
     squad_convert_examples_to_features,
+    xnli_compute_metrics,
     xnli_output_modes,
     xnli_processors,
     xnli_tasks_num_labels,
@@ -102,6 +103,7 @@ from .file_utils import (
     is_faiss_available,
     is_psutil_available,
     is_py3nvml_available,
+    is_sklearn_available,
     is_tf_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -210,10 +212,6 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-
-if is_sklearn_available():
-    from .data import glue_compute_metrics, xnli_compute_metrics
 
 
 # Modeling
@@ -531,6 +529,8 @@ if is_torch_available():
 
     # Trainer
     from .trainer import EvalPrediction, Trainer, set_seed, torch_distributed_zero_first
+else:
+    from .utils.dummy_pt_objects import *
 
 # TensorFlow
 if is_tf_available():
@@ -752,6 +752,11 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+else:
+    # Import the same objects as dummies to get them in the namespace.
+    # They will raise an import error if the user tries to instantiate / use them.
+    from .utils.dummy_tf_objects import *
 
 
 if not is_tf_available() and not is_torch_available():
