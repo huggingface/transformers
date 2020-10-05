@@ -347,22 +347,20 @@ class FlaxBertModel(FlaxPreTrainedModel):
         return self._config
 
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-        def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-            return self.model.apply(
-                {"param": self.params},
-                jnp.array(input_ids, dtype="i4"),
-                jnp.array(token_type_ids, dtype="i4"),
-                jnp.array(position_ids, dtype="i4"),
-                jnp.array(attention_mask, dtype="i4"),
-            )
-
         if token_type_ids is None:
-            token_type_ids = np.ones_like(input_ids)
+            token_type_ids = jnp.ones_like(input_ids)
 
         if position_ids is None:
-            position_ids = np.arange(np.atleast_2d(input_ids).shape[-1])
+            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
 
         if attention_mask is None:
-            attention_mask = np.ones_like(input_ids)
+            attention_mask = jnp.ones_like(input_ids)
 
-        return predict(input_ids, token_type_ids, position_ids, attention_mask)
+        return self.model.apply(
+            {"param": self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+        )
+
