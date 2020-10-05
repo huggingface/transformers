@@ -1,6 +1,8 @@
 import unittest
 
-from transformers import AutoConfig, BertConfig, is_flax_available
+import jax
+
+from transformers import AutoConfig, BertConfig, is_flax_available, AutoTokenizer, TensorType
 from transformers.modeling_flax_bert import FlaxBertModel
 from transformers.modeling_flax_roberta import FlaxRobertaModel
 from transformers.testing_utils import require_flax, slow
@@ -35,3 +37,29 @@ class FlaxAutoModelTest(unittest.TestCase):
                 model = FlaxAutoModel.from_pretrained(model_name)
                 self.assertIsNotNone(model)
                 self.assertIsInstance(model, FlaxRobertaModel)
+
+    @slow
+    def test_bert_jax_jit(self):
+        for model_name in ["bert-base-cased", "bert-large-uncased"]:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = FlaxBertModel.from_pretrained(model_name)
+            tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
+
+            @jax.jit
+            def eval(**kwargs):
+                return model(**kwargs)
+
+            eval(**tokens).block_until_ready()
+
+    @slow
+    def test_roberta_jax_jit(self):
+        for model_name in ["roberta-base-cased", "roberta-large-uncased"]:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = FlaxRobertaModel.from_pretrained(model_name)
+            tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
+
+            @jax.jit
+            def eval(**kwargs):
+                return model(**kwargs)
+
+            eval(**tokens).block_until_ready()
