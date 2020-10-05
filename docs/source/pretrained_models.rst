@@ -426,4 +426,13 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                    |                                                            |                                                                                                                                       |
 |                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-
+| SqueezeBERT        | ``squeezebert/squeezebert-uncased``                        | | 12-layer, 768-hidden, 12-heads, 51M parameters, 4.3x faster than bert-base-uncased on a smartphone.                                 |
+|                    |                                                            | | SqueezeBERT architecture pretrained from scratch on masked language model (MLM) and sentence order prediction (SOP) tasks.          |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``squeezebert/squeezebert-mnli``                           | | 12-layer, 768-hidden, 12-heads, 51M parameters, 4.3x faster than bert-base-uncased on a smartphone.                                 |
+|                    |                                                            | | This is the squeezebert-uncased model finetuned on MNLI sentence pair classification task with distillation from electra-base.      |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``squeezebert/squeezebert-mnli-headless``                  | | 12-layer, 768-hidden, 12-heads, 51M parameters, 4.3x faster than bert-base-uncased on a smartphone.                                 |
+|                    |                                                            | | This is the squeezebert-uncased model finetuned on MNLI sentence pair classification task with distillation from electra-base.      |
+|                    |                                                            | | The final classification layer is removed, so when you finetune, the final layer will be reinitialized.                             |
++--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+

@@ -148,7 +148,10 @@ conversion utilities for the following models:
 29. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized
     Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang, Zihang
     Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, and Quoc V. Le.
-30. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+30. SqueezeBERT (from UC Berkeley) released with the paper
+    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks? <https://arxiv.org/abs/2006.11316>`_
+    by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer.
+31. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -241,6 +244,7 @@ conversion utilities for the following models:
     model_doc/reformer
     model_doc/retribert
     model_doc/roberta
+    model_doc/squeezebert
     model_doc/t5
     model_doc/transformerxl
     model_doc/xlm
