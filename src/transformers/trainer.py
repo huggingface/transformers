@@ -769,7 +769,7 @@ class Trainer:
             reissue_pt_warnings(caught_warnings)
 
         # Determine the new best metric / best model checkpoint
-        if metrics is not None:
+        if metrics is not None and self.args.metric_for_best_model is not None:
             metric_to_check = self.args.metric_for_best_model
             if not metric_to_check.startswith("eval_"):
                 metric_to_check = f"eval_{metric_to_check}"
