@@ -163,7 +163,10 @@ class Trainer:
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
         callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
-            A list of callbacks to customize the training loop.
+            A list of callbacks to customize the training loop. Will add those to the list of default callbacks
+            detailed in :doc:`here <callback>`.
+
+            If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
         optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
@@ -280,9 +283,41 @@ class Trainer:
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
     def add_callback(self, callback):
+        """
+        Add a callback to the current list of :class:`~transformer.TrainerCallback`.
+
+        Args:
+           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
+               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
+               In the first case, will instantiate a member of that class.
+        """
         self.callback_handler.add_callback(callback)
 
+    def pop_callback(self, callback):
+        """
+        Remove a callback from the current list of :class:`~transformer.TrainerCallback` and returns it.
+
+        If the callback is not found, returns :obj:`None` (and no error is raised).
+
+        Args:
+           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
+               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
+               In the first case, will pop the first member of that class found in the list of callbacks.
+
+        Returns:
+            :class:`~transformer.TrainerCallback`: The callback removed, if found.
+        """
+        self.callback_handler.pop_callback(callback)
+
     def remove_callback(self, callback):
+        """
+        Remove a callback from the current list of :class:`~transformer.TrainerCallback`.
+
+        Args:
+           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
+               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
+               In the first case, will remove the first member of that class found in the list of callbacks.
+        """
         self.callback_handler.remove_callback(callback)
 
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):

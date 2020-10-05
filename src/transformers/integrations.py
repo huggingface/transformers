@@ -185,10 +185,19 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 
 class TensorBoardCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `TensorBoard
+    <https://www.tensorflow.org/tensorboard>`__.
+
+    Args:
+        tb_writer (:obj:`SummaryWriter`, `optional`):
+            The writer to use. Will instatiate one if not set.
+    """
+
     def __init__(self, tb_writer=None):
         assert (
             _has_tensorboard
-        ), "TensorBoardCallback requires tensorbaord to be installed. Either update your PyTorch version or install tensorboardX."
+        ), "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
         self.tb_writer = tb_writer
 
     def on_init_end(self, args, state, control, **kwargs):
@@ -223,6 +232,11 @@ class TensorBoardCallback(TrainerCallback):
 
 
 class WandbCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases
+    <https://www.wandb.com/>`__.
+    """
+
     def __init__(self):
         assert _has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
         self._initialized = False
@@ -235,13 +249,13 @@ class WandbCallback(TrainerCallback):
         `here <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
-            WANDB_WATCH:
-                (Optional, ["gradients", "all", "false"]) "gradients" by default, set to "false" to disable gradient logging
-                or "all" to log gradients and parameters
-            WANDB_PROJECT:
-                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project
-            WANDB_DISABLED:
-                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
+            WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
+                Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
+                logging or :obj:`"all"` to log gradients and parameters.
+            WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
+                Set this to a custom string to store results in a different project.
+            WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to disable wandb entirely.
         """
         self._initialized = True
         if state.is_world_process_zero:
@@ -268,6 +282,11 @@ class WandbCallback(TrainerCallback):
 
 
 class CometCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML
+    <https://www.comet.ml/site/>`__.
+    """
+
     def __init__(self):
         assert _has_comet, "CometCallback requires wandb to be installed. Run `pip install comet-ml`."
         self._initialized = False
@@ -277,12 +296,12 @@ class CometCallback(TrainerCallback):
         Setup the optional Comet.ml integration.
 
         Environment:
-            COMET_MODE:
-                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
-            COMET_PROJECT_NAME:
-                (Optional): str - Comet.ml project name for experiments
-            COMET_OFFLINE_DIRECTORY:
-                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+            COMET_MODE (:obj:`str`, `optional`):
+                "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME (:obj:`str`, `optional`):
+                Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
+                Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
 
         For a number of configurable items in the environment,
         see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.

@@ -31,7 +31,8 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TrainerState:
     """
-    A class containing the `Trainer` inner state that will be saved along the model and optimizer.
+    A class containing the :class:`~transformers.Trainer` inner state that will be saved along the model and optimizer
+    when checkpointing and passed to the :class:`~transformers.TrainerCallback`.
 
     .. note::
 
@@ -58,7 +59,7 @@ class TrainerState:
             far.
         is_local_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
-        several machines) main process.
+            several machines) main process.
         is_world_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not this process is the global main process (when training in a distributed fashion on
             several machines, this is only going to be :obj:`True` for one process).
@@ -96,7 +97,8 @@ class TrainerState:
 @dataclass
 class TrainerControl:
     """
-    A class that handles the :class:`~transformers.Trainer` controlflow.
+    A class that handles the :class:`~transformers.Trainer` control flow. This class is used by the
+    :class:`~transformers.TrainerCallback` to activate some switches in the training loop.
 
     Args:
         should_training_stop (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -143,37 +145,119 @@ class TrainerControl:
 
 
 class TrainerCallback:
+    """
+    A class for objects that will inspect the state of the training loop at some events and take some decisions. At
+    each of those events the following arguments are available:
+
+    Args:
+        args (:class:`~transformers.TrainingArguments`):
+            The training arguments used to instantiate the :class:`~transformers.Trainer`.
+        state (:class:`~transformers.TrainerState`):
+            The current state of the :class:`~transformers.Trainer`.
+        control (:class:`~transformers.TrainerControl`):
+            The object that is returned to the :class:`~transformers.Trainer` and can be used to make some decisions.
+        model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`):
+            The model being trained.
+        optimizer (:obj:`torch.optim.Optimizer`):
+            The optimizer used for the training steps.
+        lr_scheduler (:obj:`torch.optim.lr_scheduler.LambdaLR`):
+            The scheduler used for setting the learning rate.
+        train_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+            The current dataloader used for training.
+        eval_dataloader (:obj:`torch.utils.data.dataloader.DataLoader`, `optional`):
+            The current dataloader used for training.
+        metrics (:obj:`Dict[str, float]`):
+            The metrics computed by the last evaluation phase.
+
+            Those are only accessible in the event :obj:`on_evaluate`.
+        logs  (:obj:`Dict[str, float]`):
+            The values to log.
+
+            Those are only accessible in the event :obj:`on_log`.
+
+    The :obj:`control` object is the only one that can be changed by the callback, in which case the event that changes
+    it should return the modified version.
+
+    The argument :obj:`args`, :obj:`state` and :obj:`control` are positionals for all events, all the others are
+    grouped in :obj:`kwargs`. You can unpack the ones you need in the signature of the event using them. As an example,
+    see the code of the simple :class:`~transformer.PrinterCallback`.
+
+    Example::
+
+        class PrinterCallback(TrainerCallback):
+
+            def on_log(self, args, state, control, logs=None, **kwargs):
+                _ = logs.pop("total_flos", None)
+                if state.is_local_process_zero:
+                    print(logs)
+    """
+
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of the initialization of the :class:`~transformers.Trainer`.
+        """
         pass
 
     def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the beginning of training.
+        """
         pass
 
     def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of training.
+        """
         pass
 
     def on_epoch_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the beginning of an epoch.
+        """
         pass
 
     def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of an epoch.
+        """
         pass
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the beginning of a training step. If using gradient accumulation, one training step might take
+        several inputs.
+        """
         pass
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called at the end of a training step. If using gradient accumulation, one training step might take
+        several inputs.
+        """
         pass
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called after an evaluation phase.
+        """
         pass
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called after a checkpoint save.
+        """
         pass
 
     def on_log(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called after logging the last logs.
+        """
         pass
 
     def on_prediction_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called after a prediction step.
+        """
         pass
 
 
@@ -300,6 +384,11 @@ class CallbackHandler(TrainerCallback):
 
 
 class DefaultFlowCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that handles the default flow of the training loop for logs, evaluation
+    and checkpoints.
+    """
+
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         # Log
         if state.global_step == 1 and args.logging_first_step:
@@ -332,6 +421,10 @@ class DefaultFlowCallback(TrainerCallback):
 
 
 class ProgressCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that displays the progress of training or evaluation.
+    """
+
     def __init__(self):
         self.training_bar = None
         self.prediction_bar = None
@@ -367,6 +460,10 @@ class ProgressCallback(TrainerCallback):
 
 
 class PrinterCallback(TrainerCallback):
+    """
+    A bare :class:`~transformers.TrainerCallback` that just prints the logs.
+    """
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
