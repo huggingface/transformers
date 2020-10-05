@@ -403,7 +403,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-SQUEEZEBERT_START_DOCSTRING = r"""    
+SQUEEZEBERT_START_DOCSTRING = r"""
 
     The SqueezeBERT model was proposed in
     `SqueezeBERT: What can computer vision teach NLP about efficient neural networks?
@@ -938,7 +938,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
 @add_start_docstrings(
     """SqueezeBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD
-     (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). 
+     (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
      """,
     SQUEEZEBERT_START_DOCSTRING,
 )
