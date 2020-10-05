@@ -126,41 +126,45 @@ conversion utilities for the following models:
     being developed by the Microsoft Translator Team.
 20. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`__ (from Facebook) released with the paper 
     `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`__ by Yinhan
-    Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov, Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer. 
+    Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov, Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 21. `MMBT <https://github.com/facebookresearch/mmbt/>`__ (from Facebook), released together with the paper a
     `Supervised Multimodal Bitransformers for Classifying Images and Text <https://arxiv.org/pdf/1909.02950.pdf>`__ by
     Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
 22. `Pegasus <https://github.com/google-research/pegasus>`__ (from Google) released with the paper `PEGASUS:
     Pre-training with Extracted Gap-sentences for Abstractive Summarization <https://arxiv.org/abs/1912.08777>`__> by
     Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
-23. `Reformer <https://github.com/google/trax/tree/master/trax/models/reformer>`_ (from Google Research) released with
-    the paper `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_ by Nikita Kitaev, Łukasz
-    Kaiser, and Anselm Levskaya.
-24. `RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_ (from Facebook), released together with
-    the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_ by Yinhan Liu, Myle
-    Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin
-    Stoyanov.
-25. `T5 <https://github.com/google-research/text-to-text-transfer-transformer>`_ (from Google) released with the paper
-    `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
-    <https://arxiv.org/abs/1910.10683>`_ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
-    Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu.
-26. `Transformer-XL <https://github.com/kimiyoung/transformer-xl>`_ (from Google/CMU) released with the paper
-    `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_ by
-    Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, and Ruslan Salakhutdinov.
-27. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual
-    Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
-28. `XLM-RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/xlmr>`_ (from Facebook AI), released together
-    with the paper `Unsupervised Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`_ by
-    Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard
-    Grave, Myle Ott, Luke Zettlemoyer, and Veselin Stoyanov.
-29. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized
-    Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang, Zihang
-    Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, and Quoc V. Le.
-30. SqueezeBERT (from UC Berkeley) released with the paper
-    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks? <https://arxiv.org/abs/2006.11316>`_
-    by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer.
-31. `Other community models <https://huggingface.co/models>`_, contributed by the `community
-    <https://huggingface.co/users>`_.
+23. `Reformer <https://huggingface.co/transformers/model_doc/reformer.html>`__ (from Google Research) released with the
+    paper `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`__ by Nikita Kitaev, Łukasz Kaiser,
+    Anselm Levskaya.
+24. `RoBERTa <https://huggingface.co/transformers/model_doc/roberta.html>`__ (from Facebook), released together with
+    the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`__ by Yinhan Liu, Myle
+    Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
+    ultilingual BERT into `DistilmBERT
+    <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__ and a German version of
+    DistilBERT.
+25. `SqueezeBert <https://huggingface.co/transformers/model_doc/squeezebert.html>`__ released with the paper
+    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks?
+    <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer.
+26. `T5 <https://huggingface.co/transformers/model_doc/t5.html>`__ (from Google AI) released with the paper `Exploring
+    the Limits of Transfer Learning with a Unified Text-to-Text Transformer <https://arxiv.org/abs/1910.10683>`__ by
+    Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi
+    Zhou and Wei Li and Peter J. Liu.
+27. `Transformer-XL <https://huggingface.co/transformers/model_doc/transformerxl.html>`__ (from Google/CMU) released
+    with the paper `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context
+    <https://arxiv.org/abs/1901.02860>`__ by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le,
+    Ruslan Salakhutdinov.
+28. `XLM <https://huggingface.co/transformers/model_doc/xlm.html>`__ (from Facebook) released together with the paper
+    `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`__ by Guillaume Lample and Alexis
+    Conneau.
+29. `XLM-RoBERTa <https://huggingface.co/transformers/model_doc/xlmroberta.html>`__ (from Facebook AI), released
+    together with the paper `Unsupervised Cross-lingual Representation Learning at Scale
+    <https://arxiv.org/abs/1911.02116>`__ by Alexis Conneau*, Kartikay Khandelwal*, Naman Goyal, Vishrav Chaudhary,
+    Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov.
+30. `XLNet <https://huggingface.co/transformers/model_doc/xlnet.html>`__ (from Google/CMU) released with the paper
+    `​XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by
+    Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+31. `Other community models <https://huggingface.co/models>`__, contributed by the `community
+    <https://huggingface.co/users>`__.
 
 .. toctree::
     :maxdepth: 2
