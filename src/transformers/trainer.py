@@ -48,6 +48,7 @@ from .trainer_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     nested_concat,
+    nested_detach,
     nested_numpify,
     nested_xla_mesh_reduce,
     set_seed,
@@ -1466,16 +1467,18 @@ class Trainer:
                 logits = outputs[:]
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+                # Remove the past from the logits.
+                logits = logits[: self.args.past_index - 1] + logits[self.args.past_index :]
 
         if prediction_loss_only:
             return (loss, None, None)
 
-        logits = tuple(logit.detach() for logit in logits)
+        logits = nested_detach(logits)
         if len(logits) == 1:
             logits = logits[0]
 
         if has_labels:
-            labels = tuple(inputs.get(name).detach() for name in self.label_names)
+            labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
             if len(labels) == 1:
                 labels = labels[0]
         else:

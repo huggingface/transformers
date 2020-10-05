@@ -58,6 +58,7 @@ from .configuration_rag import RagConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
@@ -73,12 +74,13 @@ from .data import (
     SquadFeatures,
     SquadV1Processor,
     SquadV2Processor,
+    glue_compute_metrics,
     glue_convert_examples_to_features,
     glue_output_modes,
     glue_processors,
     glue_tasks_num_labels,
-    is_sklearn_available,
     squad_convert_examples_to_features,
+    xnli_compute_metrics,
     xnli_output_modes,
     xnli_processors,
     xnli_tasks_num_labels,
@@ -102,6 +104,7 @@ from .file_utils import (
     is_faiss_available,
     is_psutil_available,
     is_py3nvml_available,
+    is_sklearn_available,
     is_tf_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -186,6 +189,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_utils import PreTrainedTokenizer
@@ -210,10 +214,6 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-
-if is_sklearn_available():
-    from .data import glue_compute_metrics, xnli_compute_metrics
 
 
 # Modeling
@@ -456,6 +456,17 @@ if is_torch_available():
         RobertaForTokenClassification,
         RobertaModel,
     )
+    from .modeling_squeezebert import (
+        SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        SqueezeBertForMaskedLM,
+        SqueezeBertForMultipleChoice,
+        SqueezeBertForQuestionAnswering,
+        SqueezeBertForSequenceClassification,
+        SqueezeBertForTokenClassification,
+        SqueezeBertModel,
+        SqueezeBertModule,
+        SqueezeBertPreTrainedModel,
+    )
     from .modeling_t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
         T5ForConditionalGeneration,
@@ -521,6 +532,8 @@ if is_torch_available():
 
     # Trainer
     from .trainer import EvalPrediction, Trainer, set_seed, torch_distributed_zero_first
+else:
+    from .utils.dummy_pt_objects import *
 
 # TensorFlow
 if is_tf_available():
@@ -742,6 +755,11 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+else:
+    # Import the same objects as dummies to get them in the namespace.
+    # They will raise an import error if the user tries to instantiate / use them.
+    from .utils.dummy_tf_objects import *
 
 
 if not is_tf_available() and not is_torch_available():

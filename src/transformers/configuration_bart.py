@@ -15,7 +15,6 @@
 """ BART configuration """
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings
 from .utils import logging
 
 
@@ -32,28 +31,38 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-BART_CONFIG_ARGS_DOC = r"""
+class BartConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a :class:`~transformers.BartModel`. It is used to
+    instantiate a BART model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
+
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Defines the different tokens that can be represented by `inputs_ids` passed to the forward method.
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.BartModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of encoder layers, 16 for pegasus, 6 for bart-base and marian
+            Number of encoder layers, 6 are used for the `bart-base` model.
         decoder_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of decoder layers, 16 for pegasus, 6 for bart-base and marian
+            Number of decoder layers, 6 are used for the `bart-base` model.
         encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
-        activation_function (:obj:`str`, defaults to "gelu"):
-            The non-linear activation function used between layers. "gelu", "relu", "swish" and "gelu_new" are supported.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler.
+            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -66,15 +75,13 @@ BART_CONFIG_ARGS_DOC = r"""
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         add_bias_logits (:obj:`bool`, `optional`, defaults to :obj:`False`):
-             :obj:`True` for marian only.
+            This should be completed, specific to marian.
         normalize_before (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Call layernorm before attention ops.  :obj:`True` for pegasus, mbart, blenderbot-3B.
-        do_blenderbot_90_layernorm (:obj:`bool`, `optional`, defaults to :obj:`False`):
-           if :obj:`True`, call layernorm_embedding one line earlier. see `discussion <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_
+            Call layernorm before attention ops.
         normalize_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Call layernorm after embeddings. Only  :obj:`True` for Bart.
+            Call layernorm after embeddings.
         static_position_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Don't learn positional embeddings, use sinusoidal.  :obj:`True` for marian, pegasus.
+            Don't learn positional embeddings, use sinusoidal.
         add_final_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Why not add another layernorm?
         scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -86,24 +93,20 @@ BART_CONFIG_ARGS_DOC = r"""
         bos_token_id (:obj:`int`, `optional`, defaults to 0)
             Beginning of stream token id.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
-            Google "layerdrop arxiv", as its not explainable in one line.
+            The LayerDrop probability for the encoder. See the `LayerDrop paper
+            <see https://arxiv.org/abs/1909.11556>`__ for more details.
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
-            Google "layerdrop arxiv", as its not explainable in one line.
+            The LayerDrop probability for the decoder. See the `LayerDrop paper
+            <see https://arxiv.org/abs/1909.11556>`__ for more details.
         extra_pos_embeddings: (:obj:`int`, `optional`, defaults to 2):
-            How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
+            How many extra learned positional embeddings to use. Should be set to :obj:`pad_token_id+1`.
         num_labels: (:obj:`int`, `optional`, defaults to 3):
-            for SequenceClassification
+            The number of labels to use in :class:`~transformers.BartForSequenceClassification`.
         is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether this is an encoder/decoder model
+            Whether this is an encoder/decoder model.
         force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
-"""
-
-
-@add_start_docstrings(BART_CONFIG_ARGS_DOC)
-class BartConfig(PretrainedConfig):
-    r"""
-    Configuration class for Bart. Parameters are renamed from the fairseq implementation
+            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``),
+            only :obj:`True` for `bart-large-cnn`.
     """
     model_type = "bart"
 
@@ -138,7 +141,6 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
-        do_blenderbot_90_layernorm=False,
         force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
@@ -176,7 +178,7 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-        self.do_blenderbot_90_layernorm = do_blenderbot_90_layernorm
+
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
@@ -196,8 +198,7 @@ class BartConfig(PretrainedConfig):
         self.classif_dropout = classifier_dropout
 
         # pos embedding offset
-        self.extra_pos_embeddings = extra_pos_embeddings
-        # bart has a hack that offsets positional embeddings by 2, other models don't do do this
+        self.extra_pos_embeddings = self.pad_token_id + 1
 
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
 
