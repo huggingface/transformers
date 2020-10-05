@@ -43,7 +43,6 @@ from lightning_base import BaseTransformer, add_generic_args, generic_train  # n
 
 
 logger = logging.getLogger(__name__)
-from pytorch_lightning.utilities import rank_zero_only
 
 
 class SummarizationModule(BaseTransformer):

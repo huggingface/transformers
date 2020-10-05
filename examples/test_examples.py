@@ -117,7 +117,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
-            # for now just testing that the script can run to a completion
+            # for now just testing that the script can run to completion
             self.assertGreater(result["acc"], 0.25)
             #
             # TODO: this fails on CI - doesn't get acc/f1>=0.75:
