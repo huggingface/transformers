@@ -183,7 +183,6 @@ class TrainerIntegrationTest(unittest.TestCase):
             state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
             best_model.to(trainer.args.device)
-        print(best_model.a, best_model.b, trainer.model.a, trainer.model.b)
         self.assertTrue(torch.allclose(best_model.a, trainer.model.a))
         self.assertTrue(torch.allclose(best_model.b, trainer.model.b))
 
