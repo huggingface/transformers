@@ -33,6 +33,7 @@ from .file_utils import (
     add_end_docstrings,
     cached_path,
     hf_bucket_url,
+    is_flax_available,
     is_remote_url,
     is_tf_available,
     is_tokenizers_available,
@@ -47,6 +48,8 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+if is_flax_available():
+    import jax.numpy as jnp
 
 if is_tokenizers_available():
     from tokenizers import AddedToken
@@ -143,6 +146,7 @@ class TensorType(ExplicitEnum):
     PYTORCH = "pt"
     TENSORFLOW = "tf"
     NUMPY = "np"
+    JAX = "jax"
 
 
 class CharSpan(NamedTuple):
@@ -565,6 +569,8 @@ class BatchEncoding(UserDict):
             as_tensor = torch.tensor
         elif tensor_type == TensorType.NUMPY:
             as_tensor = np.asarray
+        elif tensor_type == TensorType.JAX and is_flax_available():
+            as_tensor = jnp.array
         else:
             raise ImportError(
                 "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
