@@ -6,7 +6,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen import compact
-from transformers import AutoTokenizer, BertConfig, TensorType
+from transformers import BertConfig
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 
 
