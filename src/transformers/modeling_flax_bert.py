@@ -28,7 +28,7 @@ def gelu(x):
 
 
 ACT2FN = {
-    "gelu": gelu,
+    "gelu": nn.gelu,
     "relu": nn.relu,
     "swish": nn.swish,
     "gelu_new": gelu,
