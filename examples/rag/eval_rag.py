@@ -15,7 +15,7 @@ from transformers import logging as transformers_logging
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # isort:skip
-from examples.rag.utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
+from utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
 
 
 logger = logging.getLogger(__name__)
