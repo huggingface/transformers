@@ -725,7 +725,7 @@ class NgramMultiheadAttention(nn.Module):
         attn = torch.cat([attn_main, attn_ngram], 0).view(-1, bsz, embed_dim)
 
         if output_attentions:
-            attn_weights = attn_weights_ngram  # .view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_ngram.view(self.ngram, bsz, self.num_heads, real_tgt_len, -1).transpose(0, 1)  # .view(bsz, self.num_heads, tgt_len, src_len)r
         else:
             attn_weights = None
 
@@ -1084,7 +1084,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_attention_mask = extended_causal_mask + extended_attention_mask
         else:
             extended_attention_mask = extended_causal_mask
-        return extended_causal_mask.repeat(self.config.num_decoder_attention_heads, 1, 1)
+        return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1)
 
     def prepare_attention_mask_ngram(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
@@ -1159,6 +1159,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        batch_size, sequence_length = input_ids.shape[:2]
+
         if encoder_attention_mask is not None:
             # invert mask
             encoder_attention_mask = encoder_attention_mask.eq(0)
@@ -1189,9 +1191,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 hidden_states.size(0) == 1
             ), "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
 
-            B = hidden_states.size(1)
             ngram_hidden_states = [
-                (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, B, 1)
+                (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, batch_size, 1)
                 for ngram in range(self.ngram)
             ]
             self_attn_mask = None
@@ -1239,13 +1240,14 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 present_key_values += (layer_past,)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
-        hidden_states_list = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
+#        hidden_states_list = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
+        last_hidden_state = hidden_states.transpose(0, 1).view((batch_size, self.ngram + 1, sequence_length) + hidden_states.shape[2:])
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states_list, present_key_values, all_hidden_states, all_self_attns])
+            return tuple(v for v in [last_hidden_state, present_key_values, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states_list,
+            last_hidden_state=last_hidden_state,
             past_key_values=present_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -1409,7 +1411,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             # print(outputs)
             # print('outputs.decoder_hidden_states')
             # print(outputs.last_hidden_state)
-        predicting_streams_logits = [self.lm_head(stream) for stream in predicting_streams]
+        logits = self.lm_head(predicting_streams)
+#        logits_1 = torch.cat([self.lm_head(stream) for stream in predicting_streams], dim=0)
+#        logits = torch.cat([self.lm_head(stream) for stream in predicting_streams], dim=0)
         # lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
 
         if labels is not None:
@@ -1421,7 +1425,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 if i > 0 and self.disable_ngram_loss:
                     break
                 expend_targets[i, :, :] = labels
-            logits = torch.cat(predicting_streams_logits, dim=0)
+#            logits = torch.cat(predicting_streams_logits, dim=0)
             lprobs = F.log_softmax(
                 logits.view(-1, logits.size(-1)),
                 dim=-1,
@@ -1441,7 +1445,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             else:
                 return Seq2SeqLMOutput(
                     loss=loss,
-                    logits=predicting_streams_logits[0],
+                    logits=logits,
                     past_key_values=outputs.past_key_values,
                     decoder_hidden_states=outputs.decoder_hidden_states,
                     decoder_attentions=outputs.decoder_attentions,
@@ -1452,14 +1456,14 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         else:
             # inference
             if not return_dict:
-                outputs_logits = (predicting_streams_logits[0],) + outputs[
+                outputs_logits = (logits,) + outputs[
                     1:
                 ]  # Add cache, hidden states and attention if they are here
                 return outputs_logits
             else:
                 return Seq2SeqLMOutput(
                     loss=None,
-                    logits=predicting_streams_logits[0],
+                    logits=logits,
                     past_key_values=outputs.past_key_values,
                     decoder_hidden_states=outputs.decoder_hidden_states,
                     decoder_attentions=outputs.decoder_attentions,

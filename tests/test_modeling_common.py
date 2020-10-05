@@ -111,6 +111,7 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
@@ -151,6 +152,8 @@ class ModelTesterMixin:
             with torch.no_grad():
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            import ipdb; ipdb.set_trace()
             out_1 = first.cpu().numpy()
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
@@ -163,7 +166,7 @@ class ModelTesterMixin:
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
@@ -216,9 +219,6 @@ class ModelTesterMixin:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                     decoder_attention_idx += 1
 
-                import ipdb
-
-                ipdb.set_trace()
                 self.assertEqual(out_len, correct_outlen)
 
                 decoder_attentions = outputs[decoder_attention_idx]

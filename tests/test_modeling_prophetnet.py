@@ -96,6 +96,7 @@ class ProphetNetModelTester:
         self.is_encoder_decoder = is_encoder_decoder
 
         self.scope = None
+        self.decoder_key_length = 2 * decoder_seq_length
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
