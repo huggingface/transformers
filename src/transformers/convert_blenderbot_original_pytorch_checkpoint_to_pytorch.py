@@ -15,15 +15,15 @@
 """Convert Blenderbot checkpoint."""
 
 import argparse
-import logging
 
 import torch
 
 from transformers import BartConfig, BartForConditionalGeneration
+from transformers.utils import logging
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 PATTERNS = [
     ["attention", "attn"],
@@ -95,7 +95,7 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
             failures.append([k, new_k])
         else:
             mapping[new_k] = v
-    if cfg.normalize_before:
+    if cfg.normalize_before:  # Blenderbot-3B checkpoints. Rename layernorm_embedding -> layer_norm
         rename_layernorm_keys(sd)
     m.model.load_state_dict(mapping, strict=True)
     m.half()

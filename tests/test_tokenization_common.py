@@ -568,7 +568,6 @@ class TokenizerTesterMixin:
                                 output = tokenizer(
                                     [seq_2], [seq_1], padding=padding_state, truncation=truncation_state
                                 )
-
                                 self.assertEqual(len(output["input_ids"][0]), model_max_length)
 
                         # Simple

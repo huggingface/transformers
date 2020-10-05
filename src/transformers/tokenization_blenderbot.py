@@ -1,15 +1,15 @@
 import json
-import logging
 import os
-from typing import List
+from typing import Dict, List, Tuple
 
 import regex as re
 
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 VOCAB_FILES_NAMES = {
@@ -18,8 +18,6 @@ VOCAB_FILES_NAMES = {
     # "tokenizer_config_file": "tokenizer_config.json",
 }
 CKPT_3B = "facebook/blenderbot-3B"
-
-logger = logging.getLogger(__name__)
 
 
 class BlenderbotTokenizer(RobertaTokenizer):
@@ -49,7 +47,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
+        A Blenderbot sequence has the following format:
 
         - single sequence: `` X </s>``
 
@@ -133,13 +131,13 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         self.cache = {}
 
     @property
-    def vocab_size(self):
+    def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def get_vocab(self):
+    def get_vocab(self) -> Dict:
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    def bpe(self, token):
+    def bpe(self, token: str) -> str:
         if token in self.cache:
             return self.cache[token]
         token = re.sub("([.,!?()])", r" \1", token)
@@ -196,8 +194,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             words.append(word)
         return " ".join(words)
 
-    def _tokenize(self, text):
-        """Tokenize a string."""
+    def _tokenize(self, text: str) -> List[str]:
+        """ Split a string into tokens using BPE."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
@@ -206,21 +204,21 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             split_tokens.extend([t for t in self.bpe(token).split(" ")])
         return split_tokens
 
-    def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+    def _convert_token_to_id(self, token: str) -> int:
+        """ Converts a token to an id using the vocab. """
         token = token.lower()
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
-    def _convert_id_to_token(self, index):
+    def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
-    def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """ Converts a sequence of tokens  in a single string. """
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory):
+    def save_vocabulary(self, save_directory: str) -> Tuple[str, str]:
         """
         Save the vocabulary and special tokens file to a directory.
 

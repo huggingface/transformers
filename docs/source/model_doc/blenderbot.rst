@@ -17,12 +17,14 @@ The authors' code can be found `here <https://github.com/facebookresearch/ParlAI
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~
 
-Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
-It inherits completely from :obj:`transformers.BartForConditionalGeneration`
-Even though blenderbot is one model, it uses two tokenizers :obj:`transformers.BlenderbotSmallTokenizer` for 90M checkpoint and :obj:`transformers.BlenderbotTokenizer` for all other checkpoints.
-:obj:`transformers.BlenderbotSmallTokenizer` will always return :obj:`transformers.BlenderbotSmallTokenizer`, regardless of checkpoint. To use the 3B parameter checkpoint, you must call BlenderbotTokenizer directly.
+- Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
+- It inherits completely from :obj:`transformers.BartForConditionalGeneration`
+- Even though blenderbot is one model, it uses two tokenizers :obj:`transformers.BlenderbotSmallTokenizer` for 90M checkpoint and :obj:`transformers.BlenderbotTokenizer` for all other checkpoints.
+- :obj:`transformers.BlenderbotSmallTokenizer` will always return :obj:`transformers.BlenderbotSmallTokenizer`, regardless of checkpoint. To use the 3B parameter checkpoint, you must call BlenderbotTokenizer directly.
+- Available checkpoints can be found in the model `hub <https://huggingface.co/models?search=blenderbot>`__.
 
-    Model Usage:
+
+Model Usage:
 
         >>> from transformers import BlenderbotSmallTokenizer, BlenderbotForConditionalGeneration
         >>> mname = 'facebook/blenderbot-90M'
@@ -34,7 +36,7 @@ Even though blenderbot is one model, it uses two tokenizers :obj:`transformers.B
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
 
 
-    See Config Values:
+See Config Values:
 
         >>> from transformers import BlenderbotConfig
         >>> config_90 = BlenderbotConfig.from_pretrained("facebook/blenderbot-90M")
@@ -49,7 +51,7 @@ See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` 
 
 BlenderbotConfig
 ~~~~~~~~~~~~~~~~~~~~~
-See :obj:`transformers.BartConfig`
+See :obj:`transformers.BartConfig`    
 
 BlenderbotTokenizer
 ~~~~~~~~~~~~~~~~~~~~~
