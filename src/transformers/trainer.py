@@ -61,6 +61,7 @@ from .trainer_pt_utils import (
     distributed_concat,
     get_tpu_sampler,
     nested_concat,
+    nested_detach,
     nested_numpify,
     nested_xla_mesh_reduce,
     reissue_pt_warnings,
