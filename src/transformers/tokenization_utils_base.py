@@ -563,20 +563,25 @@ class BatchEncoding(UserDict):
             tensor_type = TensorType(tensor_type)
 
         # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW and is_tf_available():
+        if tensor_type == TensorType.TENSORFLOW:
+            if not is_tf_available():
+                raise ImportError("Unable to convert output to TensorFlow tensors format, TensorFlow is not installed.")
             as_tensor = tf.constant
-        elif tensor_type == TensorType.PYTORCH and is_torch_available():
+        elif tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             as_tensor = torch.tensor
-        elif tensor_type == TensorType.NUMPY:
-            as_tensor = np.asarray
-        elif tensor_type == TensorType.JAX and is_flax_available():
+        elif tensor_type == TensorType.JAX:
+            if not is_flax_available():
+                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             as_tensor = jnp.array
         else:
-            raise ImportError(
-                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    tensor_type
-                )
-            )
+            as_tensor = np.asarray
+        # (mfuntowicz: This code is unreachable)
+        # else:
+        #     raise ImportError(
+        #         "Unable to convert output to tensors format {}".format(tensor_type)
+        #     )
 
         # Do the tensor conversion in batch
         for key, value in self.items():
