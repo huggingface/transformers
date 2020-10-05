@@ -160,6 +160,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
+            elif tf_model.authorized_missing_keys is not None:
+                # authorized missing keys don't have to be loaded
+                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                    continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
 
@@ -193,6 +197,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
 
     unexpected_keys = list(all_pytorch_weights)
+
+    if tf_model.authorized_missing_keys is not None:
+        for pat in tf_model.authorized_missing_keys:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
         logger.warning(

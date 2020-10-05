@@ -44,6 +44,10 @@ def mish(x):
     return x * torch.tanh(torch.nn.functional.softplus(x))
 
 
+def linear_act(x):
+    return x
+
+
 ACT2FN = {
     "relu": F.relu,
     "swish": swish,
@@ -52,6 +56,8 @@ ACT2FN = {
     "gelu_new": gelu_new,
     "gelu_fast": gelu_fast,
     "mish": mish,
+    "linear": linear_act,
+    "sigmoid": torch.sigmoid,
 }
 
 

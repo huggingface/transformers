@@ -47,9 +47,11 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         # Demonstrate fp16 issue, Contributions welcome!
         self.model.half()
         translated_tokens_fp16 = self.model.generate(**inputs, max_length=10)
-        decoded = self.tokenizer.batch_decode(translated_tokens_fp16, skip_special_tokens=True)
-        bad_fp16_result = ["unk_7unk_7unk_7unk_7unk_7unk_7unk_7", "unk_7unk_7unk_7unk_7unk_7unk_7unk_7"]
-        self.assertListEqual(decoded, bad_fp16_result)
+        decoded_fp16 = self.tokenizer.batch_decode(translated_tokens_fp16, skip_special_tokens=True)
+        assert decoded_fp16 == [
+            "California's largest electricity provider has begun",
+            "N-Dubz have revealed they were",
+        ]
 
 
 class PegasusConfigTests(unittest.TestCase):

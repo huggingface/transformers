@@ -21,7 +21,7 @@ For a quick overview of the general philosphy of the library and its organizatio
 
 # Typical workflow for including a model
 
-Here an overview of the general workflow: 
+Here an overview of the general workflow:
 
 - [ ] Add model/configuration/tokenization classes.
 - [ ] Add conversion scripts.
@@ -69,7 +69,7 @@ Here is the workflow for documentation:
 - [ ] Create a new page `xxx.rst` in the folder `docs/source/model_doc` and add this file in `docs/source/index.rst`.
 
 Make sure to check you have no sphinx warnings when building the documentation locally and follow our
-[documentaiton guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification).
+[documentation guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification).
 
 ## Final steps
 

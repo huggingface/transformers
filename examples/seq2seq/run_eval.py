@@ -152,8 +152,7 @@ def run_generate(verbose=True):
         print(scores)
 
     if args.score_path is not None:
-        path = args.score_path
-        json.dump(scores, open(path, "w"))
+        json.dump(scores, open(args.score_path, "w"))
 
     return scores
 

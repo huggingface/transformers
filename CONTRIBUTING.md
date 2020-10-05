@@ -9,6 +9,9 @@ It also helps us if you spread the word: reference the library from blog posts
 on the awesome projects it made possible, shout out on Twitter every time it has
 helped you, or simply star the repo to say "thank you".
 
+Whichever way you choose to contribute, please be mindful to respect our
+[code of conduct](https://github.com/huggingface/transformers/blob/master/CODE_OF_CONDUCT.md).
+
 ## You can contribute in so many ways!
 
 There are 4 ways you can contribute to transformers:
@@ -176,12 +179,13 @@ Follow these steps to start contributing:
    ```bash
    $ make quality
    ```
-
    You can do the automatic style corrections and code verifications that can't be automated in one go:
 
    ```bash
    $ make fixup
    ```
+
+   This target is also optimized to only work with files modified by the PR you're working on.
 
    If you're modifying documents under `docs/source`, make sure to validate that
    they can still be built. This check also runs in CI. To run a local check

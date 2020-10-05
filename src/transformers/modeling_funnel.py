@@ -187,16 +187,16 @@ class FunnelAttentionStructure(nn.Module):
         # dividide.
         self.pooling_mult = None
 
-    def init_attention_inputs(self, input_embeds, attention_mask=None, token_type_ids=None):
+    def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None):
         """ Returns the attention inputs associated to the inputs of the model. """
-        # input_embeds has shape batch_size x seq_len x d_model
+        # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
-        self.seq_len = seq_len = input_embeds.size(1)
-        position_embeds = self.get_position_embeds(seq_len, input_embeds.dtype, input_embeds.device)
+        self.seq_len = seq_len = inputs_embeds.size(1)
+        position_embeds = self.get_position_embeds(seq_len, inputs_embeds.dtype, inputs_embeds.device)
         token_type_mat = self.token_type_ids_to_mat(token_type_ids) if token_type_ids is not None else None
         cls_mask = (
-            F.pad(input_embeds.new_ones([seq_len - 1, seq_len - 1]), (1, 0, 1, 0))
+            F.pad(inputs_embeds.new_ones([seq_len - 1, seq_len - 1]), (1, 0, 1, 0))
             if self.config.separate_cls
             else None
         )
@@ -367,7 +367,6 @@ class FunnelAttentionStructure(nn.Module):
         # Stride is applied on the second-to-last dimension.
         stride = (stride, 1)
 
-        tensor = tensor.float()
         if mode == "mean":
             tensor = F.avg_pool2d(tensor, stride, stride=stride, ceil_mode=True)
         elif mode == "max":
@@ -554,7 +553,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         attn_score = attn_score.float()
         # perform masking
         if attention_mask is not None:
-            attn_score = attn_score - INF * attention_mask[:, None, None].float()
+            attn_score = attn_score - INF * (1 - attention_mask[:, None, None].float())
         # attention probability
         attn_prob = torch.softmax(attn_score, dim=-1, dtype=dtype)
         attn_prob = self.attention_dropout(attn_prob)
@@ -856,7 +855,9 @@ FUNNEL_INPUTS_DOCSTRING = r"""
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):

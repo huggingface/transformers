@@ -1618,6 +1618,9 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
+
+    authorized_missing_keys = [r"pooler"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1700,6 +1703,9 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
+
+    authorized_missing_keys = [r"pooler"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

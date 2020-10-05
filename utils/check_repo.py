@@ -314,9 +314,8 @@ def check_repo_quality():
     print("Checking all models are properly tested.")
     check_all_decorator_order()
     check_all_models_are_tested()
-    # Uncomment me when RAG is back
-    # print("Checking all models are properly documented.")
-    # check_all_models_are_documented()
+    print("Checking all models are properly documented.")
+    check_all_models_are_documented()
 
 
 if __name__ == "__main__":
