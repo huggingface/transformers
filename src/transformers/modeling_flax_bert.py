@@ -6,7 +6,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen import compact
-from transformers import BertConfig, AutoTokenizer, TensorType
+from transformers import AutoTokenizer, BertConfig, TensorType
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 
 
@@ -334,7 +334,6 @@ class FlaxBertModel(FlaxPreTrainedModel):
             num_heads=config.num_attention_heads,
             head_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
-            padding_idx=config.pad_token_id,
         )
 
         super().__init__(config, model, state, seed)
