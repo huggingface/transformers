@@ -69,9 +69,9 @@ class BertLayerNorm(nn.Module):
         """
         features = x.shape[-1]
         mean = jnp.mean(x, axis=-1, keepdims=True)
-        mean2 = jnp.mean(jnp.lax.square(x), axis=-1, keepdims=True)
-        var = mean2 - jnp.lax.square(mean)
-        mul = jnp.lax.rsqrt(var + epsilon)
+        mean2 = jnp.mean(jax.lax.square(x), axis=-1, keepdims=True)
+        var = mean2 - jax.lax.square(mean)
+        mul = jax.lax.rsqrt(var + epsilon)
         if scale:
             mul = mul * jnp.asarray(self.param("gamma", (features,), scale_init), dtype)
         y = (x - mean) * mul
