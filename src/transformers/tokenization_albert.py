@@ -345,7 +345,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
 class AlbertTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" BERT tokenizer (backed by HuggingFace's `tokenizers` library). Based on
+    Construct a "fast" ALBERT tokenizer (backed by HuggingFace's `tokenizers` library). Based on
     `SentencePiece <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
