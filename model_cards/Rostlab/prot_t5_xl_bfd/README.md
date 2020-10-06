@@ -20,7 +20,7 @@ This means it was pretrained on the raw protein sequences only, with no humans l
 publicly available data) with an automatic process to generate inputs and labels from those protein sequences.
 
 One important difference between this T5 model and the original T5 version is the denosing objective.
-The original T5-3M model was pretrained using a span denosing objective, while this model was pre-trained with a Bart-like MLM denosing objective.
+The original T5-3B model was pretrained using a span denosing objective, while this model was pre-trained with a Bart-like MLM denosing objective.
 The masking probability is consistent with the original T5 training by randomly masking 15% of the amino acids in the input.
 
 It has been shown that the features extracted from this self-supervised model (LM-embeddings) captured important biophysical properties governing protein shape.
