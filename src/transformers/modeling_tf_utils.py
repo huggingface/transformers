@@ -25,6 +25,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
+from tensorflow.python.keras import backend as K
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
@@ -265,8 +266,6 @@ def load_tf_weights(model, resolved_archive_file):
         resolved_archive_file (:obj:`str`):
             The location of the H5 file.
     """
-    from tensorflow.python.keras import backend as K
-
     with h5py.File(resolved_archive_file, "r") as f:
         saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
         weight_value_tuples = []

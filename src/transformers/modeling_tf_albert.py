@@ -466,7 +466,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 class TFAlbertMainLayer(tf.keras.layers.Layer):
     config_class = AlbertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
         self.output_attentions = config.output_attentions
@@ -480,7 +480,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="pooler",
-        )
+        ) if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -594,7 +594,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output[:, 0])
+        pooled_output = self.pooler(sequence_output[:, 0]) if self.pooler is not None else None
 
         if not return_dict:
             return (
@@ -826,13 +826,12 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top. """, ALBERT_START_DOCSTRING)
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    authorized_missing_keys = [r"pooler"]
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
 
     def get_output_embeddings(self):
@@ -994,14 +993,13 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
-
-    authorized_missing_keys = [r"pooler"]
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1079,14 +1077,13 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    authorized_missing_keys = [r"pooler"]
+    authorized_unexpected_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.num_labels = config.num_labels
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
