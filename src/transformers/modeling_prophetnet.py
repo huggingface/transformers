@@ -219,11 +219,13 @@ class SelfAttention(nn.Module):
         dropout=0.0,
         bias=True,
         encoder_decoder_attention=False,  # otherwise self_attention
+        output_dropout=0.0,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
+        self.output_dropout = output_dropout
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
@@ -328,6 +330,7 @@ class SelfAttention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         else:
             attn_weights = None
+        attn_output = F.dropout(attn_output, p=self.output_dropout, training=self.training)
         return attn_output, attn_weights
 
     def _use_saved_state(self, k, v, saved_state, attention_mask, static_kv, bsz):
@@ -383,6 +386,33 @@ class SelfAttention(nn.Module):
         return new_attention_mask
 
 
+#
+# class EncoderFeedForward(nn.Module):
+#
+#    def __init__(self, config: ProphetNetConfig):
+#        super().__init__()
+#
+
+
+class DecoderFeedForward(nn.Module):
+    def __init__(self, config: ProphetNetConfig):
+        super().__init__()
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.intermediate = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
+        self.output = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
+
+    def forward(self, hidden_states):
+        hidden_states = self.intermediate(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+
+        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.output(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        return hidden_states
+
+
 class EncoderLayer(nn.Module):
     """
     Same to Transformer Encoder Layer
@@ -395,6 +425,7 @@ class EncoderLayer(nn.Module):
             self.embed_dim,
             config.num_encoder_attention_heads,
             dropout=config.attention_dropout,
+            output_dropout=config.dropout,
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -412,7 +443,6 @@ class EncoderLayer(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         residual = hidden_states
@@ -441,6 +471,7 @@ class NgramMultiheadAttention(nn.Module):
         kdim=None,
         vdim=None,
         dropout=0.0,
+        output_dropout=0.0,
         bias=True,
         add_bias_kv=False,
         add_zero_attn=False,
@@ -460,6 +491,7 @@ class NgramMultiheadAttention(nn.Module):
         self.relative_max_distance = relative_max_distance
         self.num_heads = num_heads
         self.dropout = dropout
+        self.output_dropout = output_dropout
         self.head_dim = embed_dim // num_heads
         self.ngram = ngram
 
@@ -507,7 +539,7 @@ class NgramMultiheadAttention(nn.Module):
     def reset_parameters(self):
         if self.qkv_same_dim:
             nn.init.xavier_uniform_(self.in_proj_weight)
-        else:
+
             nn.init.xavier_uniform_(self.k_proj_weight)
             nn.init.xavier_uniform_(self.v_proj_weight)
             nn.init.xavier_uniform_(self.q_proj_weight)
@@ -761,6 +793,7 @@ class NgramMultiheadAttention(nn.Module):
         else:
             attn_weights = None
 
+        attn = F.dropout(attn, p=self.output_dropout, training=self.training)
         return attn, attn_weights
 
     def in_proj_qkv(self, query):
@@ -811,29 +844,35 @@ class ProphetNetDecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_dropout = config.activation_dropout
         self.activation_fn = ACT2FN[config.activation_function]
+        self.ngram = config.ngram
 
         self.ngram_self_attn = NgramMultiheadAttention(
             self.embed_dim,
             config.num_attention_heads,
             dropout=config.attention_dropout,
+            output_dropout=config.dropout,
             add_bias_kv=False,
             add_zero_attn=False,
             self_attention=True,
             ngram=config.ngram,
         )
+        self.ngram_self_attn_layer_norm = LayerNorm(self.embed_dim)
+
         self.encoder_attn = SelfAttention(
             self.embed_dim,
             config.num_decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
+            output_dropout=config.dropout,
         )
-
-        self.ngram = config.ngram
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+
         self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.feed_forward = DecoderFeedForward(config)
+
+    #        self.activation_fn = ACT2FN[config.activation_function]
+    #        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
+    #        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
 
     def forward(
         self,
@@ -849,12 +888,10 @@ class ProphetNetDecoderLayer(nn.Module):
         real_positions=None,
     ):
         # one main stream and ngram predicting streams
-        residual = hidden_states
-
         if layer_state is None:
             layer_state = {}
 
-        hidden_states, self_attn_weights = self.ngram_self_attn(
+        ngram_attention_output, self_attn_weights = self.ngram_self_attn(
             hidden_states=hidden_states,
             layer_state=layer_state,
             need_weights=False,
@@ -865,32 +902,35 @@ class ProphetNetDecoderLayer(nn.Module):
             real_positions=real_positions,
             output_attentions=output_attentions,
         )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        residual = hidden_states
+
+        # residual #1
+        hidden_states = self.ngram_self_attn_layer_norm(hidden_states + ngram_attention_output)
 
         # TODO(PVP): make encoder_attn optional
         # TODO(PVP): refactor module into multiple smaller modules
-        hidden_states, _ = self.encoder_attn(
+        attention_output, _ = self.encoder_attn(
             query=hidden_states,
             key=encoder_hidden_states,
             attention_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
 
-        hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        # residual #2
+        hidden_states = self.encoder_attn_layer_norm(attention_output + hidden_states)
+
+        feed_forward_output = self.feed_forward(hidden_states)
+        #        hidden_states = residual + hidden_states
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        #        residual = hidden_states
+        #        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        #        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        #        hidden_states = self.fc2(hidden_states)
+        #        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        #        hidden_states = residual + hidden_states
+
+        # residual #3
+        hidden_states = self.final_layer_norm(feed_forward_output + hidden_states)
 
         return (
             hidden_states,

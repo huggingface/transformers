@@ -469,7 +469,9 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased")
+        model = ProphetNetForConditionalGeneration.from_pretrained(
+            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased"
+        )
         model.to(torch_device)
 
         # encoder-decoder outputs
