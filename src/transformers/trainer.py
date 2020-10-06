@@ -137,8 +137,15 @@ class Trainer:
     optimized for 🤗 Transformers.
 
     Args:
-        model (:class:`~transformers.PreTrainedModel`, `optional`):
+        model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
             The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed.
+
+            .. note::
+
+                :class:`~transformers.Trainer` is optimized to work with the :class:`~transformers.PreTrainedModel`
+                provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
+                they work the same way as the 🤗 Transformers models (expect input and labels as arguments and return
+                a tuple with the loss first if labels are provided).
         args (:class:`~transformers.TrainingArguments`, `optional`):
             The arguments to tweak for training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
             with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.
@@ -177,7 +184,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: PreTrainedModel = None,
+        model: Union[PreTrainedModel, torch.nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
