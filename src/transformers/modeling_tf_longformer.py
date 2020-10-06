@@ -426,9 +426,9 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cd->abd',
+            equation="abc,cd->abd",
             output_shape=(None, config.intermediate_size),
-            bias_axes='d',
+            bias_axes="d",
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
@@ -451,8 +451,8 @@ class TFLongformerOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cd->abd',
-            bias_axes='d',
+            equation="abc,cd->abd",
+            bias_axes="d",
             output_shape=(None, config.hidden_size),
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",

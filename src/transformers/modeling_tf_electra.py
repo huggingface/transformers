@@ -72,23 +72,23 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cde->abde', 
+            equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
-            bias_axes='de',
+            bias_axes="de",
             kernel_initializer=get_initializer(config.initializer_range),
             name="query",
         )
         self.key = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cde->abde', 
+            equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
-            bias_axes='de',
+            bias_axes="de",
             kernel_initializer=get_initializer(config.initializer_range),
             name="key",
         )
         self.value = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cde->abde', 
+            equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
-            bias_axes='de',
+            bias_axes="de",
             kernel_initializer=get_initializer(config.initializer_range),
             name="value",
         )
@@ -142,9 +142,9 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation='abcd,cde->abe',
+            equation="abcd,cde->abe",
             output_shape=(None, self.all_head_size),
-            bias_axes='e',
+            bias_axes="e",
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
@@ -186,9 +186,9 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cd->abd',
+            equation="abc,cd->abd",
             output_shape=(None, config.intermediate_size),
-            bias_axes='d',
+            bias_axes="d",
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
@@ -211,8 +211,8 @@ class TFElectraOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation='abc,cd->abd',
-            bias_axes='d',
+            equation="abc,cd->abd",
+            bias_axes="d",
             output_shape=(None, config.hidden_size),
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
