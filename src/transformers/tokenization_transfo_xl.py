@@ -36,7 +36,7 @@ from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalize
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
-from .file_utils import cached_path, is_torch_available, require_torch
+from .file_utils import cached_path, is_torch_available, torch_only_method
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
@@ -143,8 +143,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             File containing the vocabulary (from the original implementation).
         pretrained_vocab_file (:obj:`str`, `optional`):
             File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
-        never_split (xxx, `optional`):
-            Fill me with intesting stuff.
+        never_split (:obj:`List[str]`, `optional`):
+            List of tokens that should never be split. If no list is specified, will simply use the existing
+            special tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -170,7 +171,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         delimiter=None,
         vocab_file=None,
         pretrained_vocab_file: str = None,
-        pretrained_vocab_file_torch: str = None,
         never_split=None,
         unk_token="<unk>",
         eos_token="<eos>",
@@ -206,17 +206,22 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         # in a library like ours, at all.
         try:
             vocab_dict = None
-            # Priority on pickle files (support PyTorch and TF)
             if pretrained_vocab_file is not None:
+                # Priority on pickle files (support PyTorch and TF)
                 with open(pretrained_vocab_file, "rb") as f:
                     vocab_dict = pickle.load(f)
-            elif pretrained_vocab_file_torch is not None:
-                if not is_torch_available:
-                    raise ImportError(
-                        "You need to install pytorch to load from a PyTorch pretrained vocabulary, "
-                        "or activate it with environment variables USE_TORCH=1 and USE_TF=0."
-                    )
-                vocab_dict = torch.load(pretrained_vocab_file_torch)
+
+                # Loading a torch-saved transfo-xl vocab dict with pickle results in an integer
+                # Entering this if statement means that we tried to load a torch-saved file with pickle, and we failed.
+                # We therefore load it with torch, if it's available.
+                if type(vocab_dict) == int:
+                    if not is_torch_available():
+                        raise ImportError(
+                            "Not trying to load dict with PyTorch as you need to install pytorch to load "
+                            "from a PyTorch pretrained vocabulary, "
+                            "or activate it with environment variables USE_TORCH=1 and USE_TF=0."
+                        )
+                    vocab_dict = torch.load(pretrained_vocab_file)
 
             if vocab_dict is not None:
                 for key, value in vocab_dict.items():
@@ -225,12 +230,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             elif vocab_file is not None:
                 self.build_vocab()
 
-        except Exception:
+        except Exception as e:
             raise ValueError(
                 "Unable to parse file {}. Unknown format. "
                 "If you tried to load a model saved through TransfoXLTokenizerFast,"
                 "please note they are not compatible.".format(pretrained_vocab_file)
-            )
+            ) from e
 
         if vocab_file is not None:
             self.build_vocab()
@@ -305,7 +310,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             vocab_file = vocab_path
         with open(vocab_file, "wb") as f:
             pickle.dump(self.__dict__, f)
-        # torch.save(self.__dict__, vocab_file)
         return (vocab_file,)
 
     def build_vocab(self):
@@ -328,7 +332,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
             logger.info("final vocab size {} from {} unique tokens".format(len(self), len(self.counter)))
 
-    @require_torch
+    @torch_only_method
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
         if verbose:
             logger.info("encoding file {} ...".format(path))
@@ -346,7 +350,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         return encoded
 
-    @require_torch
+    @torch_only_method
     def encode_sents(self, sents, ordered=False, verbose=False):
         if verbose:
             logger.info("encoding {} sents ...".format(len(sents)))
@@ -457,7 +461,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         out_string = self.moses_detokenizer.detokenize(tokens)
         return detokenize_numbers(out_string).strip()
 
-    @require_torch
+    @torch_only_method
     def convert_to_tensor(self, symbols):
         return torch.LongTensor(self.convert_tokens_to_ids(symbols))
 
@@ -728,7 +732,7 @@ class LMShuffledIterator(object):
         for idx in epoch_indices:
             yield self.data[idx]
 
-    @require_torch
+    @torch_only_method
     def stream_iterator(self, sent_stream):
         # streams for each data in the batch
         streams = [None] * self.bsz
@@ -818,7 +822,7 @@ class LMMultiFileIterator(LMShuffledIterator):
 
 class TransfoXLCorpus(object):
     @classmethod
-    @require_torch
+    @torch_only_method
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
         """
         Instantiate a pre-processed corpus.
@@ -923,7 +927,7 @@ class TransfoXLCorpus(object):
         return data_iter
 
 
-@require_torch
+@torch_only_method
 def get_lm_corpus(datadir, dataset):
     fn = os.path.join(datadir, "cache.pt")
     fn_pickle = os.path.join(datadir, "cache.pkl")

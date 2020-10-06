@@ -190,7 +190,7 @@ def is_faiss_available():
     return _faiss_available
 
 
-def require_torch(fn):
+def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
             raise ImportError(
