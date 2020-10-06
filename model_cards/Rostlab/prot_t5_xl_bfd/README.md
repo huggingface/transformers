@@ -15,27 +15,27 @@ Pretrained model on protein sequences using a masked language modeling (MLM) obj
 
 ## Model description
 
-ProtT5-XL-BFD is based on T5 model which pretrained on a large corpus of protein sequences in a self-supervised fashion.
+ProtT5-XL-BFD is based on the `t5-3b` model and was pretrained on a large corpus of protein sequences in a self-supervised fashion.
 This means it was pretrained on the raw protein sequences only, with no humans labelling them in any way (which is why it can use lots of
 publicly available data) with an automatic process to generate inputs and labels from those protein sequences.
 
-One important difference between our T5 model and the original T5 version is the denosing objective.
-In the original T5 paper they used span denosing for the T5-3B model, in our case we used Bart like MLM denosing objective.
-The masking probability follows the original T5 training with randomly masks 15% of the amino acids in the input. 
+One important difference between this T5 model and the original T5 version is the denosing objective.
+The original T5-3M model was pretrained using a span denosing objective, while this model was pre-trained with a Bart-like MLM denosing objective.
+The masking probability is consistent with the original T5 training by randomly masking 15% of the amino acids in the input.
 
-At the end, the feature extracted from this model revealed that the LM-embeddings from unlabeled data (only protein sequences) captured important biophysical properties governing protein
+It has been shown that the features extracted from this self-supervised model (LM-embeddings) captured important biophysical properties governing protein shape.
 shape.
 This implied learning some of the grammar of the language of life realized in protein sequences.
 
 ## Intended uses & limitations
 
 The model could be used for protein feature extraction or to be fine-tuned on downstream tasks.
-We have noticed in some tasks you could gain more accuracy by fine-tuning the model rather than using it as a feature extractor.
-We have also noticed that for feature extraction, its better to use the feature extracted from the encoder not the decoder.
+We have noticed in some tasks on can gain more accuracy by fine-tuning the model rather than using it as a feature extractor.
+We have also noticed that for feature extraction, its better to use the feature extracted from the encoder not from the decoder.
 
 ### How to use
 
-Here is how to use this model to get the features of a given protein sequence in PyTorch:
+Here is how to use this model to extract the features of a given protein sequence in PyTorch:
 
 ```python
 from transformers import T5Tokenizer, T5Model
@@ -80,7 +80,7 @@ Protein Sequence [EOS]
 
 The preprocessing step was performed on the fly, by cutting and padding the protein sequences up to 512 tokens.
 
-The details of the masking procedure for each sequence followed the original T5 model for token masking as following:
+The details of the masking procedure for each sequence are as follows:
 - 15% of the amino acids are masked.
 - In 90% of the cases, the masked amino acids are replaced by `[MASK]` token.
 - In 10% of the cases, the masked amino acids are replaced by a random amino acid (different) from the one they replace.
