@@ -163,9 +163,7 @@ conversion utilities for the following models:
 30. `XLNet <https://huggingface.co/transformers/model_doc/xlnet.html>`__ (from Google/CMU) released with the paper
     `​XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by
     Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-31. `Blenderbot <https://github.com/facebookresearch/ParlAI>`_ (from Facebook AI Research) released with the paper `Recipes for building an open-domain chatbot
-    <https://arxiv.org/abs/2004.13637>`_ by Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu, Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston
-32. `Other community models <https://huggingface.co/models>`__, contributed by the `community
+31. `Other community models <https://huggingface.co/models>`__, contributed by the `community
     <https://huggingface.co/users>`__.
 
 .. toctree::
