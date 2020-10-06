@@ -1808,6 +1808,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 )  # Default to truncate the longest sequences in pairs of inputs
             elif not isinstance(truncation, TruncationStrategy):
                 truncation_strategy = TruncationStrategy(truncation)
+            elif isinstance(truncation, TruncationStrategy):
+                truncation_strategy = truncation
         else:
             truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
 
