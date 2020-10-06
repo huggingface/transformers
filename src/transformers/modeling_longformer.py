@@ -16,30 +16,24 @@
 
 import math
 import warnings
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
-
 from .activations import ACT2FN, gelu
 from .configuration_longformer import LongformerConfig
 from .file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
-    ModelOutput,
     replace_return_docstrings,
 )
-
-from .modeling_outputs import (
-    MaskedLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from .modeling_outputs import MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from .modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -66,7 +60,7 @@ LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 @dataclass
 class LongformerBaseModelOutput(ModelOutput):
-    """ 
+    """
     Base class for Longformer's outputs, with potential hidden states, local and global attentions.
 
     Args:
@@ -112,7 +106,7 @@ class LongformerBaseModelOutput(ModelOutput):
 
 @dataclass
 class LongformerBaseModelOutputWithPooling(ModelOutput):
-    """ 
+    """
     Base class for Longformer's outputs that also contains a pooling of the last hidden states.
 
     Args:
@@ -164,7 +158,7 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
 
 @dataclass
 class LongformerMultipleChoiceModelOutput(ModelOutput):
-    """ 
+    """
     Base class for outputs of multiple choice Longformer models.
 
     Args:
@@ -215,7 +209,7 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
 
 @dataclass
 class LongformerQuestionAnsweringModelOutput(ModelOutput):
-    """ 
+    """
     Base class for outputs of question answering Longformer models.
 
     Args:
@@ -577,15 +571,19 @@ class LongformerSelfAttention(nn.Module):
 
         if output_attentions:
             if is_global_attn:
-               # The attention weights for tokens with global attention are
-               # just filler values, they were never used to compute the output.
-               # Fill with 0 now, the correct values are in 'global_attn_probs'.
-               local_attn_probs[is_index_global_attn_nonzero] = 0
+                # The attention weights for tokens with global attention are
+                # just filler values, they were never used to compute the output.
+                # Fill with 0 now, the correct values are in 'global_attn_probs'.
+                local_attn_probs[is_index_global_attn_nonzero] = 0
             local_attn_probs = local_attn_probs.permute(0, 2, 1, 3)
 
-        outputs = (attn_output,) if not output_attentions \
-            else  (attn_output, local_attn_probs, global_attn_probs) if is_global_attn \
-            else  (attn_output, local_attn_probs)
+        outputs = (
+            (attn_output,)
+            if not output_attentions
+            else (attn_output, local_attn_probs, global_attn_probs)
+            if is_global_attn
+            else (attn_output, local_attn_probs)
+        )
         return outputs
 
     @staticmethod
@@ -935,9 +933,7 @@ class LongformerSelfAttention(nn.Module):
             self.head_dim,
         ], f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}."
 
-        global_attn_probs = global_attn_probs.view(
-            batch_size, self.num_heads, max_num_global_attn_indices, seq_len
-        )
+        global_attn_probs = global_attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
         global_attn_output = global_attn_output.view(
             batch_size, self.num_heads, max_num_global_attn_indices, self.head_dim
         )
@@ -1081,7 +1077,7 @@ class LongformerEncoder(nn.Module):
         return_dict=False,
     ):
         all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None # All local attentions.
+        all_attentions = () if output_attentions else None  # All local attentions.
         all_global_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1112,19 +1108,23 @@ class LongformerEncoder(nn.Module):
                 all_attentions = all_attentions + (layer_outputs[1],)
                 # Output global attentions if they exist.
                 if len(layer_outputs) > 2:
-                   all_global_attentions = all_global_attentions + (layer_outputs[2],)
+                    all_global_attentions = all_global_attentions + (layer_outputs[2],)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions, all_global_attentions or None] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_attentions, all_global_attentions or None]
+                if v is not None
+            )
         return LongformerBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
-            global_attentions=all_global_attentions or None
+            global_attentions=all_global_attentions or None,
         )
 
 
