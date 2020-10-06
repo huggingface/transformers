@@ -475,12 +475,16 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
-        self.pooler = tf.keras.layers.Dense(
-            config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
-            name="pooler",
-        ) if add_pooling_layer else None
+        self.pooler = (
+            tf.keras.layers.Dense(
+                config.hidden_size,
+                kernel_initializer=get_initializer(config.initializer_range),
+                activation="tanh",
+                name="pooler",
+            )
+            if add_pooling_layer
+            else None
+        )
 
     def get_input_embeddings(self):
         return self.embeddings
