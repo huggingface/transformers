@@ -215,6 +215,88 @@ class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
          Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
     """
 
+def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
+    """
+    Detect missing and unexpected layers.
+
+    Args:
+        model (:obj:`tf.keras.models.Model`):
+            The model to load the weights into.
+        resolved_archive_file (:obj:`str`):
+            The location of the H5 file.
+    
+    Returns:
+        Two lists, one for the missing layers, and another one for the unexpected layers.
+    """
+    missing_layers = []
+    unexpected_layers = []
+
+    with h5py.File(resolved_archive_file, 'r') as f:
+        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, 'layer_names'))
+        model_layer_names = set(layer.name for layer in model.layers)
+        missing_layers = list(model_layer_names - saved_layer_names)
+        unexpected_layers = list(saved_layer_names - model_layer_names)
+
+        for layer in model.layers:
+            if layer.name in saved_layer_names:
+                g = f[layer.name]
+                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, 'weight_names')
+                saved_weight_names_set = set("/".join(weight_name.split("/")[2:]) for weight_name in saved_weight_names)
+                symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
+                symbolic_weights_names = set("/".join(symbolic_weight.name.split("/")[2:]) for symbolic_weight in symbolic_weights)
+                missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
+                unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
+    
+    return missing_layers, unexpected_layers
+
+
+def load_tf_weights(model, resolved_archive_file):
+    """
+    Load the TF weights from a H5 file.
+
+    Args:
+        model (:obj:`tf.keras.models.Model`):
+            The model to load the weights into.
+        resolved_archive_file (:obj:`str`):
+            The location of the H5 file.
+    """
+    from tensorflow.python.keras import backend as K
+
+    with h5py.File(resolved_archive_file, 'r') as f:
+        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, 'layer_names'))
+        weight_value_tuples = []
+
+        for layer in model.layers:
+            if layer.name in saved_layer_names:
+                g = f[layer.name]
+                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, 'weight_names')
+                symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
+                saved_weight_names_values = {}
+
+                for weight_name in saved_weight_names:
+                    name = "/".join(weight_name.split("/")[1:])
+                    saved_weight_names_values[name] = np.asarray(g[weight_name])
+
+                for symbolic_weight in symbolic_weights:
+                    splited_layers = symbolic_weight.name.split("/")[1:]
+                    symbolic_weight_name = "/".join(splited_layers)
+
+                    if symbolic_weight_name in saved_weight_names_values:
+                        saved_weight_value = saved_weight_names_values[symbolic_weight_name]
+                        
+                        if K.int_shape(symbolic_weight) != saved_weight_value.shape:
+                            try:
+                                array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
+                            except AssertionError as e:
+                                e.args += (K.int_shape(symbolic_weight), saved_weight_value.shape)
+                                raise e
+                        else:
+                            array = saved_weight_value
+                        
+                        weight_value_tuples.append((symbolic_weight, array))
+    
+    K.batch_set_value(weight_value_tuples)
+
 
 def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
     """
@@ -717,8 +799,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         missing_keys, unexpected_keys = detect_tf_missing_unexpected_layers(model, resolved_archive_file)
 
         if cls.authorized_missing_keys is not None:
-            for pat in cls.authorized_missing_keys:
-                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+                for pat in cls.authorized_missing_keys:
+                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
         if cls.authorized_unexpected_keys is not None:
             for pat in cls.authorized_unexpected_keys:
@@ -735,7 +817,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
         else:
             logger.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
+<<<<<<< HEAD
 
+=======
+              
+>>>>>>> d7e5e4bf... Fix TF utils
         if len(missing_keys) > 0:
             logger.warning(
                 f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
@@ -773,7 +859,6 @@ class TFConv1D(tf.keras.layers.Layer):
         kwargs:
             Additional keyword arguments passed along to the :obj:`__init__` of :obj:`tf.keras.layers.Layer`.
     """
-
     def __init__(self, nf, nx, initializer_range=0.02, **kwargs):
         super().__init__(**kwargs)
         self.nf = nf

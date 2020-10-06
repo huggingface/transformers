@@ -39,7 +39,6 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         - transpose: boolean indicating weither TF2.0 and PyTorch weights matrices are transposed with regards to each other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
-    tf_name = tf_name.replace("self/attention/", "")
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
     )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
