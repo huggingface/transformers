@@ -791,3 +791,7 @@ class TFTrainer:
             save_tf_model(self.model, output_dir)
         else:
             self.model.save_pretrained(output_dir)
+
+        # Also save to SavedModel format.
+        tf.saved_model.save(self.model, export_dir=output_dir)
+        logger.info("SavedModel saved in {}".format(output_dir))
