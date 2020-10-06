@@ -768,8 +768,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 Whether or not to clean up the tokenization spaces.
             spaces_between_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to add spaces around special tokens.
-                The behavior of Fast tokenizers is to have this to `False`.
-                This is setup to True in slow tokenizers for backward compatibility.
+                The behavior of Fast tokenizers is to have this to :obj:`False`.
+                This is setup to :obj:`True` in slow tokenizers for backward compatibility.
 
         Returns:
             :obj:`str`: The decoded sentence.

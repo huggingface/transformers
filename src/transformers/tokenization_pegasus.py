@@ -14,7 +14,7 @@
 # limitations under the License.
 from typing import Dict, List, Optional
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 
@@ -176,7 +176,7 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -187,7 +187,7 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -199,10 +199,6 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
         padding="longest",
         **unused,
     ) -> BatchEncoding:
-        """
-        Prepare model inputs for summarization or translation.
-
-        """
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
         tokenizer_kwargs = dict(

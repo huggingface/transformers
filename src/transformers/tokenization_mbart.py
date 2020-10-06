@@ -15,7 +15,7 @@
 
 from typing import List, Optional
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
@@ -222,21 +222,30 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
 class MBartTokenizerFast(XLMRobertaTokenizerFast):
     """
-    This inherits from XLMRobertaTokenizer. ``prepare_seq2seq_batch`` should be used to encode inputs.
-    Other tokenizer methods like ``encode`` do not work properly.
+    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and adds
+    a new :meth:`~transformers.MBartTokenizerFast.prepare_seq2seq_batch`.
+
+    Refer to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning
+    the initialization parameters and other methods.
+
+    .. warning::
+        ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
+        properly.
+
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and
     ``<language code> <tokens> <eos>``` for target language documents.
 
     Examples::
 
-        >>> from transformers import MBartTokenizer
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro')
+        >>> from transformers import MBartTokenizerFast
+        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro')
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> batch: dict = tokenizer.prepare_seq2seq_batch(
         ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
         ... )
-
     """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
@@ -258,15 +267,15 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` methods.
+        special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True if the token list is already formatted with special tokens for the model
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -291,16 +300,19 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens. The special tokens depend on calling set_lang.
+
         An MBART sequence has the following format, where ``X`` represents the sequence:
+
         - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
         - ``decoder_input_ids``: (for decoder) ``[tgt_lang_code] X [eos]``
+
         BOS is never used.
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -311,7 +323,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -325,69 +337,6 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         return_tensors: str = "pt",
         **kwargs,
     ) -> BatchEncoding:
-        """Prepare a batch that can be passed directly to an instance of MBartModel.
-
-        Arguments:
-            src_texts: (:obj:`list`):
-                list of documents to summarize or source language texts
-            src_lang: (:obj:`str`, `optional`, default='en_XX'):
-                default en_XX (english), the language we are translating from
-            tgt_texts: (:obj:`list`, `optional`):
-                list of tgt language texts or summaries.
-            tgt_lang: (:obj:`str`, `optional`, default='ro_RO'):
-                default ro_RO (romanian), the language we are translating to
-            max_length (:obj:`int`, `optional`):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts)
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
-            max_target_length (:obj:`int`, `optional`):
-                Controls the maximum length of decoder inputs (target language texts or summaries)
-                If left unset or set to :obj:`None`, this will use the max_length value.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
-                Activates and controls padding. Accepts the following values:
-
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`True`):
-                Activates and controls truncation. Accepts the following values:
-
-                * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
-                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
-                  if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
-                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
-                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
-
-        Return:
-            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to the encoder.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
-            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
-                This does not include causal mask, which is built by the model.
-
-            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
-            will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
-
-        """
         if max_length is None:
             max_length = self.max_len
         self.set_src_lang_special_tokens(src_lang)

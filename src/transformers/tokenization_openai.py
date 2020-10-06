@@ -248,8 +248,8 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     - lower case all inputs
     - uses BERT's BasicTokenizer for pre-BPE tokenization
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):

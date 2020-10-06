@@ -189,28 +189,29 @@ class ReformerTokenizer(PreTrainedTokenizer):
 
 class ReformerTokenizerFast(PreTrainedTokenizerFast):
     """
-    Constructs an Reformer tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Construct a "fast" Reformer tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
+    <https://github.com/google/sentencepiece>`__ .
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`string`):
+        vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the end
                 of sequence. The token used is the :obj:`sep_token`.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
+        additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
     """
 

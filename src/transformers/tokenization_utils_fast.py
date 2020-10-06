@@ -278,8 +278,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         Converts a string in a sequence of tokens, using the backend Rust tokenizer.
 
-        Note that, unlike slow tokenizers (instances of PreTrainedTokenizer), this method
-        will replace the unknown tokens with the `unk_token`.
+        Note that, unlike slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method
+        will replace the unknown tokens with the :obj:`unk_token`.
 
         Args:
             text (:obj:`str`):
