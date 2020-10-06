@@ -1,3 +1,9 @@
+---
+language: en
+tags:
+- legal
+---
+
 # LEGAL-BERT: The Muppets straight out of Law School
 
 <img align="left" src="https://i.ibb.co/p3kQ7Rw/Screenshot-2020-10-06-at-12-16-36-PM.png" width="130"/> 
