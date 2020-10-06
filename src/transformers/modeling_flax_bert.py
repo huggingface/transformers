@@ -363,4 +363,3 @@ class FlaxBertModel(FlaxPreTrainedModel):
             jnp.array(position_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
         )
-
