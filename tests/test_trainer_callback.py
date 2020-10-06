@@ -69,13 +69,15 @@ class TrainerCallbackTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.output_dir)
 
-    def get_trainer(self, a=0, b=0, train_len=64, eval_len=64, callbacks=None, **kwargs):
+    def get_trainer(self, a=0, b=0, train_len=64, eval_len=64, callbacks=None, disable_tqdm=False, **kwargs):
+        # disable_tqdm in TrainingArguments has a flaky default since it depends on the level of logging. We make sure
+        # its set to False since the tests later on depend on its value.
         train_dataset = RegressionDataset(length=train_len)
         eval_dataset = RegressionDataset(length=eval_len)
         config = RegressionModelConfig(a=a, b=b)
         model = RegressionPreTrainedModel(config)
 
-        args = TrainingArguments(self.output_dir, **kwargs)
+        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, **kwargs)
         return Trainer(
             model,
             args,
@@ -128,7 +130,7 @@ class TrainerCallbackTest(unittest.TestCase):
 
     def test_init_callback(self):
         trainer = self.get_trainer()
-        expected_callbacks = DEFAULT_CALLBACKS + [ProgressCallback]
+        expected_callbacks = DEFAULT_CALLBACKS.copy() + [ProgressCallback]
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
         # Callbacks passed at init are added to the default callbacks
@@ -138,7 +140,7 @@ class TrainerCallbackTest(unittest.TestCase):
 
         # TrainingArguments.disable_tqdm controls if use ProgressCallback or PrinterCallback
         trainer = self.get_trainer(disable_tqdm=True)
-        expected_callbacks = DEFAULT_CALLBACKS + [PrinterCallback]
+        expected_callbacks = DEFAULT_CALLBACKS.copy() + [PrinterCallback]
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
     def test_add_remove_callback(self):
