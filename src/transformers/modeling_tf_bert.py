@@ -869,13 +869,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-<<<<<<< HEAD
 
     authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
-=======
-    authorized_unexpected_keys = [r"pooler", r"nsp___cls"]
->>>>>>> 4f9a430c... Handle authorized unexpected keys when loading weights
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -958,13 +954,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
 
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
-<<<<<<< HEAD
 
     authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
-=======
-    authorized_unexpected_keys = [r"pooler", r"nsp___cls"]
->>>>>>> 4f9a430c... Handle authorized unexpected keys when loading weights
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1340,13 +1332,9 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
-<<<<<<< HEAD
 
     authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
-=======
-    authorized_unexpected_keys = [r"pooler", r"nsp___cls"]
->>>>>>> 4f9a430c... Handle authorized unexpected keys when loading weights
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1430,13 +1418,9 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     BERT_START_DOCSTRING,
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
-<<<<<<< HEAD
 
     authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
-=======
-    authorized_unexpected_keys = [r"pooler", r"nsp___cls"]
->>>>>>> 4f9a430c... Handle authorized unexpected keys when loading weights
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
