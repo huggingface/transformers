@@ -122,7 +122,7 @@ class ModelCard:
             modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
             modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
             modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
-            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
+            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
 
         """
         cache_dir = kwargs.pop("cache_dir", None)
@@ -139,7 +139,9 @@ class ModelCard:
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             model_card_file = pretrained_model_name_or_path
         else:
-            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False)
+            model_card_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False, mirror=None
+            )
 
         if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)

@@ -18,6 +18,7 @@
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -43,7 +44,11 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 XLM_ROBERTA_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
@@ -61,6 +66,19 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 class XLMRobertaModel(RobertaModel):
     """
     This class overrides :class:`~transformers.RobertaModel`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    "XLM-RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.",
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

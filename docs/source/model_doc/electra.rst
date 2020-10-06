@@ -1,14 +1,14 @@
 ELECTRA
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Overview
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ELECTRA model was proposed in the paper.
-`ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators <https://openreview.net/pdf?id=r1xMH1BtvB>`__.
-ELECTRA is a new pre-training approach which trains two transformer models: the generator and the discriminator. The
-generator's role is to replace tokens in a sequence, and is therefore trained as a masked language model. The discriminator,
-which is the model we're interested in, tries to identify which tokens were replaced by the generator in the sequence.
+The ELECTRA model was proposed in the paper `ELECTRA: Pre-training Text Encoders as Discriminators Rather Than
+Generators <https://openreview.net/pdf?id=r1xMH1BtvB>`__. ELECTRA is a new pretraining approach which trains two
+transformer models: the generator and the discriminator. The generator's role is to replace tokens in a sequence, and
+is therefore trained as a masked language model. The discriminator, which is the model we're interested in, tries to
+identify which tokens were replaced by the generator in the sequence.
 
 The abstract from the paper is the following:
 
@@ -35,44 +35,45 @@ compute and outperforms them when using the same amount of compute.*
 
 Tips:
 
-- ELECTRA is the pre-training approach, therefore there is nearly no changes done to the underlying model: BERT. The
-  only change is the separation of the embedding size and the hidden size -> The embedding size is generally smaller,
+- ELECTRA is the pretraining approach, therefore there is nearly no changes done to the underlying model: BERT. The
+  only change is the separation of the embedding size and the hidden size: the embedding size is generally smaller,
   while the hidden size is larger. An additional projection layer (linear) is used to project the embeddings from
   their embedding size to the hidden size. In the case where the embedding size is the same as the hidden size, no
   projection layer is used.
 - The ELECTRA checkpoints saved using `Google Research's implementation <https://github.com/google-research/electra>`__
   contain both the generator and discriminator. The conversion script requires the user to name which model to export
   into the correct architecture. Once converted to the HuggingFace format, these checkpoints may be loaded into all
-  available ELECTRA models, however. This means that the discriminator may be loaded in the `ElectraForMaskedLM` model,
-  and the generator may be loaded in the `ElectraForPreTraining` model (the classification head will be randomly
-  initialized as it doesn't exist in the generator).
+  available ELECTRA models, however. This means that the discriminator may be loaded in the
+  :class:`~transformers.ElectraForMaskedLM` model, and the generator may be loaded in the
+  :class:`~transformers.ElectraForPreTraining` model (the classification head will be randomly initialized as it
+  doesn't exist in the generator).
 
-The original code can be found `here <https://github.com/google-research/electra>`_.
+The original code can be found `here <https://github.com/google-research/electra>`__.
 
 
 ElectraConfig
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraConfig
     :members:
 
 
 ElectraTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraTokenizer
     :members:
 
 
 ElectraTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraTokenizerFast
     :members:
 
 
 Electra specific outputs
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_electra.ElectraForPreTrainingOutput
     :members:
@@ -82,98 +83,98 @@ Electra specific outputs
 
 
 ElectraModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraModel
-    :members:
+    :members: forward
 
 
 ElectraForPreTraining
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForPreTraining
-    :members:
+    :members: forward
 
 
 ElectraForMaskedLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForMaskedLM
-    :members:
+    :members: forward
 
 
 ElectraForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForSequenceClassification
-    :members:
+    :members: forward
 
 
 ElectraForMultipleChoice
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForMultipleChoice
-    :members:
+    :members: forward
 
 
 ElectraForTokenClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForTokenClassification
-    :members:
+    :members: forward
 
 
 ElectraForQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForQuestionAnswering
-    :members:
+    :members: forward
 
 
 TFElectraModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraModel
-    :members:
+    :members: call
 
 
 TFElectraForPreTraining
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForPreTraining
-    :members:
+    :members: call
 
 
 TFElectraForMaskedLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForMaskedLM
-    :members:
+    :members: call
 
 
 TFElectraForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForSequenceClassification
-    :members:
+    :members: call
 
 
 TFElectraForMultipleChoice
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForMultipleChoice
-    :members:
+    :members: call
 
 
 TFElectraForTokenClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForTokenClassification
-    :members:
+    :members: call
 
 
 TFElectraForQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForQuestionAnswering
-    :members:
+    :members: call

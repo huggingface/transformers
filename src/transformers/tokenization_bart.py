@@ -38,6 +38,15 @@ _all_bart_models = [
 
 
 class BartTokenizer(RobertaTokenizer):
+    r"""
+    Construct a BART tokenizer.
+
+    :class:`~transformers.BartTokenizer` is identical to :class:`~transformers.RobertaTokenizer` and adds a new
+    :meth:`~transformers.BartTokenizer.prepare_seq2seq_batch`
+
+    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
+    the initialization parameters and other methods.
+    """
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
     pretrained_vocab_files_map = {
@@ -111,9 +120,7 @@ class BartTokenizer(RobertaTokenizer):
 
             - **input_ids** -- List of token ids to be fed to the encoder.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
-            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
-                This does not include causal mask, which is built by the model.
+            - **labels** -- List of token ids for tgt_texts
 
             The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.

@@ -1,4 +1,5 @@
 import inspect
+import logging
 import os
 import re
 import shutil
@@ -9,11 +10,12 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 
-from .file_utils import _tf_available, _torch_available, _torch_tpu_available
+from .file_utils import _datasets_available, _faiss_available, _tf_available, _torch_available, _torch_tpu_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
+DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.
 
 
@@ -60,8 +62,9 @@ def slow(test_case):
 
     """
     if not _run_slow_tests:
-        test_case = unittest.skip("test is slow")(test_case)
-    return test_case
+        return unittest.skip("test is slow")(test_case)
+    else:
+        return test_case
 
 
 def custom_tokenizers(test_case):
@@ -73,8 +76,9 @@ def custom_tokenizers(test_case):
     to a truthy value to run them.
     """
     if not _run_custom_tokenizers:
-        test_case = unittest.skip("test of custom tokenizers")(test_case)
-    return test_case
+        return unittest.skip("test of custom tokenizers")(test_case)
+    else:
+        return test_case
 
 
 def require_torch(test_case):
@@ -85,8 +89,9 @@ def require_torch(test_case):
 
     """
     if not _torch_available:
-        test_case = unittest.skip("test requires PyTorch")(test_case)
-    return test_case
+        return unittest.skip("test requires PyTorch")(test_case)
+    else:
+        return test_case
 
 
 def require_tf(test_case):
@@ -97,8 +102,9 @@ def require_tf(test_case):
 
     """
     if not _tf_available:
-        test_case = unittest.skip("test requires TensorFlow")(test_case)
-    return test_case
+        return unittest.skip("test requires TensorFlow")(test_case)
+    else:
+        return test_case
 
 
 def require_multigpu(test_case):
@@ -117,7 +123,23 @@ def require_multigpu(test_case):
 
     if torch.cuda.device_count() < 2:
         return unittest.skip("test requires multiple GPUs")(test_case)
-    return test_case
+    else:
+        return test_case
+
+
+def require_non_multigpu(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
+    """
+    if not _torch_available:
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() > 1:
+        return unittest.skip("test requires 0 or 1 GPU")(test_case)
+    else:
+        return test_case
 
 
 def require_torch_tpu(test_case):
@@ -126,8 +148,8 @@ def require_torch_tpu(test_case):
     """
     if not _torch_tpu_available:
         return unittest.skip("test requires PyTorch TPU")
-
-    return test_case
+    else:
+        return test_case
 
 
 if _torch_available:
@@ -138,9 +160,26 @@ else:
 
 
 def require_torch_and_cuda(test_case):
-    """Decorator marking a test that requires CUDA and PyTorch). """
+    """Decorator marking a test that requires CUDA and PyTorch. """
     if torch_device != "cuda":
-        return unittest.skip("test requires CUDA")
+        return unittest.skip("test requires CUDA")(test_case)
+    else:
+        return test_case
+
+
+def require_datasets(test_case):
+    """Decorator marking a test that requires datasets."""
+
+    if not _datasets_available:
+        return unittest.skip("test requires `datasets`")(test_case)
+    else:
+        return test_case
+
+
+def require_faiss(test_case):
+    """Decorator marking a test that requires faiss."""
+    if not _faiss_available:
+        return unittest.skip("test requires `faiss`")(test_case)
     else:
         return test_case
 
@@ -270,6 +309,46 @@ class CaptureStderr(CaptureStd):
         super().__init__(out=False)
 
 
+class CaptureLogger:
+    """Context manager to capture `logging` streams
+
+    Args:
+    - logger: 'logging` logger object
+
+    Results:
+        The captured output is available via `self.out`
+
+    Example:
+
+    >>> from transformers import logging
+    >>> from transformers.testing_utils import CaptureLogger
+
+    >>> msg = "Testing 1, 2, 3"
+    >>> logging.set_verbosity_info()
+    >>> logger = logging.get_logger("transformers.tokenization_bart")
+    >>> with CaptureLogger(logger) as cl:
+    ...     logger.info(msg)
+    >>> assert cl.out, msg+"\n"
+    """
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.io = StringIO()
+        self.sh = logging.StreamHandler(self.io)
+        self.out = ""
+
+    def __enter__(self):
+        self.logger.addHandler(self.sh)
+        return self
+
+    def __exit__(self, *exc):
+        self.logger.removeHandler(self.sh)
+        self.out = self.io.getvalue()
+
+    def __repr__(self):
+        return f"captured: {self.out}\n"
+
+
 class TestCasePlus(unittest.TestCase):
     """This class extends `unittest.TestCase` with additional features.
 
@@ -315,7 +394,7 @@ class TestCasePlus(unittest.TestCase):
     def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
         """
         Args:
-            tmp_dir (:obj:`string`, `optional`, defaults to :obj:`None`):
+            tmp_dir (:obj:`string`, `optional`):
                 use this path, if None a unique path will be assigned
             before (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 if `True` and tmp dir already exists make sure to empty it right away
@@ -357,3 +436,14 @@ class TestCasePlus(unittest.TestCase):
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
+
+
+def mockenv(**kwargs):
+    """this is a convenience wrapper, that allows this:
+
+    @mockenv(USE_CUDA=True, USE_TF=False)
+    def test_something():
+        use_cuda = os.getenv("USE_CUDA", False)
+        use_tf = os.getenv("USE_TF", False)
+    """
+    return unittest.mock.patch.dict(os.environ, kwargs)

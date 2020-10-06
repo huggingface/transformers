@@ -114,8 +114,8 @@ class PretrainedConfig(object):
           model pretrained weights.
         - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
           used when converting from an original (TensorFlow or PyTorch) checkpoint.
-        - **id2label** (:obj:`List[str]`, `optional`) -- A map from index (for instance prediction index, or target
-          index) to label.
+        - **id2label** (:obj:`Dict[int, str]`, `optional`) -- A map from index (for instance prediction index, or
+          target index) to label.
         - **label2id** (:obj:`Dict[str, int]`, `optional`) -- A map from label to index for the model.
         - **num_labels** (:obj:`int`, `optional`) -- Number of labels to use in the last layer added to the model,
           typically for a classification task.
@@ -130,6 +130,7 @@ class PretrainedConfig(object):
         - **eos_token_id** (:obj:`int`, `optional`)) -- The id of the `end-of-stream` token.
         - **decoder_start_token_id** (:obj:`int`, `optional`)) -- If an encoder-decoder model starts decoding with
           a different token than `bos`, the id of that token.
+        - **sep_token_id** (:obj:`int`, `optional`)) -- The id of the `separation` token.
 
     PyTorch specific parameters
         - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
@@ -190,12 +191,14 @@ class PretrainedConfig(object):
             self.num_labels = kwargs.pop("num_labels", 2)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
+        self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.sep_token_id = kwargs.pop("sep_token_id", None)
+
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forwar", 0)
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
@@ -301,11 +304,11 @@ class PretrainedConfig(object):
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-            config = BertConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            assert config.output_attention == True
-            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attention=True,
+            config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+            assert config.output_attentions == True
+            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True,
                                                                foo=False, return_unused_kwargs=True)
-            assert config.output_attention == True
+            assert config.output_attentions == True
             assert unused_kwargs == {'foo': False}
 
         """
@@ -337,7 +340,9 @@ class PretrainedConfig(object):
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False)
+            config_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+            )
 
         try:
             # Load from URL or cache if already cached

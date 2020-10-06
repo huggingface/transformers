@@ -15,6 +15,7 @@
 """ Logging utilities. """
 
 import logging
+import os
 import threading
 from logging import CRITICAL  # NOQA
 from logging import DEBUG  # NOQA
@@ -29,6 +30,33 @@ from typing import Optional
 
 _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
+
+log_levels = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
+
+_default_log_level = logging.WARNING
+
+
+def _get_default_logging_level():
+    """
+    If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level.
+    If it is not - fall back to ``_default_log_level``
+    """
+    env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
+    if env_level_str:
+        if env_level_str in log_levels:
+            return log_levels[env_level_str]
+        else:
+            logging.getLogger().warning(
+                f"Unknown option TRANSFORMERS_VERBOSITY={env_level_str}, "
+                f"has to be one of: { ', '.join(log_levels.keys()) }"
+            )
+    return _default_log_level
 
 
 def _get_library_name() -> str:
@@ -54,7 +82,7 @@ def _configure_library_root_logger() -> None:
         # Apply our default configuration to the library root logger.
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
-        library_root_logger.setLevel(logging.INFO)
+        library_root_logger.setLevel(_get_default_logging_level())
         library_root_logger.propagate = False
 
 
@@ -73,8 +101,10 @@ def _reset_library_root_logger() -> None:
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
-    """Return a logger with the specified name.
-    This function is not supposed to be directly accessed by library users.
+    """
+    Return a logger with the specified name.
+
+    This function is not supposed to be directly accessed unless you are writing a custom transformers module.
     """
 
     if name is None:
@@ -85,16 +115,21 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 
 
 def get_verbosity() -> int:
-    """Return the current level for the HuggingFace Transformers's root logger.
+    """
+    Return the current level for the 🤗 Transformers's root logger as an int.
+
     Returns:
-        Logging level, e.g., ``transformers.logging.DEBUG`` and ``transformers.logging.INFO``.
+        :obj:`int`: The logging level.
+
     .. note::
-        HuggingFace Transformers has following logging levels:
-        - ``transformers.logging.CRITICAL``, ``transformers.logging.FATAL``
-        - ``transformers.logging.ERROR``
-        - ``transformers.logging.WARNING``, ``transformers.logging.WARN``
-        - ``transformers.logging.INFO``
-        - ``transformers.logging.DEBUG``
+
+        🤗 Transformers has following logging levels:
+
+        - 50: ``transformers.logging.CRITICAL`` or ``transformers.logging.FATAL``
+        - 40: ``transformers.logging.ERROR``
+        - 30: ``transformers.logging.WARNING`` or ``transformers.logging.WARN``
+        - 20: ``transformers.logging.INFO``
+        - 10: ``transformers.logging.DEBUG``
     """
 
     _configure_library_root_logger()
@@ -102,10 +137,18 @@ def get_verbosity() -> int:
 
 
 def set_verbosity(verbosity: int) -> None:
-    """Set the level for the HuggingFace Transformers's root logger.
+    """
+    Set the vebosity level for the 🤗 Transformers's root logger.
+
     Args:
-        verbosity:
-            Logging level, e.g., ``transformers.logging.DEBUG`` and ``transformers.logging.INFO``.
+        verbosity (:obj:`int`):
+            Logging level, e.g., one of:
+
+            - ``transformers.logging.CRITICAL`` or ``transformers.logging.FATAL``
+            - ``transformers.logging.ERROR``
+            - ``transformers.logging.WARNING`` or ``transformers.logging.WARN``
+            - ``transformers.logging.INFO``
+            - ``transformers.logging.DEBUG``
     """
 
     _configure_library_root_logger()
@@ -113,18 +156,22 @@ def set_verbosity(verbosity: int) -> None:
 
 
 def set_verbosity_info():
+    """Set the verbosity to the :obj:`INFO` level."""
     return set_verbosity(INFO)
 
 
 def set_verbosity_warning():
+    """Set the verbosity to the :obj:`WARNING` level."""
     return set_verbosity(WARNING)
 
 
 def set_verbosity_debug():
+    """Set the verbosity to the :obj:`DEBUG` level."""
     return set_verbosity(DEBUG)
 
 
 def set_verbosity_error():
+    """Set the verbosity to the :obj:`ERROR` level."""
     return set_verbosity(ERROR)
 
 
@@ -163,3 +210,32 @@ def enable_propagation() -> None:
 
     _configure_library_root_logger()
     _get_library_root_logger().propagate = True
+
+
+def enable_explicit_format() -> None:
+    """
+    Enable explicit formatting for every HuggingFace Transformers's logger. The explicit formatter is as follows:
+
+    ::
+
+        [LEVELNAME|FILENAME|LINE NUMBER] TIME >> MESSAGE
+
+    All handlers currently bound to the root logger are affected by this method.
+    """
+    handlers = _get_library_root_logger().handlers
+
+    for handler in handlers:
+        formatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s >> %(message)s")
+        handler.setFormatter(formatter)
+
+
+def reset_format() -> None:
+    """
+    Resets the formatting for HuggingFace Transformers's loggers.
+
+    All handlers currently bound to the root logger are affected by this method.
+    """
+    handlers = _get_library_root_logger().handlers
+
+    for handler in handlers:
+        handler.setFormatter(None)

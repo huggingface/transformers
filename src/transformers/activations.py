@@ -40,6 +40,14 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
+def mish(x):
+    return x * torch.tanh(torch.nn.functional.softplus(x))
+
+
+def linear_act(x):
+    return x
+
+
 ACT2FN = {
     "relu": F.relu,
     "swish": swish,
@@ -47,6 +55,9 @@ ACT2FN = {
     "tanh": torch.tanh,
     "gelu_new": gelu_new,
     "gelu_fast": gelu_fast,
+    "mish": mish,
+    "linear": linear_act,
+    "sigmoid": torch.sigmoid,
 }
 
 
@@ -55,3 +66,7 @@ def get_activation(activation_string):
         return ACT2FN[activation_string]
     else:
         raise KeyError("function {} not found in ACT2FN mapping {}".format(activation_string, list(ACT2FN.keys())))
+
+
+def mish(x):
+    return x * torch.tanh(torch.nn.functional.softplus(x))

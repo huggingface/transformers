@@ -199,7 +199,7 @@ class MecabTokenizer:
         try:
             import fugashi
         except ModuleNotFoundError as error:
-            raise error(
+            raise error.__class__(
                 "You need to install fugashi to use MecabTokenizer."
                 "See https://pypi.org/project/fugashi/ for installation."
             )
@@ -211,7 +211,7 @@ class MecabTokenizer:
                 try:
                     import ipadic
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The ipadic dictionary is not installed. "
                         "See https://github.com/polm/ipadic-py for installation."
                     )
@@ -222,7 +222,7 @@ class MecabTokenizer:
                 try:
                     import unidic_lite
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The unidic_lite dictionary is not installed. "
                         "See https://github.com/polm/unidic-lite for installation."
                     )
@@ -233,7 +233,7 @@ class MecabTokenizer:
                 try:
                     import unidic
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The unidic dictionary is not installed. "
                         "See https://github.com/polm/unidic-py for installation."
                     )
@@ -249,7 +249,7 @@ class MecabTokenizer:
                 raise ValueError("Invalid mecab_dic is specified.")
 
             mecabrc = os.path.join(dic_dir, "mecabrc")
-            mecab_option = "-d {} -r {} ".format(dic_dir, mecabrc) + mecab_option
+            mecab_option = '-d "{}" -r "{}" '.format(dic_dir, mecabrc) + mecab_option
 
         self.mecab = fugashi.GenericTagger(mecab_option)
 
