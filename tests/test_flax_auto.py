@@ -1,6 +1,6 @@
 import unittest
 
-from transformers import AutoConfig, AutoTokenizer, BertConfig, is_flax_available, TensorType
+from transformers import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 
