@@ -46,9 +46,15 @@ class BartSummarizationDistiller(SummarizationModule):
         if hparams.length_penalty != -1:
             student.config.length_penalty = hparams.length_penalty
         super().__init__(hparams, model=student, config=student.config)
+        model_type = student.config.model_type
         self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]
-        self.different_encoder = hparams.student_encoder_layers != teacher.config.encoder_layers
-        self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
+        if model_type != 't5':
+            self.different_encoder = hparams.student_encoder_layers != teacher.config.encoder_layers
+            self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
+        else:
+            self.different_encoder = hparams.student_encoder_layers != teacher.config.num_layers
+            self.different_decoder = hparams.student_decoder_layers != teacher.config.num_decoder_layers
+
         self.teacher = teacher
         freeze_params(self.teacher)
 
