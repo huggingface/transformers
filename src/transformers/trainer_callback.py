@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Callbacks to use with the Trainer class and customize the training loop.
+"""
 
 import dataclasses
 import json

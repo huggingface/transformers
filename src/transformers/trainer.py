@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
+"""
 
 import inspect
 import os
@@ -144,8 +147,7 @@ class Trainer:
 
                 :class:`~transformers.Trainer` is optimized to work with the :class:`~transformers.PreTrainedModel`
                 provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
-                they work the same way as the 🤗 Transformers models (expect input and labels as arguments and return
-                a tuple with the loss first if labels are provided).
+                they work the same way as the 🤗 Transformers models.
         args (:class:`~transformers.TrainingArguments`, `optional`):
             The arguments to tweak for training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
             with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.

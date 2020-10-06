@@ -288,7 +288,7 @@ class CometCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert _has_comet, "CometCallback requires wandb to be installed. Run `pip install comet-ml`."
+        assert _has_comet, "CometCallback requires comet-ml to be installed. Run `pip install comet-ml`."
         self._initialized = False
 
     def setup(self, args, state, model):
