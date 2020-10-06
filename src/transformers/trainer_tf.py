@@ -31,6 +31,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.distribute.values import PerReplica
 
+from .file_utils import TF2_WEIGHTS_NAME
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
@@ -785,6 +786,22 @@ class TFTrainer:
         logger.info(f"Saving model in {output_dir}")
 
         if not isinstance(self.model, TFPreTrainedModel):
-            raise ValueError("Trainer.model appears to not be a PreTrainedModel")
+            warnings.warn(
+                "Trainer.model appears to not be a PreTrainedModel. The model will still be saved as a usual tf.keras.models.Model model, but no PretrainedConfig will be saved."
+            )
 
-        self.model.save_pretrained(output_dir)
+            if os.path.isfile(output_dir):
+                logger.error("Provided path ({}) should be a directory, not a file".format(output_dir))
+                return
+            os.makedirs(output_dir, exist_ok=True)
+
+            # If we save using the predefined names, we can load using `from_pretrained` if ``model`` is an instance of class `TFPreTrainedModel`.
+            output_model_file = os.path.join(output_dir, TF2_WEIGHTS_NAME)
+            self.model.save_weights(output_model_file)
+            logger.info("Model weights saved in {}".format(output_model_file))
+        else:
+            self.model.save_pretrained(output_dir)
+
+        # Also save to SavedModel format.
+        tf.saved_model.save(self.model, export_dir=output_dir)
+        logger.info("SavedModel saved in {}".format(output_dir))
