@@ -19,9 +19,44 @@ from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 
 
+SPIECE_UNDERLINE = "▁"
+
+####################################################
+# Mapping from the keyword arguments names of Tokenizer `__init__`
+# to file names for serializing Tokenizer instances
+####################################################
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+
+####################################################
+# Mapping from the keyword arguments names of Tokenizer `__init__`
+# to pretrained vocabulary URL for all the model shortcut names.
+####################################################
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/spiece.model"}
+}
+
+####################################################
+# Mapping from model shortcut names to max length of inputs
+####################################################
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "google/pegasus-xsum": 512,
+}
+
+
 class PegasusTokenizer(ReformerTokenizer):
+    r"""
+    Construct a Pegasus tokenizer.
+
+    :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
+    :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
+
+    Refer to superclass :class:`~transformers.ReformerTokenizer` for usage examples and documentation concerning
+    the initialization parameters and other methods.
+    """
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = {"vocab_file": "spiece.model"}
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -85,18 +120,24 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
-        Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A Pegasus sequence has the following format, where ``X`` represents the sequence:
+
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>``  (not intended use)
 
+        BOS is never used.
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
+                List of IDs to which the special tokens will be added.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return token_ids_0 + [self.eos_token_id]
@@ -115,10 +156,6 @@ class PegasusTokenizer(ReformerTokenizer):
         padding="longest",
         **unused,
     ) -> BatchEncoding:
-        """
-        Prepare model inputs for summarization or translation.
-
-        """
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
         tokenizer_kwargs = dict(
@@ -144,6 +181,8 @@ class PegasusTokenizer(ReformerTokenizer):
 class PegasusTokenizerFast(ReformerTokenizerFast):
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = {"vocab_file": "spiece.model"}
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = PegasusTokenizer
 
     # def num_special_tokens_to_add(self, pair=False):

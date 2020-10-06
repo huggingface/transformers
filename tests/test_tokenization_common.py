@@ -585,6 +585,7 @@ class TokenizerTesterMixin:
                 model_max_length = tokenizer.model_max_length
                 self.assertEqual(model_max_length, 100)
                 seq_2 = seq_0 * model_max_length
+                assert len(seq_2) > model_max_length
 
                 sequence1 = tokenizer(seq_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
@@ -598,9 +599,9 @@ class TokenizerTesterMixin:
                     [False, True, "longest"] if tokenizer.pad_token and tokenizer.pad_token_id >= 0 else [False]
                 )
                 for padding_state in padding_strategies:
-                    with self.subTest(f"Padding: {padding_state}"):
+                    with self.subTest(f"{tokenizer.__class__.__name__} Padding: {padding_state}"):
                         for truncation_state in [True, "longest_first", "only_first"]:
-                            with self.subTest(f"Truncation: {truncation_state}"):
+                            with self.subTest(f"{tokenizer.__class__.__name__} Truncation: {truncation_state}"):
                                 output = tokenizer(seq_2, seq_1, padding=padding_state, truncation=truncation_state)
                                 self.assertEqual(len(output["input_ids"]), model_max_length)
 

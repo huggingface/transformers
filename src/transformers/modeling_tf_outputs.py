@@ -84,7 +84,7 @@ class TFBaseModelOutputWithPast(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            ``past_key_values`` input) to speed up sequential decoding.
+            :obj:`past_key_values` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -114,13 +114,13 @@ class TFSeq2SeqModelOutput(ModelOutput):
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-            If ``past_key_values`` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
         past_key_values (:obj:`List[tf.Tensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`tf.Tensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -200,7 +200,7 @@ class TFCausalLMOutputWithPast(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            ``past_key_values`` input) to speed up sequential decoding.
+            :obj:`past_key_values` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -265,7 +265,7 @@ class TFSeq2SeqLMOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -372,7 +372,7 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -518,7 +518,7 @@ class TFSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.

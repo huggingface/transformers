@@ -9,6 +9,9 @@ It also helps us if you spread the word: reference the library from blog posts
 on the awesome projects it made possible, shout out on Twitter every time it has
 helped you, or simply star the repo to say "thank you".
 
+Whichever way you choose to contribute, please be mindful to respect our
+[code of conduct](https://github.com/huggingface/transformers/blob/master/CODE_OF_CONDUCT.md).
+
 ## You can contribute in so many ways!
 
 There are 4 ways you can contribute to transformers:

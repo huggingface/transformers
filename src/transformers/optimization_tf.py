@@ -88,6 +88,7 @@ def create_optimizer(
     adam_beta2: float = 0.999,
     adam_epsilon: float = 1e-8,
     weight_decay_rate: float = 0.0,
+    power: float = 1.0,
     include_in_weight_decay: Optional[List[str]] = None,
 ):
     """
@@ -110,6 +111,8 @@ def create_optimizer(
             The epsilon to use in Adam.
         weight_decay_rate (:obj:`float`, `optional`, defaults to 0):
             The weight decay to use.
+        power (:obj:`float`, `optional`, defaults to 1.0):
+            The power to use for PolynomialDecay.
         include_in_weight_decay (:obj:`List[str]`, `optional`):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters except bias and layer norm parameters.
@@ -119,6 +122,7 @@ def create_optimizer(
         initial_learning_rate=init_lr,
         decay_steps=num_train_steps - num_warmup_steps,
         end_learning_rate=init_lr * min_lr_ratio,
+        power=power,
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(

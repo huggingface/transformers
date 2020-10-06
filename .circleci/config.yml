@@ -248,6 +248,7 @@ jobs:
             - run: isort --check-only examples templates tests src utils
             - run: flake8 examples templates tests src utils
             - run: python utils/check_copies.py
+            - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
     check_repository_consistency:
         working_directory: ~/transformers
