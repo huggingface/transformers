@@ -2,9 +2,7 @@ name: Self-hosted runner (push)
 
 on: 
   push:
-    branches:
-      - master
-    paths: 
+    paths:
       - "src/**"
       - "tests/**"
       - ".github/**"
