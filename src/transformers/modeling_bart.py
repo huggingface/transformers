@@ -1176,7 +1176,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             config.d_model,
             config.d_model,
             config.num_labels,
-            config.classif_dropout,
+            config.classifier_dropout,
         )
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
