@@ -421,14 +421,27 @@ class GenerationMixin:
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
-            # create empty decoder input_ids
-            input_ids = torch.full(
-                (effective_batch_size * num_beams, 1),
-                decoder_start_token_id,
-                dtype=torch.long,
-                device=next(self.parameters()).device,
-            )
-            cur_len = 1
+            if decoder_input_ids is not None:
+                # give initial decoder input ids
+                effective_decoder_input_ids = decoder_input_ids.repeat(effective_batch_size * num_beams, 1)
+                effective_decoder_start_token_id = torch.full(
+                    (effective_batch_size * num_beams, 1),
+                    decoder_start_token_id,
+                    dtype=torch.long,
+                    device=next(self.parameters()).device,
+                )
+                input_ids = torch.cat([effective_decoder_start_token_id, effective_decoder_input_ids], dim=-1).to(
+                    next(self.parameters()).device
+                )
+            else:
+                # create empty decoder input_ids
+                input_ids = torch.full(
+                    (effective_batch_size * num_beams, 1),
+                    decoder_start_token_id,
+                    dtype=torch.long,
+                    device=next(self.parameters()).device,
+                )
+            cur_len = input_ids.shape[-1]
 
             assert (
                 batch_size == encoder_outputs.last_hidden_state.shape[0]
@@ -450,20 +463,6 @@ class GenerationMixin:
 
             # save encoder_outputs in `model_kwargs`
             model_kwargs["encoder_outputs"] = encoder_outputs
-
-            # give initial decoder input ids
-            if decoder_input_ids is not None:
-                effective_decoder_input_ids = decoder_input_ids.repeat(effective_batch_size * num_beams, 1)
-                effective_decoder_start_token_id = torch.full(
-                    (effective_batch_size * num_beams, 1),
-                    decoder_start_token_id,
-                    dtype=torch.long,
-                    device=input_ids.device,
-                )
-                input_ids = torch.cat([effective_decoder_start_token_id, effective_decoder_input_ids], dim=-1).to(
-                    input_ids.device
-                )
-                cur_len = input_ids.shape[-1]
 
         else:
             cur_len = input_ids.shape[-1]
