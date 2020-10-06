@@ -23,7 +23,7 @@ By default a :class:`~transformers.Trainer` will use the following callbacks:
 
 The main class that implements callbacks is :class:`~transformers.TrainerCallback`. It gets the
 :class:`~transformers.TrainingArguments` used to instantiate the :class:`~transformers.Trainer`, can access that
-Trainer's internal state via `:class:~transformers.TrainerState`, and can take some actions on the training loop via
+Trainer's internal state via :class:`~transformers.TrainerState`, and can take some actions on the training loop via
 :class:`~transformers.TrainerControl`.
 
 
