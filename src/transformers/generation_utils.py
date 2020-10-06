@@ -458,9 +458,11 @@ class GenerationMixin:
                     (effective_batch_size * num_beams, 1),
                     decoder_start_token_id,
                     dtype=torch.long,
-                    device=input_ids.device
+                    device=input_ids.device,
                 )
-                input_ids = torch.cat([effective_decoder_start_token_id, effective_decoder_input_ids], dim=-1).to(input_ids.device)
+                input_ids = torch.cat([effective_decoder_start_token_id, effective_decoder_input_ids], dim=-1).to(
+                    input_ids.device
+                )
                 cur_len = input_ids.shape[-1]
 
         else:
