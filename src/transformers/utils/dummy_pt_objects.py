@@ -931,6 +931,15 @@ class GPT2DoubleHeadsModel:
         requires_pytorch(self)
 
 
+class GPT2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class GPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
