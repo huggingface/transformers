@@ -5,18 +5,18 @@ check_dirs := examples templates tests src utils
 
 # get modified files since the branch was made
 fork_point_sha := $(shell git merge-base --fork-point master)
-joined_dirs    := $(shell echo $(check_dirs) | tr " " "|")
-modified_files := $(shell git diff --name-only $(fork_point_sha) | egrep '^($(joined_dirs))')
-#$(info modified files are: $(modified_files))
+joined_dirs := $(shell echo $(check_dirs) | tr " " "|")
+modified_py_files := $(shell git diff --name-only $(fork_point_sha) | egrep '^($(joined_dirs))' | egrep '\.py$$')
+#$(info modified files are: $(modified_py_files))
 
 modified_only_fixup:
-	@if [ -n "$(modified_files)" ]; then \
-		echo "Checking/fixing $(modified_files)"; \
-		black $(modified_files); \
-		isort $(modified_files); \
-		flake8 $(modified_files); \
+	@if [ -n "$(modified_py_files)" ]; then \
+		echo "Checking/fixing $(modified_py_files)"; \
+		black $(modified_py_files); \
+		isort $(modified_py_files); \
+		flake8 $(modified_py_files); \
 	else \
-		echo "No relevant files were modified"; \
+		echo "No library .py files were modified"; \
 	fi
 
 # Check that source code meets quality standards
