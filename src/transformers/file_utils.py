@@ -76,9 +76,6 @@ try:
         import jax
         from jax.config import config
 
-        # TODO(marcvanzee): Flax Linen requires JAX omnistaging. Remove this
-        # once JAX enables it by default.
-        config.enable_omnistaging()
 
         logger.info("JAX version {}, Flax: available".format(jax.__version__))
         logger.info("Flax available: {}".format(flax))
