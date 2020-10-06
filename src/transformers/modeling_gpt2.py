@@ -950,15 +950,15 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
 @add_start_docstrings(
     """The GPT2 Model transformer with a sequence classification head on top
-    (linear layer). 
-    
-    :class:`~transformers.GPT2ForSequenceClassification` uses the last token in order to do the classification, as 
+    (linear layer).
+
+    :class:`~transformers.GPT2ForSequenceClassification` uses the last token in order to do the classification, as
     other causal models (e.g. GPT-1) do.
-    
-    Since it does classification on the last token, it requires to know the position of the last token. 
-    If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token 
-    in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. 
-    Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it 
+
+    Since it does classification on the last token, it requires to know the position of the last token.
+    If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token
+    in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch.
+    Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it
     does the same (take the last value in each row of the batch).
     """,
     GPT2_START_DOCSTRING,
