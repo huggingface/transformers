@@ -230,7 +230,6 @@ class TestSummarizationDistiller(unittest.TestCase):
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
-    @unittest.skip("T5 distillation is broken at the moment")
     def test_distill_t5(self):
         updates = dict(
             student_encoder_layers=1,

@@ -48,12 +48,12 @@ class BartSummarizationDistiller(SummarizationModule):
         super().__init__(hparams, model=student, config=student.config)
         model_type = student.config.model_type
         self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]
-        if model_type != 't5':
-            self.different_encoder = hparams.student_encoder_layers != teacher.config.encoder_layers
-            self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
-        else:
-            self.different_encoder = hparams.student_encoder_layers != teacher.config.num_layers
-            self.different_decoder = hparams.student_decoder_layers != teacher.config.num_decoder_layers
+        if model_type == "t5":
+            teacher.config.encoder_layers = len(teacher.get_encoder().block)
+            teacher.config.decoder_layers = len(teacher.get_decoder().block)
+
+        self.different_encoder = hparams.student_encoder_layers != teacher.config.encoder_layers
+        self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
 
         self.teacher = teacher
         freeze_params(self.teacher)
@@ -135,7 +135,7 @@ class BartSummarizationDistiller(SummarizationModule):
             output_hidden_states=True,
             output_attentions=False,
             use_cache=False,
-        )  # TODO(@sshleifer): return_dict=True cleanup
+        )
 
         # Same cross entropy vs. label smoothing logic as finetune.py
         assert lm_logits.shape[-1] == self.model.config.vocab_size
@@ -153,29 +153,36 @@ class BartSummarizationDistiller(SummarizationModule):
             return torch.tensor(0.0).type_as(student_lm_loss)
 
         loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
-        if self.different_encoder:
+        if self.different_encoder:  # compute encoder hidden state loss
             with torch.no_grad():
-                teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.get_encoder()(
-                    input_ids, attention_mask=src_mask, output_hidden_states=True
+                outputs = self.teacher.get_encoder()(
+                    input_ids, attention_mask=src_mask, output_hidden_states=True, return_dict=True
                 )
+
+            teacher_enc_outputs, teacher_enc_hid = outputs.last_hidden_state, outputs.hidden_states
             # DEPRECATE THIS
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, src_mask)
 
-            hid_loss_enc = self.calc_hidden_loss(src_mask, enc_hidden_state, teacher_enc_hid, self.e_layer_ids)
-
-        teacher_enc_outputs = (enc_outputs,)
-        assert isinstance(teacher_enc_outputs, tuple), type(teacher_enc_outputs)
+            hid_loss_enc = self.calc_hidden_loss(
+                src_mask,
+                enc_hidden_state,
+                teacher_enc_hid,
+                self.e_layer_ids,
+                normalize_hidden=self.hparams.normalize_hidden,
+            )
 
         with torch.no_grad():
-            tloss, tlogits, tdec_hidden, _ = self.teacher(
+            outputs = self.teacher(
                 input_ids,
                 attention_mask=src_mask,
-                encoder_outputs=teacher_enc_outputs,
+                encoder_outputs=(enc_outputs,),
                 decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
+                return_dict=True,
             )
+            tlogits, tdec_hidden = outputs.logits, outputs.decoder_hidden_states
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
