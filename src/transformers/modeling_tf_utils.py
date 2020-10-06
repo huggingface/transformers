@@ -799,12 +799,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         missing_keys, unexpected_keys = detect_tf_missing_unexpected_layers(model, resolved_archive_file)
 
         if cls.authorized_missing_keys is not None:
-            for pat in cls.authorized_missing_keys:
-                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-        
-        if cls.authorized_unexpected_keys is not None:
-            for pat in cls.authorized_unexpected_keys:
-                unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+                for pat in cls.authorized_missing_keys:
+                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
         if cls.authorized_unexpected_keys is not None:
             for pat in cls.authorized_unexpected_keys:
@@ -821,11 +817,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
         else:
             logger.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
-<<<<<<< HEAD
-
-=======
-              
->>>>>>> d7e5e4bf... Fix TF utils
         if len(missing_keys) > 0:
             logger.warning(
                 f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
@@ -840,7 +831,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         if output_loading_info:
-            loading_info = {"missing_keys": missing_keys, "unexpected_layers_weights": unexpected_keys}
+            loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
 
             return model, loading_info
 
