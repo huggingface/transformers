@@ -118,13 +118,36 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
 
     def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+        # init special `NgramMultiheadAttention`
+        if isinstance(module, NgramMultiheadAttention):
+            if module.qkv_same_dim:
+                module.in_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+            #                nn.init.xavier_uniform_(module.in_proj_weight)
+            else:
+                module.k_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+                module.v_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+                module.q_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+            #                nn.init.(module.k_proj_weight)
+            #                nn.init.xavier_uniform_(module.v_proj_weight)
+            #                nn.init.xavier_uniform_(module.q_proj_weight)
+
+            module.out_proj.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            #            module.out_proj.weight.data.uniform_()
+            if module.in_proj_bias is not None:
+                module.in_proj_bias.data.zero_()
+                module.out_proj.bias.data.zero_()
+            if module.bias_k is not None:
+                module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
+            #                module.bias_k.data.normal_()
+            if module.bias_v is not None:
+                module.bias_v.data.normal_(mean=0.0, std=self.config.init_std)
+        #                module.bias_v.data.normal_()
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
@@ -146,7 +169,9 @@ class LearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.onnx_trace = False
 
-    def forward(self, input_ids, use_cache=False, past_key_values=None, positions=None):
+    def forward(
+        self, inputs_shape, device, attention_mask=None, use_cache=False, past_key_values=None, positions=None
+    ):
         """Input is expected to be of size [bsz x seqlen]."""
         assert (positions is None) or (
             self.padding_idx is None
@@ -157,11 +182,17 @@ class LearnedPositionalEmbedding(nn.Embedding):
                 # positions is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
                 prev_num_input_ids = past_key_values[0]["self"]["prev_key"].shape[2]
-                num_input_ids = input_ids.size(1) + prev_num_input_ids
-                positions = input_ids.data.new(1, 1).fill_(int(self.padding_idx + num_input_ids))
+                num_input_ids = inputs_shape[1] + prev_num_input_ids
+                positions = torch.ones((1, 1), dtype=torch.long, device=device) * (
+                    int(self.padding_idx + num_input_ids)
+                )
+
             else:
-                mask = input_ids.data.ne(self.padding_idx).int()
-                positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + self.padding_idx
+                if attention_mask is None:
+                    attention_mask = torch.ones(inputs_shape, dtype=torch.long, device=device)
+                positions = (
+                    torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask
+                ).long() + self.padding_idx
             real_positions = positions
         else:
             real_positions = positions
@@ -465,11 +496,10 @@ class NgramMultiheadAttention(nn.Module):
 
         self.add_zero_attn = add_zero_attn
 
-        self.reset_parameters()
+        #        self.reset_parameters()
 
         self.onnx_trace = False
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
-        assert self.cache_key == "self"
+        self.cache_key = "self"
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -607,7 +637,7 @@ class NgramMultiheadAttention(nn.Module):
         assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
 
         if layer_state is not None:  # reuse k,v and encoder_attention_mask
-            saved_state = layer_state.get(self.cache_key, {})
+            saved_state = layer_state.get("self", {})
         else:
             saved_state = None
             layer_state = {}
@@ -652,7 +682,7 @@ class NgramMultiheadAttention(nn.Module):
                 else:
                     v_main = torch.cat((prev_value, v_main), dim=1)
             # Update cache
-            layer_state[self.cache_key] = {
+            layer_state["self"] = {
                 "prev_key": k_main.view(bsz, self.num_heads, -1, self.head_dim),
                 "prev_value": v_main.view(bsz, self.num_heads, -1, self.head_dim),
             }
@@ -964,8 +994,16 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
+        self.init_weights()
+
     def forward(
-        self, input_ids, attention_mask=None, output_attentions=None, output_hidden_states=None, return_dict=False
+        self,
+        input_ids=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=False,
     ):
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -977,8 +1015,14 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             # invert
             attention_mask = attention_mask.eq(0)
 
-        inputs_embeds = self.embed_tokens(input_ids)
-        embed_pos, real_positions = self.embed_positions(input_ids)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Either input_ids or inputs_embeds has to be passed.")
+        elif input_ids is not None and inputs_embeds is not None:
+            raise ValueError("Make sure to only pass input_ids or inputs_embeds.")
+        elif input_ids is not None and inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        embed_pos, real_positions = self.embed_positions(inputs_embeds.shape[:2], inputs_embeds.device)
         x = inputs_embeds + embed_pos
         x = self.emb_layer_norm(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -1038,6 +1082,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
+
+        self.init_weights()
 
     def cal_and_buffer_finetune_relative_positions(self, real_positions):
         n_tokens = real_positions.size(-1)
@@ -1118,7 +1164,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
-        inputs_embeds=None,  # TODO(Patrick) Implement
+        inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1149,14 +1195,24 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        batch_size, sequence_length = input_ids.shape[:2]
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Either `decoder_input_ids` or `decoder_inputs_embeds` has to be passed.")
+        elif input_ids is not None and inputs_embeds is not None:
+            raise ValueError("Make sure to only pass `decoder_input_ids` or `decoder_inputs_embeds`.")
+        elif input_ids is not None and inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        batch_size, sequence_length = inputs_embeds.shape[:2]
 
         if encoder_attention_mask is not None:
             # invert mask
             encoder_attention_mask = encoder_attention_mask.eq(0)
 
         main_stream_pos_embed, real_positions = self.embed_positions(
-            input_ids, use_cache=use_cache, past_key_values=past_key_values
+            (batch_size, sequence_length),
+            device=inputs_embeds.device,
+            use_cache=use_cache,
+            past_key_values=past_key_values,
         )
 
         if past_key_values is not None:
@@ -1167,10 +1223,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             )
         predicting_stream_pos_embed = self.embed_positions._forward(real_positions + 1)
 
-        hidden_states = self.embed_tokens(input_ids)
         if self.embed_scale is not None:
-            hidden_states *= self.embed_scal
-        hidden_states += main_stream_pos_embed
+            inputs_embeds *= self.embed_scal
+        hidden_states = inputs_embeds + main_stream_pos_embed
         # B x T x C -> T x B x C
         hidden_states = hidden_states.transpose(0, 1)
 
@@ -1272,6 +1327,8 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder = ProphetNetEncoder(config, self.embed_tokens)
         self.decoder = ProphetNetDecoder(config, self.embed_tokens)
 
+        self.init_weights()
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -1284,12 +1341,14 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="microsoft/prophetnet-large-uncased")
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs: Optional[Tuple] = None,
         past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1301,12 +1360,11 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        assert decoder_input_ids is not None
-
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1319,6 +1377,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -1371,12 +1430,14 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -1386,12 +1447,14 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     ):
 
         outputs = self.model(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1399,63 +1462,56 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         )
         predicting_streams = outputs[0][:, 1:]
 
+        loss = None
         if labels is not None:
             # fine-tune
-            loss_logits = self.lm_head(predicting_streams)
-            logits = loss_logits[:, 0]
+            logits = self.lm_head(predicting_streams)
+            loss = self._compute_loss(logits, labels)
 
-            expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(
-                self.padding_idx
-            )
-            for i in range(self.config.ngram):
-                if i > 0 and self.disable_ngram_loss:
-                    break
-                expend_targets[i, :, :] = labels
-            lprobs = F.log_softmax(
-                loss_logits.view(-1, logits.size(-1)),
-                dim=-1,
-                dtype=torch.float32,
-            )
-            loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="sum")
-            if self.config.eps > 0.0:
-                smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-                non_pad_mask = expend_targets.ne(self.padding_idx).view(-1)
-                smooth_loss = smooth_loss[non_pad_mask]
-                smooth_loss = smooth_loss.sum()
-
-                eps_i = self.config.eps / lprobs.size(-1)
-                loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
-            if not return_dict:
-                return (loss,) + outputs
-            else:
-                return Seq2SeqLMOutput(
-                    loss=loss,
-                    logits=logits,
-                    past_key_values=outputs.past_key_values,
-                    decoder_hidden_states=outputs.decoder_hidden_states,
-                    decoder_attentions=outputs.decoder_attentions,
-                    encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-                    encoder_hidden_states=outputs.encoder_hidden_states,
-                    encoder_attentions=outputs.encoder_attentions,
-                )
+            logits = logits[:, 0]
         else:
-            # inference
             logits = self.lm_head(predicting_streams[:, 0])
 
-            if not return_dict:
-                outputs_logits = (logits,) + outputs[1:]  # Add cache, hidden states and attention if they are here
-                return outputs_logits
-            else:
-                return Seq2SeqLMOutput(
-                    loss=None,
-                    logits=logits,
-                    past_key_values=outputs.past_key_values,
-                    decoder_hidden_states=outputs.decoder_hidden_states,
-                    decoder_attentions=outputs.decoder_attentions,
-                    encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-                    encoder_hidden_states=outputs.encoder_hidden_states,
-                    encoder_attentions=outputs.encoder_attentions,
-                )
+        if not return_dict:
+            return (loss, logits) + outputs[1:] if loss is not None else (logits,) + outputs[1:]
+        else:
+            return Seq2SeqLMOutput(
+                loss=loss,
+                logits=logits,
+                past_key_values=outputs.past_key_values,
+                decoder_hidden_states=outputs.decoder_hidden_states,
+                decoder_attentions=outputs.decoder_attentions,
+                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                encoder_hidden_states=outputs.encoder_hidden_states,
+                encoder_attentions=outputs.encoder_attentions,
+            )
+
+    def _compute_loss(self, logits, labels):
+        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(self.padding_idx)
+
+        for i in range(self.config.ngram):
+            if i > 0 and self.disable_ngram_loss:
+                break
+            expend_targets[i, :, :] = labels
+
+        lprobs = F.log_softmax(
+            logits.view(-1, logits.size(-1)),
+            dim=-1,
+            dtype=torch.float32,
+        )
+
+        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="sum")
+
+        if self.config.eps > 0.0:
+            smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
+            non_pad_mask = expend_targets.ne(self.padding_idx).view(-1)
+            smooth_loss = smooth_loss[non_pad_mask]
+            smooth_loss = smooth_loss.sum()
+
+            eps_i = self.config.eps / lprobs.size(-1)
+            loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
+
+        return loss
 
     def prepare_inputs_for_generation(
         self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs

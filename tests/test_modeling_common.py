@@ -784,6 +784,10 @@ class ModelTesterMixin:
             model.eval()
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            with torch.no_grad():
+                hidden_states = model(**inputs)[0]
+
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -801,7 +805,9 @@ class ModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
-                model(**inputs)
+                hidden_states_from_inputs_embeds = model(**inputs)[0]
+
+            self.assertTrue(torch.allclose(hidden_states, hidden_states_from_inputs_embeds, atol=1e-2))
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
