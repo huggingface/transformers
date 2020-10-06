@@ -213,7 +213,7 @@ from .trainer_callback import (
     TrainerControl,
     TrainerState,
 )
-from .trainer_utils import EvalPrediction, set_seed
+from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging

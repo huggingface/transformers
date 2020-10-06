@@ -314,7 +314,7 @@ class Trainer:
         Returns:
             :class:`~transformer.TrainerCallback`: The callback removed, if found.
         """
-        self.callback_handler.pop_callback(callback)
+        return self.callback_handler.pop_callback(callback)
 
     def remove_callback(self, callback):
         """
