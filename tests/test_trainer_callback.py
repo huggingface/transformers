@@ -10,11 +10,14 @@ from transformers import (
     Trainer,
     TrainerCallback,
     TrainingArguments,
+    is_torch_available,
 )
 from transformers.testing_utils import require_torch
 from transformers.trainer import DEFAULT_CALLBACKS
 
-from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
+
+if is_torch_available():
+    from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
 
 
 class TestTrainerCallback(TrainerCallback):
