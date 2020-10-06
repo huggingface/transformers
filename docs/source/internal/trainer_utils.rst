@@ -3,7 +3,7 @@ Utilities for Trainer
 
 This page lists all the utility functions used by :class:`~transformers.Trainer`.
 
-Most of those are only useful if you are studying the code of the tokenizers in the library.
+Most of those are only useful if you are studying the code of the Trainer in the library.
 
 Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
