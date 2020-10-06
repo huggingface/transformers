@@ -687,7 +687,7 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
 class TFMobileBertMainLayer(tf.keras.layers.Layer):
     config_class = MobileBertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
         self.output_attentions = config.output_attentions
@@ -696,7 +696,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFMobileBertEmbeddings(config, name="embeddings")
         self.encoder = TFMobileBertEncoder(config, name="encoder")
-        self.pooler = TFMobileBertPooler(config, name="pooler")
+        self.pooler = TFMobileBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -805,7 +805,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (
@@ -1029,13 +1029,12 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
     def get_output_embeddings(self):
@@ -1296,14 +1295,13 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAnsweringLoss):
-
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1528,14 +1526,13 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenClassificationLoss):
-
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
