@@ -108,6 +108,8 @@ from .file_utils import (
     is_tf_available,
     is_torch_available,
     is_torch_tpu_available,
+    is_sentencepiece_available,
+    is_tokenizers_available,
 )
 from .hf_argparser import HfArgumentParser
 
