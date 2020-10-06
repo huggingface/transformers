@@ -184,13 +184,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
                 e.args += (symbolic_weight.shape, array.shape)
                 raise e
 
-        if list(symbolic_weight.shape) != list(array.shape):
-            try:
-                array = numpy.reshape(array, symbolic_weight.shape)
-            except AssertionError as e:
-                e.args += (symbolic_weight.shape, array.shape)
-                raise e
-
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
         except AssertionError as e:
@@ -347,13 +340,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             array = numpy.squeeze(array)
         elif len(pt_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
-
-        if list(pt_weight.shape) != list(array.shape):
-            try:
-                array = numpy.reshape(array, pt_weight.shape)
-            except AssertionError as e:
-                e.args += (pt_weight.shape, array.shape)
-                raise e
 
         if list(pt_weight.shape) != list(array.shape):
             try:
