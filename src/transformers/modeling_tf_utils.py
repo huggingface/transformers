@@ -321,6 +321,10 @@ def save_tf_model(model, save_directory):
     model.save_weights(output_model_file)
     logger.info("Model weights saved in {}".format(output_model_file))
 
+    # Also save to SavedModel format.
+    tf.saved_model.save(model, export_dir=save_directory)
+    logger.info("SavedModel saved in {}".format(save_directory))
+
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     r"""
