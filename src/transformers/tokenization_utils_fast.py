@@ -16,8 +16,8 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import logging
 import os
+import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -38,9 +38,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(
@@ -139,12 +140,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
-        """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
+        """Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
 
-            Overflowing tokens are converted to additional examples (like batches) so the output values of
-            the dict are lists (overflows) of lists (tokens).
+        Overflowing tokens are converted to additional examples (like batches) so the output values of
+        the dict are lists (overflows) of lists (tokens).
 
-            Output shape: (overflows, sequence length)
+        Output shape: (overflows, sequence length)
         """
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.model_input_names
@@ -328,7 +329,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -345,6 +346,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             raise ValueError(
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )
+
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
 
         if kwargs:
             raise ValueError(f"Keyword arguments {kwargs} not recognized.")
@@ -365,19 +373,21 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 encodings = self._tokenizer.encode(
                     *batch_text_or_text_pairs[0],
                     add_special_tokens=add_special_tokens,
-                    is_pretokenized=is_pretokenized,
+                    is_pretokenized=is_split_into_words,
                 )
             else:
                 # We got a single sequence
                 encodings = self._tokenizer.encode(
                     batch_text_or_text_pairs[0],
                     add_special_tokens=add_special_tokens,
-                    is_pretokenized=is_pretokenized,
+                    is_pretokenized=is_split_into_words,
                 )
             encodings = [encodings]
         else:
             encodings = self._tokenizer.encode_batch(
-                batch_text_or_text_pairs, add_special_tokens=add_special_tokens, is_pretokenized=is_pretokenized
+                batch_text_or_text_pairs,
+                add_special_tokens=add_special_tokens,
+                is_pretokenized=is_split_into_words,
             )
 
         # Convert encoding to dict
@@ -423,7 +433,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -435,11 +445,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
 
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self._batch_encode_plus(
             batched_input,
-            is_pretokenized=is_pretokenized,
+            is_split_into_words=is_split_into_words,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,

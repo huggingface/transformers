@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """Fill examples with bitext up to max_tokens without breaking up examples.
 [['I went', 'yo fui'],
 ['to the store', 'a la tienda']

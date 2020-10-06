@@ -1,12 +1,12 @@
 CTRL
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Overview
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CTRL model was proposed in `CTRL: A Conditional Transformer Language Model for Controllable Generation <https://arxiv.org/abs/1909.05858>`_
-by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
-It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
+CTRL model was proposed in `CTRL: A Conditional Transformer Language Model for Controllable Generation
+<https://arxiv.org/abs/1909.05858>`_ by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
+Richard Socher. It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
 corpus of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
 
 The abstract from the paper is the following:
@@ -31,50 +31,50 @@ Tips:
   it can be observed in the `run_generation.py` example script.
 - The PyTorch models can take the `past` as input, which is the previously computed key/value attention pairs. Using
   this `past` value prevents the model from re-computing pre-computed values in the context of text generation.
-  See `reusing the past in generative models <../quickstart.html#using-the-past>`_ for more information on the usage
+  See `reusing the past in generative models <../quickstart.html#using-the-past>`__ for more information on the usage
   of this argument.
 
-The original code can be found `here <https://github.com/salesforce/ctrl>`_.
+The original code can be found `here <https://github.com/salesforce/ctrl>`__.
 
 
 CTRLConfig
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CTRLConfig
     :members:
 
 
 CTRLTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CTRLTokenizer
     :members: save_vocabulary
 
 
 CTRLModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CTRLModel
-    :members:
+    :members: forward
 
 
 CTRLLMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CTRLLMHeadModel
-    :members:
+    :members: forward
 
 
 TFCTRLModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFCTRLModel
-    :members:
+    :members: call
 
 
 TFCTRLLMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFCTRLLMHeadModel
-    :members:
+    :members: call
 

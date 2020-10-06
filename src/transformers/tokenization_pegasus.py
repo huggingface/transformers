@@ -14,13 +14,21 @@
 # limitations under the License.
 from typing import Dict, List, Optional
 
-from transformers.tokenization_reformer import ReformerTokenizer
-
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
+from .tokenization_reformer import ReformerTokenizer
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 
 
 class PegasusTokenizer(ReformerTokenizer):
+    r"""
+    Construct a Pegasus tokenizer.
+
+    :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
+    :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
+
+    Refer to superclass :class:`~transformers.ReformerTokenizer` for usage examples and documentation concerning
+    the initialization parameters and other methods.
+    """
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = {"vocab_file": "spiece.model"}
 
@@ -86,25 +94,31 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
-        Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A Pegasus sequence has the following format, where ``X`` represents the sequence:
+
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>``  (not intended use)
 
+        BOS is never used.
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -114,11 +128,8 @@ class PegasusTokenizer(ReformerTokenizer):
         return_tensors: str = "pt",
         truncation=True,
         padding="longest",
+        **unused,
     ) -> BatchEncoding:
-        """
-        Prepare model inputs for summarization or translation.
-
-        """
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
         tokenizer_kwargs = dict(
@@ -133,7 +144,9 @@ class PegasusTokenizer(ReformerTokenizer):
             return model_inputs
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
-        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
+        # TODO(@sshleifer): maybe tgt_texts = [self.pad_token + t for t in tgt_texts]  # add decoder_start_token_id
+        labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
+        model_inputs["labels"] = labels
+        # for k, v in decoder_inputs.items():
+        #    model_inputs[f"decoder_{k}"] = v
         return model_inputs

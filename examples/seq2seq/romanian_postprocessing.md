@@ -12,7 +12,7 @@ Note: You need to have your test_generations.txt before you start this process.
 cd $HOME
 git clone git@github.com:moses-smt/mosesdecoder.git
 cd mosesdecoder  
-git@github.com:rsennrich/wmt16-scripts.git
+git clone git@github.com:rsennrich/wmt16-scripts.git
 ```
 
 (2) define a function for post processing.

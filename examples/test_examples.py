@@ -22,7 +22,8 @@ from unittest.mock import patch
 
 import torch
 
-from transformers.testing_utils import TestCasePlus
+from transformers.file_utils import is_apex_available
+from transformers.testing_utils import TestCasePlus, torch_device
 
 
 SRC_DIRS = [
@@ -52,6 +53,11 @@ def get_setup_file():
     return args.f
 
 
+def is_cuda_and_apex_available():
+    is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
+    return is_using_cuda and is_apex_available()
+
+
 class ExamplesTests(TestCasePlus):
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -75,6 +81,9 @@ class ExamplesTests(TestCasePlus):
             --seed=42
             --max_seq_length=128
             """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
@@ -102,7 +111,9 @@ class ExamplesTests(TestCasePlus):
             --max_seq_length=128
             """.split()
         if torch.cuda.is_available():
-            testargs += ["--fp16", "--gpus=1"]
+            testargs += ["--gpus=1"]
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
@@ -135,12 +146,14 @@ class ExamplesTests(TestCasePlus):
             --do_train
             --do_eval
             --num_train_epochs=1
-            --no_cuda
             """.split()
+
+        if torch_device != "cuda":
+            testargs.append("--no_cuda")
 
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
-            self.assertLess(result["perplexity"], 35)
+            self.assertLess(result["perplexity"], 42)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -175,7 +188,14 @@ class ExamplesTests(TestCasePlus):
         logger.addHandler(stream_handler)
 
         testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42"]
-        model_type, model_name = ("--model_type=gpt2", "--model_name_or_path=sshleifer/tiny-gpt2")
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        model_type, model_name = (
+            "--model_type=gpt2",
+            "--model_name_or_path=sshleifer/tiny-gpt2",
+        )
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)

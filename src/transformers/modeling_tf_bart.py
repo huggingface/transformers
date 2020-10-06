@@ -34,11 +34,12 @@ from .modeling_tf_utils import (
     TFSharedEmbeddings,
     cast_bool_to_primitive,
     keras_serializable,
+    shape_list,
 )
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
+    """Replace non-padding symbols with their position numbers. Position numbers begin at
     padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
     `utils.make_positions`.
 
@@ -52,7 +53,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
 
 
 logger = logging.getLogger(__name__)
-
 
 
 BART_START_DOCSTRING = r"""
@@ -119,6 +119,34 @@ class TFPretrainedBartModel(TFPreTrainedModel):
             "inputs": input_ids,
         }
         return dummy_inputs
+
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
+
+        assert (
+            decoder_start_token_id is not None
+        ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
+
+        shifted_input_ids = tf.cast(input_ids, tf.int32)
+        shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
+        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
+        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids = tf.where(
+            shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+        )
+
+        # "Verify that `labels` has only positive values and -100"
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+
+        # Make sure the assertion op is called by wrapping the result in an identity no-op
+        with tf.control_dependencies([assert_gte0]):
+            shifted_input_ids = tf.identity(shifted_input_ids)
+
+        return shifted_input_ids
 
 
 # Helper Functions, mostly for making masks
@@ -643,7 +671,10 @@ class Attention(tf.keras.layers.Layer):
 
         if key_padding_mask is not None and key_padding_mask._rank() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.shape[:2] == (bsz, src_len,)
+        assert key_padding_mask is None or key_padding_mask.shape[:2] == (
+            bsz,
+            src_len,
+        )
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights: T = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
             neg_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
@@ -719,7 +750,7 @@ class Attention(tf.keras.layers.Layer):
 
 
 def gelu(x):
-    """ Gaussian Error Linear Unit.
+    """Gaussian Error Linear Unit.
     Original Implementation of the gelu activation function in Google Bert repo when initially created.
         For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
@@ -762,7 +793,8 @@ def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, **kwargs):
 
 
 @add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
+    "The bare BART Model outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
 )
 class TFBartModel(TFPretrainedBartModel):
     def __init__(self, config: BartConfig, *inputs, **kwargs):
@@ -781,7 +813,11 @@ class TFBartModel(TFPretrainedBartModel):
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
     def _prepare_bart_decoder_inputs(
-        self, input_ids: T, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
+        self,
+        input_ids: T,
+        decoder_input_ids=None,
+        decoder_attn_mask=None,
+        mask_dtype=None,
     ):
         """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
         none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
@@ -804,8 +840,8 @@ class TFBartModel(TFPretrainedBartModel):
         input_ids,
         attention_mask=None,
         decoder_input_ids=None,  # BAD DEFAULT LEFT FOR CONSISTENT SIGNATURE
-        encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
+        encoder_outputs: Optional[Tuple] = None,
         decoder_cached_states=None,
         use_cache=None,
         output_attentions=None,
@@ -870,7 +906,7 @@ class TFBartModel(TFPretrainedBartModel):
         else:
             return TFSeq2SeqModelOutput(
                 last_hidden_state=decoder_outputs.last_hidden_state,
-                decoder_past_key_values=decoder_outputs.past_key_values,
+                past_key_values=decoder_outputs.past_key_values,
                 decoder_hidden_states=decoder_outputs.hidden_states,
                 decoder_attentions=decoder_outputs.attentions,
                 encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -889,7 +925,8 @@ class TFBartModel(TFPretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING,
+    "The BART Model with a language modeling head. Can be used for summarization.",
+    BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
@@ -901,45 +938,45 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def call(self, inputs: dict, **kwargs):
         r"""
-        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-            with labels
-            in ``[0, ..., config.vocab_size]``.
+            masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the masked language modeling loss.
+                Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
+                with labels
+                in ``[0, ..., config.vocab_size]``.
 
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Masked language modeling loss.
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        Returns:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+            masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+                Masked language modeling loss.
+            prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+                Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+                heads.
 
-    Examples::
+        Examples::
 
-            # Mask filling only works for bart-large
-            from transformers import BartTokenizer, TFBartForConditionalGeneration
-            tokenizer = BartTokenizer.from_pretrained('bart-large')
-            TXT = "My friends are <mask> but they eat too many carbs."
-            model = TFBartForConditionalGeneration.from_pretrained('bart-large')
-            input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids)[0]
-            masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            probs = logits[0, masked_index].softmax(dim=0)
-            values, predictions = probs.topk(5)
-            tokenizer.decode(predictions).split()
-            # ['good', 'great', 'all', 'really', 'very']
+                # Mask filling only works for bart-large
+                from transformers import BartTokenizer, TFBartForConditionalGeneration
+                tokenizer = BartTokenizer.from_pretrained('bart-large')
+                TXT = "My friends are <mask> but they eat too many carbs."
+                model = TFBartForConditionalGeneration.from_pretrained('bart-large')
+                input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
+                logits = model(input_ids)[0]
+                masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+                probs = logits[0, masked_index].softmax(dim=0)
+                values, predictions = probs.topk(5)
+                tokenizer.decode(predictions).split()
+                # ['good', 'great', 'all', 'really', 'very']
         """
 
         if isinstance(inputs, dict):
@@ -958,7 +995,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
         return TFSeq2SeqLMOutput(
             logits=lm_logits,
-            decoder_past_key_values=outputs.decoder_past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,

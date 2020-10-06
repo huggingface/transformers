@@ -15,57 +15,59 @@
 # limitations under the License.
 
 import copy
-import logging
 
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class EncoderDecoderConfig(PretrainedConfig):
     r"""
-        :class:`~transformers.EncoderDecoderConfig` is the configuration class to store the configuration of a `EncoderDecoderModel`.
+    :class:`~transformers.EncoderDecoderConfig` is the configuration class to store the configuration of a
+    :class:`~transformers.EncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to the
+    specified arguments, defining the encoder and decoder configs.
 
-        It is used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder configs.
-        Configuration objects inherit from  :class:`~transformers.PretrainedConfig`
-        and can be used to control the model outputs.
-        See the documentation for :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
-        Args:
-            kwargs (`optional`):
-                Remaining dictionary of keyword arguments. Notably:
-                    encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-                        An instance of a configuration object that defines the encoder config.
-                    decoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-                        An instance of a configuration object that defines the decoder config.
+    Args:
+        kwargs (`optional`):
+            Dictionary of keyword arguments. Notably:
 
-        Example::
+                - **encoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                  object that defines the encoder config.
+                - **decoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                  object that defines the decoder config.
 
-            >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
+    Examples::
 
-            >>> # Initializing a BERT bert-base-uncased style configuration
-            >>> config_encoder = BertConfig()
-            >>> config_decoder = BertConfig()
+        >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
-            >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+        >>> # Initializing a BERT bert-base-uncased style configuration
+        >>> config_encoder = BertConfig()
+        >>> config_decoder = BertConfig()
 
-            >>> # Initializing a Bert2Bert model from the bert-base-uncased style configurations
-            >>> model = EncoderDecoderModel(config=config)
+        >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-            >>> # Accessing the model configuration
-            >>> config_encoder = model.config.encoder
-            >>> config_decoder  = model.config.decoder
-            >>> # set decoder config to causal lm
-            >>> config_decoder.is_decoder = True
-            >>> config_decoder.add_cross_attention = True
+        >>> # Initializing a Bert2Bert model from the bert-base-uncased style configurations
+        >>> model = EncoderDecoderModel(config=config)
 
-            >>> # Saving the model, including its configuration
-            >>> model.save_pretrained('my-model')
+        >>> # Accessing the model configuration
+        >>> config_encoder = model.config.encoder
+        >>> config_decoder  = model.config.decoder
+        >>> # set decoder config to causal lm
+        >>> config_decoder.is_decoder = True
+        >>> config_decoder.add_cross_attention = True
 
-            >>> # loading model and config from pretrained folder
-            >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained('my-model')
-            >>> model = EncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
+        >>> # Saving the model, including its configuration
+        >>> model.save_pretrained('my-model')
+
+        >>> # loading model and config from pretrained folder
+        >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained('my-model')
+        >>> model = EncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
     """
     model_type = "encoder_decoder"
 

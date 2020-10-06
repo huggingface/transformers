@@ -19,15 +19,16 @@
 
 
 import glob
-import logging
 import os
 import pickle
 import re
+import warnings
 from collections import Counter, OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 
+import sacremoses as sm
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
@@ -38,13 +39,14 @@ from tokenizers.processors import BertProcessing
 from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .utils import logging
 
 
 if is_torch_available():
     import torch
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.txt"}
 VOCAB_FILES_NAMES_FAST = {"pretrained_vocab_file": "vocab.json", "vocab_file": "vocab.json"}
@@ -70,13 +72,84 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
 }
 CORPUS_NAME = "corpus.bin"
 
+MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
+DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
+
+
+def tokenize_numbers(text_array: List[str]) -> List[str]:
+    """
+    Splits large comma-separated numbers and floating point values.
+    This is done by replacing commas with ' @,@ ' and dots with ' @.@ '.
+    Args:
+        text_array: An already tokenized text as list
+    Returns:
+        A list of strings with tokenized numbers
+    Example::
+        >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
+        ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
+    """
+    tokenized = []
+    for i in range(len(text_array)):
+        reg, sub = MATCH_NUMBERS
+        replaced = re.sub(reg, sub, text_array[i]).split()
+        tokenized.extend(replaced)
+
+    return tokenized
+
+
+def detokenize_numbers(text: str) -> str:
+    """
+    Inverts the operation of `tokenize_numbers`.
+    This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Args:
+        text: A string where the number should be detokenized
+    Returns:
+        A detokenized string
+    Example::
+        >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
+        "$ 5,000 1.73 m"
+    """
+    for reg, sub in DETOKENIZE_NUMBERS:
+        text = re.sub(reg, sub, text)
+    return text
+
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
-    Transformer-XL tokenizer adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
+    Construct a Transformer-XL tokenizer adapted from Vocab class in `the original code
+    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        special (:obj:`List[str]`, `optional`):
+            A list of special tokens (to be treated by the original implementation of this tokenizer).
+        min_freq (:obj:`int`, `optional`, defaults to 0):
+            The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
+            will be mapped to :obj:`unk_token`).
+        max_size (:obj:`int`, `optional`):
+            The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
+            after excluding the tokens according to the :obj:`min_freq` rule.
+        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to lowercase the input when tokenizing.
+        delimiter (:obj:`str`, `optional`):
+            The delimiter used btween tokens.
+        vocab_file (:obj:`str`, `optional`):
+            File containing the vocabulary (from the original implementation).
+        pretrained_vocab_file (:obj:`str`, `optional`):
+            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
+        never_split (xxx, `optional`):
+            Fill me with intesting stuff.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
+            The end of sequence token.
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
+            A list of additional special tokens (for the HuggingFace functionality).
+        language (:obj:`str`, `optional`, defaults to :obj:`"en"`):
+            The language of this tokenizer (used for mose preprocessing).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -97,6 +170,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
+        language="en",
         **kwargs
     ):
         super().__init__(
@@ -118,6 +192,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
+        self.language = language
+        self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
+        self.moses_tokenizer = sm.MosesTokenizer(language)
+        self.moses_detokenizer = sm.MosesDetokenizer(language)
 
         try:
             if pretrained_vocab_file is not None:
@@ -163,7 +241,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def count_sents(self, sents, verbose=False):
         """
-            sents : a list of sentences, each a list of tokenized symbols
+        sents : a list of sentences, each a list of tokenized symbols
         """
         if verbose:
             logger.info("counting {} sents ...".format(len(sents)))
@@ -300,6 +378,34 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         del self.added_tokens_decoder[old_index]
         del self.added_tokens_encoder[token]
 
+    def moses_punct_norm(self, text):
+        return self.moses_punct_normalizer.normalize(text)
+
+    def moses_tokenize(self, text):
+        return self.moses_tokenizer.tokenize(
+            text, aggressive_dash_splits=True, return_str=False, escape=False, protected_patterns=self.never_split
+        )
+
+    def moses_pipeline(self, text: str) -> List[str]:
+        """
+        Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
+        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`).
+        Additionally, large comma-separated numbers and floating point values are split.
+        E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000 people are 1 @.@ 80m tall".
+        Args:
+            text: Text to be tokenized
+        Returns:
+            A list of tokenized strings
+        Example::
+            >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+            >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
+            ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
+        """
+        text = self.moses_punct_norm(text)
+        text = self.moses_tokenize(text)
+        text = tokenize_numbers(text)
+        return text
+
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
@@ -323,9 +429,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement")
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
-        out_string = " ".join(tokens).strip()
-        return out_string
+        """
+        Converts a sequence of tokens (string) in a single string.
+        Additionally, the split numbers are converted back into it's original form.
+        """
+        out_string = self.moses_detokenizer.detokenize(tokens)
+        return detokenize_numbers(out_string).strip()
 
     def convert_to_tensor(self, symbols):
         return torch.LongTensor(self.convert_tokens_to_ids(symbols))
@@ -347,7 +456,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if self.delimiter == "":
             symbols = line
         else:
-            symbols = line.split(self.delimiter)
+            symbols = self.moses_pipeline(line)
 
         if add_double_eos:  # lm1b
             return ["<S>"] + symbols + ["<S>"]
@@ -355,19 +464,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols + ["<eos>"]
         else:
             return symbols
-
-    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
-        # add spaces before punctuation symbols as should be done in transfo-xl
-        add_space_before_punct_symbol = kwargs.pop("add_space_before_punct_symbol", False)
-        if add_space_before_punct_symbol:
-            text = self.punctuation_with_space_around_pattern.sub(r" ", text)
-        elif self.punction_without_space_before_pattern.search(text):
-            # searches until the first occurence of a punctuation symbol without surrounding spaces
-            logger.warning(
-                "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
-            )
-
-        return (text, kwargs)
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
@@ -433,14 +529,45 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "Fast" Transformer-XL tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Transformer-XL tokenizer (backed by HuggingFace's `tokenizers` library) adapted from Vocab class
+    in `the original code <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a
+    word-level tokenizer (no sub-word tokenization).
 
-    The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
-    Adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    Args:
+        special (:obj:`List[str]`, `optional`):
+            A list of special tokens (to be treated by the original implementation of this tokenizer).
+        min_freq (:obj:`int`, `optional`, defaults to 0):
+            The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
+            will be mapped to :obj:`unk_token`).
+        max_size (:obj:`int`, `optional`):
+            The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
+            after excluding the tokens according to the :obj:`min_freq` rule.
+        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to lowercase the input when tokenizing.
+        delimiter (:obj:`str`, `optional`):
+            The delimiter used btween tokens.
+        vocab_file (:obj:`str`, `optional`):
+            File containing the vocabulary (from the original implementation).
+        pretrained_vocab_file (:obj:`str`, `optional`):
+            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
+        never_split (xxx, `optional`):
+            Fill me with intesting stuff.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
+            The end of sequence token.
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
+            A list of additional special tokens (for the HuggingFace functionality).
+        add_eos (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add the end-of-sentence token.
+        add_double_eos (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add the end-of-sentence token.
+        normalization (xxx, `optional`):
+            Fill me with intesting stuff.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES_FAST
@@ -484,6 +611,11 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+        warnings.warn(
+            "The class `TransfoXLTokenizerFast` is deprecated and will be removed in a future version. Please use `TransfoXLTokenizer` with it's enhanced tokenization instead.",
+            FutureWarning,
+        )
+
     def save_pretrained(self, save_directory):
         logger.warning(
             "Please note you will not be able to load the vocabulary in"
@@ -496,7 +628,7 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 class LMOrderedIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None):
         """
-            data -- LongTensor -- the LongTensor is strictly ordered
+        data -- LongTensor -- the LongTensor is strictly ordered
         """
         self.bsz = bsz
         self.bptt = bptt
@@ -555,7 +687,7 @@ class LMOrderedIterator(object):
 class LMShuffledIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
         """
-            data -- list[LongTensor] -- there is no order among the LongTensors
+        data -- list[LongTensor] -- there is no order among the LongTensors
         """
         self.data = data
 

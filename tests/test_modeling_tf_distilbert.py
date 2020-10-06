@@ -39,7 +39,8 @@ if is_tf_available():
 
 class TFDistilBertModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -183,9 +184,6 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else None
     )
-    test_pruning = True
-    test_torchscript = True
-    test_head_masking = True
 
     def setUp(self):
         self.model_tester = TFDistilBertModelTester(self)

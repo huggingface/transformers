@@ -80,7 +80,9 @@ class ModelTester:
 
 
 def prepare_bart_inputs_dict(
-    config, input_ids, attention_mask=None,
+    config,
+    input_ids,
+    attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -93,7 +95,7 @@ def prepare_bart_inputs_dict(
 
 @require_tf
 class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = ((TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ())
+    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -226,7 +228,9 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         output = model(**inputs_dict)[0]
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = tf.Tensor([[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],)
+        expected_slice = tf.Tensor(
+            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
+        )
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     @cached_property

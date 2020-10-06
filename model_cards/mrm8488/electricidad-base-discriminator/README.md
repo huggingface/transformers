@@ -59,8 +59,20 @@ predictions = torch.round((torch.sign(discriminator_outputs[0]) + 1) / 2)
 el rapido  zorro  marro    ##n   amar  sobre     el  perro   pere ##zoso    0.0    0.0    0.0    0.0    0.0    0.0    1.0    1.0    0.0    0.0    0.0    0.0    0.0[None, None, None, None, None, None, None, None, None, None, None, None, None
 '''
 ```
-
 As you can see there are **1s** in the places where the model detected a fake token. So, it works! 🎉
+
+
+### Some models fine-tuned on a downstream task 🛠️
+
+[Question Answering](https://huggingface.co/mrm8488/electricidad-base-finetuned-squadv1-es)
+
+[POS](https://huggingface.co/mrm8488/electricidad-base-finetuned-pos)
+
+[NER](https://huggingface.co/mrm8488/electricidad-base-finetuned-ner)
+
+[Paraphrase Identification](https://huggingface.co/mrm8488/RuPERTa-base-finetuned-pawsx-es)
+
+
 
 ## Acknowledgments
 

@@ -1,9 +1,9 @@
-**********************************************
+***********************************************************************************************************************
 Exporting transformers models
-**********************************************
+***********************************************************************************************************************
 
 ONNX / ONNXRuntime
-==============================================
+=======================================================================================================================
 
 Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntime (ORT) <https://microsoft.github.io/onnxruntime/>`_ are part of an effort from leading industries in the AI field
 to provide a unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
@@ -42,7 +42,7 @@ Also, the conversion tool supports different options which let you tune the beha
 
 
 Optimizations
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph.
 Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (*see note below*):
@@ -68,7 +68,7 @@ Optimizations can then be enabled when loading the model through ONNX runtime fo
     For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
 
 Quantization
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 ONNX exporter supports generating a quantized version of the model to allow efficient inference.
 
@@ -116,7 +116,7 @@ Example of quantized BERT model export:
 
 
 TorchScript
-=======================================
+=======================================================================================================================
 
 .. note::
     This is the very beginning of our experiments with TorchScript and we are still exploring its capabilities
@@ -130,25 +130,24 @@ Pytorch's two modules `JIT and TRACE <https://pytorch.org/docs/stable/jit.html>`
 their model to be re-used in other programs, such as efficiency-oriented C++ programs.
 
 We have provided an interface that allows the export of 🤗 Transformers models to TorchScript so that they can
-be reused in a different environment than a Pytorch-based python program. Here we explain how to use our models so that
-they can be exported, and what to be mindful of when using these models with TorchScript.
+be reused in a different environment than a Pytorch-based python program. Here we explain how to export and use our models using TorchScript.
 
-Exporting a model needs two things:
+Exporting a model requires two things:
 
-* dummy inputs to execute a model forward pass.
-* the model needs to be instantiated with the ``torchscript`` flag.
+* a forward pass with dummy inputs.
+* model instantiation with the ``torchscript`` flag.
 
 These necessities imply several things developers should be careful about. These are detailed below.
 
 
 Implications
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 TorchScript flag and tied weights
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 This flag is necessary because most of the language models in this repository have tied weights between their
-``Embedding`` layer and their ``Decoding`` layer. TorchScript does not allow the export of models that have tied weights,
-it is therefore necessary to untie the weights beforehand.
+``Embedding`` layer and their ``Decoding`` layer. TorchScript does not allow the export of models that have tied weights, therefore
+it is necessary to untie and clone the weights beforehand.
 
 This implies that models instantiated with the ``torchscript`` flag have their ``Embedding`` layer and ``Decoding`` layer
 separate, which means that they should not be trained down the line. Training would de-synchronize the two layers,
@@ -158,7 +157,7 @@ This is not the case for models that do not have a Language Model head, as those
 can be safely exported without the ``torchscript`` flag.
 
 Dummy inputs and standard lengths
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 The dummy inputs are used to do a model forward pass. While the inputs' values are propagating through the layers,
 Pytorch keeps track of the different operations executed on each tensor. These recorded operations are then used
@@ -179,12 +178,12 @@ It is recommended to be careful of the total number of operations done on each i
 when exporting varying sequence-length models.
 
 Using TorchScript in Python
--------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
-Below are examples of using the Python to save, load models as well as how to use the trace for inference.
+Below is an example, showing how to save, load models as well as how to use the trace for inference.
 
 Saving a model
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This snippet shows how to use TorchScript to export a ``BertModel``. Here the ``BertModel`` is instantiated
 according to a ``BertConfig`` class and then saved to disk under the filename ``traced_bert.pt``
@@ -230,20 +229,20 @@ according to a ``BertConfig`` class and then saved to disk under the filename ``
     torch.jit.save(traced_model, "traced_bert.pt")
 
 Loading a model
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This snippet shows how to load the ``BertModel`` that was previously saved to disk under the name ``traced_bert.pt``.
 We are re-using the previously initialised ``dummy_input``.
 
 .. code-block:: python
 
-    loaded_model = torch.jit.load("traced_model.pt")
+    loaded_model = torch.jit.load("traced_bert.pt")
     loaded_model.eval()
 
-    all_encoder_layers, pooled_output = loaded_model(dummy_input)
+    all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 
 Using a traced model for inference
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Using the traced model for inference is as simple as using its ``__call__`` dunder method:
 

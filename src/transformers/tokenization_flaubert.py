@@ -15,15 +15,15 @@
 """Tokenization classes for Flaubert, based on XLM."""
 
 
-import logging
 import unicodedata
 
 import six
 
 from .tokenization_xlm import XLMTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -78,13 +78,13 @@ def convert_to_unicode(text):
 
 class FlaubertTokenizer(XLMTokenizer):
     """
-    BPE tokenizer for Flaubert
+    Construct a Flaubert tokenizer. Based on Byte-Pair Encoding. The tokenization process is the following:
 
-    - Moses preprocessing & tokenization
-    - Normalize all inputs text
-    - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
-      (ex: "__classify__") to a vocabulary
-    - `do_lowercase` controle lower casing (automatically set for pretrained vocabularies)
+    - Moses preprocessing and tokenization.
+    - Normalizing all inputs text.
+    - The arguments ``special_tokens`` and the function ``set_special_tokens``, can be used to add additional symbols
+      (like "__classify__") to a vocabulary.
+    - The argument :obj:`do_lowercase` controls lower casing (automatically set for pretrained vocabularies).
 
     This tokenizer inherits from :class:`~transformers.XLMTokenizer`. Please check the superclass for usage examples
     and documentation regarding arguments.

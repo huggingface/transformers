@@ -1,5 +1,5 @@
 Tokenizer
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 A tokenizer is in charge of preparing the inputs for a model. The library contains tokenizers for all the models. Most
 of the tokenizers are available in two flavors: a full python implementation and a "Fast" implementation based on the
@@ -36,24 +36,24 @@ alignment methods which can be used to map between the original string (characte
 getting the index of the token comprising a given character or the span of characters corresponding to a given token).
 
 
-``PreTrainedTokenizer``
-~~~~~~~~~~~~~~~~~~~~~~~~
+PreTrainedTokenizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizer
     :special-members: __call__
     :members:
 
 
-``PreTrainedTokenizerFast``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PreTrainedTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizerFast
     :special-members: __call__
     :members:
 
 
-``BatchEncoding``
-~~~~~~~~~~~~~~~~~~~~~~~~
+BatchEncoding
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BatchEncoding
     :members:
