@@ -333,7 +333,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFBertForPreTraining.from_pretrained("lysandre/tiny-bert-random", use_cdn=False)
+        model = TFBertForPreTraining.from_pretrained("lysandre/tiny-bert-random")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

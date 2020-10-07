@@ -253,7 +253,7 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFElectraModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFElectraForPreTraining.from_pretrained("lysandre/tiny-electra-random", use_cdn=False)
+        model = TFElectraForPreTraining.from_pretrained("lysandre/tiny-electra-random")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

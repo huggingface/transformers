@@ -551,7 +551,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm(self):
-        model = TFLongformerForMaskedLM.from_pretrained("lysandre/tiny-longformer-random", use_cdn=False)
+        model = TFLongformerForMaskedLM.from_pretrained("lysandre/tiny-longformer-random")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
