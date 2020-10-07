@@ -86,7 +86,6 @@ CHEAP_ARGS = {
     "n_val": -1,
     "n_test": -1,
     "student_encoder_layers": 1,
-    "alpha_encoder_loss": 0.0,
     "freeze_encoder": False,
     "auto_scale_batch_size": False,
 }
@@ -227,7 +226,6 @@ class TestSummarizationDistiller(unittest.TestCase):
         assert len(all_files) > 2
         self.assertEqual(len(transformer_ckpts), 2)
 
-    @unittest.skip("T5 distillation is broken at the moment")
     def test_distill_t5(self):
         updates = dict(
             student_encoder_layers=1,
@@ -252,7 +250,6 @@ class TestSummarizationDistiller(unittest.TestCase):
             model_name_or_path="sshleifer/tinier_bart",
             teacher=CHEAP_ARGS["model_name_or_path"],
             val_check_interval=0.5,
-            alpha_encoder_loss=0.4,
         )
         default_updates.update(updates)
         args_d: dict = CHEAP_ARGS.copy()
@@ -421,6 +418,10 @@ def test_finetune(model):
         # check that embeds are the same
         assert bart.decoder.embed_tokens == bart.encoder.embed_tokens
         assert bart.decoder.embed_tokens == bart.shared
+
+    example_batch = load_json(module.output_dir / "text_batch.json")
+    assert isinstance(example_batch, dict)
+    assert len(example_batch) >= 4
 
 
 def test_finetune_extra_model_args():

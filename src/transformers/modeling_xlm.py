@@ -706,6 +706,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         checkpoint="xlm-mlm-en-2048",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="<special1>",
     )
     def forward(
         self,

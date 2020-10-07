@@ -129,7 +129,7 @@ from .modeling_funnel import (
     FunnelForTokenClassification,
     FunnelModel,
 )
-from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
+from .modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 from .modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
 from .modeling_longformer import (
     LongformerForMaskedLM,
@@ -377,6 +377,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForSequenceClassification),
         (FunnelConfig, FunnelForSequenceClassification),
         (DebertaConfig, DebertaForSequenceClassification),
+        (GPT2Config, GPT2ForSequenceClassification),
     ]
 )
 
