@@ -97,7 +97,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
-            The pad token.
+            The token used for padding, for example when batching sequences of different lengths.
         **kwargs
             passed to  :class:`~transformers.PreTrainedTokenizer`
     """
