@@ -40,6 +40,11 @@ if is_torch_available():
         BartModel,
         BartTokenizer,
         BartTokenizerFast,
+        BertConfig,
+        BlenderbotConfig,
+        MarianConfig,
+        MBartConfig,
+        PegasusConfig,
         pipeline,
     )
     from transformers.modeling_bart import (
@@ -639,3 +644,12 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
                 torch.tensor(self.desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3
             )
         )
+
+    def test_child_config_equivalence(self):
+        """Test that configs associated with children of BartForConditionalGeneration are identical."""
+        child_classes = [BlenderbotConfig, MBartConfig, MarianConfig, PegasusConfig]
+        parent_keys = BartConfig().to_dict().keys()
+        for c in child_classes:
+            assert c().to_dict().keys() == parent_keys  # traceback is very nice on it's own
+        # check that test is not stupid
+        assert BertConfig().to_dict().keys() != parent_keys

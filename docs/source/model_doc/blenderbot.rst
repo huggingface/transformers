@@ -25,6 +25,9 @@ Implementation Notes
 - Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
 
 
+Usage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Model Usage:
 
         >>> from transformers import BlenderbotSmallTokenizer, BlenderbotForConditionalGeneration

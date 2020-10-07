@@ -115,7 +115,7 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
-        extra_pos_embeddings=2,  # FIXME(@sshleifer): delete?
+        extra_pos_embeddings=2,
         activation_function="gelu",
         vocab_size=50265,
         d_model=1024,
