@@ -18,7 +18,6 @@ previous features. To inject custom behavior you can subclass them and override 
 - **get_eval_dataloader**/**get_eval_tfdataset** -- Creates the evaulation DataLoader (PyTorch) or TF Dataset.
 - **get_test_dataloader**/**get_test_tfdataset** -- Creates the test DataLoader (PyTorch) or TF Dataset.
 - **log** -- Logs information on the various objects watching training.
-- **setup_wandb** -- Setups wandb (see `here <https://docs.wandb.com/huggingface>`__ for more information).
 - **create_optimizer_and_scheduler** -- Setups the optimizer and learning rate scheduler if they were not passed at
   init.
 - **compute_loss** - Computes the loss on a batch of training inputs.
@@ -40,6 +39,10 @@ Here is an example of how to customize :class:`~transformers.Trainer` using a cu
             logits = outputs[0]
             return my_custom_loss(logits, labels)
 
+Another way to customize the training loop behavior for the PyTorch :class:`~transformers.Trainer` is to use
+:doc:`callbacks <callback>` that can inspect the training loop state (for progress reporting, logging on TensorBoard or
+other ML platforms...) and take decisions (like early stopping).
+
 
 Trainer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -47,11 +50,13 @@ Trainer
 .. autoclass:: transformers.Trainer
     :members:
 
+
 TFTrainer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTrainer
     :members:
+
 
 TrainingArguments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -59,17 +64,9 @@ TrainingArguments
 .. autoclass:: transformers.TrainingArguments
     :members:
 
+
 TFTrainingArguments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTrainingArguments
     :members:
-
-Utilities
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.EvalPrediction
-
-.. autofunction:: transformers.set_seed
-
-.. autofunction:: transformers.torch_distributed_zero_first
