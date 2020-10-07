@@ -82,7 +82,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods. Users
     should refer to the superclass for more information regarding methods.
 
     Args:
