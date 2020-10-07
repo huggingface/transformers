@@ -33,6 +33,7 @@ from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPIN
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
+from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -158,6 +159,7 @@ from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast,
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
+from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_deberta import DebertaTokenizer
@@ -309,6 +311,7 @@ if is_torch_available():
         BertGenerationEncoder,
         load_tf_weights_in_bert_generation,
     )
+    from .modeling_blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
     from .modeling_camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
