@@ -96,7 +96,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             The end of sentence token.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this token instead.
-        pad_token (:obj:`string`, `optional`, defaults to "__pad__"):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
             The pad token.
         **kwargs
             passed to  :class:`~transformers.PreTrainedTokenizer`
