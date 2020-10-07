@@ -64,7 +64,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
         default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
     )
     lr_scheduler: Optional[str] = field(
-        default="linear", metadata={"help": f"Which lr schedular to use. Selected in {arg_to_scheduler_choices}"}
+        default="linear", metadata={"help": f"Which lr scheduler to use. Selected in {arg_to_scheduler_choices}"}
     )
 
 
