@@ -455,11 +455,12 @@ PT_MASKED_LM_SAMPLE = r"""
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
-        >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt")["input_ids"]
+        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
 
-        >>> outputs = model(input_ids, labels=input_ids)
+        >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
-        >>> prediction_logits = outputs.logits
+        >>> logits = outputs.logits
 """
 
 PT_BASE_MODEL_SAMPLE = r"""
@@ -521,14 +522,15 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> input_ids = inputs["input_ids"]
         >>> inputs["labels"] = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
 
         >>> outputs = model(inputs)
-        >>> loss, scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 TF_QUESTION_ANSWERING_SAMPLE = r"""
@@ -538,14 +540,16 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         >>> input_dict = tokenizer(question, text, return_tensors='tf')
-        >>> start_scores, end_scores = model(input_dict)
+        >>> outputs = model(input_dict)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
 
         >>> all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        >>> answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
+        >>> answer = ' '.join(all_tokens[tf.math.argmax(start_logits, 1)[0] : tf.math.argmax(end_logits, 1)[0]+1])
 """
 
 TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -555,13 +559,14 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
 
         >>> outputs = model(inputs)
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 TF_MASKED_LM_SAMPLE = r"""
@@ -571,12 +576,14 @@ TF_MASKED_LM_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
-        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
+        >>> inputs["labels"] = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
 
-        >>> outputs = model(input_ids)
-        >>> prediction_scores = outputs[0]
+        >>> outputs = model(inputs)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 TF_BASE_MODEL_SAMPLE = r"""
@@ -586,12 +593,12 @@ TF_BASE_MODEL_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
 
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> last_hidden_states = outputs.last_hidden_states
 """
 
 TF_MULTIPLE_CHOICE_SAMPLE = r"""
@@ -601,7 +608,7 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -612,7 +619,7 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> outputs = model(inputs)  # batch size is 1
 
         >>> # the linear classifier still needs to be trained
-        >>> logits = outputs[0]
+        >>> logits = outputs.logits
 """
 
 TF_CAUSAL_LM_SAMPLE = r"""
@@ -622,18 +629,21 @@ TF_CAUSAL_LM_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
-        >>> logits = outputs[0]
+        >>> logits = outputs.logits
 """
 
 
-def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None):
+def add_code_sample_docstrings(
+    *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None
+):
     def docstring_decorator(fn):
         model_class = fn.__qualname__.split(".")[0]
         is_tf_class = model_class[:2] == "TF"
+        doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
 
         if "SequenceClassification" in model_class:
             code_sample = TF_SEQUENCE_CLASSIFICATION_SAMPLE if is_tf_class else PT_SEQUENCE_CLASSIFICATION_SAMPLE
@@ -643,7 +653,8 @@ def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, o
             code_sample = TF_TOKEN_CLASSIFICATION_SAMPLE if is_tf_class else PT_TOKEN_CLASSIFICATION_SAMPLE
         elif "MultipleChoice" in model_class:
             code_sample = TF_MULTIPLE_CHOICE_SAMPLE if is_tf_class else PT_MULTIPLE_CHOICE_SAMPLE
-        elif "MaskedLM" in model_class:
+        elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
+            doc_kwargs["mask"] = "[MASK]" if mask is None else mask
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
         elif "LMHead" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
@@ -653,7 +664,7 @@ def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, o
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
         output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
-        built_doc = code_sample.format(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
+        built_doc = code_sample.format(**doc_kwargs)
         fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + output_doc + built_doc
         return fn
 

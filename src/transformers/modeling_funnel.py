@@ -1169,6 +1169,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
         checkpoint="funnel-transformer/small",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="<mask>",
     )
     def forward(
         self,
