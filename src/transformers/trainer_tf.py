@@ -787,7 +787,7 @@ class TFTrainer:
 
         if not isinstance(self.model, TFPreTrainedModel):
             warnings.warn(
-                "Trainer.model appears to not be a PreTrainedModel. The model will still be saved as a usual tf.keras.models.Model model, but no PretrainedConfig will be saved."
+                "`Trainer.model` appears to not be a `PreTrainedModel`. The model will still be saved as a usual `tf.keras.models.Model model`, but no `PretrainedConfig` will be saved."
             )
 
             if os.path.isfile(output_dir):
