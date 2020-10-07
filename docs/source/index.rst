@@ -233,6 +233,7 @@ conversion utilities for the following models:
     model_doc/bart
     model_doc/bert
     model_doc/bertgeneration
+    model_doc/blenderbot
     model_doc/camembert
     model_doc/ctrl
     model_doc/deberta

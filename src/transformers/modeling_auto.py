@@ -24,6 +24,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -82,6 +83,7 @@ from .modeling_bert import (
     BertModel,
 )
 from .modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
+from .modeling_blenderbot import BlenderbotForConditionalGeneration
 from .modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -353,6 +355,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
         (MBartConfig, MBartForConditionalGeneration),
+        (BlenderbotConfig, BlenderbotForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),

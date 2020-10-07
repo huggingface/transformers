@@ -449,6 +449,18 @@ def load_tf_weights_in_bert_generation(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_bert_generation)
 
 
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BlenderbotForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
