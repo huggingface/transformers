@@ -269,5 +269,5 @@ class DebertaModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 2))
         self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[0.0884, -0.1047]])
+        expected_tensor = torch.tensor([[0.0915, -0.6561]])
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4), f"{output}")
