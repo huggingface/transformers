@@ -205,7 +205,15 @@ from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 # Trainer
-from .trainer_utils import EvalPrediction, TrainerState, set_seed
+from .trainer_callback import (
+    DefaultFlowCallback,
+    PrinterCallback,
+    ProgressCallback,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+)
+from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
@@ -529,7 +537,8 @@ if is_torch_available():
     from .tokenization_marian import MarianTokenizer
 
     # Trainer
-    from .trainer import EvalPrediction, Trainer, set_seed, torch_distributed_zero_first
+    from .trainer import Trainer
+    from .trainer_pt_utils import torch_distributed_zero_first
 else:
     from .utils.dummy_pt_objects import *
 
