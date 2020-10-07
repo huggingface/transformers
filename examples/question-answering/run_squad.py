@@ -167,7 +167,9 @@ def train(args, train_dataset, model, tokenizer):
     # Added here for reproductibility
     set_seed(args)
 
-    for _ in train_iterator:
+    for e in train_iterator:
+        if args.local_rank != -1:
+            train_dataloader.sampler.set_epoch(e)
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
 
