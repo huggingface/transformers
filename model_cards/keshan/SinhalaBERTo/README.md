@@ -4,6 +4,8 @@ tags:
 - SinhalaBERTo
 - Sinhala
 - roberta
+datasets:
+- oscar
 ---
 ### Overview
 
