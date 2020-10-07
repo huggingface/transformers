@@ -18,7 +18,7 @@ from transformers.optimization import (
     get_linear_schedule_with_warmup,
     get_polynomial_decay_schedule_with_warmup,
 )
-from transformers.trainer import get_tpu_sampler
+from transformers.trainer_pt_utils import get_tpu_sampler
 
 
 try:
