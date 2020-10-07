@@ -20,6 +20,7 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+logger.setLevel(logging.INFO)
 
 BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",

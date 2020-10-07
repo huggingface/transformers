@@ -1,0 +1,9 @@
+{
+  "modelname": "LysBERT",
+  "uppercase_modelname": "{{cookiecutter.modelname|upper}}",
+  "lowercase_modelname": "{{cookiecutter.modelname|lower}}",
+  "camelcase_modelname": "{{cookiecutter.modelname|capitalize}}",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "lysbert-base-cased",
+  "masked_lm_model": ["Yes", "No"]
+}
