@@ -94,7 +94,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             The beginning of sentence token.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
             The end of sentence token.
-        unk_token (:obj:`string`, `optional`, defaults to "__unk__"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this token instead.
         pad_token (:obj:`string`, `optional`, defaults to "__pad__"):
             The pad token.
