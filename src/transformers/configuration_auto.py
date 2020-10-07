@@ -44,6 +44,7 @@ from .configuration_rag import RagConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
@@ -80,6 +81,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -105,6 +107,7 @@ CONFIG_MAPPING = OrderedDict(
         ("deberta", DebertaConfig),
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
+        ("squeezebert", SqueezeBertConfig),
         ("bert", BertConfig),
         ("openai-gpt", OpenAIGPTConfig),
         ("gpt2", GPT2Config),
@@ -141,6 +144,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roberta", "RoBERTa"),
         ("flaubert", "FlauBERT"),
         ("fsmt", "FairSeq Machine-Translation"),
+        ("squeezebert", "SqueezeBERT"),
         ("bert", "BERT"),
         ("openai-gpt", "OpenAI GPT"),
         ("gpt2", "OpenAI GPT-2"),

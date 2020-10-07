@@ -535,6 +535,7 @@ class ElectraPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
     authorized_missing_keys = [r"position_ids"]
+    authorized_unexpected_keys = [r"electra\.embeddings_project\.weight", r"electra\.embeddings_project\.bias"]
 
     # Copied from transformers.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):

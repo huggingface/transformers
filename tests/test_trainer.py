@@ -193,7 +193,9 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer()
         trainer.train()
         args = TrainingArguments("./regression")
-        self.assertEqual(args.to_dict(), trainer.args.to_dict())
+        dict1, dict2 = args.to_dict(), trainer.args.to_dict()
+        for key in dict1.keys():
+            self.assertEqual(dict1[key], dict2[key])
 
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.

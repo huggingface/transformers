@@ -154,6 +154,13 @@ def nested_concat(tensors, new_tensors, dim=0):
         raise ImportError("Torch must be installed to use `nested_concat`")
 
 
+def nested_deatch(tensors):
+    "Detach `tensors` (even if it's a nested list/tuple of tensors)."
+    if isinstance(tensors, (list, tuple)):
+        return type(tensors)(nested_detach(t) for t in tensors)
+    return tensors.detach()
+
+
 def nested_numpify(tensors):
     "Numpify `tensors` (even if it's a nested list/tuple of tensors)."
     if isinstance(tensors, (list, tuple)):

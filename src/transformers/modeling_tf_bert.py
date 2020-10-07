@@ -854,6 +854,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
+    authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -939,6 +940,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
+    authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1286,6 +1288,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
 
+    authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1369,6 +1372,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
 
+    authorized_unexpected_keys = [r"pooler"]
     authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
