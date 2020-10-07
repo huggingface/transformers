@@ -1,6 +1,8 @@
 ---
+language: is
 datasets:
 - Icelandic portion of the OSCAR corpus from INRIA
+- oscar
 ---
 
 # IsRoBERTa a RoBERTa-like masked language model
