@@ -92,7 +92,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             Path to the merges file.
         bos_token (:obj:`string`, `optional`, defaults to "__start__"):
             The beginning of sentence token.
-        eos_token (:obj:`string`, `optional`, defaults to "__end__"):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
             The end of sentence token.
         unk_token (:obj:`string`, `optional`, defaults to "__unk__"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this token instead.
