@@ -90,7 +90,9 @@ extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
 extras["retrieval"] = ["faiss-cpu", "datasets"]
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "comet_ml"] + extras["retrieval"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "comet_ml"] + extras[
+    "retrieval"
+]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
 extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
@@ -130,9 +132,7 @@ setup(
         "sacremoses",
     ],
     extras_require=extras,
-    entry_points={
-        "console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]
-    },
+    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
