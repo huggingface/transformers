@@ -52,7 +52,7 @@ See Config Values:
 BlenderbotConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: transformers.BlenderbotConfig
-    :members: 
+    :members:
 
 BlenderbotTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -72,4 +72,4 @@ BlenderbotForConditionalGeneration
 See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` and `generate`
 
 .. autoclass:: transformers.BlenderbotForConditionalGeneration
-    :members: build_inputs_with_special_tokens
+    :members:
