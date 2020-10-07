@@ -20,7 +20,7 @@ Implementation Notes
 
 - Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
 - It inherits completely from :class:`~transformers.BartForConditionalGeneration`
-- Even though blenderbot is one model, it uses two tokenizers :obj:`transformers.BlenderbotSmallTokenizer` for 90M checkpoint and :obj:`transformers.BlenderbotTokenizer` for all other checkpoints.
+- Even though blenderbot is one model, it uses two tokenizers :class:`~transformers.BlenderbotSmallTokenizer` for 90M checkpoint and :class:`~transformers.BlenderbotTokenizer` for all other checkpoints.
 - :obj:`transformers.BlenderbotSmallTokenizer` will always return :obj:`transformers.BlenderbotSmallTokenizer`, regardless of checkpoint. To use the 3B parameter checkpoint, you must call BlenderbotTokenizer directly.
 - Available checkpoints can be found in the model `hub <https://huggingface.co/models?search=blenderbot>`__.
 
