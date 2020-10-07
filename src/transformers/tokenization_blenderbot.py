@@ -90,7 +90,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             File containing the vocabulary.
         merges_file (:obj:`str`):
             Path to the merges file.
-        bos_token (:obj:`string`, `optional`, defaults to "__start__"):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"__start__"`):
             The beginning of sentence token.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
             The end of sentence token.
