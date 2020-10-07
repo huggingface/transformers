@@ -277,12 +277,7 @@ class CallbackHandler(TrainerCallback):
         self.train_dataloader = None
         self.eval_dataloader = None
 
-        has_flow_callback = False
-        for cb in self.callbacks:
-            if isinstance(cb, DefaultFlowCallback):
-                has_flow_callback = True
-                break
-        if not has_flow_callback:
+        if not any(isinstance(cb, DefaultFlowCallback) for cb in self.callbacks):
             logger.warn(
                 "The Trainer will not work properly if you don't have a `DefaultFlowCallback` in its callbacks. You\n"
                 + "should add one before training with `trainer.add_callback(DefaultFlowCallback). The current list of"
