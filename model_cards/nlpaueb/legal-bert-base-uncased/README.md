@@ -6,11 +6,16 @@ tags:
 
 # LEGAL-BERT: The Muppets straight out of Law School
 
-<img align="left" src="https://i.ibb.co/p3kQ7Rw/Screenshot-2020-10-06-at-12-16-36-PM.png" width="130"/> 
+<img align="left" src="https://i.ibb.co/p3kQ7Rw/Screenshot-2020-10-06-at-12-16-36-PM.png" width="100"/> 
 
-LEGAL-BERT is a family of BERT models for the legal domain, intended to assist legal NLP research, computational law, and legal technology applications.  To pre-train the different variations of LEGAL-BERT, we collected 12 GB of diverse English legal text from several fields (e.g., legislation, court cases,  contracts) scraped from publicly available resources. Model are part of:
+LEGAL-BERT is a family of BERT models for the legal domain, intended to assist legal NLP research, computational law, and legal technology applications.  To pre-train the different variations of LEGAL-BERT, we collected 12 GB of diverse English legal text from several fields (e.g., legislation, court cases,  contracts) scraped from publicly available resources. Sub-domains variants (CONTRACTS-, EURLEX-, ECHR-) and/or general LEGAL-BERT perform better than using BERT out of the box for domain-specific tasks. A light-weight model (33% the size of BERT-BASE) pre-trained from scratch on legal data with competitive perfomance is also available.
+<br/><br/><br/><br/>
 
-> I. Chalkidis, M. Fergadiotis, P. Malakasiotis, N. Aletras and I. Androutsopoulos. "LEGAL-BERT: The Muppets straight out of Law School". In Findings of Empirical Methods in Natural Language Processing (EMNLP 2020) (Short Papers), to be held online, 2020. (https://arxiv.org/abs/xxxx.xxxxx)
+---
+
+I. Chalkidis, M. Fergadiotis, P. Malakasiotis, N. Aletras and I. Androutsopoulos. "LEGAL-BERT: The Muppets straight out of Law School". In Findings of Empirical Methods in Natural Language Processing (EMNLP 2020) (Short Papers), to be held online, 2020. (https://arxiv.org/abs/2010.02559)
+
+---
 
 ## Pre-training corpora
 
@@ -24,9 +29,9 @@ The pre-training corpora of LEGAL-BERT include:
     
 * 12,554 cases from HUDOC, the repository of the European Court of Human Rights (ECHR) (http://hudoc.echr.coe.int/eng).
     
-* 164,141 cases from various courts across the \usa, hosted in the Case Law Access Project portal (https://case.law).
+* 164,141 cases from various courts across the USA, hosted in the Case Law Access Project portal (https://case.law).
     
-* 76,366 US contracts from EDGAR, the database of \us Securities and Exchange Commission (SECOM) (https://www.sec.gov/edgar.shtml).
+* 76,366 US contracts from EDGAR, the database of US Securities and Exchange Commission (SECOM) (https://www.sec.gov/edgar.shtml).
 
 ## Pre-training details
 
@@ -87,7 +92,7 @@ model = AutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
 
 ## Evaluation on downstream tasks
 
-Consider the experiments in the article "LEGAL-BERT: The Muppets straight out of Law School". Chalkidis et al., 2018, (https://arxiv.org/abs/xxxx.xxxxx)
+Consider the experiments in the article "LEGAL-BERT: The Muppets straight out of Law School". Chalkidis et al., 2018, (https://arxiv.org/abs/2010.02559)
 
 ## Author
 
