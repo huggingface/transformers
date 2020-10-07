@@ -99,7 +99,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
             The token used for padding, for example when batching sequences of different lengths.
         **kwargs
-            passed to  :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to  :class:`~transformers.PreTrainedTokenizer`
     """
 
     vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
