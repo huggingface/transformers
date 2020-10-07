@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
-
+"""Tests for BlenderBot"""
 import unittest
 
 from transformers import is_torch_available

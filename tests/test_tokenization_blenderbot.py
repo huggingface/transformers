@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
+"""Tests for Blenderbot Tokenizers, including common tests for BlenderbotSmallTokenizer."""
 import json
 import os
 import unittest
