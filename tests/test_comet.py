@@ -1,5 +1,6 @@
-import transformers
-import comet_ml
+import transformers  # noqa:F401 isort:skip
+import comet_ml  # isort:skip
+
 
 def test_import():
     experiment = comet_ml.OfflineExperiment(
@@ -10,4 +11,3 @@ def test_import():
 
     assert experiment.alive is True
     experiment.end()
-    
