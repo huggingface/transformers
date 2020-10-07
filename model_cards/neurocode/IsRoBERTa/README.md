@@ -5,14 +5,13 @@ datasets:
 
 # IsRoBERTa a RoBERTa-like masked language model
 
-Probably the first icelandic language transfer model!
+Probably the first icelandic transformer language model!
 
 ## Overview
-**Language model:** RobertaForMaskedLM  
 **Language:** Icelandic  
 **Downstream-task:** masked-lm 
 **Training data:** OSCAR corpus 
-**Code:**  See [example](https://github.com/neurocode-io/icelandic-language-model)
+**Code:**  See [here](https://github.com/neurocode-io/icelandic-language-model)
 **Infrastructure**: 1x Nvidia K80
 
 ## Hyperparameters
