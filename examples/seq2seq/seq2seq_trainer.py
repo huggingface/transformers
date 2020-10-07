@@ -84,15 +84,15 @@ class Seq2SeqTrainer(Trainer):
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
 
     def _get_lr_scheduler(self, num_training_steps):
-        get_schedule_func = arg_to_scheduler[self.args.lr_scheduler]
-        if self.args.lr_scheduler not in ["constant", "constant_w_warmup"]:
-            scheduler = get_schedule_func(
+        schedule_func = arg_to_scheduler[self.args.lr_scheduler]
+        if self.args.lr_scheduler == "constant":
+            scheduler = schedule_func(self.optimizer)
+        elif self.args.lr_scheduler == "constant_w_warmup":
+            scheduler = schedule_func(self.optimizer, num_warmup_steps=self.args.warmup_steps)
+        else:
+            scheduler = schedule_func(
                 self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
             )
-        elif self.args.lr_scheduler == "constant_w_warmup":
-            scheduler = get_schedule_func(self.optimizer, num_warmup_steps=self.args.warmup_steps)
-        else:  # constant
-            scheduler = get_schedule_func(self.optimizer)
         return scheduler
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
