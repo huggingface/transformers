@@ -198,7 +198,7 @@ class BartConfig(PretrainedConfig):
         self.dropout = dropout
 
         # Classifier stuff
-        self.classif_dropout = classifier_dropout
+        self.classifier_dropout = classifier_dropout
 
         # pos embedding offset
         self.extra_pos_embeddings = extra_pos_embeddings

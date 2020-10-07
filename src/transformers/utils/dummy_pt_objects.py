@@ -931,6 +931,15 @@ class GPT2DoubleHeadsModel:
         requires_pytorch(self)
 
 
+class GPT2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class GPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1860,18 +1869,9 @@ class MarianTokenizer:
         requires_pytorch(self)
 
 
-class EvalPrediction:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class Trainer:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
-
-
-def set_seed(*args, **kwargs):
-    requires_pytorch(set_seed)
 
 
 def torch_distributed_zero_first(*args, **kwargs):

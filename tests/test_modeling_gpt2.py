@@ -30,6 +30,7 @@ if is_torch_available():
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Config,
         GPT2DoubleHeadsModel,
+        GPT2ForSequenceClassification,
         GPT2LMHeadModel,
         GPT2Model,
     )
@@ -87,6 +88,7 @@ class GPT2ModelTester:
         self.scope = None
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
+        self.pad_token_id = vocab_size - 1
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -126,6 +128,7 @@ class GPT2ModelTester:
             # initializer_range=self.initializer_range,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
             return_dict=True,
             gradient_checkpointing=gradient_checkpointing,
         )
@@ -337,6 +340,17 @@ class GPT2ModelTester:
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_gpt2_for_sequence_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPT2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        print(config.num_labels, sequence_labels.size())
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -364,10 +378,12 @@ class GPT2ModelTester:
 @require_torch
 class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    all_generative_model_classes = (
-        (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    all_model_classes = (
+        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification)
+        if is_torch_available()
+        else ()
+    )
+    all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     test_missing_keys = False
 
     def setUp(self):
@@ -400,6 +416,10 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gpt2_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
+
+    def test_gpt2_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
 
     def test_gpt2_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
