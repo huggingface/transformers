@@ -22,7 +22,7 @@ Implementation Notes
 - It inherits completely from :class:`~transformers.BartForConditionalGeneration`
 - Even though blenderbot is one model, it uses two tokenizers :class:`~transformers.BlenderbotSmallTokenizer` for 90M checkpoint and :class:`~transformers.BlenderbotTokenizer` for all other checkpoints.
 - :class:`~transformers.BlenderbotSmallTokenizer` will always return :class:`~transformers.BlenderbotSmallTokenizer`, regardless of checkpoint. To use the 3B parameter checkpoint, you must call :class:`~transformers.BlenderbotTokenizer` directly.
-- Available checkpoints can be found in the model `hub <https://huggingface.co/models?search=blenderbot>`__.
+- Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
 
 
 Model Usage:
