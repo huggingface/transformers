@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
+from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -26,6 +26,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = OpenAIGPTTokenizer
+    rust_tokenizer_class = OpenAIGPTTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()

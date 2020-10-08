@@ -126,7 +126,6 @@ class PhobertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            max_len=256,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

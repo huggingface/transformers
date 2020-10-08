@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -743,7 +744,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
     @replace_return_docstrings(output_type=TFElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -753,6 +754,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
         r"""
         Returns:
@@ -769,8 +771,15 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             >>> scores = outputs[0]
         """
         return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+
+        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
+            warnings.warn(
+                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
+            )
+            inputs = kwargs["input_ids"]
+
         discriminator_hidden_states = self.electra(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             position_ids,
@@ -847,7 +856,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
     )
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -858,6 +867,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -868,16 +878,22 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         """
         return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
 
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
+        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
+            warnings.warn(
+                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
+            )
+            inputs = kwargs["input_ids"]
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         generator_hidden_states = self.electra(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             position_ids,
@@ -952,7 +968,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     )
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -963,6 +979,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -973,16 +990,22 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         """
         return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
 
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
+        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
+            warnings.warn(
+                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
+            )
+            inputs = kwargs["input_ids"]
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         outputs = self.electra(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             position_ids,

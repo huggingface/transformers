@@ -103,6 +103,8 @@ class GPT2Config(PretrainedConfig):
             :class:`~transformers.GPT2DoubleHeadsModel` and :class:`~transformers.TFGPT2DoubleHeadsModel`.
 
             The dropout ratio to be used after the projection and activation.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -142,6 +144,7 @@ class GPT2Config(PretrainedConfig):
         summary_first_dropout=0.1,
         bos_token_id=50256,
         eos_token_id=50256,
+        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -164,6 +167,7 @@ class GPT2Config(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+        self.gradient_checkpointing = gradient_checkpointing
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

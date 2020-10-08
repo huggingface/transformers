@@ -20,7 +20,7 @@ from run_eval_search import run_search
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.hf_api import HfApi
 from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
-from utils import label_smoothed_nll_loss, lmap, load_json
+from utils import ROUGE_KEYS, label_smoothed_nll_loss, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -86,7 +86,6 @@ CHEAP_ARGS = {
     "n_val": -1,
     "n_test": -1,
     "student_encoder_layers": 1,
-    "alpha_encoder_loss": 0.0,
     "freeze_encoder": False,
     "auto_scale_batch_size": False,
 }
@@ -230,7 +229,6 @@ class TestSummarizationDistiller(unittest.TestCase):
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
-    @unittest.skip("T5 distillation is broken at the moment")
     def test_distill_t5(self):
         updates = dict(
             student_encoder_layers=1,
@@ -255,7 +253,6 @@ class TestSummarizationDistiller(unittest.TestCase):
             model_name_or_path="sshleifer/tinier_bart",
             teacher=CHEAP_ARGS["model_name_or_path"],
             val_check_interval=0.5,
-            alpha_encoder_loss=0.4,
         )
         default_updates.update(updates)
         args_d: dict = CHEAP_ARGS.copy()
@@ -365,7 +362,7 @@ def test_run_eval_search(model):
         if "translation" in task:
             expected_strings.append("bleu")
         else:
-            expected_strings.extend(["rouge1", "rouge2", "rougeL"])
+            expected_strings.extend(ROUGE_KEYS)
         for w in expected_strings:
             assert w in cs.out
         for w in un_expected_strings:
@@ -424,6 +421,10 @@ def test_finetune(model):
         # check that embeds are the same
         assert bart.decoder.embed_tokens == bart.encoder.embed_tokens
         assert bart.decoder.embed_tokens == bart.shared
+
+    example_batch = load_json(module.output_dir / "text_batch.json")
+    assert isinstance(example_batch, dict)
+    assert len(example_batch) >= 4
 
 
 def test_finetune_extra_model_args():

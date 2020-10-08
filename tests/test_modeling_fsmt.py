@@ -71,7 +71,7 @@ class ModelTester:
         # hack needed for modeling_common tests - despite not really having this attribute in this model
         self.vocab_size = self.src_vocab_size
 
-    def prepare_config_and_inputs_for_common(self):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.src_vocab_size).clamp(
             3,
         )
@@ -97,6 +97,13 @@ class ModelTester:
             pad_token_id=self.pad_token_id,
         )
         inputs_dict = prepare_fsmt_inputs_dict(config, input_ids)
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
+        inputs_dict["decoder_attention_mask"] = inputs_dict["attention_mask"]
+        inputs_dict["use_cache"] = False
         return config, inputs_dict
 
 
@@ -142,7 +149,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
 
     # XXX: override test_model_common_attributes / different Embedding type
     def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -152,7 +159,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, torch.nn.modules.sparse.Embedding))
 
     def test_initialization_more(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = FSMTModel(config)
         model.to(torch_device)
         model.eval()
@@ -170,7 +177,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
         # self.assertAlmostEqual(torch.std(model.encoder.embed_positions.weights).item(), config.init_std, 2)
 
     def test_advanced_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
@@ -200,7 +207,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
         _assert_tensors_equal(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
 
     def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 
@@ -210,7 +217,7 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(info["missing_keys"], [])
 
     def test_save_load_no_save_keys(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 

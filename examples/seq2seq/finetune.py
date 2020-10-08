@@ -26,12 +26,14 @@ from utils import (
     calculate_bleu,
     calculate_rouge,
     flatten_list,
+    freeze_embeds,
     freeze_params,
     get_git_info,
     label_smoothed_nll_loss,
     lmap,
     pickle_save,
     save_git_info,
+    save_json,
     use_task_specific_params,
 )
 
@@ -90,7 +92,7 @@ class SummarizationModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         if self.hparams.freeze_embeds:
-            self.freeze_embeds()
+            freeze_embeds(self.model)
         if self.hparams.freeze_encoder:
             freeze_params(self.model.get_encoder())
             assert_all_frozen(self.model.get_encoder())
@@ -104,29 +106,24 @@ class SummarizationModule(BaseTransformer):
         self.dataset_class = (
             Seq2SeqDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
         )
+        self.already_saved_batch = False
         self.eval_beams = self.model.config.num_beams if self.hparams.eval_beams is None else self.hparams.eval_beams
-        assert self.eval_beams >= 1, f"got self.eval_beams={self.eval_beams}. Need an integer > 1"
         if self.hparams.eval_max_gen_length is not None:
             self.eval_max_length = self.hparams.eval_max_gen_length
         else:
             self.eval_max_length = self.model.config.max_length
         self.val_metric = self.default_val_metric if self.hparams.val_metric is None else self.hparams.val_metric
 
-    def freeze_embeds(self):
-        """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        if self.model_type == "t5":
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
-                freeze_params(d.embed_tokens)
-        elif self.model_type == "fsmt":
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
-        else:
-            freeze_params(self.model.model.shared)
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
+    def save_readable_batch(self, batch: Dict[str, torch.Tensor]) -> Dict[str, List[str]]:
+        """A debugging utility"""
+        readable_batch = {
+            k: self.tokenizer.batch_decode(v.tolist()) if "mask" not in k else v.shape for k, v in batch.items()
+        }
+        save_json(readable_batch, Path(self.output_dir) / "text_batch.json")
+        save_json({k: v.tolist() for k, v in batch.items()}, Path(self.output_dir) / "tok_batch.json")
+
+        self.already_saved_batch = True
+        return readable_batch
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -145,6 +142,9 @@ class SummarizationModule(BaseTransformer):
             decoder_input_ids = self.model._shift_right(tgt_ids)
         else:
             decoder_input_ids = shift_tokens_right(tgt_ids, pad_token_id)
+        if not self.already_saved_batch:  # This would be slightly better if it only happened on rank zero
+            batch["decoder_input_ids"] = decoder_input_ids
+            self.save_readable_batch(batch)
 
         outputs = self(src_ids, attention_mask=src_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
         lm_logits = outputs[0]

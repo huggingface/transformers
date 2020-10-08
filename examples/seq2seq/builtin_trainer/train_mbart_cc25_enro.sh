@@ -18,5 +18,4 @@ python finetune_trainer.py \
     --do_train --do_eval --do_predict --evaluate_during_training \
     --predict_with_generate --logging_first_step 
     --task translation \
-    --run_name mbart_en_ro \
     "$@"

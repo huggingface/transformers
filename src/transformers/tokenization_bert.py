@@ -20,8 +20,6 @@ import os
 import unicodedata
 from typing import List, Optional
 
-from tokenizers import BertWordPieceTokenizer
-
 from .tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
@@ -207,6 +205,10 @@ class BertTokenizer(PreTrainedTokenizer):
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
     @property
+    def do_lower_case(self):
+        return self.basic_tokenizer.do_lower_case
+
+    @property
     def vocab_size(self):
         return len(self.vocab)
 
@@ -329,7 +331,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, vocab_path):
         """
-        Save the vocabulary (copy original file) and special tokens file to a directory.
+        Save the vocabulary and special tokens file to a directory.
 
         Args:
             vocab_path (:obj:`str`):
@@ -610,6 +612,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    slow_tokenizer_class = BertTokenizer
 
     def __init__(
         self,
@@ -620,31 +623,20 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        clean_text=True,
         tokenize_chinese_chars=True,
         strip_accents=None,
-        wordpieces_prefix="##",
         **kwargs
     ):
         super().__init__(
-            BertWordPieceTokenizer(
-                vocab_file=vocab_file,
-                unk_token=unk_token,
-                sep_token=sep_token,
-                cls_token=cls_token,
-                pad_token=pad_token,
-                mask_token=mask_token,
-                clean_text=clean_text,
-                handle_chinese_chars=tokenize_chinese_chars,
-                strip_accents=strip_accents,
-                lowercase=do_lower_case,
-                wordpieces_prefix=wordpieces_prefix,
-            ),
+            vocab_file,
+            do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
             **kwargs,
         )
 
