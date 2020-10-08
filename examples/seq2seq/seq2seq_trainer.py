@@ -82,6 +82,8 @@ class Seq2SeqTrainer(Trainer):
 
         if self.lr_scheduler is None:
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
+        else:  # ignoring --lr_scheduler
+            logger.warn("scheduler is passed to `Seq2SeqTrainer`, `--lr_scheduler` arg is ignored.")
 
     def _get_lr_scheduler(self, num_training_steps):
         schedule_func = arg_to_scheduler[self.args.lr_scheduler]
