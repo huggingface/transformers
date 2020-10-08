@@ -513,7 +513,6 @@ if is_torch_available():
         XLMRobertaForQuestionAnswering,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
-<<<<<<< HEAD
         XLMRobertaForQuestionAnswering,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
