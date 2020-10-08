@@ -528,7 +528,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
 
         # encoder outputs
-        encoder_outputs = model.model.encoder(encoder_ids)[0]
+        encoder_outputs = model.prophetnet.encoder(encoder_ids)[0]
         expected_encoder_outputs_slice = torch.tensor(
             [[[-0.2526, -0.1951, -0.2185], [-0.8923, 0.2992, -0.4623], [-0.4585, 0.0165, -0.6652]]]
         ).to(torch_device)
@@ -537,7 +537,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
 
         # decoder outputs
-        decoder_outputs = model.model.decoder(
+        decoder_outputs = model.prophetnet.decoder(
             decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
         )
         predicting_streams = decoder_outputs[0][:, 1:]

@@ -115,33 +115,28 @@ def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
 
 class ProphetNetPreTrainedModel(PreTrainedModel):
     config_class = ProphetNetConfig
-    base_model_prefix = "model"
+    base_model_prefix = "prophetnet"
 
     def _init_weights(self, module):
         # init special `NgramMultiheadAttention`
         if isinstance(module, NgramMultiheadAttention):
             if module.qkv_same_dim:
                 module.in_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-            #                nn.init.xavier_uniform_(module.in_proj_weight)
             else:
-                module.k_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-                module.v_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-                module.q_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-            #                nn.init.(module.k_proj_weight)
-            #                nn.init.xavier_uniform_(module.v_proj_weight)
-            #                nn.init.xavier_uniform_(module.q_proj_weight)
+                module.key_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+                module.value_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+                module.query_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
 
             module.out_proj.weight.data.normal_(mean=0.0, std=self.config.init_std)
-            #            module.out_proj.weight.data.uniform_()
+
             if module.in_proj_bias is not None:
                 module.in_proj_bias.data.zero_()
                 module.out_proj.bias.data.zero_()
-            if module.bias_k is not None:
+            if module.key_proj_bias is not None:
                 module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
-            #                module.bias_k.data.normal_()
-            if module.bias_v is not None:
-                module.bias_v.data.normal_(mean=0.0, std=self.config.init_std)
-        #                module.bias_v.data.normal_()
+            if module.value_proj_bias is not None:
+                module.value_proj_bias.data.normal_(mean=0.0, std=self.config.init_std)
+
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
@@ -231,9 +226,11 @@ class SelfAttention(nn.Module):
         self.scaling = self.head_dim ** -0.5
 
         self.encoder_decoder_attention = encoder_decoder_attention
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+        self.key_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.value_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.query_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
@@ -265,16 +262,16 @@ class SelfAttention(nn.Module):
             saved_state = None
             layer_state = {}
 
-        q = self.q_proj(query) * self.scaling
+        q = self.query_proj(query) * self.scaling
         if static_kv:
             if key is None:
                 k = v = None
             else:
-                k = self.k_proj(key)
-                v = self.v_proj(key)
+                k = self.key_proj(key)
+                v = self.value_proj(key)
         else:
-            k = self.k_proj(query)
-            v = self.v_proj(query)
+            k = self.key_proj(query)
+            v = self.value_proj(query)
 
         q = self._shape(q, tgt_len, bsz)
         if k is not None:
@@ -386,20 +383,12 @@ class SelfAttention(nn.Module):
         return new_attention_mask
 
 
-#
-# class EncoderFeedForward(nn.Module):
-#
-#    def __init__(self, config: ProphetNetConfig):
-#        super().__init__()
-#
-
-
-class DecoderFeedForward(nn.Module):
-    def __init__(self, config: ProphetNetConfig):
+class FeedForwardBlock(nn.Module):
+    def __init__(self, config: ProphetNetConfig, ffn_dim: int):
         super().__init__()
         self.activation_fn = ACT2FN[config.activation_function]
-        self.intermediate = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
-        self.output = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
+        self.intermediate = nn.Linear(config.hidden_size, ffn_dim)
+        self.output = nn.Linear(ffn_dim, config.hidden_size)
         self.activation_dropout = config.activation_dropout
         self.dropout = config.dropout
 
@@ -411,49 +400,6 @@ class DecoderFeedForward(nn.Module):
         hidden_states = self.output(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         return hidden_states
-
-
-class EncoderLayer(nn.Module):
-    """
-    Same to Transformer Encoder Layer
-    """
-
-    def __init__(self, config: ProphetNetConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = SelfAttention(
-            self.embed_dim,
-            config.num_encoder_attention_heads,
-            dropout=config.attention_dropout,
-            output_dropout=config.dropout,
-        )
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
-
-    def forward(self, hidden_states, attention_mask, output_attentions=False):
-        residual = hidden_states
-        hidden_states, attn_weights = self.self_attn(
-            query=hidden_states,
-            key=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        return hidden_states, attn_weights
 
 
 def softmax(x, dim, onnx_trace=False):
@@ -509,9 +455,9 @@ class NgramMultiheadAttention(nn.Module):
         if self.qkv_same_dim:
             self.in_proj_weight = nn.Parameter(torch.Tensor(3 * embed_dim, embed_dim))
         else:
-            self.k_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.kdim))
-            self.v_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.vdim))
-            self.q_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+            self.key_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.kdim))
+            self.value_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.vdim))
+            self.query_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
 
         if bias:
             self.in_proj_bias = nn.Parameter(torch.Tensor(3 * embed_dim))
@@ -521,37 +467,18 @@ class NgramMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         if add_bias_kv:
-            self.bias_k = nn.Parameter(torch.Tensor(1, 1, embed_dim))
-            self.bias_v = nn.Parameter(torch.Tensor(1, 1, embed_dim))
+            self.key_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
+            self.value_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
         else:
-            self.bias_k = self.bias_v = None
+            self.key_proj_bias = self.value_proj_bias = None
 
         self.add_zero_attn = add_zero_attn
-
-        #        self.reset_parameters()
 
         self.onnx_trace = False
         self.cache_key = "self"
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
-
-    def reset_parameters(self):
-        if self.qkv_same_dim:
-            nn.init.xavier_uniform_(self.in_proj_weight)
-
-            nn.init.xavier_uniform_(self.k_proj_weight)
-            nn.init.xavier_uniform_(self.v_proj_weight)
-            nn.init.xavier_uniform_(self.q_proj_weight)
-
-        nn.init.xavier_uniform_(self.out_proj.weight)
-        if self.in_proj_bias is not None:
-            nn.init.constant_(self.in_proj_bias, 0.0)
-            nn.init.constant_(self.out_proj.bias, 0.0)
-        if self.bias_k is not None:
-            nn.init.xavier_normal_(self.bias_k)
-        if self.bias_v is not None:
-            nn.init.xavier_normal_(self.bias_v)
 
     def main_stream_relative_logits(self, query, attn_weights, real_positions, i_bucket_main_stream):
         # input query [T,B,C]
@@ -677,10 +604,10 @@ class NgramMultiheadAttention(nn.Module):
         q, k, v = self.in_proj_qkv(hidden_states)
         q *= self.scaling
 
-        if self.bias_k is not None:
-            assert self.bias_v is not None
+        if self.key_proj_bias is not None:
+            assert self.value_proj_bias is not None
             k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
-            v = torch.cat([v, self.bias_v.repeat(1, bsz, 1)])
+            v = torch.cat([v, self.value_proj_bias.repeat(1, bsz, 1)])
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
             k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -806,13 +733,13 @@ class NgramMultiheadAttention(nn.Module):
             bias = self.in_proj_bias
             if bias is not None:
                 bias = bias[: self.embed_dim]
-            return F.linear(query, self.q_proj_weight, bias)
+            return F.linear(query, self.query_proj_weight, bias)
 
     def in_proj_k(self, key):
         if self.qkv_same_dim:
             return self._in_proj(key, start=self.embed_dim, end=2 * self.embed_dim)
         else:
-            weight = self.k_proj_weight
+            weight = self.key_proj_weight
             bias = self.in_proj_bias
             if bias is not None:
                 bias = bias[self.embed_dim : 2 * self.embed_dim]
@@ -822,7 +749,7 @@ class NgramMultiheadAttention(nn.Module):
         if self.qkv_same_dim:
             return self._in_proj(value, start=2 * self.embed_dim)
         else:
-            weight = self.v_proj_weight
+            weight = self.value_proj_weight
             bias = self.in_proj_bias
             if bias is not None:
                 bias = bias[2 * self.embed_dim :]
@@ -837,6 +764,41 @@ class NgramMultiheadAttention(nn.Module):
         return F.linear(input, weight, bias)
 
 
+class ProphetNetEncoderLayer(nn.Module):
+    def __init__(self, config: ProphetNetConfig):
+        super().__init__()
+
+        # 1st residual block
+        self.self_attn = SelfAttention(
+            config.hidden_size,
+            config.num_encoder_attention_heads,
+            dropout=config.attention_dropout,
+            output_dropout=config.dropout,
+        )
+        self.self_attn_layer_norm = LayerNorm(config.hidden_size)
+
+        # 2nd residual block
+        self.feed_forward = FeedForwardBlock(config, config.encoder_ffn_dim)
+        #        self.final_layer_norm = LayerNorm(config.hidden_size)
+        self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
+
+    def forward(self, hidden_states, attention_mask, output_attentions=False):
+
+        # 1st residual block
+        attention_output, attn_weights = self.self_attn(
+            query=hidden_states,
+            key=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = self.self_attn_layer_norm(attention_output + hidden_states)
+
+        # 2nd residual block
+        feed_forward_output = self.feed_forward(hidden_states)
+        hidden_states = self.feed_forward_layer_norm(feed_forward_output + hidden_states)
+        return hidden_states, attn_weights
+
+
 class ProphetNetDecoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
@@ -846,6 +808,7 @@ class ProphetNetDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.ngram = config.ngram
 
+        # 1st residual block
         self.ngram_self_attn = NgramMultiheadAttention(
             self.embed_dim,
             config.num_attention_heads,
@@ -858,21 +821,23 @@ class ProphetNetDecoderLayer(nn.Module):
         )
         self.ngram_self_attn_layer_norm = LayerNorm(self.embed_dim)
 
-        self.encoder_attn = SelfAttention(
+        # 2nd residual block
+        #        self.encoder_attn = SelfAttention(
+        self.cross_attn = SelfAttention(
             self.embed_dim,
             config.num_decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
             output_dropout=config.dropout,
         )
-        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        #        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.cross_attn_layer_norm = LayerNorm(self.embed_dim)
 
-        self.final_layer_norm = LayerNorm(self.embed_dim)
-        self.feed_forward = DecoderFeedForward(config)
+        # 3rd residual block
+        self.feed_forward = FeedForwardBlock(config, config.decoder_ffn_dim)
+        self.feed_forward_layer_norm = LayerNorm(self.embed_dim)
 
-    #        self.activation_fn = ACT2FN[config.activation_function]
-    #        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-    #        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+    #        self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -891,6 +856,7 @@ class ProphetNetDecoderLayer(nn.Module):
         if layer_state is None:
             layer_state = {}
 
+        # 1st residual block
         ngram_attention_output, self_attn_weights = self.ngram_self_attn(
             hidden_states=hidden_states,
             layer_state=layer_state,
@@ -902,35 +868,20 @@ class ProphetNetDecoderLayer(nn.Module):
             real_positions=real_positions,
             output_attentions=output_attentions,
         )
-
-        # residual #1
         hidden_states = self.ngram_self_attn_layer_norm(hidden_states + ngram_attention_output)
 
-        # TODO(PVP): make encoder_attn optional
-        # TODO(PVP): refactor module into multiple smaller modules
-        attention_output, _ = self.encoder_attn(
+        # 2nd residual block
+        attention_output, _ = self.cross_attn(
             query=hidden_states,
             key=encoder_hidden_states,
             attention_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
+        hidden_states = self.cross_attn_layer_norm(attention_output + hidden_states)
 
-        # residual #2
-        hidden_states = self.encoder_attn_layer_norm(attention_output + hidden_states)
-
+        # 3rd residual block
         feed_forward_output = self.feed_forward(hidden_states)
-        #        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        #        residual = hidden_states
-        #        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        #        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        #        hidden_states = self.fc2(hidden_states)
-        #        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        #        hidden_states = residual + hidden_states
-
-        # residual #3
-        hidden_states = self.final_layer_norm(feed_forward_output + hidden_states)
+        hidden_states = self.feed_forward_layer_norm(feed_forward_output + hidden_states)
 
         return (
             hidden_states,
@@ -1009,30 +960,30 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     """
     Same to Transformer Encoder.
     Transformer encoder consisting of *config.num_encoder_layers* self attention layers. Each layer
-    is a :class:`EncoderLayer`.
+    is a :class:`ProphetNetEncoderLayer`.
 
     Args:
         config: ProphetNetConfig
     """
 
-    def __init__(self, config: ProphetNetConfig, embed_tokens: nn.Embedding = None):
+    def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
         super().__init__(config)
 
         self.output_hidden_states = config.output_hidden_states
 
         self.dropout = config.dropout
-        embed_dim = embed_tokens.embedding_dim
-        self.padding_idx = embed_tokens.padding_idx
+        embed_dim = word_embeddings.embedding_dim
+        self.padding_idx = word_embeddings.padding_idx
         self.max_source_positions = config.max_position_embeddings
 
-        self.embed_tokens = embed_tokens
+        self.word_embeddings = word_embeddings
         self.embed_scale = None
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings + 1 + self.padding_idx, embed_dim, self.padding_idx
         )
 
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.num_encoder_layers)])
-        self.emb_layer_norm = LayerNorm(embed_dim)
+        self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
+        self.embeddings_layer_norm = LayerNorm(embed_dim)
 
         self.init_weights()
 
@@ -1060,11 +1011,11 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         elif input_ids is not None and inputs_embeds is not None:
             raise ValueError("Make sure to only pass input_ids or inputs_embeds.")
         elif input_ids is not None and inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
 
         embed_pos, real_positions = self.embed_positions(inputs_embeds.shape[:2], inputs_embeds.device)
         x = inputs_embeds + embed_pos
-        x = self.emb_layer_norm(x)
+        x = self.embeddings_layer_norm(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
@@ -1100,20 +1051,20 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     is a :class:`ProphetNetDecoderLayer`.
     Args:
         config: ProphetNetConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        word_embeddings (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: ProphetNetConfig, embed_tokens: nn.Embedding = None):
+    def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
         super().__init__(config)
         self.ngram = config.ngram
         self.num_buckets = config.num_buckets
         self.relative_max_distance = config.relative_max_distance
 
         self.dropout = config.dropout
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx = word_embeddings.padding_idx
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = None
-        self.embed_tokens = embed_tokens
+        self.word_embeddings = word_embeddings
         embed_dim = config.hidden_size
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings + 2 + self.padding_idx, embed_dim, self.padding_idx
@@ -1121,7 +1072,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.ngram_input_embed = nn.Embedding(self.ngram, embed_dim, None)
 
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
-        self.emb_layer_norm = LayerNorm(embed_dim)
+        self.embeddings_layer_norm = LayerNorm(embed_dim)
 
         self.init_weights()
 
@@ -1240,7 +1191,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         elif input_ids is not None and inputs_embeds is not None:
             raise ValueError("Make sure to only pass `decoder_input_ids` or `decoder_inputs_embeds`.")
         elif input_ids is not None and inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
 
         batch_size, sequence_length = inputs_embeds.shape[:2]
 
@@ -1292,8 +1243,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         # TODO in train [(1+ngram)*T, B, C], in inference [T+ngram, B, C]
         hidden_states = torch.cat([hidden_states] + ngram_hidden_states, 0)
 
-        if self.emb_layer_norm:
-            hidden_states = self.emb_layer_norm(hidden_states)
+        if self.embeddings_layer_norm:
+            hidden_states = self.embeddings_layer_norm(hidden_states)
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -1363,19 +1314,19 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size, dim_size = config.pad_token_id, config.vocab_size, config.hidden_size
-        self.embed_tokens = nn.Embedding(vocab_size, dim_size, padding_idx=padding_idx)
-        self.encoder = ProphetNetEncoder(config, self.embed_tokens)
-        self.decoder = ProphetNetDecoder(config, self.embed_tokens)
+        self.word_embeddings = nn.Embedding(vocab_size, dim_size, padding_idx=padding_idx)
+        self.encoder = ProphetNetEncoder(config, self.word_embeddings)
+        self.decoder = ProphetNetDecoder(config, self.word_embeddings)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.embed_tokens
+        return self.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embed_tokens = value
-        self.encoder.embed_tokens = self.embed_tokens
-        self.decoder.embed_tokens = self.embed_tokens
+        self.word_embeddings = value
+        self.encoder.word_embeddings = self.word_embeddings
+        self.decoder.word_embeddings = self.word_embeddings
 
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="microsoft/prophetnet-large-uncased")
@@ -1448,12 +1399,9 @@ def _reorder_buffer(attn_cache, new_order):
     "The ProphetNet Model with a language modeling head. Can be used for summarization.", PROPHETNET_START_DOCSTRING
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
-    base_model_prefix = "model"
-
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
-        base_model = ProphetNetModel(config)
-        self.model = base_model
+        self.prophetnet = ProphetNetModel(config)
         self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
 
@@ -1465,7 +1413,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return self.lm_head
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.prophetnet.word_embeddings
 
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
     def forward(
@@ -1486,7 +1434,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         **unused,
     ):
 
-        outputs = self.model(
+        outputs = self.prophetnet(
             input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -1601,4 +1549,4 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return reordered_past
 
     def get_encoder(self):
-        return self.model.encoder
+        return self.prophetnet.encoder

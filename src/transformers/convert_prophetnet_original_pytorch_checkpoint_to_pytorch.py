@@ -17,10 +17,7 @@
 
 import argparse
 
-import torch
-
 from transformers import logging
-from transformers.configuration_prophetnet import ProphetNetConfig
 from transformers.modeling_prophetnet import ProphetNetForConditionalGeneration
 
 # transformers_old should correspond to branch `save_old_prophetnet_model_structure` here
@@ -38,8 +35,6 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
     Copy/paste/tweak prohpetnet's weights to our prophetnet structure.
     """
     prophet_old = ProphetNetForConditionalGenerationOld.from_pretrained(prophetnet_checkpoint_path)
-    prophet_old.eval()
-    prophet_config_old = prophet_old.config
 
     prophet, loading_info = ProphetNetForConditionalGeneration.from_pretrained(
         prophetnet_checkpoint_path, output_loading_info=True
@@ -47,17 +42,41 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
 
     mapping = {
         "ngram_self_attn_layer_norm": "self_attn_layer_norm",
+        "cross_attn": "encoder_attn",
+        "cross_attn_layer_norm": "encoder_attn_layer_norm",
+        "feed_forward_layer_norm": "final_layer_norm",
         "feed_forward": "",
         "intermediate": "fc1",
         "output": "fc2",
+        "key_proj_bias": "bias_k",
+        "value_proj_bias": "bias_v",
+        "key_proj_weight": "k_proj_weight",
+        "value_proj_weight": "v_proj_weight",
+        "query_proj_weight": "q_proj_weight",
+        "key_proj": "k_proj",
+        "value_proj": "v_proj",
+        "query_proj": "q_proj",
+        "word_embeddings": "embed_tokens",
+        "embeddings_layer_norm": "emb_layer_norm",
     }
 
     for key in loading_info["missing_keys"]:
-        model = prophet
-        old_model = prophet_old
         attributes = key.split(".")
+
+        if attributes[0] == "lm_head":
+            model = prophet
+            old_model = prophet_old
+        else:
+            model = prophet.prophetnet
+            old_model = prophet_old.model
+
         is_key_init = False
         for attribute in attributes:
+            if attribute in mapping:
+                old_attribute = mapping[attribute]
+            else:
+                old_attribute = attribute
+
             if attribute == "weight":
                 assert old_model.weight.shape == model.weight.shape, "Shapes have to match!"
                 model.weight = old_model.weight
@@ -70,11 +89,20 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 logger.info(f"{attribute} is initialized")
                 is_key_init = True
                 break
-
-            if attribute in mapping:
-                old_attribute = mapping[attribute]
-            else:
-                old_attribute = attribute
+            elif attribute in [
+                "in_proj_weight",
+                "key_proj_weight",
+                "value_proj_weight",
+                "query_proj_weight",
+                "in_proj_bias",
+                "key_proj_bias",
+                "value_proj_bias",
+            ]:
+                old_model_weight = getattr(old_model, old_attribute)
+                assert getattr(model, attribute).shape == old_model_weight.shape, "Shapes have to match!"
+                setattr(model, attribute, old_model_weight)
+                is_key_init = True
+                break
 
             if attribute.isdigit():
                 model = model[int(attribute)]
