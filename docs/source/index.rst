@@ -213,6 +213,7 @@ conversion utilities for the following models:
     :maxdepth: 2
     :caption: Main Classes
 
+    main_classes/callback
     main_classes/configuration
     main_classes/logging
     main_classes/model
@@ -232,6 +233,7 @@ conversion utilities for the following models:
     model_doc/bart
     model_doc/bert
     model_doc/bertgeneration
+    model_doc/blenderbot
     model_doc/camembert
     model_doc/ctrl
     model_doc/deberta
@@ -270,3 +272,4 @@ conversion utilities for the following models:
     internal/modeling_utils
     internal/pipelines_utils
     internal/tokenization_utils
+    internal/trainer_utils
