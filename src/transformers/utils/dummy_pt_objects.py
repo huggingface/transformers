@@ -1296,6 +1296,36 @@ class PegasusForConditionalGeneration:
         requires_pytorch(self)
 
 
+PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ProphetNetForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class RagModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1689,6 +1719,27 @@ class XLMPreTrainedModel:
 
 
 class XLMWithLMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class XLMProphetNetForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
