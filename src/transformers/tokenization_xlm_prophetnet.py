@@ -207,8 +207,8 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+            return ([0] * len(token_ids_0)) + [1]
+        return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -236,7 +236,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
+        return len(self.sp_model) + self.fairseq_offset
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
