@@ -368,7 +368,7 @@ class BartHeadTests(unittest.TestCase):
             torch.Tensor([0, 11349, 495, 4040, 571, 2]),
         ]
         for ex, desired_result in zip(examples, fairseq_results):
-            bart_toks = tokenizer.encode(ex, return_tensors="pt")
+            bart_toks = tokenizer.encode(ex, return_tensors="pt").squeeze()
             assert_tensors_close(desired_result.long(), bart_toks, prefix=ex)
 
     def test_generate_fp16(self):
@@ -417,11 +417,9 @@ class BartHeadTests(unittest.TestCase):
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b aren't both tensors, raise a nice Assertion error."""
-
+    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
-    assert a.shape == b.shape
     try:
         if torch.allclose(a, b, atol=atol):
             return True
@@ -506,7 +504,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
-            logits2 = model(**inputs_dict)[0]
+            logits2 = model(**inputs_dict)[0].squeeze()
         assert_tensors_close(batched_logits[1], logits2, atol=TOLERANCE)
         assert_tensors_close(expected_slice, logits_arr, atol=TOLERANCE)
 
