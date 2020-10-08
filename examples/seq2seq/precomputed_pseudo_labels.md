@@ -1,6 +1,7 @@
-### Precomputed pseudolabels
-+ decompress with tar -xzvf. The produced directory name may differ from the filename.
+### Saved Pseudo-Labels
+These are the generations of various large models on various large **training** sets. All in all they took about 200 GPU hours to produce.
 
+### Available Pseudo-labels
 | Dataset | Model                       | Link                                                                                   | Rouge Scores       | Notes                                                                                                       
 |---------|-----------------------------|----------------------------------------------------------------------------------------|--------------------|-------------------------------------------------------------------------------------------------------------
 | XSUM    | facebook/bart-large-xsum    | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/bart_xsum_pl.tgz)          | 49.8/28.0/42.5     |                                                                                                             
@@ -12,13 +13,21 @@
 | EN-RO   | Helsinki-NLP/opus-mt-en-ro  | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/wmt_en_ro/opus_mt_en_ro.tgz) |       |  
 | EN-RO   | facebook/mbart-large-en-ro  | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/wmt_en_ro/mbart_large_en_ro.tgz) |       |  
 
-### Generating Pseudolabels
-+ These command takes a while to run. For example,  pegasus_cnn_cnn_pls.tgz took 8 hours on 8 GPUs.
-+ Pegasus does not work in fp16 :(, Bart, mBART and Marian do.
 
+Example Download Command:
+```bash
+curl -S https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/bart_xsum_pl.tgz | tar -xvz -C .
+```
+### Generating Your own Pseudolabels
 ```bash                                                                                       
 python -m torch.distributed.launch --nproc_per_node=8 run_distributed_eval.py \
     --model_name facebook/bart-large-xsum --save_dir bart_xsum_pl --data_dir xsum \
-    --fp16 --bs 32 --sync_timeout 60000 --max_source_length 1024
+    --fp16 --bs 32 --sync_timeout 60000 --max_source_length 1024 \
+    --type_path train
 ```
 
++ These command takes a while to run. For example,  pegasus_cnn_cnn_pls.tgz took 8 hours on 8 GPUs.
++ Pegasus does not work in fp16 :(, Bart, mBART and Marian do.
++ Even if you have 1 GPU, `run_distributed_eval.py` is 10-20% faster than `run_eval.py` because it uses `SortishSampler` to minimize padding computation.
+
+Feel free to contribute your own pseudolabels via PR to this table with new google drive link!
