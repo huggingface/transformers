@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from seq2seq_trainer import Seq2SeqTrainer
+from seq2seq_trainer import Seq2SeqTrainer, arg_to_scheduler_choices
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -62,6 +62,9 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     dropout: Optional[float] = field(default=None, metadata={"help": "Dropout probability. Goes into model.config."})
     attention_dropout: Optional[float] = field(
         default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
+    )
+    lr_scheduler: Optional[str] = field(
+        default="linear", metadata={"help": f"Which lr scheduler to use. Selected in {arg_to_scheduler_choices}"}
     )
 
 
