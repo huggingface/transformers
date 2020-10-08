@@ -19,6 +19,7 @@ import os
 from shutil import copyfile
 
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
 
@@ -174,6 +175,75 @@ class ReformerTokenizer(PreTrainedTokenizer):
 
         Returns:
             :obj:`Tuple(str)`: Paths to the files saved.
+        """
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)
+
+
+class ReformerTokenizerFast(PreTrainedTokenizerFast):
+    """
+    Construct a "fast" Reformer tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
+    <https://github.com/google/sentencepiece>`__ .
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the end
+                of sequence. The token used is the :obj:`sep_token`.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        additional_special_tokens (:obj:`List[str]`, `optional`):
+            Additional special tokens used by the tokenizer.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
+    slow_tokenizer_class = ReformerTokenizer
+
+    def __init__(
+        self,
+        vocab_file,
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        additional_special_tokens=[],
+        **kwargs
+    ):
+        super().__init__(
+            vocab_file,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
+        self.vocab_file = vocab_file
+
+    def save_vocabulary(self, save_directory):
+        """Save the sentencepiece vocabulary (copy original file) and special tokens file
+        to a directory.
         """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))

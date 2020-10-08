@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 LXMERT Authors.
+# Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,52 +17,29 @@
 import os
 import unittest
 
-from transformers.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
+from transformers.testing_utils import _torch_available
+from transformers.tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
-    tokenizer_class = LxmertTokenizer
-    rust_tokenizer_class = LxmertTokenizerFast
+FRAMEWORK = "pt" if _torch_available else "tf"
+
+
+class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
+    tokenizer_class = CamembertTokenizer
+    rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True
-    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()
 
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
-        output_text = "unwanted, running"
-        return input_text, output_text
-
-    def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file)
-
-        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
-        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+        # We have a SentencePiece fixture for testing
+        tokenizer = CamembertTokenizer(SAMPLE_VOCAB)
+        tokenizer.save_pretrained(self.tmpdirname)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:

@@ -22,23 +22,15 @@ import glob
 import os
 import pickle
 import re
-import warnings
 from collections import Counter, OrderedDict
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
 import sacremoses as sm
-from tokenizers import Tokenizer
-from tokenizers.implementations import BaseTokenizer
-from tokenizers.models import WordLevel
-from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalizer_from_str
-from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
-from tokenizers.processors import BertProcessing
 
 from .file_utils import cached_path, is_torch_available, torch_only_method
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
 
@@ -53,17 +45,10 @@ VOCAB_FILES_NAMES = {
     "pretrained_vocab_file_torch": "vocab.bin",
     "vocab_file": "vocab.txt",
 }
-VOCAB_FILES_NAMES_FAST = {"pretrained_vocab_file": "vocab.json", "vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "pretrained_vocab_file": {
         "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.pkl",
-    }
-}
-
-PRETRAINED_VOCAB_FILES_MAP_FAST = {
-    "pretrained_vocab_file": {
-        "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.json",
     }
 }
 
@@ -240,6 +225,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if vocab_file is not None:
             self.build_vocab()
 
+    @property
+    def do_lower_case(self):
+        return self.lower_case
+
     def _compile_space_around_punctuation_pattern(self):
         look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
         look_ahead_to_match_all_except_space = r"(?=[^\s])"
@@ -298,11 +287,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         Returns:
             :obj:`Tuple(str)`: Paths to the files saved.
         """
-
-        logger.warning(
-            "Please note you will not be able to load the save vocabulary in"
-            " Rust-based TransfoXLTokenizerFast as they don't share the same structure."
-        )
 
         if os.path.isdir(vocab_path):
             vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["pretrained_vocab_file"])
@@ -490,165 +474,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols + ["<eos>"]
         else:
             return symbols
-
-
-class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
-    def __init__(
-        self,
-        vocab_file,
-        delimiter,
-        lowercase,
-        unk_token,
-        eos_token,
-        add_eos=False,
-        add_double_eos=False,
-        normalization: Optional[str] = None,
-    ):
-
-        try:
-            tokenizer = WordLevel(vocab_file, unk_token=unk_token)
-            tokenizer = Tokenizer(tokenizer)
-        except Exception:
-            raise ValueError(
-                "Unable to parse file {}. Unknown format. "
-                "If you tried to load a model saved through TransfoXLTokenizer,"
-                "please note they are not compatible.".format(vocab_file)
-            )
-
-        # Create the correct normalization path
-        normalizer = []
-
-        # Include unicode normalization
-        if normalization:
-            normalizer += [unicode_normalizer_from_str(normalization)]
-
-        # Include case normalization
-        if lowercase:
-            normalizer += [Lowercase()]
-
-        # Strip normalizer at the end
-        normalizer += [Strip(left=True, right=True)]
-
-        if len(normalizer) > 0:
-            tokenizer.normalizer = Sequence(normalizer) if len(normalizer) > 1 else normalizer[0]
-
-        # Setup the splitter
-        tokenizer.pre_tokenizer = CharDelimiterSplit(delimiter) if delimiter else WhitespaceSplit()
-
-        if add_double_eos:
-            tokenizer.post_processor = BertProcessing(
-                (eos_token, tokenizer.token_to_id(eos_token)), (eos_token, tokenizer.token_to_id(eos_token))
-            )
-
-        parameters = {
-            "model": "TransfoXLModel",
-            "add_eos": add_eos,
-            "add_double_eos": add_double_eos,
-            "unk_token": unk_token,
-            "eos_token": eos_token,
-            "delimiter": delimiter,
-            "lowercase": lowercase,
-        }
-
-        super().__init__(tokenizer, parameters)
-
-
-class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
-    """
-    Construct a "fast" Transformer-XL tokenizer (backed by HuggingFace's `tokenizers` library) adapted from Vocab class
-    in `the original code <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a
-    word-level tokenizer (no sub-word tokenization).
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
-
-    Args:
-        special (:obj:`List[str]`, `optional`):
-            A list of special tokens (to be treated by the original implementation of this tokenizer).
-        min_freq (:obj:`int`, `optional`, defaults to 0):
-            The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
-            will be mapped to :obj:`unk_token`).
-        max_size (:obj:`int`, `optional`):
-            The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
-            after excluding the tokens according to the :obj:`min_freq` rule.
-        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to lowercase the input when tokenizing.
-        delimiter (:obj:`str`, `optional`):
-            The delimiter used btween tokens.
-        vocab_file (:obj:`str`, `optional`):
-            File containing the vocabulary (from the original implementation).
-        pretrained_vocab_file (:obj:`str`, `optional`):
-            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
-        never_split (xxx, `optional`):
-            Fill me with intesting stuff.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
-            The end of sequence token.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
-            A list of additional special tokens (for the HuggingFace functionality).
-        add_eos (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to add the end-of-sentence token.
-        add_double_eos (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to add the end-of-sentence token.
-        normalization (xxx, `optional`):
-            Fill me with intesting stuff.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES_FAST
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = []
-
-    def __init__(
-        self,
-        special=None,
-        min_freq=0,
-        max_size=None,
-        lower_case=False,
-        delimiter=None,
-        vocab_file=None,
-        pretrained_vocab_file=None,
-        never_split=None,
-        unk_token="<unk>",
-        eos_token="<eos>",
-        additional_special_tokens=["<formula>"],
-        add_eos=False,
-        add_double_eos=False,
-        normalization=None,
-        **kwargs
-    ):
-
-        super().__init__(
-            _TransfoXLDelimiterLookupTokenizer(
-                vocab_file=vocab_file or pretrained_vocab_file,
-                delimiter=delimiter,
-                lowercase=lower_case,
-                unk_token=unk_token,
-                eos_token=eos_token,
-                add_eos=add_eos,
-                add_double_eos=add_double_eos,
-                normalization=normalization,
-            ),
-            unk_token=unk_token,
-            eos_token=eos_token,
-            additional_special_tokens=additional_special_tokens,
-            **kwargs,
-        )
-
-        warnings.warn(
-            "The class `TransfoXLTokenizerFast` is deprecated and will be removed in a future version. Please use `TransfoXLTokenizer` with it's enhanced tokenization instead.",
-            FutureWarning,
-        )
-
-    def save_pretrained(self, save_directory):
-        logger.warning(
-            "Please note you will not be able to load the vocabulary in"
-            " Python-based TransfoXLTokenizer as they don't share the same structure."
-        )
-
-        return super().save_pretrained(save_directory)
 
 
 class LMOrderedIterator(object):

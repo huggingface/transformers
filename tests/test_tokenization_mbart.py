@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer, is_torch_available
+from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
 from transformers.testing_utils import require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -17,6 +17,8 @@ RO_CODE = 250020
 
 class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MBartTokenizer
+    rust_tokenizer_class = MBartTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
