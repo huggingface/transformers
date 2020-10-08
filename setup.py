@@ -111,7 +111,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.8.1.rc2",
+        "tokenizers == 0.9.0.rc2",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # utilities from PyPA to e.g. compare versions
@@ -124,8 +124,9 @@ setup(
         "tqdm >= 4.27",
         # for OpenAI GPT
         "regex != 2019.12.17",
-        # for XLNet
+        # for SentencePiece models
         "sentencepiece != 0.1.92",
+        "protobuf",
         # for XLM
         "sacremoses",
     ],

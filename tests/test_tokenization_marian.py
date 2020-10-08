@@ -38,6 +38,7 @@ FRAMEWORK = "pt" if _torch_available else "tf"
 class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = MarianTokenizer
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

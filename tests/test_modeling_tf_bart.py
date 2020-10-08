@@ -87,15 +87,15 @@ def prepare_bart_inputs_dict(
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     return {
-        "inputs": input_ids,
+        "input_ids": input_ids,
         "decoder_input_ids": input_ids,
         "attention_mask": attention_mask,
     }
 
 
 @require_tf
-class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
+class TestTFBartForConditionalGeneration(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -176,19 +176,7 @@ class TFBartHeadTests(unittest.TestCase):
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-    @slow
-    def test_tokenization(self):
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
-        examples = [" Hello world", " DomDramg"]  # need leading spaces for equality
-        fairseq_results = [
-            tf.Tensor([0, 20920, 232, 2]),
-            tf.Tensor([0, 11349, 495, 4040, 571, 2]),
-        ]
-        for ex, desired_result in zip(examples, fairseq_results):
-            bart_toks = tokenizer.encode(ex, return_tensors="pt")
-            _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
-
-    @unittest.skip("I dont know how to do .half yet")
+    @unittest.skip("I dont know how to do .half in TF yet")
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         model = TFBartForConditionalGeneration(config).eval()

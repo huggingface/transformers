@@ -3,7 +3,7 @@ from pathlib import Path
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch
-from transformers.tokenization_pegasus import PegasusTokenizer
+from transformers.tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -11,6 +11,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = PegasusTokenizer
+    rust_tokenizer_class = PegasusTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()

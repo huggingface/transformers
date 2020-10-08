@@ -116,7 +116,7 @@ class TFPretrainedBartModel(TFPreTrainedModel):
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "inputs": input_ids,
+            "input_ids": input_ids,
         }
         return dummy_inputs
 
@@ -158,8 +158,6 @@ def _check_shapes(shape_1, shape2):
 def make_padding_mask(input_ids, padding_idx=1):
     """True for pad tokens"""
     padding_mask = tf.math.equal(input_ids, padding_idx)  # bool tensor
-    if not tf.math.reduce_any(padding_mask):
-        padding_mask = None
     return padding_mask
 
 
@@ -176,7 +174,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         assert not config.normalize_before, "MBART Not Supported"
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = FIXMENORM(self.embed_dim, name="self_attn_layer_norm")
         self.dropout_wt = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = gelu
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
@@ -215,9 +213,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         return x, attn_weights
 
 
-@keras_serializable
+# @keras_serializable
 class TFBartEncoder(tf.keras.layers.Layer):
-    config_class = BartConfig
+    # config_class = BartConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
     is a :class:`TFEncoderLayer`.
@@ -248,7 +246,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = LayerNorm(embed_dim, name="layernorm_embedding")
+        self.layernorm_embedding = FIXMENORM(embed_dim, name="layernorm_embedding")
 
     def call(
         self,
@@ -334,7 +332,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.activation_fn = gelu
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = FIXMENORM(self.embed_dim, name="self_attn_layer_norm")
         self.encoder_attn = Attention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -342,10 +340,10 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             encoder_decoder_attention=True,
             name="encoder_attn",
         )
-        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, name="encoder_attn_layer_norm")
+        self.encoder_attn_layer_norm = FIXMENORM(self.embed_dim, name="encoder_attn_layer_norm")
         self.fc1 = Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = LayerNorm(self.embed_dim, name="final_layer_norm")
+        self.final_layer_norm = FIXMENORM(self.embed_dim, name="final_layer_norm")
 
     def call(
         self,
@@ -417,7 +415,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-@keras_serializable
+# @keras_serializable  # TODO(SS): Is this needed/helpful?
 class TFBartDecoder(tf.keras.layers.Layer):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
@@ -427,7 +425,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    config_class = BartConfig
+    # config_class = BartConfig # TODO(SS): Delete if not needed
 
     def __init__(self, config: BartConfig, embed_tokens, **kwargs):
         super().__init__(**kwargs)
@@ -444,13 +442,16 @@ class TFBartDecoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = LayerNorm(config.d_model, name="layernorm_embedding")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.layer_norm = None  # fix later for mbart
+        self.layernorm_embedding = (
+            FIXMENORM(config.d_model, name="layernorm_embedding") if config.normalize_embedding else tf.identity
+        )
+        self.layer_norm = FIXMENORM(config.d_model, name="layer_norm") if config.add_final_layer_norm else None
 
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.use_cache = config.use_cache
+        self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
 
     def call(
         self,
@@ -487,12 +488,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
             # assert input_ids.ne(self.padding_idx).any()
 
         x = self.embed_tokens(input_ids) * self.embed_scale
-        x += positions
-        x = self.layernorm_embedding(x)
+        if self.do_blenderbot_90_layernorm:
+            x = self.layernorm_embedding(x) + positions
+        else:
+            x = self.layernorm_embedding(x + positions)
         x = self.dropout(x)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
+        assert len(encoder_hidden_states.shape) == 3
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
 
         # decoder layers
@@ -536,11 +540,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = list(all_self_attns) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
-        encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
-        if use_cache:
-            next_cache = [(encoder_hidden_states, encoder_padding_mask), next_decoder_cache]
-        else:
-            next_cache = None
+
+        next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
         if not return_dict:
             return x, next_cache, all_hidden_states, all_self_attns
         else:
@@ -760,6 +761,9 @@ def gelu(x):
     return x * cdf
 
 
+import warnings
+
+
 class LearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -788,8 +792,8 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
         return super().call(positions + self.offset)  # super object is not callable for some reason
 
 
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, **kwargs):
-    return tf.keras.layers.LayerNormalization(epsilon=eps, **kwargs)
+def FIXMENORM(normalized_shape, eps=1e-5, elementwise_affine=True, **kwargs):
+    return tf.keras.layers.LayerNormalization(epsilon=1e-5, **kwargs)
 
 
 @add_start_docstrings(
@@ -814,7 +818,7 @@ class TFBartModel(TFPretrainedBartModel):
 
     def _prepare_bart_decoder_inputs(
         self,
-        input_ids: T,
+        inputs,
         decoder_input_ids=None,
         decoder_attn_mask=None,
         mask_dtype=None,
@@ -824,7 +828,7 @@ class TFBartModel(TFPretrainedBartModel):
         """
         pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
-            decoder_input_ids = self._shift_right(input_ids)
+            decoder_input_ids = self._shift_right(inputs)
         bsz, tgt_len = decoder_input_ids.shape[:2]
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
@@ -837,11 +841,11 @@ class TFBartModel(TFPretrainedBartModel):
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         decoder_input_ids=None,  # BAD DEFAULT LEFT FOR CONSISTENT SIGNATURE
         decoder_attention_mask=None,
-        encoder_outputs: Optional[Tuple] = None,
+        encoder_outputs: Optional[TFBaseModelOutput] = None,
         decoder_cached_states=None,
         use_cache=None,
         output_attentions=None,
@@ -862,7 +866,7 @@ class TFBartModel(TFPretrainedBartModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if not use_cache:
             decoder_input_ids, decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
-                input_ids,
+                inputs,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attn_mask=decoder_attention_mask,
                 mask_dtype=self.shared.dtype,
@@ -870,26 +874,32 @@ class TFBartModel(TFPretrainedBartModel):
         else:
             decoder_padding_mask, causal_mask = None, None
         assert decoder_input_ids is not None
+        assert isinstance(encoder_outputs, TFBaseModelOutput) or encoder_outputs is None, f'{type(encoder_outputs)}'
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
+                input_ids=inputs,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True, # may need fix later
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOuput when return_dict=False
-        elif return_dict and not isinstance(encoder_outputs, TFBaseModelOutput):
-            encoder_outputs = TFBaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
+        assert isinstance(encoder_outputs, TFBaseModelOutput)
+        # elif return_dict and isinstance(encoder_outputs, TFBaseModelOutput):
+        #
+        #     encoder_outputs = TFBaseModelOutput(
+        #         last_hidden_state=encoder_outputs[0],
+        #         hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+        #         attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+        #     )
+
+
+
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        assert len(encoder_outputs.last_hidden_state.shape) == 3
         decoder_outputs = self.decoder(
             decoder_input_ids,
-            encoder_outputs[0],
+            encoder_outputs.last_hidden_state,
             attention_mask,
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
@@ -924,6 +934,9 @@ class TFBartModel(TFPretrainedBartModel):
         return self.shared
 
 
+from .tokenization_utils_base import BatchEncoding
+
+
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.",
     BART_START_DOCSTRING,
@@ -934,94 +947,200 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     def __init__(self, config: BartConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.model = TFBartModel(config, name="model")
+        self.use_cache = config.use_cache
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
-    def call(self, inputs: dict, **kwargs):
-        r"""
-            masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-                Labels for computing the masked language modeling loss.
-                Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-                with labels
-                in ``[0, ..., config.vocab_size]``.
-
-        Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-            masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-                Masked language modeling loss.
-            prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-                Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-                heads.
-
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        # the next 3 should be deleted
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        """
         Examples::
 
-                # Mask filling only works for bart-large
-                from transformers import BartTokenizer, TFBartForConditionalGeneration
-                tokenizer = BartTokenizer.from_pretrained('bart-large')
-                TXT = "My friends are <mask> but they eat too many carbs."
-                model = TFBartForConditionalGeneration.from_pretrained('bart-large')
-                input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
-                logits = model(input_ids)[0]
-                masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-                probs = logits[0, masked_index].softmax(dim=0)
-                values, predictions = probs.topk(5)
-                tokenizer.decode(predictions).split()
-                # ['good', 'great', 'all', 'really', 'very']
+            # Mask filling only works for bart-large
+            from transformers import BartTokenizer, TFBartForConditionalGeneration
+            tokenizer = BartTokenizer.from_pretrained('bart-large')
+            TXT = "My friends are <mask> but they eat too many carbs."
+            model = TFBartForConditionalGeneration.from_pretrained('bart-large')
+            input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
+            logits = model(input_ids)[0]
+            masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+            probs = logits[0, masked_index].softmax(dim=0)
+            values, predictions = probs.topk(5)
+            tokenizer.decode(predictions).split()
+            # ['good', 'great', 'all', 'really', 'very']
         """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            decoder_input_ids = inputs[2] if len(inputs) > 2 else decoder_input_ids
+            decoder_attention_mask = inputs[3] if len(inputs) > 3 else decoder_attention_mask
+            encoder_outputs = inputs[4] if len(inputs) > 4 else encoder_outputs
+            past_key_values = inputs[5] if len(inputs) > 5 else past_key_values
+            labels = inputs[6] if len(inputs) > 6 else labels
+            use_cache = inputs[7] if len(inputs) > 7 else use_cache
+            output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
+            output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
+            return_dict = inputs[10] if len(inputs) > 10 else return_dict
+            assert len(inputs) <= 13, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            if "inputs" in inputs:
+                warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
+                input_ids = inputs.get("inputs")
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
+            decoder_attention_mask = inputs.get("decoder_attention_mask", decoder_attention_mask)
+            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
+            past_key_values = inputs.get("past_key_values", past_key_values)
+            labels = inputs.get("labels", labels)
+            use_cache = inputs.get("use_cache", use_cache)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 13, "Too many inputs."
 
-        if isinstance(inputs, dict):
-            kwargs.update(inputs)
+            if "past_key_value_states" in inputs:
+                warnings.warn(
+                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                    FutureWarning,
+                )
+                past_key_values = inputs.pop("past_key_value_states")
         else:
-            kwargs["inputs"] = inputs
+            input_ids = inputs
 
-        inputs = kwargs.pop("inputs", kwargs.pop("input_ids", None))
-        assert "input_ids" not in kwargs
-        outputs = self.model(inputs, **kwargs)
+            if "past_key_value_states" in kwargs:
+                warnings.warn(
+                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                    FutureWarning,
+                )
+                past_key_values = kwargs.pop("past_key_value_states")
+        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        outputs: TFSeq2SeqModelOutput = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,  # TODO(SS): this may need to change to support compilation
+        )
+        logits = self.model.shared(outputs.last_hidden_state, mode="linear")
+        loss = None if labels is None else self.compute_loss(labels, logits)
 
-        lm_logits = self.model.shared(outputs[0], mode="linear")
+        past = outputs.past_key_values if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
+        if not return_dict:
+            if past is not None:
+                decoder_outputs = (past,)
+            else:
+                decoder_outputs = tuple(
+                    [x for x in (outputs.decoder_hidden_states, outputs.decoder_attentions) if x is not None]
+                )
+            encoder_outputs = tuple(
+                [
+                    x
+                    for x in (
+                        outputs.encoder_last_hidden_state,
+                        outputs.encoder_hidden_states,
+                        outputs.encoder_attentions,
+                    )
+                    if x is not None
+                ]
+            )
+            output = (logits,) + decoder_outputs + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
 
-        if not isinstance(outputs, TFSeq2SeqModelOutput):  # return_dict=False
-            return (lm_logits,) + outputs[1:]
+        # Putting this before breaks tf compilation.
+        # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        # output_hidden_states = (
+        #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        # )
+        #
+        # # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
+        # # TF refuses to compile anymore.
+        # if not cast_bool_to_primitive(use_cache, self.config.use_cache):
+        #     decoder_outputs = decoder_outputs[:1] + (None,) + decoder_outputs[1:]
+        # if not cast_bool_to_primitive(output_hidden_states, self.config.output_hidden_states):
+        #     encoder_outputs = encoder_outputs[:1] + (None,) + encoder_outputs[1:]
+        #     decoder_outputs = decoder_outputs[:2] + (None,) + decoder_outputs[2:]
+        # if not cast_bool_to_primitive(output_attentions, self.config.output_attentions):
+        #     encoder_outputs = encoder_outputs + (None,)
+        #     decoder_outputs = decoder_outputs + (None,)
 
         return TFSeq2SeqLMOutput(
-            logits=lm_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
+            loss=loss,
+            logits=logits,
+            past_key_values=past,  # index 1 of d outputs
+            decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
+            decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
+            encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
+            encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
+            encoder_attentions=outputs.encoder_attentions,  # 2 of e out
         )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
-            encoder_outputs = past
+            assert isinstance(past[0], tf.Tensor)
+            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
             decoder_cached_states = None
         else:
             encoder_outputs, decoder_cached_states = past
+            if isinstance(encoder_outputs, tuple):
+                assert isinstance(encoder_outputs[0], tf.Tensor)
+                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
+            elif isinstance(encoder_outputs, tf.Tensor):
+                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
             assert (
                 decoder_cached_states
             ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
-
+        assert isinstance(encoder_outputs, TFBaseModelOutput)
         return {
             "inputs": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
             "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "decoder_attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    @staticmethod
+    def _reorder_cache(past, beam_idx):
+        assert len(past) == 2
+        (encoder_out, decoder_cached_states) = past
+        #enc_out, enc_mask = encoder_out
+
+        reordered_past = []
+        for layer_past in decoder_cached_states:
+            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+
+            layer_past_new = {
+                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
+            }
+            reordered_past.append(layer_past_new)
+        #new_enc_out = enc_out if enc_out is None else tf.gather(enc_out[0], beam_idx, axis=0)
+        #new_enc_mask = enc_mask if enc_mask is None else tf.gather(enc_out[1], beam_idx, axis=0)
+
+        past = (encoder_out, reordered_past)
+        return past
 
     def prepare_scores_for_generation(self, scores, cur_len, max_length):
         raise NotImplementedError("FIXME: This never gets called, but should.")
@@ -1031,25 +1150,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         if cur_len == max_length - 1 and self.config.eos_token_ids[0] is not None:
             self._force_token_ids_generation(scores, self.config.eos_token_ids[0])
         return scores
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        # return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)1
-        # raise ValueError('hit _reorder_cache')
-        ((enc_out, enc_mask, *trash), decoder_cached_states) = past
-
-        reordered_past = []
-        for layer_past in decoder_cached_states:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {
-                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-            }
-            reordered_past.append(layer_past_new)
-        new_enc_out = enc_out if enc_out is None else tf.gather(enc_out, beam_idx, axis=0)
-        new_enc_mask = enc_mask if enc_mask is None else tf.gather(enc_mask, beam_idx, axis=0)
-
-        past = ((new_enc_out, new_enc_mask), reordered_past)
-        return past
 
     def get_output_embeddings(self):
         return self.model.shared

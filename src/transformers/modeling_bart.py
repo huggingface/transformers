@@ -595,7 +595,7 @@ class BartDecoder(nn.Module):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = []
+        next_decoder_cache: List[Dict] = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -640,7 +640,7 @@ class BartDecoder(nn.Module):
         )
 
 
-def _reorder_buffer(attn_cache, new_order):
+def _reorder_buffer(attn_cache: Dict, new_order) -> Dict:
     for k, input_buffer_k in attn_cache.items():
         if input_buffer_k is not None:
             attn_cache[k] = input_buffer_k.index_select(0, new_order)

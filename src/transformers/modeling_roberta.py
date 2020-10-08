@@ -758,13 +758,13 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
 
         Example::
 
-            >>> from transformers import RobertaTokenizer, RobertaLMHeadModel, RobertaConfig
+            >>> from transformers import RobertaTokenizer, RobertaForCausalLM, RobertaConfig
             >>> import torch
 
             >>> tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-            >>> config = RobertaConfig.from_pretrained("roberta-base")
+            >>> config = RobertaConfig.from_pretrained("roberta-base", return_dict=True)
             >>> config.is_decoder = True
-            >>> model = RobertaLMHeadModel.from_pretrained('roberta-base', config=config, return_dict=True)
+            >>> model = RobertaForCausalLM.from_pretrained('roberta-base', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
