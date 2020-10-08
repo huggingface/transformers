@@ -21,23 +21,12 @@ from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncod
 
 SPIECE_UNDERLINE = "▁"
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model shortcut names.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/spiece.model"}
 }
 
-####################################################
-# Mapping from model shortcut names to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/pegasus-xsum": 512,
 }
