@@ -76,7 +76,6 @@ try:
         import jax
         from jax.config import config
 
-
         logger.info("JAX version {}, Flax: available".format(jax.__version__))
         logger.info("Flax available: {}".format(flax))
         _flax_available = True
