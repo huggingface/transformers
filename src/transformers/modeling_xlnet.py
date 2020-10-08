@@ -874,7 +874,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             decoding. The token ids which have their past given to this model should not be passed as
             :obj:`input_ids` as they have already been computed.
 
-            :obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
+            :obj::obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
         perm_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`):
             Mask to indicate the attention pattern for each input token with values selected in ``[0, 1]``:
 
@@ -997,15 +997,15 @@ class XLNetModel(XLNetPreTrainedModel):
             curr_out = curr_out[: self.reuse_len]
 
         if self.mem_len is None or self.mem_len == 0:
-            # If `use_cache` is active but no `mem_len` is defined, the model behaves like GPT-2 at inference time
+            # If :obj:`use_cache` is active but no `mem_len` is defined, the model behaves like GPT-2 at inference time
             # and returns all of the past and current hidden states.
             cutoff = 0
         else:
-            # If `use_cache` is active and `mem_len` is defined, the model returns the last `mem_len` hidden
+            # If :obj:`use_cache` is active and `mem_len` is defined, the model returns the last `mem_len` hidden
             # states. This is the preferred setting for training and long-form generation.
             cutoff = -self.mem_len
         if prev_mem is None:
-            # if `use_cache` is active and `mem_len` is defined, the model
+            # if :obj:`use_cache` is active and `mem_len` is defined, the model
             new_mem = curr_out[cutoff:]
         else:
             new_mem = torch.cat([prev_mem, curr_out], dim=0)[cutoff:]

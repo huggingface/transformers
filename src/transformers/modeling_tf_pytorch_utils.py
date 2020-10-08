@@ -160,6 +160,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
+            elif tf_model.authorized_missing_keys is not None:
+                # authorized missing keys don't have to be loaded
+                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                    continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
 
@@ -172,6 +176,13 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             array = numpy.squeeze(array)
         elif len(symbolic_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
+
+        if list(symbolic_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, symbolic_weight.shape)
+            except AssertionError as e:
+                e.args += (symbolic_weight.shape, array.shape)
+                raise e
 
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
@@ -193,6 +204,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
 
     unexpected_keys = list(all_pytorch_weights)
+
+    if tf_model.authorized_missing_keys is not None:
+        for pat in tf_model.authorized_missing_keys:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
         logger.warning(
@@ -243,6 +258,8 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     import transformers
 
+    from .modeling_tf_utils import load_tf_weights
+
     logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
 
     # Instantiate and load the associated TF 2.0 model
@@ -256,7 +273,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
 
-    tf_model.load_weights(tf_checkpoint_path, by_name=True)
+    load_tf_weights(tf_model, tf_checkpoint_path)
 
     return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
 
@@ -323,6 +340,13 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             array = numpy.squeeze(array)
         elif len(pt_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
+
+        if list(pt_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, pt_weight.shape)
+            except AssertionError as e:
+                e.args += (pt_weight.shape, array.shape)
+                raise e
 
         try:
             assert list(pt_weight.shape) == list(array.shape)

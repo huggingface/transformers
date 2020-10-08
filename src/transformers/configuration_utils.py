@@ -114,8 +114,8 @@ class PretrainedConfig(object):
           model pretrained weights.
         - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
           used when converting from an original (TensorFlow or PyTorch) checkpoint.
-        - **id2label** (:obj:`List[str]`, `optional`) -- A map from index (for instance prediction index, or target
-          index) to label.
+        - **id2label** (:obj:`Dict[int, str]`, `optional`) -- A map from index (for instance prediction index, or
+          target index) to label.
         - **label2id** (:obj:`Dict[str, int]`, `optional`) -- A map from label to index for the model.
         - **num_labels** (:obj:`int`, `optional`) -- Number of labels to use in the last layer added to the model,
           typically for a classification task.
@@ -130,6 +130,7 @@ class PretrainedConfig(object):
         - **eos_token_id** (:obj:`int`, `optional`)) -- The id of the `end-of-stream` token.
         - **decoder_start_token_id** (:obj:`int`, `optional`)) -- If an encoder-decoder model starts decoding with
           a different token than `bos`, the id of that token.
+        - **sep_token_id** (:obj:`int`, `optional`)) -- The id of the `separation` token.
 
     PyTorch specific parameters
         - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
@@ -195,6 +196,8 @@ class PretrainedConfig(object):
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.sep_token_id = kwargs.pop("sep_token_id", None)
+
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # task specific arguments

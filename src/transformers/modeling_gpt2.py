@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch OpenAI GPT-2 model."""
 
-
 import os
 import warnings
 from dataclasses import dataclass
@@ -23,7 +22,7 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import ACT2FN
 from .configuration_gpt2 import GPT2Config
@@ -34,7 +33,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from .modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from .modeling_utils import (
     Conv1D,
     PreTrainedModel,
@@ -366,7 +365,7 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            ``past_key_values`` input) to speed up sequential decoding.
+            :obj:`past_key_values` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -408,11 +407,11 @@ GPT2_START_DOCSTRING = r"""
 GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
-            :obj:`input_ids_length` = ``sequence_length`` if ``past_key_values`` is ``None`` else
+            :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
             ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
 
-            If ``past_key_values`` is used, only ``input_ids`` that do not have their past calculated should be passed
+            If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be passed
             as ``input_ids``.
 
             Indices can be obtained using :class:`~transformers.GPT2Tokenizer`.
@@ -422,7 +421,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         past_key_values (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model
-            (see ``past_key_values`` output below). Can be used to speed up sequential decoding.
+            (see :obj:`past_key_values` output below). Can be used to speed up sequential decoding.
             The ``input_ids`` which have their past given to this model should not be passed as ``input_ids`` as they
             have already been computed.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -458,11 +457,11 @@ GPT2_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
 
-            If ``past_key_values`` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
-            ``past_key_values``).
+            If :obj:`past_key_values` is used, optionally only the last :obj:`inputs_embeds` have to be input (see
+            :obj:`past_key_values`).
         use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, ``past_key_values`` key value states are returned and can be used to speed up
-            decoding (see ``past_key_values``).
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`).
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -624,16 +623,35 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(
-                hidden_states,
-                layer_past=layer_past,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
+            if getattr(self.config, "gradient_checkpointing", False):
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # checkpointing only works with tuple returns, not with lists
+                        return tuple(output for output in module(*inputs, use_cache, output_attentions))
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    hidden_states,
+                    layer_past,
+                    attention_mask,
+                    head_mask[i],
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                )
+            else:
+                outputs = block(
+                    hidden_states,
+                    layer_past=layer_past,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
 
             hidden_states, present = outputs[:2]
             if use_cache is True:
@@ -924,6 +942,124 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             mc_loss=mc_loss,
             logits=lm_logits,
             mc_logits=mc_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """The GPT2 Model transformer with a sequence classification head on top
+    (linear layer).
+
+    :class:`~transformers.GPT2ForSequenceClassification` uses the last token in order to do the classification, as
+    other causal models (e.g. GPT-1) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token.
+    If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token
+    in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch.
+    Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it
+    does the same (take the last value in each row of the batch).
+    """,
+    GPT2_START_DOCSTRING,
+)
+class GPT2ForSequenceClassification(GPT2PreTrainedModel):
+    authorized_missing_keys = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.transformer = GPT2Model(config)
+        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="microsoft/dialogrpt",
+        output_type=SequenceClassifierOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape[:2]
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
+        assert (
+            self.config.pad_token_id is not None or batch_size == 1
+        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                )
+
+        pooled_logits = logits[range(batch_size), sequence_lengths]
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(pooled_logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,

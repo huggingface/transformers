@@ -23,8 +23,10 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
+    DebertaConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -45,6 +47,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    SqueezeBertConfig,
     T5Config,
     TransfoXLConfig,
     XLMConfig,
@@ -59,8 +62,10 @@ from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_bertweet import BertweetTokenizer
+from .tokenization_blenderbot import BlenderbotSmallTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
+from .tokenization_deberta import DebertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
@@ -81,6 +86,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
@@ -104,6 +110,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
+        (LongformerConfig, (LongformerTokenizer, None)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (BertweetTokenizer, None)),
@@ -115,6 +123,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
+        (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -125,6 +134,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
+        (DebertaConfig, (DebertaTokenizer, None)),
         (LayoutLMConfig, (LayoutLMTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
     ]

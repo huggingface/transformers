@@ -20,5 +20,4 @@ python xla_spawn.py --num_cores $TPU_NUM_CORES \
     --do_train --do_eval --evaluate_during_training \
     --prediction_loss_only \
     --task translation --label_smoothing 0.1 \
-    --run_name marian_en_ro_6_3 \
     "$@"

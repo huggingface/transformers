@@ -22,9 +22,34 @@ vocab_files_names = {
 
 
 class MarianTokenizer(PreTrainedTokenizer):
-    """Sentencepiece tokenizer for marian. Source and target languages have different SPM models.
-    The logic is use the relevant source_spm or target_spm to encode txt as pieces, then look up each piece in a
-    vocab dictionary.
+    r"""
+    Construct a Marian tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        source_spm (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
+            contains the vocabulary for the source language.
+        target_spm (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
+            contains the vocabulary for the target language.
+        source_lang (:obj:`str`, `optional`):
+            A string representing the source language.
+        target_lang (:obj:`str`, `optional`):
+            A string representing the target language.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        model_max_length (:obj:`int`, `optional`, defaults to 512):
+            The maximum sentence length the model accepts.
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<eop>", "<eod>"]`):
+            Additional special tokens used by the tokenizer.
 
     Examples::
 
@@ -165,7 +190,16 @@ class MarianTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
-        """save vocab file to json and copy spm files from their original path."""
+        """
+        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
