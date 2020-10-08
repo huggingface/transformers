@@ -571,9 +571,6 @@ if is_torch_available():
         DPRContextEncoder,
         DPRQuestionEncoder,
         DPRReader,
-=======
-        XLMRobertaModel,
->>>>>>> aba4e22944f0c985bebdcde51d47a565dd4f551d
     )
     from .modeling_xlnet import (
         XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
