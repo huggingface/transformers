@@ -40,6 +40,11 @@ if is_torch_available():
         BartModel,
         BartTokenizer,
         BartTokenizerFast,
+        BertConfig,
+        BlenderbotConfig,
+        MarianConfig,
+        MBartConfig,
+        PegasusConfig,
         pipeline,
     )
     from transformers.modeling_bart import (
@@ -76,7 +81,7 @@ class ModelTester:
         self.bos_token_id = 0
         torch.manual_seed(0)
 
-    def prepare_config_and_inputs_for_common(self):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
         )
@@ -99,6 +104,13 @@ class ModelTester:
             pad_token_id=self.pad_token_id,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
+        inputs_dict["decoder_attention_mask"] = inputs_dict["attention_mask"]
+        inputs_dict["use_cache"] = False
         return config, inputs_dict
 
 
@@ -139,7 +151,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_initialization_more(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = BartModel(config)
         model.to(torch_device)
         model.eval()
@@ -156,7 +168,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.embed_positions)
 
     def test_advanced_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
@@ -168,7 +180,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         decoder_features_with_passed_mask = model(
             decoder_attention_mask=invert_mask(decoder_attn_mask), decoder_input_ids=decoder_input_ids, **inputs_dict
         )[0]
-        _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
+        assert_tensors_close(decoder_features_with_passed_mask, decoder_features_with_created_mask)
         useless_mask = torch.zeros_like(decoder_attn_mask)
         decoder_features = model(decoder_attention_mask=useless_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
@@ -182,10 +194,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         decoder_features_with_long_encoder_mask = model(
             inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"].long()
         )[0]
-        _assert_tensors_equal(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
+        assert_tensors_close(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
 
     def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 
@@ -356,8 +368,8 @@ class BartHeadTests(unittest.TestCase):
             torch.Tensor([0, 11349, 495, 4040, 571, 2]),
         ]
         for ex, desired_result in zip(examples, fairseq_results):
-            bart_toks = tokenizer.encode(ex, return_tensors="pt")
-            _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
+            bart_toks = tokenizer.encode(ex, return_tensors="pt").squeeze()
+            assert_tensors_close(desired_result.long(), bart_toks, prefix=ex)
 
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
@@ -404,8 +416,8 @@ class BartHeadTests(unittest.TestCase):
         self.assertTrue(torch.eq(input_new, output_new).all())
 
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+def assert_tensors_close(a, b, atol=1e-12, prefix=""):
+    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:
@@ -413,7 +425,11 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
+        pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
+        if a.numel() > 100:
+            msg = f"tensor values are {pct_different:.1%} percent different."
+        else:
+            msg = f"{a} != {b}"
         if prefix:
             msg = prefix + ": " + msg
         raise AssertionError(msg)
@@ -488,9 +504,9 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
-            logits2 = model(**inputs_dict)[0]
-        _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
-        _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
+            logits2 = model(**inputs_dict)[0].squeeze()
+        assert_tensors_close(batched_logits[1], logits2, atol=TOLERANCE)
+        assert_tensors_close(expected_slice, logits_arr, atol=TOLERANCE)
 
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
@@ -626,3 +642,12 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
                 torch.tensor(self.desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3
             )
         )
+
+    def test_child_config_equivalence(self):
+        """Test that configs associated with children of BartForConditionalGeneration are identical."""
+        child_classes = [BlenderbotConfig, MBartConfig, MarianConfig, PegasusConfig]
+        parent_keys = BartConfig().to_dict().keys()
+        for c in child_classes:
+            assert c().to_dict().keys() == parent_keys  # traceback is very nice on it's own
+        # check that test is not stupid
+        assert BertConfig().to_dict().keys() != parent_keys

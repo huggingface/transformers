@@ -1,109 +1,36 @@
-import json
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
-
-import numpy as np
-import torch
+from typing import Optional
 
 from seq2seq_trainer import Seq2SeqTrainer
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
-    BartTokenizer,
-    EvalPrediction,
     HfArgumentParser,
     MBartTokenizer,
-    T5Tokenizer,
     TrainingArguments,
     set_seed,
 )
-from transformers.modeling_bart import shift_tokens_right
+from transformers.trainer_utils import EvaluationStrategy
 from utils import (
     LegacySeq2SeqDataset,
+    Seq2SeqDataCollator,
     Seq2SeqDataset,
     assert_all_frozen,
-    calculate_bleu,
-    calculate_rouge,
+    build_compute_metrics_fn,
+    freeze_embeds,
     freeze_params,
     lmap,
-    trim_batch,
+    save_json,
     use_task_specific_params,
+    write_txt_file,
 )
 
 
 logger = logging.getLogger(__name__)
-
-
-class Seq2SeqDataCollator:
-    def __init__(self, tokenizer, data_args, tpu_num_cores=None):
-        self.tokenizer = tokenizer
-        self.pad_token_id = tokenizer.pad_token_id
-        self.data_args = data_args
-        self.tpu_num_cores = tpu_num_cores
-        self.add_prefix_space = isinstance(tokenizer, BartTokenizer)
-
-    def __call__(self, batch) -> Dict[str, torch.Tensor]:
-        if hasattr(self.tokenizer, "prepare_seq2seq_batch"):
-            batch = self._encode(batch)
-            input_ids, attention_mask, labels = (
-                batch["input_ids"],
-                batch["attention_mask"],
-                batch["labels"],
-            )
-        else:
-            input_ids = torch.stack([x["input_ids"] for x in batch])
-            attention_mask = torch.stack([x["attention_mask"] for x in batch])
-            labels = torch.stack([x["labels"] for x in batch])
-
-            labels = trim_batch(labels, self.pad_token_id)
-            input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
-
-        if isinstance(self.tokenizer, T5Tokenizer):
-            decoder_input_ids = self._shift_right_t5(labels)
-            labels = labels
-        else:
-            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id)
-            labels = labels
-
-        batch = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "decoder_input_ids": decoder_input_ids,
-            "labels": labels,
-        }
-        return batch
-
-    def _shift_right_t5(self, input_ids):
-        decoder_start_token_id = self.pad_token_id
-
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
-
-        # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = decoder_start_token_id
-
-        return shifted_input_ids
-
-    def _encode(self, batch) -> Dict[str, torch.Tensor]:
-        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
-            [x["src_texts"] for x in batch],
-            src_lang=self.data_args.src_lang,
-            tgt_texts=[x["tgt_texts"] for x in batch],
-            tgt_lang=self.data_args.tgt_lang,
-            max_length=self.data_args.max_source_length,
-            max_target_length=self.data_args.max_target_length,
-            padding="max_length" if self.tpu_num_cores is not None else "longest",  # TPU hack
-            return_tensors="pt",
-            add_prefix_space=self.add_prefix_space,
-        )
-        return batch_encoding.data
 
 
 @dataclass
@@ -124,6 +51,17 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to SortishSamler or not."})
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
+    )
+    adafactor: bool = field(default=False, metadata={"help": "whether to use adafactor"})
+    encoder_layerdrop: Optional[float] = field(
+        default=None, metadata={"help": "Encoder layer dropout probability. Goes into model.config."}
+    )
+    decoder_layerdrop: Optional[float] = field(
+        default=None, metadata={"help": "Decoder layer dropout probability. Goes into model.config."}
+    )
+    dropout: Optional[float] = field(default=None, metadata={"help": "Dropout probability. Goes into model.config."})
+    attention_dropout: Optional[float] = field(
+        default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
     )
 
 
@@ -251,6 +189,13 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
     )
+
+    extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+    for p in extra_model_params:
+        if getattr(training_args, p, None):
+            assert hasattr(config, p), f"({config.__class__.__name__}) doesn't have a `{p}` attribute"
+            setattr(config, p, getattr(training_args, p))
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -266,57 +211,15 @@ def main():
     use_task_specific_params(model, data_args.task)
 
     # set num_beams for evaluation
-    if data_args.eval_beams is not None:
-        model.config.num_beams = data_args.eval_beams
-    assert model.config.num_beams >= 1, f"got eval_beams={model.config.num_beams}. Need an integer >= 1"
-
-    # set max length for generation
-    model.config.max_generate_length = data_args.val_max_target_length
+    if data_args.eval_beams is None:
+        data_args.eval_beams = model.config.num_beams
 
     # set decoder_start_token_id for MBart
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
-        decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
-        model.config.decoder_start_token_id = decoder_start_token_id
-
-    def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
-        def non_pad_len(tokens: np.ndarray) -> int:
-            return np.count_nonzero(tokens != tokenizer.pad_token_id)
-
-        def decode_pred(pred: EvalPrediction) -> Tuple[List[str], List[str]]:
-            pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
-            label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
-            pred_str = lmap(str.strip, pred_str)
-            label_str = lmap(str.strip, label_str)
-            return pred_str, label_str
-
-        def summarization_metrics(pred: EvalPrediction) -> Dict:
-            pred_str, label_str = decode_pred(pred)
-            rouge: Dict = calculate_rouge(pred_str, label_str)
-            summ_len = np.mean(lmap(non_pad_len, pred.predictions))
-            rouge.update({"gen_len": summ_len})
-            return rouge
-
-        def translation_metrics(pred: EvalPrediction) -> Dict:
-            pred_str, label_str = decode_pred(pred)
-            bleu: Dict = calculate_bleu(pred_str, label_str)
-            gen_len = np.mean(lmap(non_pad_len, pred.predictions))
-            bleu.update({"gen_len": gen_len})
-            return bleu
-
-        compute_metrics_fn = summarization_metrics if "summarization" in task_name else translation_metrics
-        return compute_metrics_fn
-
-    def freeze_embeds(model: torch.nn.Module):
-        """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        try:
-            freeze_params(model.model.shared)
-            for d in [model.model.encoder, model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
-        except AttributeError:
-            freeze_params(model.shared)
-            for d in [model.encoder, model.decoder]:
-                freeze_params(d.embed_tokens)
+        assert (
+            data_args.tgt_lang is not None and data_args.src_lang is not None
+        ), "mBart requires --tgt_lang and --src_lang"
+        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
 
     if model_args.freeze_embeds:
         freeze_embeds(model)
@@ -350,7 +253,7 @@ def main():
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
-        if training_args.do_eval
+        if training_args.do_eval or training_args.evaluation_strategy != EvaluationStrategy.NO
         else None
     )
     test_dataset = (
@@ -368,13 +271,18 @@ def main():
     )
 
     # Initialize our Trainer
+    compute_metrics_fn = (
+        build_compute_metrics_fn(data_args.task, tokenizer) if training_args.predict_with_generate else None
+    )
     trainer = Seq2SeqTrainer(
         model=model,
+        config=config,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=Seq2SeqDataCollator(tokenizer, data_args, training_args.tpu_num_cores),
-        compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_with_generate else None,
+        compute_metrics=compute_metrics_fn,
+        data_args=data_args,
     )
 
     # Training
@@ -386,6 +294,7 @@ def main():
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
         if trainer.is_world_process_zero():
+            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
@@ -395,41 +304,36 @@ def main():
 
         result = trainer.evaluate()
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.json")
         if trainer.is_world_process_zero():
             logger.info("***** Eval results *****")
             for key, value in result.items():
                 logger.info("  %s = %s", key, value)
-
-            with open(output_eval_file, "w") as f:
-                json.dump(result, f)
-
+            save_json(result, os.path.join(training_args.output_dir, "eval_results.json"))
             eval_results.update(result)
 
     if training_args.do_predict:
         logging.info("*** Test ***")
 
         test_output = trainer.predict(test_dataset=test_dataset)
-        test_metrics = test_output.metrics
-        test_metrics = {k.replace("eval", "test"): v for k, v in test_metrics.items()}
-
-        output_test_file = os.path.join(training_args.output_dir, "test_results.json")
+        test_metrics = {k.replace("eval", "test"): v for k, v in test_output.metrics.items()}
 
         if trainer.is_world_process_zero():
             logger.info("***** Test results *****")
             for key, value in test_metrics.items():
                 logger.info("  %s = %s", key, value)
 
-            with open(output_test_file, "w") as f:
-                json.dump(test_metrics, f)
+            save_json(test_metrics, os.path.join(training_args.output_dir, "test_results.json"))
+            eval_results.update(test_metrics)
 
             if training_args.predict_with_generate:
-                test_preds = tokenizer.batch_decode(test_output.predictions, skip_special_tokens=True)
+                test_preds = tokenizer.batch_decode(
+                    test_output.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                )
                 test_preds = lmap(str.strip, test_preds)
-                output_test_pred_file = os.path.join(training_args.output_dir, "test_generations.txt")
-                with open(output_test_pred_file, "w") as f:
-                    f.write("\n".join(test_preds))
+                write_txt_file(test_preds, os.path.join(training_args.output_dir, "test_generations.txt"))
 
+    if trainer.is_world_process_zero():
+        save_json(eval_results, "all_results.json")
     return eval_results
 
 

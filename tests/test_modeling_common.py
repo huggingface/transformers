@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import inspect
 import os.path
 import random
 import tempfile
@@ -160,6 +161,28 @@ class ModelTesterMixin:
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "input_ids",
+                    "attention_mask",
+                    "decoder_input_ids",
+                    "decoder_attention_mask",
+                    "encoder_outputs",
+                ]
+                self.assertListEqual(arg_names[:5], expected_arg_names)
+            else:
+                expected_arg_names = ["input_ids"]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         seq_len = getattr(self.model_tester, "seq_length", None)
@@ -275,10 +298,22 @@ class ModelTesterMixin:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
+            inputs = self._prepare_for_class(inputs_dict, model_class)
 
             try:
-                traced_gpt2 = torch.jit.trace(model, inputs)
+                if model.config.is_encoder_decoder:
+                    model.config.use_cache = False  # TODO: this should be deleted after bug #7474 is solved
+                    input_ids = inputs["input_ids"]
+                    attention_mask = inputs["attention_mask"]
+                    decoder_input_ids = inputs["decoder_input_ids"]
+                    decoder_attention_mask = inputs["decoder_attention_mask"]
+
+                    traced_model = torch.jit.trace(
+                        model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
+                    )
+                else:
+                    input_ids = inputs["input_ids"]
+                    traced_model = torch.jit.trace(model, input_ids)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -286,7 +321,7 @@ class ModelTesterMixin:
                 pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
                 try:
-                    torch.jit.save(traced_gpt2, pt_file_name)
+                    torch.jit.save(traced_model, pt_file_name)
                 except Exception:
                     self.fail("Couldn't save module.")
 
@@ -720,6 +755,10 @@ class ModelTesterMixin:
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
@@ -733,7 +772,9 @@ class ModelTesterMixin:
                         return
                     else:
                         self.assertTrue(
-                            torch.allclose(tuple_object, dict_object, atol=1e-5),
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
                             msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
                         )
 

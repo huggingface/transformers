@@ -55,7 +55,7 @@ class CopyCheckTester(unittest.TestCase):
         with open(fname, "w") as f:
             f.write(code)
         if overwrite_result is None:
-            self.assertTrue(check_copies.is_copy_consistent(fname))
+            self.assertTrue(len(check_copies.is_copy_consistent(fname)) == 0)
         else:
             check_copies.is_copy_consistent(f.name, overwrite=True)
             with open(fname, "r") as f:

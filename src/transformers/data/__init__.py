@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-from .metrics import is_sklearn_available
+from .metrics import glue_compute_metrics, xnli_compute_metrics
 from .processors import (
     DataProcessor,
     InputExample,
@@ -21,7 +21,3 @@ from .processors import (
     xnli_processors,
     xnli_tasks_num_labels,
 )
-
-
-if is_sklearn_available():
-    from .metrics import glue_compute_metrics, xnli_compute_metrics
