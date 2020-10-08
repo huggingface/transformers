@@ -56,7 +56,8 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 from .configuration_utils import PretrainedConfig
-from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
+from .tokenization_albert import AlbertTokenizer
+from .tokenization_albert_fast import AlbertTokenizerFast
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_generation import BertGenerationTokenizer
