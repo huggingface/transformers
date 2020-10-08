@@ -18,6 +18,7 @@
 import os
 from shutil import copyfile
 from typing import List
+import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
@@ -77,16 +78,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
         self.vocab_file = vocab_file
 
         self.sp_model = spm.SentencePieceProcessor()
@@ -108,14 +99,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use BertGenerationTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 

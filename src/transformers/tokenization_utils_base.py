@@ -1667,7 +1667,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return tokenizer
 
-    def save_pretrained(self, save_directory: str) -> Tuple[str]:
+    def save_pretrained(self, save_directory: str, legacy_format: bool = True) -> Tuple[str]:
         """
         Save the full tokenizer state.
 
@@ -1687,6 +1687,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
+            legacy_format (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether to save the tokenizer in legacy format (default), i.e. with tokenizer specific vocabulary and
+                a separate added_tokens files or in the unified JSON file format for the `tokenizers` library.
+                It's only possible to save a Fast tokenizer in the unified JSON format and this format is incompatible
+                with "slow" tokenizers (not powered by the `tokenizers` library).
 
         Returns:
             A tuple of :obj:`str`: The files saved.
@@ -1728,9 +1733,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
-        return self._save_pretrained(save_directory, file_names)
+        return self._save_pretrained(save_directory=save_directory, file_names=file_names, legacy_format=legacy_format)
 
-    def _save_pretrained(self, save_directory: str, file_names: Tuple[str]) -> Tuple[str]:
+    def _save_pretrained(self, save_directory: str, file_names: Tuple[str], legacy_format: bool = True) -> Tuple[str]:
+        """ Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
+
+            Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens}
+            using the specific :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast._save_pretrained`
+        """
+        if not legacy_format:
+            raise ValueError("Only fast tokenizers (instances of PretrainedTokenizerFast) can be saved in non legacy format.")
+
         added_tokens_file = os.path.join(save_directory, ADDED_TOKENS_FILE)
         added_vocab = self.get_added_vocab()
         if added_vocab:

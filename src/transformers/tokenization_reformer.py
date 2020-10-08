@@ -17,6 +17,7 @@
 
 import os
 from shutil import copyfile
+import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -101,16 +102,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use ReformerTokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
@@ -131,14 +122,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use ReformerTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 

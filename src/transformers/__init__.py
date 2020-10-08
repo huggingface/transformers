@@ -110,6 +110,8 @@ from .file_utils import (
     is_torch_tpu_available,
     is_sentencepiece_available,
     is_tokenizers_available,
+    is_tokenizers_available,
+    is_sentencepiece_available
 )
 from .hf_argparser import HfArgumentParser
 
@@ -154,7 +156,6 @@ from .pipelines import (
 from .retrieval_rag import RagRetriever
 
 # Tokenizers
-from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
@@ -207,6 +208,17 @@ from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
+
+if is_sentencepiece_available():
+    from .tokenization_albert import AlbertTokenizer
+else:
+    from .utils.dummy_sentencepiece_objects import *
+
+if is_tokenizers_available():
+    from .tokenization_albert_fast import AlbertTokenizerFast
+else:
+    from .utils.dummy_tokenizers_objects import *
+
 
 # Trainer
 from .trainer_callback import (

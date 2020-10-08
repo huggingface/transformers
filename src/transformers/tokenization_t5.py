@@ -20,6 +20,7 @@ import re
 import warnings
 from shutil import copyfile
 from typing import List, Optional
+import sentencepiece as spm
 
 from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
@@ -124,16 +125,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
@@ -223,14 +214,6 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
