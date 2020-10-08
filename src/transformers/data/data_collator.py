@@ -446,7 +446,7 @@ class DataCollatorForNextSentencePrediction:
             "input_ids": input_ids,
             "attention_mask": self._tensorize_batch(attention_masks),
             "token_type_ids": self._tensorize_batch(segment_ids),
-            "masked_lm_labels": mlm_labels if self.mlm else None,
+            "labels": mlm_labels if self.mlm else None,
             "next_sentence_label": torch.tensor(nsp_labels),
         }
         if self.mlm:

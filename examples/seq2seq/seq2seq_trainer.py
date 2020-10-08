@@ -9,7 +9,7 @@ from transformers import Trainer
 from transformers.configuration_fsmt import FSMTConfig
 from transformers.file_utils import is_torch_tpu_available
 from transformers.optimization import Adafactor, AdamW, get_linear_schedule_with_warmup
-from transformers.trainer import get_tpu_sampler
+from transformers.trainer_pt_utils import get_tpu_sampler
 
 
 try:
