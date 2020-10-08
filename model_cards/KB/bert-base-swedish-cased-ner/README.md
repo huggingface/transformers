@@ -1,5 +1,5 @@
 ---
-language: swedish
+language: sv
 ---
 
 # Swedish BERT Models

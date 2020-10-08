@@ -1,12 +1,11 @@
 ---
-language: "multilingual"
+language:
+- hi
+- sa
+- gu
 tags:
-- Hindi
-- Sanskrit
-- Gujarati
 - Indic
-- roberta
-license: "MIT"
+license: mit
 datasets:
 - Wikipedia (Hindi, Sanskrit, Gujarati)
 metrics:

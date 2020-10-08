@@ -1,3 +1,3 @@
 ---
-language: chinese
+language: zh
 ---

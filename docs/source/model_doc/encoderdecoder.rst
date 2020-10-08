@@ -1,23 +1,30 @@
 Encoder Decoder Models
-------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
-This class can wrap an encoder model, such as ``BertModel`` and a decoder modeling with a language modeling head, such as ``BertForMaskedLM`` into a encoder-decoder model.
+The :class:`~transformers.EncoderDecoderModel` can be used to initialize a sequence-to-sequence model with any
+pretrained autoencoding model as the encoder and any pretrained autoregressive model as the decoder.
 
-The ``EncoderDecoderModel`` class allows to instantiate a encoder decoder model using the ``from_encoder_decoder_pretrain`` class method taking a pretrained encoder and pretrained decoder model as an input. 
-The ``EncoderDecoderModel`` is saved using the standard ``save_pretrained()`` method and can also again be loaded using the standard ``from_pretrained()`` method. 
+The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation tasks
+was shown in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by
+Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
 
-An application of this architecture could be *summarization* using two pretrained Bert models as is shown in the paper: `Text Summarization with Pretrained Encoders <https://arxiv.org/abs/1910.13461>`_ by Yang Liu and Mirella Lapata. 
+After such an :class:`~transformers.EncoderDecoderModel` has been trained/fine-tuned, it can be saved/loaded just like
+any other models (see the examples for more information).
+
+An application of this architecture could be to leverage two pretrained :class:`~transformers.BertModel` as the encoder
+and decoder for a summarization model as was shown in: `Text Summarization with Pretrained Encoders
+<https://arxiv.org/abs/1908.08345>`__ by Yang Liu and Mirella Lapata. 
 
 
-``EncoderDecoderConfig``
-~~~~~~~~~~~~~~~~~~~~~~~~~
+EncoderDecoderConfig
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.EncoderDecoderConfig
     :members:
 
 
-``EncoderDecoderModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+EncoderDecoderModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.EncoderDecoderModel
-    :members:
+    :members: forward

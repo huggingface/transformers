@@ -1,10 +1,13 @@
 // These two things need to be updated at each release for the version selector.
 // Last stable version
-const stableVersion = "v3.0.2"
+const stableVersion = "v3.3.0"
 // Dictionary doc folder to label
 const versionMapping = {
     "master": "master",
-    "": "v3.0.0/v3.0.1/v3.0.2 (stable)",
+    "": "v3.3.0/v3.3.1",
+    "v3.2.0": "v3.2.0",
+    "v3.1.0": "v3.1.0 (stable)",
+    "v3.0.2": "v3.0.0/v3.0.1/v3.0.2",
     "v2.11.0": "v2.11.0",
     "v2.10.0": "v2.10.0",
     "v2.9.1": "v2.9.0/v2.9.1",
@@ -21,6 +24,18 @@ const versionMapping = {
     "v1.1.0": "v1.1.0",
     "v1.0.0": "v1.0.0"
 }
+// The page that have a notebook and therefore should have the open in colab badge.
+const hasNotebook = [
+    "benchmarks",
+    "custom_datasets",
+    "multilingual",
+    "perplexity",
+    "preprocessing",
+    "quicktour",
+    "task_summary",
+    "tokenizer_summary",
+    "training"
+];
 
 function addIcon() {
     const huggingFaceLogo = "https://huggingface.co/landing/assets/transformers-docs/huggingface_logo.svg";
@@ -80,6 +95,26 @@ function addGithubButton() {
         </div>
     `;
     document.querySelector(".wy-side-nav-search .icon-home").insertAdjacentHTML('afterend', div);
+}
+
+function addColabLink() {
+    const parts = location.toString().split('/');
+    const pageName = parts[parts.length - 1].split(".")[0];
+
+    if (hasNotebook.includes(pageName)) {
+        const baseURL = "https://colab.research.google.com/github/huggingface/notebooks/blob/master/transformers_doc/"
+        const linksColab = `
+        <div class="colab-dropdown">
+            <img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg">
+            <div class="colab-dropdown-content">
+                <button onclick=" window.open('${baseURL}${pageName}.ipynb')">Mixed</button>
+                <button onclick=" window.open('${baseURL}pytorch/${pageName}.ipynb')">PyTorch</button>
+                <button onclick=" window.open('${baseURL}tensorflow/${pageName}.ipynb')">TensorFlow</button>
+            </div>
+        </div>`
+        const leftMenu = document.querySelector(".wy-breadcrumbs-aside")
+        leftMenu.innerHTML = linksColab + '\n' + leftMenu.innerHTML
+    }
 }
 
 function addVersionControl() {
@@ -201,9 +236,11 @@ function platformToggle() {
 
     const createFrameworkButtons = sample => {
             const pytorchButton = document.createElement("button");
+            pytorchButton.classList.add('pytorch-button')
             pytorchButton.innerText = "PyTorch";
 
             const tensorflowButton = document.createElement("button");
+            tensorflowButton.classList.add('tensorflow-button')
             tensorflowButton.innerText = "TensorFlow";
 
             const selectorDiv = document.createElement("div");
@@ -218,22 +255,36 @@ function platformToggle() {
             tensorflowButton.classList.remove("selected");
 
             pytorchButton.addEventListener("click", () => {
-                sample.element.innerHTML = sample.pytorchSample;
-                pytorchButton.classList.add("selected");
-                tensorflowButton.classList.remove("selected");
+                for(const codeBlock of updatedCodeBlocks){
+                    codeBlock.element.innerHTML = codeBlock.pytorchSample;
+                }
+                Array.from(document.getElementsByClassName('pytorch-button')).forEach(button => {
+                    button.classList.add("selected");
+                })
+                Array.from(document.getElementsByClassName('tensorflow-button')).forEach(button => {
+                    button.classList.remove("selected");
+                })
             });
             tensorflowButton.addEventListener("click", () => {
-               sample.element.innerHTML = sample.tensorflowSample;
-                tensorflowButton.classList.add("selected");
-                pytorchButton.classList.remove("selected");
+                for(const codeBlock of updatedCodeBlocks){
+                    codeBlock.element.innerHTML = codeBlock.tensorflowSample;
+                }
+                Array.from(document.getElementsByClassName('tensorflow-button')).forEach(button => {
+                    button.classList.add("selected");
+                })
+                Array.from(document.getElementsByClassName('pytorch-button')).forEach(button => {
+                    button.classList.remove("selected");
+                })
             });
         };
 
-    codeBlocks
+    const updatedCodeBlocks = codeBlocks
         .map(element => {return {element: element.firstChild, innerText: element.innerText}})
         .filter(codeBlock => codeBlock.innerText.includes(pytorchIdentifier) && codeBlock.innerText.includes(tensorflowIdentifier))
         .map(getFrameworkSpans)
-        .forEach(createFrameworkButtons);
+
+    updatedCodeBlocks
+        .forEach(createFrameworkButtons)
 }
 
 
@@ -255,6 +306,7 @@ function onLoad() {
     addGithubButton();
     parseGithubButtons();
     addHfMenu();
+    addColabLink();
     platformToggle();
 }
 

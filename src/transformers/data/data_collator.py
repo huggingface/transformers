@@ -1,10 +1,12 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, NewType, Tuple
+from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
 from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_base import BatchEncoding, PaddingStrategy
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -33,7 +35,7 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     # have the same attributes.
     # So we will look at the first element as a proxy for what attributes exist
     # on the whole batch.
-    if not isinstance(features[0], dict):
+    if not isinstance(features[0], (dict, BatchEncoding)):
         features = [vars(f) for f in features]
 
     first = features[0]
@@ -60,9 +62,58 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
             if isinstance(v, torch.Tensor):
                 batch[k] = torch.stack([f[k] for f in features])
             else:
-                batch[k] = torch.tensor([f[k] for f in features], dtype=torch.long)
+                batch[k] = torch.tensor([f[k] for f in features])
 
     return batch
+
+
+@dataclass
+class DataCollatorWithPadding:
+    """
+    Data collator that will dynamically pad the inputs received.
+
+    Args:
+        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+            The tokenizer used for encoding the data.
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding
+            index) among:
+
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+              single sequence if provided).
+            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided.
+            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+              different lengths).
+        max_length (:obj:`int`, `optional`):
+            Maximum length of the returned list and optionally padding length (see above).
+        pad_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the sequence to a multiple of the provided value.
+
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+            >= 7.5 (Volta).
+    """
+
+    tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+
+    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        batch = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+        )
+        if "label" in batch:
+            batch["labels"] = batch["label"]
+            del batch["label"]
+        if "label_ids" in batch:
+            batch["labels"] = batch["label_ids"]
+            del batch["label_ids"]
+        return batch
 
 
 @dataclass
@@ -77,17 +128,27 @@ class DataCollatorForLanguageModeling:
     mlm: bool = True
     mlm_probability: float = 0.15
 
-    def __call__(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+    ) -> Dict[str, torch.Tensor]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
         if self.mlm:
             inputs, labels = self.mask_tokens(batch)
             return {"input_ids": inputs, "labels": labels}
         else:
             labels = batch.clone().detach()
-            labels[labels == self.tokenizer.pad_token_id] = -100
+            if self.tokenizer.pad_token_id is not None:
+                labels[labels == self.tokenizer.pad_token_id] = -100
             return {"input_ids": batch, "labels": labels}
 
-    def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
+    def _tensorize_batch(
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+    ) -> torch.Tensor:
+        # In order to accept both lists of lists and lists of Tensors
+        if isinstance(examples[0], (list, tuple)):
+            examples = [torch.tensor(e, dtype=torch.long) for e in examples]
         length_of_first = examples[0].size(0)
         are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
         if are_tensors_same_length:
@@ -137,6 +198,75 @@ class DataCollatorForLanguageModeling:
 
 
 @dataclass
+class DataCollatorForSOP(DataCollatorForLanguageModeling):
+    """
+    Data collator used for sentence order prediction task.
+    - collates batches of tensors, honoring their tokenizer's pad_token
+    - preprocesses batches for both masked language modeling and sentence order prediction
+    """
+
+    def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        input_ids = [example["input_ids"] for example in examples]
+        input_ids = self._tensorize_batch(input_ids)
+        input_ids, labels, attention_mask = self.mask_tokens(input_ids)
+
+        token_type_ids = [example["token_type_ids"] for example in examples]
+        # size of segment_ids varied because randomness, padding zero to the end as the orignal implementation
+        token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+
+        sop_label_list = [example["sentence_order_label"] for example in examples]
+        sentence_order_label = torch.stack(sop_label_list)
+
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+            "sentence_order_label": sentence_order_label,
+        }
+
+    def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Prepare masked tokens inputs/labels/attention_mask for masked language modeling: 80% MASK, 10% random, 10% original.
+        N-gram not applied yet.
+        """
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+            )
+
+        labels = inputs.clone()
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+        probability_matrix = torch.full(labels.shape, self.mlm_probability)
+        special_tokens_mask = [
+            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+        ]
+        probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+        if self.tokenizer._pad_token is not None:
+            padding_mask = labels.eq(self.tokenizer.pad_token_id)
+            probability_matrix.masked_fill_(padding_mask, value=0.0)
+        masked_indices = torch.bernoulli(probability_matrix).bool()
+        # probability be `1` (masked), however in albert model attention mask `0` means masked, revert the value
+        attention_mask = (~masked_indices).float()
+        if self.tokenizer._pad_token is not None:
+            attention_padding_mask = labels.eq(self.tokenizer.pad_token_id)
+            attention_mask.masked_fill_(attention_padding_mask, value=1.0)
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens, -100 is default for CE compute
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
+        inputs[indices_random] = random_words[indices_random]
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels, attention_mask
+
+
+@dataclass
 class DataCollatorForPermutationLanguageModeling:
     """
     Data collator used for permutation language modeling.
@@ -148,12 +278,21 @@ class DataCollatorForPermutationLanguageModeling:
     plm_probability: float = 1 / 6
     max_span_length: int = 5  # maximum length of a span of masked tokens
 
-    def __call__(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+    ) -> Dict[str, torch.Tensor]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
         inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
+    def _tensorize_batch(
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+    ) -> torch.Tensor:
+        # In order to accept both lists of lists and lists of Tensors
+        if isinstance(examples[0], (list, tuple)):
+            examples = [torch.Tensor(e) for e in examples]
         length_of_first = examples[0].size(0)
         are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
         if are_tensors_same_length:
@@ -257,3 +396,136 @@ class DataCollatorForPermutationLanguageModeling:
             ) & masked_indices[i]
 
         return inputs, perm_mask, target_mapping, labels
+
+
+@dataclass
+class DataCollatorForNextSentencePrediction:
+    """
+    Data collator used for next sentence prediction.
+    - collates examples which contains pre-generated negative examples
+    - preprocesses batches for masked language modeling
+    """
+
+    tokenizer: PreTrainedTokenizer
+    mlm: bool = True
+    block_size: int = 512
+    short_seq_probability: float = 0.1
+    nsp_probability: float = 0.5
+    mlm_probability: float = 0.15
+
+    def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        """
+        The input should contain negative examples, :class:`~transformers.DataCollatorForNextSentencePrediction` will not generate any negative examples.
+        Args:
+            examples (:obj:`List[Dict]`): Each dictionary should have the following keys:
+                  - ``tokens_a``: A sequence of tokens, which should appear before ``tokens_b`` in the text.
+                  - ``tokens_b``: A sequence of tokens, which should appear after ``tokens_a`` in the text.
+                  - ``is_random_next``: 1 if this pair is generated randomly, else 0.
+        """
+
+        tokens_a = [e["tokens_a"] for e in examples]
+        tokens_b = [e["tokens_b"] for e in examples]
+        nsp_labels = [1 if e["is_random_next"] else 0 for e in examples]
+
+        input_ids = []
+        segment_ids = []
+        attention_masks = []
+
+        assert len(tokens_a) == len(tokens_b)
+        for i in range(len(tokens_a)):
+            input_id, attention_mask, segment_id = self.create_features_from_example(tokens_a[i], tokens_b[i])
+            input_ids.append(input_id)
+            segment_ids.append(segment_id)
+            attention_masks.append(attention_mask)
+        if self.mlm:
+            input_ids, mlm_labels = self.mask_tokens(self._tensorize_batch(input_ids))
+        else:
+            input_ids = self._tensorize_batch(input_ids)
+
+        result = {
+            "input_ids": input_ids,
+            "attention_mask": self._tensorize_batch(attention_masks),
+            "token_type_ids": self._tensorize_batch(segment_ids),
+            "labels": mlm_labels if self.mlm else None,
+            "next_sentence_label": torch.tensor(nsp_labels),
+        }
+        if self.mlm:
+            result["masked_lm_labels"] = mlm_labels
+        return result
+
+    def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
+        length_of_first = examples[0].size(0)
+        are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
+        if are_tensors_same_length:
+            return torch.stack(examples, dim=0)
+        else:
+            if self.tokenizer._pad_token is None:
+                raise ValueError(
+                    "You are attempting to pad samples but the tokenizer you are using"
+                    f" ({self.tokenizer.__class__.__name__}) does not have one."
+                )
+            return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+
+    def create_features_from_example(self, tokens_a, tokens_b):
+        """Creates examples for a single document."""
+
+        max_num_tokens = self.block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
+
+        tokens_a, tokens_b, _ = self.tokenizer.truncate_sequences(
+            tokens_a,
+            tokens_b,
+            num_tokens_to_remove=len(tokens_a) + len(tokens_b) - max_num_tokens,
+            truncation_strategy="longest_first",
+        )
+
+        input_id = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+        attention_mask = [1] * len(input_id)
+        segment_id = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
+        assert len(input_id) <= self.block_size
+
+        # pad
+        while len(input_id) < self.block_size:
+            input_id.append(0)
+            attention_mask.append(0)
+            segment_id.append(0)
+
+        input_id = torch.tensor(input_id)
+        attention_mask = torch.tensor(attention_mask)
+        segment_id = torch.tensor(segment_id)
+
+        return input_id, attention_mask, segment_id
+
+    def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        """
+
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+            )
+
+        labels = inputs.clone()
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+        probability_matrix = torch.full(labels.shape, self.mlm_probability)
+        special_tokens_mask = [
+            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+        ]
+        probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+        if self.tokenizer._pad_token is not None:
+            padding_mask = labels.eq(self.tokenizer.pad_token_id)
+            probability_matrix.masked_fill_(padding_mask, value=0.0)
+        masked_indices = torch.bernoulli(probability_matrix).bool()
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
+        inputs[indices_random] = random_words[indices_random]
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels

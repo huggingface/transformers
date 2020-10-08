@@ -14,13 +14,11 @@
 # limitations under the License.
 """Tokenization classes for RetriBERT."""
 
-
-import logging
-
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -42,10 +40,10 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RetriBertTokenizer(BertTokenizer):
     r"""
-    Constructs a  retribert.
+    Constructs a RetriBERT tokenizer.
 
-    :class:`~transformers.retribert is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.RetroBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
@@ -60,10 +58,10 @@ class RetriBertTokenizer(BertTokenizer):
 
 class RetriBertTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" RetriBertTokenizerFast (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" RetriBERT tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.RetriBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.RetriBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.

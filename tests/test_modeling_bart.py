@@ -19,6 +19,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -27,30 +28,39 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+
     from transformers import (
         AutoModel,
         AutoModelForSequenceClassification,
         AutoTokenizer,
-        BartModel,
-        BartForConditionalGeneration,
-        BartForSequenceClassification,
-        BartForQuestionAnswering,
         BartConfig,
+        BartForConditionalGeneration,
+        BartForQuestionAnswering,
+        BartForSequenceClassification,
+        BartModel,
         BartTokenizer,
+        BartTokenizerFast,
+        BertConfig,
+        BlenderbotConfig,
+        MarianConfig,
+        MBartConfig,
+        PegasusConfig,
         pipeline,
     )
     from transformers.modeling_bart import (
-        shift_tokens_right,
-        invert_mask,
-        _prepare_bart_decoder_inputs,
         SinusoidalPositionalEmbedding,
+        _prepare_bart_decoder_inputs,
+        invert_mask,
+        shift_tokens_right,
     )
+PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
 @require_torch
 class ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -71,8 +81,10 @@ class ModelTester:
         self.bos_token_id = 0
         torch.manual_seed(0)
 
-    def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+            3,
+        )
         input_ids[:, -1] = 2  # Eos Token
 
         config = BartConfig(
@@ -94,9 +106,18 @@ class ModelTester:
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
+        inputs_dict["decoder_attention_mask"] = inputs_dict["attention_mask"]
+        inputs_dict["use_cache"] = False
+        return config, inputs_dict
+
 
 def prepare_bart_inputs_dict(
-    config, input_ids, attention_mask=None,
+    config,
+    input_ids,
+    attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -130,7 +151,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_initialization_more(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = BartModel(config)
         model.to(torch_device)
         model.eval()
@@ -147,7 +168,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.embed_positions)
 
     def test_advanced_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
@@ -159,7 +180,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         decoder_features_with_passed_mask = model(
             decoder_attention_mask=invert_mask(decoder_attn_mask), decoder_input_ids=decoder_input_ids, **inputs_dict
         )[0]
-        _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
+        assert_tensors_close(decoder_features_with_passed_mask, decoder_features_with_created_mask)
         useless_mask = torch.zeros_like(decoder_attn_mask)
         decoder_features = model(decoder_attention_mask=useless_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
@@ -173,10 +194,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         decoder_features_with_long_encoder_mask = model(
             inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"].long()
         )[0]
-        _assert_tensors_equal(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
+        assert_tensors_close(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
 
     def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 
@@ -238,6 +259,7 @@ class BartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
+            return_dict=True,
         )
         return config, input_ids, batch_size
 
@@ -247,24 +269,24 @@ class BartHeadTests(unittest.TestCase):
         model = BartForSequenceClassification(config)
         model.to(torch_device)
         outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=labels)
-        logits = outputs[1]
         expected_shape = torch.Size((batch_size, config.num_labels))
-        self.assertEqual(logits.shape, expected_shape)
-        loss = outputs[0]
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_question_answering_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        loss, start_logits, end_logits, _ = model(
-            input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
+        outputs = model(
+            input_ids=input_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
         )
 
-        self.assertEqual(start_logits.shape, input_ids.shape)
-        self.assertEqual(end_logits.shape, input_ids.shape)
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
+        self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
@@ -272,10 +294,10 @@ class BartHeadTests(unittest.TestCase):
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
         lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=input_ids, labels=lm_labels)
+        outputs = lm_model(input_ids=input_ids, labels=lm_labels)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_lm_uneven_forward(self):
         config = BartConfig(
@@ -288,13 +310,14 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=8,
             decoder_ffn_dim=8,
             max_position_embeddings=48,
+            return_dict=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+        outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
@@ -345,8 +368,8 @@ class BartHeadTests(unittest.TestCase):
             torch.Tensor([0, 11349, 495, 4040, 571, 2]),
         ]
         for ex, desired_result in zip(examples, fairseq_results):
-            bart_toks = tokenizer.encode(ex, return_tensors="pt")
-            _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
+            bart_toks = tokenizer.encode(ex, return_tensors="pt").squeeze()
+            assert_tensors_close(desired_result.long(), bart_toks, prefix=ex)
 
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
@@ -393,8 +416,8 @@ class BartHeadTests(unittest.TestCase):
         self.assertTrue(torch.eq(input_new, output_new).all())
 
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+def assert_tensors_close(a, b, atol=1e-12, prefix=""):
+    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:
@@ -402,7 +425,11 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
+        pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
+        if a.numel() > 100:
+            msg = f"tensor values are {pct_different:.1%} percent different."
+        else:
+            msg = f"{a} != {b}"
         if prefix:
             msg = prefix + ": " + msg
         raise AssertionError(msg)
@@ -417,6 +444,14 @@ TOLERANCE = 1e-4
 
 @require_torch
 class BartModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_tokenizer(self):
+        return BartTokenizer.from_pretrained("facebook/bart-large")
+
+    @cached_property
+    def default_tokenizer_fast(self):
+        return BartTokenizerFast.from_pretrained("facebook/bart-large")
+
     @slow
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
@@ -436,8 +471,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         pbase = pipeline(task="fill-mask", model="facebook/bart-base")
         src_text = [" I went to the <mask>."]
         results = [x["token_str"] for x in pbase(src_text)]
-        expected_results = ["Ġbathroom", "Ġrestroom", "Ġhospital", "Ġkitchen", "Ġcar"]
-        self.assertListEqual(results, expected_results)
+        assert "Ġbathroom" in results
 
     @slow
     def test_bart_large_mask_filling(self):
@@ -470,20 +504,23 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
-            logits2 = model(**inputs_dict)[0]
-        _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
-        _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
+            logits2 = model(**inputs_dict)[0].squeeze()
+        assert_tensors_close(batched_logits[1], logits2, atol=TOLERANCE)
+        assert_tensors_close(expected_slice, logits_arr, atol=TOLERANCE)
 
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
         model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum").to(torch_device)
         self.assertFalse(model.config.is_valid_mbart())
-        tok = BartTokenizer.from_pretrained("facebook/bart-large")
+        tok = self.default_tokenizer
 
-        PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
-        EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
+        EXPECTED_SUMMARY = "California's largest power company has begun shutting off electricity to thousands of customers in the state."
         dct = tok.batch_encode_plus(
-            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
+            [PGE_ARTICLE],
+            max_length=1024,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
         ).to(torch_device)
 
         hypotheses_batch = model.generate(
@@ -498,7 +535,10 @@ class BartModelIntegrationTests(unittest.TestCase):
             decoder_start_token_id=model.config.eos_token_id,
         )
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True,)
+        decoded = tok.batch_decode(
+            hypotheses_batch,
+            skip_special_tokens=True,
+        )
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
@@ -602,3 +642,12 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
                 torch.tensor(self.desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3
             )
         )
+
+    def test_child_config_equivalence(self):
+        """Test that configs associated with children of BartForConditionalGeneration are identical."""
+        child_classes = [BlenderbotConfig, MBartConfig, MarianConfig, PegasusConfig]
+        parent_keys = BartConfig().to_dict().keys()
+        for c in child_classes:
+            assert c().to_dict().keys() == parent_keys  # traceback is very nice on it's own
+        # check that test is not stupid
+        assert BertConfig().to_dict().keys() != parent_keys

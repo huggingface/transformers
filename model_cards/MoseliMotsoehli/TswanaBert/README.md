@@ -1,5 +1,5 @@
 ---
-language: setswana
+language: tn
 ---
 
 # TswanaBert

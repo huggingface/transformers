@@ -1,5 +1,5 @@
 Multi-lingual models
-================================================
+=======================================================================================================================
 
 Most of the models available in this library are mono-lingual models (English, Chinese and German). A few
 multi-lingual models are available and have a different mechanisms than mono-lingual models.
@@ -8,13 +8,13 @@ This page details the usage of these models.
 The two models that currently support multiple languages are BERT and XLM.
 
 XLM
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 XLM has a total of 10 different checkpoints, only one of which is mono-lingual. The 9 remaining model checkpoints can
 be split in two categories: the checkpoints that make use of language embeddings, and those that don't
 
 XLM & Language Embeddings
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 This section concerns the following checkpoints:
 
@@ -82,7 +82,7 @@ The example `run_generation.py <https://github.com/huggingface/transformers/blob
 can generate text using the CLM checkpoints from XLM, using the language embeddings.
 
 XLM without Language Embeddings
-------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 This section concerns the following checkpoints:
 
@@ -94,7 +94,7 @@ sentence representations, differently from previously-mentioned XLM checkpoints.
 
 
 BERT
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 BERT has two checkpoints that can be used for multi-lingual tasks:
 
@@ -105,7 +105,7 @@ These checkpoints do not require language embeddings at inference time. They sho
 used in the context and infer accordingly.
 
 XLM-RoBERTa
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 XLM-RoBERTa was trained on 2.5TB of newly created clean CommonCrawl data in 100 languages. It provides strong
 gains over previously released multi-lingual models like mBERT or XLM on downstream taks like classification,

@@ -1,5 +1,5 @@
 ---
-language: turkish
+language: tr
 ---
 
 # For Turkish language, here is an easy-to-use NER application. 

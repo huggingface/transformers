@@ -9,6 +9,9 @@ It also helps us if you spread the word: reference the library from blog posts
 on the awesome projects it made possible, shout out on Twitter every time it has
 helped you, or simply star the repo to say "thank you".
 
+Whichever way you choose to contribute, please be mindful to respect our
+[code of conduct](https://github.com/huggingface/transformers/blob/master/CODE_OF_CONDUCT.md).
+
 ## You can contribute in so many ways!
 
 There are 4 ways you can contribute to transformers:
@@ -65,7 +68,7 @@ Awesome! Please provide the following information:
 If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
-We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them 
+We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them
 in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates) folder.
 
 ### Do you want a new feature (that is not a model)?
@@ -87,8 +90,8 @@ A world-class feature request addresses the following points:
 If your issue is well written we're already 80% of the way there by the time you
 post it.
 
-We have added **templates** to guide you in the process of adding a new example script for training or testing the 
-models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates) 
+We have added **templates** to guide you in the process of adding a new example script for training or testing the
+models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates)
 folder.
 
 ## Start contributing! (Pull Requests)
@@ -134,12 +137,18 @@ Follow these steps to start contributing:
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.)
 
-   Right now, we need an unreleased version of `isort` to avoid a
-   [bug](https://github.com/timothycrosley/isort/pull/1000):
+   To run the full test suite, you might need the additional dependency on `datasets` which requires a separate source
+   install:
 
    ```bash
-   $ pip install -U git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+   $ git clone https://github.com/huggingface/datasets
+   $ cd datasets
+   $ pip install -e .
    ```
+
+   If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
+   library.
+
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
@@ -149,6 +158,14 @@ Follow these steps to start contributing:
    $ make test
    ```
 
+   Note, that this command uses `-n auto` pytest flag, therefore, it will start as many parallel `pytest` processes as the number of your computer's CPU-cores, and if you have lots of those and a few GPUs and not a great amount of RAM, it's likely to overload your computer. Therefore, to run the test suite, you may want to consider using this command instead:
+
+   ```bash
+   $ python -m pytest -n 3 --dist=loadfile -s -v ./tests/
+   ```
+
+   Adjust the value of `-n` to fit the load your hardware can support.
+
    `transformers` relies on `black` and `isort` to format its source code
    consistently. After you make changes, format them with:
 
@@ -156,11 +173,28 @@ Follow these steps to start contributing:
    $ make style
    ```
 
-   `transformers` also uses `flake8` to check for coding mistakes. Quality
+   `transformers` also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
    control runs in CI, however you can also run the same checks with:
 
    ```bash
    $ make quality
+   ```
+   You can do the automatic style corrections and code verifications that can't be automated in one go:
+
+   ```bash
+   $ make fixup
+   ```
+
+   This target is also optimized to only work with files modified by the PR you're working on.
+
+   If you're modifying documents under `docs/source`, make sure to validate that
+   they can still be built. This check also runs in CI. To run a local check
+   make sure you have installed the documentation builder requirements, by
+   running `pip install .[tf,torch,docs]` once from the root of this repository
+   and then run:
+
+   ```bash
+   $ make docs
    ```
 
    Once you're happy with your changes, add changed files using `git add` and
@@ -208,21 +242,21 @@ Follow these steps to start contributing:
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
 4. Make sure existing tests pass;
-5. Add high-coverage tests. No quality testing = no merge. 
-   - If you are adding a new model, make sure that you use 
+5. Add high-coverage tests. No quality testing = no merge.
+   - If you are adding a new model, make sure that you use
      `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
-   - If you are adding new `@slow` tests, make sure they pass using 
-     `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
-   - If you are adding a new tokenizer, write tests, and make sure 
+   - If you are adding new `@slow` tests, make sure they pass using
+     `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`.
+   - If you are adding a new tokenizer, write tests, and make sure
      `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
-   CircleCI does not run the slow tests. 
-6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an 
+   CircleCI does not run the slow tests, but github actions does every night!
+6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an
    example.
 
 ### Tests
 
-An extensive test suite is included to test the library behavior and several examples. Library tests can be found in 
-the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the 
+An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
+the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the
 [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
@@ -238,8 +272,7 @@ and for the examples:
 $ pip install -r examples/requirements.txt  # only needed the first time
 $ python -m pytest -n auto --dist=loadfile -s -v ./examples/
 ```
-
-In fact, that's how `make test` and `make test-examples` are implemented!
+In fact, that's how `make test` and `make test-examples` are implemented (sans the `pip install` line)!
 
 You can specify a smaller set of tests in order to test only the feature
 you're working on.

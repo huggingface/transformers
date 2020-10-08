@@ -1,11 +1,11 @@
 Processors
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 This library includes processors for several traditional tasks. These processors can be used to process a dataset into
 examples that can be fed to a model.
 
 Processors
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All processors follow the same architecture which is that of the
 :class:`~transformers.data.processors.utils.DataProcessor`. The processor returns a list
@@ -26,7 +26,7 @@ of :class:`~transformers.data.processors.utils.InputExample`. These
 
 
 GLUE
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 `General Language Understanding Evaluation (GLUE) <https://gluebenchmark.com/>`__ is a benchmark that evaluates
 the performance of models across a diverse set of existing NLU tasks. It was released together with the paper
@@ -52,13 +52,13 @@ Additionally, the following method  can be used to load values from a data file 
 .. automethod:: transformers.data.processors.glue.glue_convert_examples_to_features
 
 Example usage
-^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An example using these processors is given in the `run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/text-classification/run_glue.py>`__ script.
 
 
 XNLI
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 `The Cross-Lingual NLI Corpus (XNLI) <https://www.nyu.edu/projects/bowman/xnli/>`__ is a benchmark that evaluates
 the quality of cross-lingual text representations. 
@@ -78,7 +78,7 @@ An example using these processors is given in the
 
 
 SQuAD
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 `The Stanford Question Answering Dataset (SQuAD) <https://rajpurkar.github.io/SQuAD-explorer//>`__ is a benchmark that evaluates
 the performance of models on question answering. Two versions are available, v1.1 and v2.0. The first version (v1.1) was released together with the paper
@@ -88,7 +88,7 @@ the paper `Know What You Don't Know: Unanswerable Questions for SQuAD <https://a
 This library hosts a processor for each of the two versions:
 
 Processors
-^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Those processors are:
     - :class:`~transformers.data.processors.utils.SquadV1Processor`
@@ -109,7 +109,7 @@ Examples are given below.
 
 
 Example usage
-^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Here is an example using the processors as well as the conversion method using data files:
 
 Example::

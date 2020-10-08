@@ -19,21 +19,23 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerConfig,
         ReformerForMaskedLM,
+        ReformerForQuestionAnswering,
+        ReformerForSequenceClassification,
+        ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
         ReformerTokenizer,
-        ReformerLayer,
-        ReformerForQuestionAnswering,
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    import torch
 
 
 class ReformerModelTester:
@@ -77,6 +79,7 @@ class ReformerModelTester:
         eos_token_id=None,
         scope=None,
         hash_seed=None,
+        num_labels=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -124,13 +127,14 @@ class ReformerModelTester:
         self.encoder_seq_length = seq_length // attn_chunk_length + (self.seq_length % attn_chunk_length != 0)
         self.key_length = (num_chunks_before + num_chunks_after + 1) * attn_chunk_length
         self.chunk_length = attn_chunk_length
+        self.num_labels = num_labels
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         choice_labels = None
         if self.use_labels:
@@ -162,6 +166,7 @@ class ReformerModelTester:
             attn_layers=self.attn_layers,
             pad_token_id=self.pad_token_id,
             hash_seed=self.hash_seed,
+            return_dict=True,
         )
 
         return (
@@ -171,59 +176,43 @@ class ReformerModelTester:
             choice_labels,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def create_and_check_reformer_model(self, config, input_ids, input_mask, choice_labels):
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        (sequence_output,) = model(input_ids, attention_mask=input_mask)
-        (sequence_output,) = model(input_ids)
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
 
-        result = {
-            "sequence_output": sequence_output,
-        }
         # 2 * hidden_size because we use reversible resnet layers
-        self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, 2 * self.hidden_size],
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.seq_length, 2 * self.hidden_size)
         )
 
     def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
-        model = ReformerModelWithLMHead(config=config)
+        config.is_decoder = False
+        config.lsh_num_chunks_after = 1
+        model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        loss = model(input_ids, attention_mask=input_mask, labels=input_ids)[0]
+        loss = model(input_ids, attention_mask=input_mask, labels=input_ids)["loss"]
         loss.backward()
 
     def create_and_check_reformer_with_lm(self, config, input_ids, input_mask, choice_labels):
+        config.lsh_num_chunks_after = 0
+        config.is_decoder = True
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
-        loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
-        result = {
-            "loss": loss,
-            "prediction_scores": prediction_scores,
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, labels=input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_reformer_with_mlm(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = False
         model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
-        result = {
-            "loss": loss,
-            "prediction_scores": prediction_scores,
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, labels=input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_reformer_model_with_attn_mask(
         self, config, input_ids, input_mask, choice_labels, is_decoder=False
@@ -251,14 +240,19 @@ class ReformerModelTester:
         half_input_ids = input_ids[:, :half_seq_len]
 
         # normal padded
-        attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1,)
+        attn_mask = torch.cat(
+            [torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)],
+            dim=-1,
+        )
         input_ids_padded = torch.cat(
-            [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1,
+            [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)],
+            dim=-1,
         )
 
         # shifted padded
         input_ids_roll = torch.cat(
-            [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1,
+            [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)],
+            dim=-1,
         )
         input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
         attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
@@ -294,32 +288,22 @@ class ReformerModelTester:
         torch.manual_seed(layer.attention_seed)
         attn_outputs = layer.attention(hidden_states, attention_mask=input_mask)
         self.parent.assertTrue(
-            torch.allclose(prev_attn_output + attn_outputs.hidden_states, next_attn_output, atol=1e-3,)
+            torch.allclose(
+                prev_attn_output + attn_outputs.hidden_states,
+                next_attn_output,
+                atol=1e-3,
+            )
         )
 
         torch.manual_seed(layer.feed_forward_seed)
         feed_forward_hidden_states = layer.feed_forward(next_attn_output)
         self.parent.assertTrue(
-            torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3,)
+            torch.allclose(
+                next_hidden_states,
+                hidden_states + feed_forward_hidden_states,
+                atol=1e-3,
+            )
         )
-
-    def create_and_check_reformer_feed_forward_chunking(self, config, input_ids, input_mask, choice_labels):
-        torch.manual_seed(0)
-        model = ReformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        hidden_states_no_chunk = model(input_ids, attention_mask=input_mask)[0]
-
-        config.chunk_size_lm_head = 1
-        config.chunk_size_feed_forward = 1
-
-        torch.manual_seed(0)
-        model = ReformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        hidden_states_with_chunk = model(input_ids, attention_mask=input_mask)[0]
-        self.parent.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     def create_and_check_reformer_feed_backward_chunking(self, config, input_ids, input_mask, choice_labels):
         if not self.is_training:
@@ -329,9 +313,11 @@ class ReformerModelTester:
         config.hidden_dropout_prob = 0
         config.local_attention_probs_dropout_prob = 0
         config.lsh_attention_probs_dropout_prob = 0
+        config.lsh_num_chunks_after = 1
+        config.is_decoder = False
 
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(config=config)
+        model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
         model.train()
         model.zero_grad()
@@ -345,7 +331,7 @@ class ReformerModelTester:
         config.chunk_size_feed_forward = 1
 
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(config=config)
+        model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
         model.train()
         model.zero_grad()
@@ -399,10 +385,25 @@ class ReformerModelTester:
         model.to(torch_device)
         model.half()
         model.eval()
-        output = model(input_ids, attention_mask=input_mask)[0]
+        output = model(input_ids, attention_mask=input_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    def create_and_check_reformer_model_generate(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = True
+        config.lsh_num_chunks_after = 0
+        config.bos_token_id = 0
+        config.eos_token_id = None
+        config.max_length = 20
+
+        model = ReformerModelWithLMHead(config=config)
+        model.to(torch_device)
+        model.eval()
+        output = model.generate()
+        self.parent.assertIsNotNone(output)
+
     def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = True
+        config.lsh_num_chunks_after = 0
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.half()
@@ -415,27 +416,53 @@ class ReformerModelTester:
         # force chunk length to be bigger than input_ids
         config.lsh_attn_chunk_length = 2 * input_ids.shape[-1]
         config.local_attn_chunk_length = 2 * input_ids.shape[-1]
-        model = ReformerModelWithLMHead(config=config)
+        config.lsh_num_chunks_after = 1
+        config.is_decoder = False
+        model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        output_logits = model(input_ids, attention_mask=input_mask)[0]
+        output_logits = model(input_ids, attention_mask=input_mask)["logits"]
         self.parent.assertTrue(output_logits.shape[1] == input_ids.shape[-1])
 
-    def create_and_check_longformer_for_question_answering(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_for_question_answering(self, config, input_ids, input_mask, choice_labels):
         model = ReformerForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
-        loss, start_logits, end_logits = model(
-            input_ids, attention_mask=input_mask, start_positions=choice_labels, end_positions=choice_labels,
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            start_positions=choice_labels,
+            end_positions=choice_labels,
         )
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
+    def create_and_check_past_buckets_states(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = True
+        config.lsh_num_chunks_before = 1
+        config.lsh_num_chunks_after = 0
+        model = ReformerModelWithLMHead(config=config)
+        model.to(torch_device)
+        model.eval()
+        input_ids_first = input_ids[:, :-1]
+        input_ids_second = input_ids[:, -1:]
+
+        # return saved cache
+        past_buckets_states = model(input_ids_first, use_cache=True)["past_buckets_states"]
+
+        # calculate last output with and without cache
+        outputs_with_cache = model(input_ids_second, past_buckets_states=past_buckets_states, use_cache=True)["logits"]
+        outputs_without_cache = model(input_ids)["logits"][:, -1]
+
+        # select random slice idx
+        random_slice_idx = torch.randint(outputs_without_cache.shape[-1], (1, 1), device=torch_device).item()
+
+        # outputs should be similar within range
+        self.parent.assertTrue(
+            torch.allclose(
+                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-2
+            )
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -443,10 +470,21 @@ class ReformerModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+    def create_and_check_reformer_for_sequence_classification(
+        self, config, input_ids, input_mask, choice_labels, is_decoder
+    ):
+        config.is_decoder = is_decoder
+        sequence_labels = ids_tensor([self.batch_size], config.num_labels)
+        model = ReformerForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
 
 class ReformerTesterMixin:
     """
-        Reformer Local and Reformer LSH run essentially the same tests
+    Reformer Local and Reformer LSH run essentially the same tests
     """
 
     def test_config(self):
@@ -478,10 +516,6 @@ class ReformerTesterMixin:
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=True)
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=False)
 
-    def test_reformer_chunking_forward_equality(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_feed_forward_chunking(*config_and_inputs)
-
     def test_reformer_chunking_backward_equality(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_feed_backward_chunking(*config_and_inputs)
@@ -489,6 +523,18 @@ class ReformerTesterMixin:
     def test_reformer_no_chunking(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_no_chunking(*config_and_inputs)
+
+    def test_reformer_qa_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_for_question_answering(*config_and_inputs)
+
+    def test_reformer_cached_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_past_buckets_states(*config_and_inputs)
+
+    def test_reformer_cached_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_generate(*config_and_inputs)
 
     @slow
     def test_dropout_random_seed_is_changing(self):
@@ -510,11 +556,17 @@ class ReformerTesterMixin:
         # Opt-out of this test.
         pass
 
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, is_decoder=False)
+
 
 @require_torch
 class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (ReformerModel, ReformerModelWithLMHead, ReformerForQuestionAnswering) if is_torch_available() else ()
+        (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
@@ -554,6 +606,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
             "eos_token_id": 2,
             "scope": None,
             "hash_seed": 0,
+            "num_labels": 2,
         }
 
     def setUp(self):
@@ -571,7 +624,9 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
 @require_torch
 class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (ReformerModel, ReformerModelWithLMHead, ReformerForQuestionAnswering) if is_torch_available() else ()
+        (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
@@ -593,8 +648,8 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "num_buckets": 2,
             "num_hashes": 4,
             "lsh_attn_chunk_length": 4,
-            "lsh_num_chunks_before": 2,
-            "lsh_num_chunks_after": 3,
+            "lsh_num_chunks_before": 1,
+            "lsh_num_chunks_after": 0,
             "chunk_size_lm_head": 5,
             "chunk_size_feed_forward": 6,
             "feed_forward_size": 32,
@@ -608,11 +663,14 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "axial_pos_embds": True,
             "axial_pos_shape": [4, 8],
             "axial_pos_embds_dim": [16, 48],
-            "attn_layers": ["lsh", "lsh", "lsh", "lsh"],
+            #            sanotheu
+            #            "attn_layers": ["lsh", "lsh", "lsh", "lsh"],
+            "attn_layers": ["lsh"],
             "pad_token_id": 0,
             "eos_token_id": 2,
             "scope": None,
             "hash_seed": 0,
+            "num_labels": 2,
         }
 
     def setUp(self):
@@ -845,7 +903,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         reformer_output = layer(prev_attn_output=hidden_states.clone(), hidden_states=hidden_states)
         output_slice = reformer_output.hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [1.6879, -1.3083, -0.4708, 1.3555, -0.6292], dtype=torch.float, device=torch_device,
+            [1.6879, -1.3083, -0.4708, 1.3555, -0.6292],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -860,11 +920,15 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer = ReformerLayer(ReformerConfig(**config)).to(torch_device)
         layer.eval()
         reformer_output = layer(
-            prev_attn_output=hidden_states.clone(), hidden_states=hidden_states, attention_mask=attn_mask,
+            prev_attn_output=hidden_states.clone(),
+            hidden_states=hidden_states,
+            attention_mask=attn_mask,
         )
         output_slice = reformer_output.hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [1.6439, -1.2306, -0.5108, 1.3006, -0.6537], dtype=torch.float, device=torch_device,
+            [1.6439, -1.2306, -0.5108, 1.3006, -0.6537],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -880,7 +944,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         reformer_output = layer(prev_attn_output=hidden_states, hidden_states=hidden_states)
         output_slice = reformer_output.hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [1.4212, -2.0576, -0.9688, 1.4599, -0.1344], dtype=torch.float, device=torch_device,
+            [1.4212, -2.0576, -0.9688, 1.4599, -0.1344],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -893,10 +959,16 @@ class ReformerIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         layer = ReformerLayer(ReformerConfig(**config)).to(torch_device)
         layer.eval()
-        reformer_output = layer(prev_attn_output=hidden_states, hidden_states=hidden_states, attention_mask=attn_mask,)
+        reformer_output = layer(
+            prev_attn_output=hidden_states,
+            hidden_states=hidden_states,
+            attention_mask=attn_mask,
+        )
         output_slice = reformer_output.hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [1.4750, -2.0235, -0.9743, 1.4463, -0.1269], dtype=torch.float, device=torch_device,
+            [1.4750, -2.0235, -0.9743, 1.4463, -0.1269],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -911,7 +983,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [-0.9896, -0.9396, -1.0831, -0.0597, 0.2456], dtype=torch.float, device=torch_device,
+            [-0.9896, -0.9396, -1.0831, -0.0597, 0.2456],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -925,7 +999,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [-1.6791, 0.7171, 0.1594, 0.4063, 1.2584], dtype=torch.float, device=torch_device,
+            [-1.6791, 0.7171, 0.1594, 0.4063, 1.2584],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -941,7 +1017,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[1, -1, :5]
         expected_output_slice = torch.tensor(
-            [0.0256, -0.0121, 0.0636, 0.0024, -0.0393], dtype=torch.float, device=torch_device,
+            [0.0256, -0.0121, 0.0636, 0.0024, -0.0393],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -963,15 +1041,21 @@ class ReformerIntegrationTests(unittest.TestCase):
         # check last grads to cover all proable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
-            [-0.0005, 0.0001, 0.0002, 0.0003, 0.0006], dtype=torch.float, device=torch_device,
+            [-0.0005, 0.0001, 0.0002, 0.0003, 0.0006],
+            dtype=torch.float,
+            device=torch_device,
         )
         grad_slice_position_factor_1 = model.reformer.embeddings.position_embeddings.weights[0][1, 0, -5:]
         expected_grad_slice_pos_fac_1 = torch.tensor(
-            [0.0037, -1.3793, -1.0231, -1.5230, -2.5306], dtype=torch.float, device=torch_device,
+            [0.0037, -1.3793, -1.0231, -1.5230, -2.5306],
+            dtype=torch.float,
+            device=torch_device,
         )
         grad_slice_position_factor_2 = model.reformer.embeddings.position_embeddings.weights[1][0, 1, :5]
         expected_grad_slice_pos_fac_2 = torch.tensor(
-            [-1.3165, 0.5168, 0.7785, 1.0811, -0.9830], dtype=torch.float, device=torch_device,
+            [-1.3165, 0.5168, 0.7785, 1.0811, -0.9830],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(grad_slice_word, expected_grad_slice_word, atol=1e-3))
         self.assertTrue(torch.allclose(grad_slice_position_factor_1, expected_grad_slice_pos_fac_1, atol=1e-3))
@@ -996,15 +1080,21 @@ class ReformerIntegrationTests(unittest.TestCase):
         # check last grads to cover all proable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
-            [2.6357e-05, 4.3358e-04, -8.4985e-04, 1.0094e-04, 3.8954e-04], dtype=torch.float, device=torch_device,
+            [2.6357e-05, 4.3358e-04, -8.4985e-04, 1.0094e-04, 3.8954e-04],
+            dtype=torch.float,
+            device=torch_device,
         )
         grad_slice_position_factor_1 = model.reformer.embeddings.position_embeddings.weights[0][1, 0, -5:]
         expected_grad_slice_pos_fac_1 = torch.tensor(
-            [-0.0984, 0.6283, 0.4282, 1.2960, 0.6897], dtype=torch.float, device=torch_device,
+            [-0.0984, 0.6283, 0.4282, 1.2960, 0.6897],
+            dtype=torch.float,
+            device=torch_device,
         )
         grad_slice_position_factor_2 = model.reformer.embeddings.position_embeddings.weights[1][0, 1, :5]
         expected_grad_slice_pos_fac_2 = torch.tensor(
-            [0.4626, -0.0231, -0.0172, 0.1081, 0.3805], dtype=torch.float, device=torch_device,
+            [0.4626, -0.0231, -0.0172, 0.1081, 0.3805],
+            dtype=torch.float,
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(grad_slice_word, expected_grad_slice_word, atol=1e-3))
         self.assertTrue(torch.allclose(grad_slice_position_factor_1, expected_grad_slice_pos_fac_1, atol=1e-3))
@@ -1020,8 +1110,23 @@ class ReformerIntegrationTests(unittest.TestCase):
         output_ids = model.generate(
             input_ids, max_length=50, num_beams=4, early_stopping=True, do_sample=False, num_hashes=8
         )
-        output_text = tokenizer.decode(output_ids[0])
+        output = tokenizer.decode(output_ids[0])
+
         self.assertEqual(
-            output_text,
+            output,
             "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
         )
+
+    @slow
+    def test_pretrained_generate_use_cache_equality(self):
+        model = ReformerModelWithLMHead.from_pretrained("google/reformer-crime-and-punishment").to(torch_device)
+        tokenizer = ReformerTokenizer.from_pretrained("google/reformer-crime-and-punishment")
+        model.eval()
+        input_ids = tokenizer.encode("A few months later", return_tensors="pt").to(torch_device)
+        output_ids_with_cache = model.generate(input_ids, max_length=130, num_hashes=8, use_cache=False)
+        output_ids_without_cache = model.generate(input_ids, max_length=130, num_hashes=8, use_cache=True)
+
+        output_with_cache = tokenizer.decode(output_ids_with_cache[0])
+        output_without_cache = tokenizer.decode(output_ids_without_cache[0])
+
+        self.assertEqual(output_with_cache, output_without_cache)
