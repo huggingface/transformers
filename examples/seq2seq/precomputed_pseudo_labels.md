@@ -4,25 +4,32 @@ These are the generations of various large models on various large **training** 
 ### Available Pseudo-labels
 | Dataset | Model                       | Link                                                                                   | Rouge Scores       | Notes                                                                                                       
 |---------|-----------------------------|----------------------------------------------------------------------------------------|--------------------|-------------------------------------------------------------------------------------------------------------
-| XSUM    | facebook/bart-large-xsum    | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/bart_xsum_pl.tgz)          | 49.8/28.0/42.5     |                                                                                                             
-| XSUM    | google/pegasus-xsum         | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/pegasus_xsum.tgz)          | 53.3/32.7/46.5     |                                                                                                             
-| XSUM    | facebook/bart-large-xsum    | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/xsum_pl2_bart.tgz)         |                   | Bart pseudolabels filtered to those with Rouge2 > 10.0 w GT                                                 
-| CNN/DM  | sshleifer/pegasus-cnn-ft-v2 | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/cnn_dm/pegasus_cnn_cnn_pls.tgz) | 47.316/26.65/44.56 | do not worry about the fact that train.source is one line shorter.                                          
-| CNN/DM  | facebook/bart-large-cnn     | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/cnn_dm/cnn_bart_pl.tgz)         |                    | 5K (2%) are missing, there should be 282173                                                                 
-| CNN/DM  | google/pegasus-xsum         | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/cnn_dm/pegasus_xsum_on_cnn.tgz) | 21.5/6.76/25       | extra labels for xsum distillation  Used max_source_length=512, (and all other pegasus-xsum configuration). 
-| EN-RO   | Helsinki-NLP/opus-mt-en-ro  | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/wmt_en_ro/opus_mt_en_ro.tgz) |       |  
-| EN-RO   | facebook/mbart-large-en-ro  | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/wmt_en_ro/mbart_large_en_ro.tgz) |       |  
+| XSUM    | `facebook/bart-large-xsum`    | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/bart_xsum_pl.tgz)          | 49.8/28.0/42.5     |                                                                                                             
+| XSUM    | `google/pegasus-xsum`         | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/pegasus_xsum.tgz)          | 53.3/32.7/46.5     |                                                                                                             
+| XSUM    | `facebook/bart-large-xsum`    | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/xsum_pl2_bart.tgz)         |                   | Bart pseudolabels filtered to those with Rouge2 > 10.0 w GT.                                                 
+| CNN/DM  | `sshleifer/pegasus-cnn-ft-v2` | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/cnn_dm/pegasus_cnn_cnn_pls.tgz) | 47.316/26.65/44.56 | do not worry about the fact that train.source is one line shorter.                                          
+| CNN/DM  | `facebook/bart-large-cnn`     | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/cnn_dm/cnn_bart_pl.tgz)         |                    | 5K (2%) are missing, there should be 282173                                                                 
+| CNN/DM  | `google/pegasus-xsum`         | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/cnn_dm/pegasus_xsum_on_cnn.tgz) | 21.5/6.76/25       | extra labels for xsum distillation  Used max_source_length=512, (and all other pegasus-xsum configuration). 
+| EN-RO   | `Helsinki-NLP/opus-mt-en-ro`  | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/wmt_en_ro/opus_mt_en_ro.tgz) |       |  
+| EN-RO   | `facebook/mbart-large-en-ro`  | [download](https://s3.amazonaws.com/datasets.huggingface.co/pseudo/wmt_en_ro/mbart_large_en_ro.tgz) |       |  
 
+
+(EN_RO = WMT 2016 English-Romanian).
 
 Example Download Command:
 ```bash
 curl -S https://s3.amazonaws.com/datasets.huggingface.co/pseudo/xsum/bart_xsum_pl.tgz | tar -xvz -C .
 ```
-### Generating Your own Pseudolabels
-```bash                                                                                       
+### Generating New Pseudolabels
+Here is the command I used to generate the pseudolabels in the second row of the table, after downloading XSUM from [here](https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz). 
+
+```bash                                                                         
 python -m torch.distributed.launch --nproc_per_node=8 run_distributed_eval.py \
-    --model_name facebook/bart-large-xsum --save_dir bart_xsum_pl --data_dir xsum \
-    --fp16 --bs 32 --sync_timeout 60000 --max_source_length 1024 \
+    --model_name google/pegasus-xsum \ 
+    --save_dir pegasus_xsum \ 
+    --data_dir xsum \
+    --bs 8 --sync_timeout 60000 \
+    --max_source_length 512 \
     --type_path train
 ```
 
@@ -30,4 +37,7 @@ python -m torch.distributed.launch --nproc_per_node=8 run_distributed_eval.py \
 + Pegasus does not work in fp16 :(, Bart, mBART and Marian do.
 + Even if you have 1 GPU, `run_distributed_eval.py` is 10-20% faster than `run_eval.py` because it uses `SortishSampler` to minimize padding computation.
 
-Feel free to contribute your own pseudolabels via PR to this table with new google drive link!
+### Contributions
+Feel free to contribute your own pseudolabels via PR. Add a row to this table with a new google drive link (or other command line downloadable link).
+
+
