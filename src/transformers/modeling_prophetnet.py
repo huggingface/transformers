@@ -1142,7 +1142,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if attention_mask is not None:
             extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * -10000.0
             extended_attention_mask = extended_attention_mask.expand((self.ngram, batch_size, seq_length, seq_length))
-            extended_attention_mask = torch.cat([extended_attention_mask, extended_attention_mask], dim=-1)
+            extended_attention_mask = torch.cat([extended_attention_mask, torch.zeros_like(extended_attention_mask)], dim=-1)
             extended_ngram_attention_mask = extended_ngram_causal_mask + extended_attention_mask
         else:
             extended_ngram_attention_mask = extended_ngram_causal_mask
