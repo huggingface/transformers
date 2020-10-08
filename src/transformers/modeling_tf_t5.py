@@ -20,6 +20,7 @@ import copy
 import itertools
 import math
 import warnings
+from typing import Tuple
 
 import tensorflow as tf
 
@@ -1136,7 +1137,7 @@ class TFT5Model(TFT5PreTrainedModel):
         )
 
         past = (
-            (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
+            decoder_outputs[1] if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
         )
         if not return_dict:
             if past is not None:
@@ -1395,29 +1396,22 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             encoder_attentions=encoder_outputs[2],
         )
 
-    def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        # first step
-        if len(past) < 2:
-            encoder_outputs, past_key_values = past, None
-        else:
-            encoder_outputs, past_key_values = past[0], past[1]
+    def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, encoder_outputs, **kwargs):
 
         # cut decoder_input_ids if past is used
-        if past_key_values is not None:
+        if past is not None:
             inputs = inputs[:, -1:]
 
         return {
             "inputs": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy
             "decoder_input_ids": inputs,  # inputs are the decoder_input_ids
-            "past_key_values": past_key_values,
+            "past_key_values": past,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past, beam_idx) -> Tuple:
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
 
@@ -1425,11 +1419,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
 
-        decoder_past = past[1]
-        past = (past[0],)
+        #decoder_past = past[1]
+        #past = (past[0],)
         reordered_decoder_past = ()
 
-        for layer_past_states in decoder_past:
+        for layer_past_states in past:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1441,4 +1435,4 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             assert len(reordered_layer_past_states) == len(layer_past_states)
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return past + (reordered_decoder_past,)
+        return reordered_decoder_past

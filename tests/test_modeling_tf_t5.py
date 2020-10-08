@@ -85,28 +85,25 @@ class TFT5ModelTester:
 
         return (config, input_ids, input_mask, token_labels)
 
-    def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
+    def create_and_check_t5_model(self, config: T5Config, input_ids, input_mask, token_labels):
         model = TFT5Model(config=config)
         inputs = {
             "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
         }
-        result = model(inputs)
+        model(inputs)
 
         result = model(input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids)
         decoder_output = result.last_hidden_state
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
-        self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
-        self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
-        self.parent.assertEqual(len(decoder_past), 2)
-        # decoder_past[0] should correspond to encoder output
-        self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
-        # There should be `num_layers` key value embeddings stored in decoder_past[1]
-        self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
-        self.parent.assertEqual(len(decoder_past[1][0]), 4)
+        assert encoder_output.shape == (self.batch_size, self.seq_length, self.hidden_size)
+        assert decoder_output.shape == (self.batch_size, self.seq_length, self.hidden_size)
+        # There should be `num_decoder_layers` key value embeddings stored in decoder_past[1]
+        assert len(decoder_past) == config.num_decoder_layers
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
+        assert len(decoder_past[0]) == 4
 
     def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
         model = TFT5ForConditionalGeneration(config=config)

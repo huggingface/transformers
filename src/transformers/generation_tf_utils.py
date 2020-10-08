@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Dict, Tuple
+
 import numpy as np
 import tensorflow as tf
 
@@ -66,6 +68,7 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        **model_kwargs
     ):
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
@@ -308,7 +311,7 @@ class TFGenerationMixin:
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
 
-            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+            encoder_outputs: Tuple = encoder(input_ids, attention_mask=attention_mask)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -347,11 +350,10 @@ class TFGenerationMixin:
                 tf.repeat(tf.expand_dims(tf.range(batch_size), -1), repeats=num_beams * effective_batch_mult, axis=1),
                 shape=(-1,),
             )
-            # expand encoder_outputs
-            encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0), *encoder_outputs[1:])
+            # expand encoder_outputs and save them to model kwargs
+            model_kwargs["encoder_outputs"] = tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0)
 
         else:
-            encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
 
         assert (
@@ -379,9 +381,9 @@ class TFGenerationMixin:
                 length_penalty=length_penalty,
                 num_beams=num_beams,
                 vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_kwargs=model_kwargs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -400,9 +402,9 @@ class TFGenerationMixin:
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_kwargs=model_kwargs,
             )
 
         return output
@@ -424,9 +426,9 @@ class TFGenerationMixin:
         eos_token_id,
         batch_size,
         vocab_size,
-        encoder_outputs,
         attention_mask,
         use_cache,
+        model_kwargs,
     ):
         """Generate sequences for each example without beam search (num_beams == 1).
         All returned sequence are generated independantly.
@@ -436,11 +438,11 @@ class TFGenerationMixin:
         unfinished_sents = tf.ones_like(input_ids[:, 0])
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        past = None  # defined for encoder-decoder models, None for decoder-only models
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_kwargs
             )
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -589,9 +591,9 @@ class TFGenerationMixin:
         length_penalty,
         num_beams,
         vocab_size,
-        encoder_outputs,
         attention_mask,
         use_cache,
+        model_kwargs,
     ):
         """Generate sequences for each example with beam search."""
 
@@ -612,15 +614,14 @@ class TFGenerationMixin:
         beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
 
         # cache compute states
-        past = encoder_outputs
-        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
+        past = None
 
         # done sentences
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
