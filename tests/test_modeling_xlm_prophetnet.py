@@ -29,7 +29,9 @@ if is_torch_available():
 class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        model = XLMProphetNetForConditionalGeneration.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+        model = XLMProphetNetForConditionalGeneration.from_pretrained(
+            "microsoft/xprophetnet-large-wiki100-cased",
+        )
         model.to(torch_device)
 
         # encoder-decoder outputs
@@ -49,7 +51,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
 
         # encoder outputs
-        encoder_outputs = model.model.encoder(encoder_ids)[0]
+        encoder_outputs = model.prophetnet.encoder(encoder_ids)[0]
         expected_encoder_outputs_slice = torch.tensor(
             [[[-1.4260, -0.7628, 0.8453], [-1.4719, -0.1391, 0.7807], [-1.7678, 0.0114, 0.4646]]]
         ).to(torch_device)
@@ -58,7 +60,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
 
         # decoder outputs
-        decoder_outputs = model.model.decoder(
+        decoder_outputs = model.prophetnet.decoder(
             decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
         )
         predicting_streams = decoder_outputs[0][:, 1:]
@@ -69,7 +71,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_ntg_hidden_states(self):
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg"
+            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg",
         )
         model.to(torch_device)
 
@@ -93,7 +95,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xprophetnet_ntg_inference(self):
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg"
+            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg",
         )
         model.to(torch_device)
 

@@ -19,10 +19,14 @@ import argparse
 
 from transformers import logging
 from transformers.modeling_prophetnet import ProphetNetForConditionalGeneration
+from transformers.modeling_xlm_prophetnet import XLMProphetNetForConditionalGeneration
 
 # transformers_old should correspond to branch `save_old_prophetnet_model_structure` here
 from transformers_old.modeling_prophetnet import (
     ProphetNetForConditionalGeneration as ProphetNetForConditionalGenerationOld,
+)
+from transformers_old.modeling_xlm_prophetnet import (
+    XLMProphetNetForConditionalGeneration as XLMProphetNetForConditionalGenerationOld,
 )
 
 
@@ -34,11 +38,16 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
     """
     Copy/paste/tweak prohpetnet's weights to our prophetnet structure.
     """
-    prophet_old = ProphetNetForConditionalGenerationOld.from_pretrained(prophetnet_checkpoint_path)
-
-    prophet, loading_info = ProphetNetForConditionalGeneration.from_pretrained(
-        prophetnet_checkpoint_path, output_loading_info=True
-    )
+    if "xprophetnet" in prophetnet_checkpoint_path:
+        prophet_old = XLMProphetNetForConditionalGenerationOld.from_pretrained(prophetnet_checkpoint_path)
+        prophet, loading_info = XLMProphetNetForConditionalGeneration.from_pretrained(
+            prophetnet_checkpoint_path, output_loading_info=True
+        )
+    else:
+        prophet_old = ProphetNetForConditionalGenerationOld.from_pretrained(prophetnet_checkpoint_path)
+        prophet, loading_info = ProphetNetForConditionalGeneration.from_pretrained(
+            prophetnet_checkpoint_path, output_loading_info=True
+        )
 
     mapping = {
         "ngram_self_attn_layer_norm": "self_attn_layer_norm",
