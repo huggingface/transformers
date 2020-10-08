@@ -357,7 +357,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(input_ids)
 
         return self.model.apply(
-            {"param": self.params},
+            {"params": self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
