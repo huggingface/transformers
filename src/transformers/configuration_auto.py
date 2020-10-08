@@ -86,8 +86,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -120,6 +120,8 @@ CONFIG_MAPPING = OrderedDict(
         ("gpt2", GPT2Config),
         ("transfo-xl", TransfoXLConfig),
         ("xlnet", XLNetConfig),
+        ("xlm-prophetnet", XLMProphetNetConfig),
+        ("prophetnet", ProphetNetConfig),
         ("xlm", XLMConfig),
         ("ctrl", CTRLConfig),
         ("electra", ElectraConfig),
@@ -129,8 +131,6 @@ CONFIG_MAPPING = OrderedDict(
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
-        ("prophetnet", ProphetNetConfig),
-        ("xlm-prophetnet", XLMProphetNetConfig),
     ]
 )
 
@@ -170,8 +170,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutlm", "LayoutLM"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
-        ("prophetnet", "ProphetNet"),
         ("xlm-prophetnet", "XLMProphetNet"),
+        ("prophetnet", "ProphetNet"),
     ]
 )
 

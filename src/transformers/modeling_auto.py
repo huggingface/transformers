@@ -251,8 +251,8 @@ MODEL_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationEncoder),
         (DebertaConfig, DebertaModel),
         (DPRConfig, DPRQuestionEncoder),
-        (ProphetNetConfig, ProphetNetModel),
         (XLMProphetNetConfig, XLMProphetNetModel),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
@@ -365,8 +365,8 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (BartConfig, BartForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
-        (ProphetNetConfig, ProphetNetForConditionalGeneration),
         (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),
+        (ProphetNetConfig, ProphetNetForConditionalGeneration),
     ]
 )
 

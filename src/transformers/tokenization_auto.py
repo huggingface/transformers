@@ -140,8 +140,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
         (DebertaConfig, (DebertaTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
-        (ProphetNetConfig, (ProphetNetTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
+        (ProphetNetConfig, (ProphetNetTokenizer, None)),
     ]
 )
 
