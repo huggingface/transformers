@@ -405,7 +405,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
         training=False,
     ):
         all_hidden_states = () if output_hidden_states else None
@@ -430,9 +430,6 @@ class TFBertEncoder(tf.keras.layers.Layer):
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
@@ -619,9 +616,11 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         else:
             input_ids = inputs
 
+        if return_dict:
+            logger.warning("The `return_dict` parameter cannot be changed. Since the v4.0 the TensorFlow models will always return a dictionary.")
+
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -670,7 +669,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             raise NotImplementedError
         else:
             head_mask = [None] * self.num_hidden_layers
-            # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
@@ -684,12 +682,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(hidden_states=sequence_output)
-
-        if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -823,7 +815,8 @@ BERT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. Since
+            the v4.0 this parameter is always set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -931,7 +924,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
             >>> prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
         if isinstance(input_ids, (tuple, list)):
             labels = input_ids[9] if len(input_ids) > 9 else labels
@@ -965,11 +957,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
             d_labels = {"labels": labels}
             d_labels["next_sentence_label"] = next_sentence_label
             total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
-
-        if not return_dict:
-            output = (prediction_scores, seq_relationship_score) + outputs[2:]
-
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return TFBertForPreTrainingOutput(
             loss=total_loss,
@@ -1024,8 +1011,6 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(input_ids, (tuple, list)):
             labels = input_ids[9] if len(input_ids) > 9 else labels
 
@@ -1055,11 +1040,6 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             shifted_prediction_scores = prediction_scores[:, :-1]
             labels = labels[:, 1:]
             lm_loss = self.compute_loss(labels=labels, logits=shifted_prediction_scores)
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-
-            return ((lm_loss,) + output) if lm_loss is not None else output
 
         return TFCausalLMOutput(
             loss=lm_loss,
@@ -1127,8 +1107,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(input_ids, (tuple, list)):
             labels = input_ids[9] if len(input_ids) > 9 else labels
 
@@ -1154,11 +1132,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         prediction_scores = self.cls(sequence_output=sequence_output, training=training)
         masked_lm_loss = None if labels is None else self.compute_loss(labels=labels, logits=prediction_scores)
 
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
         return TFMaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
@@ -1172,11 +1145,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
-<<<<<<< HEAD
-=======
     authorized_missing_keys = [r"position_ids"]
 
->>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1187,11 +1157,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-<<<<<<< HEAD
-        inputs=None,
-=======
         input_ids=None,
->>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1224,9 +1190,12 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 <<<<<<< HEAD
 =======
 
+<<<<<<< HEAD
 >>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
+=======
+>>>>>>> f45fece2... Fix return_dict to True
         if isinstance(input_ids, (tuple, list)):
             next_sentence_label = input_ids[9] if len(input_ids) > 9 else next_sentence_label
 
@@ -1266,11 +1235,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 =======
 >>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
-
-        if not return_dict:
-            output = (seq_relationship_scores,) + outputs[2:]
-
-            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
         return TFNextSentencePredictorOutput(
             loss=next_sentence_loss,
@@ -1327,8 +1291,6 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(input_ids, (tuple, list)):
             labels = input_ids[9] if len(input_ids) > 9 else labels
 
@@ -1353,11 +1315,6 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         pooled_output = self.dropout(inputs=pooled_output, training=training)
         logits = self.classifier(inputs=pooled_output)
         loss = None if labels is None else self.compute_loss(labels=labels, logits=logits)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1450,8 +1407,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         else:
             input_ids = inputs
 
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if input_ids is not None:
             num_choices = shape_list(tensor=input_ids)[1]
             seq_length = shape_list(tensor=input_ids)[2]
@@ -1491,11 +1446,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         logits = self.classifier(inputs=pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels=labels, logits=reshaped_logits)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
             loss=loss,
@@ -1554,8 +1504,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(input_ids, (tuple, list)):
             labels = input_ids[9] if len(input_ids) > 9 else labels
 
@@ -1580,11 +1528,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         sequence_output = self.dropout(inputs=sequence_output, training=training)
         logits = self.classifier(inputs=sequence_output)
         loss = None if labels is None else self.compute_loss(labels=labels, logits=logits)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-
-            return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1648,8 +1591,6 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
         if isinstance(input_ids, (tuple, list)):
             start_positions = input_ids[9] if len(input_ids) > 9 else start_positions
             end_positions = input_ids[10] if len(input_ids) > 10 else end_positions
@@ -1683,11 +1624,6 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             total_loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=total_loss,
