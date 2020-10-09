@@ -223,32 +223,14 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertFalse(_is_punctuation(" "))
 
     def test_clean_text(self):
-        tokenizer = self.get_tokenizer(clean_text=True)
-        rust_tokenizer = self.get_rust_tokenizer(clean_text=True)
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
 
         # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
-        self.assertListEqual(
-            [tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
-            [['[UNK]'], [], ['[UNK]']]
-        )
+        self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]])
 
         self.assertListEqual(
-            [rust_tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
-            [['[UNK]'], [], ['[UNK]']]
-        )
-
-        tokenizer = self.get_tokenizer(clean_text=False)
-        rust_tokenizer = self.get_rust_tokenizer(clean_text=False)
-
-        # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
-        self.assertListEqual(
-            [tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
-            [['[UNK]'], ['[UNK]'], ['[UNK]']]
-        )
-
-        self.assertListEqual(
-            [rust_tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
-            [['[UNK]'], ['[UNK]'], ['[UNK]']]
+            [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
         )
 
     @slow
