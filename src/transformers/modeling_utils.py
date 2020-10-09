@@ -934,7 +934,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         else:
             resolved_archive_file = None
 
-        model_kwargs['name_or_path'] = pretrained_model_name_or_path
+        model_kwargs["name_or_path"] = pretrained_model_name_or_path
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)

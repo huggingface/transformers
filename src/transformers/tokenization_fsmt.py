@@ -499,9 +499,15 @@ class FSMTTokenizer(PreTrainedTokenizer):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
 
-        src_vocab_file = os.path.join(save_directory, (filename_prefix or "") + VOCAB_FILES_NAMES["src_vocab_file"])
-        tgt_vocab_file = os.path.join(save_directory, (filename_prefix or "") + VOCAB_FILES_NAMES["tgt_vocab_file"])
-        merges_file = os.path.join(save_directory,(filename_prefix or "") + VOCAB_FILES_NAMES["merges_file"])
+        src_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["src_vocab_file"]
+        )
+        tgt_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tgt_vocab_file"]
+        )
+        merges_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+        )
 
         with open(src_vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

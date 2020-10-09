@@ -20,9 +20,8 @@ import pathlib
 import random
 import unicodedata
 from functools import lru_cache
-from zipfile import ZipFile
 from typing import Optional, Tuple
-from numpy.lib.npyio import save
+from zipfile import ZipFile
 
 import tqdm
 

@@ -19,9 +19,10 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
+from .file_utils import is_sentencepiece_available
 from .tokenization_utils_fast import PreTrainedTokenizerFast
-from .file_utils import is_sentencepiece_available, is_tokenizers_available
 from .utils import logging
+
 
 if is_sentencepiece_available():
     from .tokenization_albert import AlbertTokenizer
@@ -51,7 +52,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "albert-large-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-tokenizer.json",
         "albert-xlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-tokenizer.json",
         "albert-xxlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-tokenizer.json",
-    }
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -255,7 +256,9 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, (filename_prefix or "") + VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

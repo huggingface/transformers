@@ -104,14 +104,12 @@ from .file_utils import (
     is_faiss_available,
     is_psutil_available,
     is_py3nvml_available,
+    is_sentencepiece_available,
     is_sklearn_available,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-    is_tokenizers_available,
-    is_sentencepiece_available
 )
 from .hf_argparser import HfArgumentParser
 
@@ -208,6 +206,7 @@ from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
+
 
 if is_sentencepiece_available():
     from .tokenization_albert import AlbertTokenizer

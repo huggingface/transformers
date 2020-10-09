@@ -15,9 +15,8 @@
 """ Tokenization class for model BertGeneration."""
 
 
-import os
-from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import List
+
 import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
