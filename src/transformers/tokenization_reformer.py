@@ -17,6 +17,7 @@
 
 import os
 from shutil import copyfile
+from typing import Dict
 
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -119,7 +120,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return self.sp_model.get_piece_size()
 
-    def get_vocab(self):
+    def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
