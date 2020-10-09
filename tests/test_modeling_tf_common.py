@@ -36,6 +36,7 @@ if is_tf_available():
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -98,6 +99,15 @@ class TFModelTesterMixin:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values():
                 inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+            elif model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.values():
+                # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
+                # This will be removed once all the TF models will be updated to the new design
+                if model_class.base_model_prefix in ["bert"]:
+                    inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                )
             elif model_class in [
                 *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
                 *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
@@ -159,8 +169,8 @@ class TFModelTesterMixin:
                 self.assertListEqual(arg_names[:5], expected_arg_names)
 
             else:
-                expected_arg_names = ["inputs"]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+                expected_arg_names = ["input_ids", "inputs"]
+                self.assertTrue(arg_names[0] in expected_arg_names)
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
@@ -728,28 +738,47 @@ class TFModelTesterMixin:
             model(inputs)
 
     def test_resize_token_embeddings(self):
+        import copy
+
         if not self.test_resize_embeddings:
             return
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         INPUT_SHAPE = [1, 10, config.hidden_size]
+
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
-                # build the embeddings
-                model = model_class(config=config)
-                emb_old = model.get_input_embeddings()
-                emb_old.build(INPUT_SHAPE)
-                # reshape the embeddings
-                new_embeddings = model._get_resized_embeddings(emb_old, size)
-                # # check that the resized embeddings size matches the desired size.
-                assert_size = size if size is not None else config.vocab_size
-                self.assertEqual(new_embeddings.shape[0], assert_size)
-                # check that weights remain the same after resizing
-                emd_old_weights = model._get_word_embeddings(emb_old)
-                models_equal = True
-                for p1, p2 in zip(emd_old_weights.numpy(), new_embeddings.numpy()):
-                    if np.sum(abs(p1 - p2)) > 0:
-                        models_equal = False
-                self.assertTrue(models_equal)
+                model = model_class(config=copy.deepcopy(config))
+                old_embd = model.get_input_embeddings()
+
+                # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
+                # This will be removed once all the TF models will be updated to the new design
+                if model.base_model_prefix in ["bert"]:
+                    old_embd.word_embeddings.build([])
+
+                    old_size, _ = old_embd.word_embeddings.weights[0].shape
+
+                    model.resize_token_embeddings(size)
+
+                    new_size, _ = old_embd.word_embeddings.weights[0].shape
+
+                    if size is None:
+                        self.assertEqual(new_size, old_size)
+                    else:
+                        self.assertEqual(size, new_size)
+                else:
+                    old_embd.build(INPUT_SHAPE)
+                    # reshape the embeddings
+                    new_embeddings = model._get_resized_embeddings(old_embd, size)
+                    # # check that the resized embeddings size matches the desired size.
+                    assert_size = size if size is not None else config.vocab_size
+                    self.assertEqual(new_embeddings.shape[0], assert_size)
+                    # check that weights remain the same after resizing
+                    emd_old_weights = model._get_word_embeddings(old_embd)
+                    models_equal = True
+                    for p1, p2 in zip(emd_old_weights.numpy(), new_embeddings.numpy()):
+                        if np.sum(abs(p1 - p2)) > 0:
+                            models_equal = False
+                    self.assertTrue(models_equal)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -834,7 +863,13 @@ class TFModelTesterMixin:
             if getattr(model, "compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
+                print("model", model_class.__name__)
+                print("prepared_for_class", prepared_for_class.keys())
+                print("inputs_dict", inputs_dict.keys())
+                print("diff", list(prepared_for_class.keys() - inputs_dict.keys()))
+                added_label = prepared_for_class[
+                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                ]
                 loss_size = tf.size(added_label)
 
                 if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():

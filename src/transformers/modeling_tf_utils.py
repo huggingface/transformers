@@ -215,49 +215,64 @@ class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
     """
 
 
-def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
+class TFNextSentencePredictionLoss:
     """
-    Detect missing and unexpected layers.
+    Loss function suitable for next sentence prediction (NSP), that is, the task of guessing the next sentence.
 
-    Args:
-        model (:obj:`tf.keras.models.Model`):
-            The model to load the weights into.
-        resolved_archive_file (:obj:`str`):
-            The location of the H5 file.
+    .. note::
 
-    Returns:
-        Two lists, one for the missing layers, and another one for the unexpected layers.
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
     """
-    missing_layers = []
-    unexpected_layers = []
 
-    with h5py.File(resolved_archive_file, "r") as f:
-        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
-        model_layer_names = set(layer.name for layer in model.layers)
-        missing_layers = list(model_layer_names - saved_layer_names)
-        unexpected_layers = list(saved_layer_names - model_layer_names)
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        next_sentence_active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
+        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, 2)), next_sentence_active_loss)
+        next_sentence_label = tf.boolean_mask(tf.reshape(labels, (-1,)), next_sentence_active_loss)
 
-        for layer in model.layers:
-            if layer.name in saved_layer_names:
-                g = f[layer.name]
-                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
-                saved_weight_names_set = set(
-                    "/".join(weight_name.split("/")[2:]) for weight_name in saved_weight_names
-                )
-                symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
-                symbolic_weights_names = set(
-                    "/".join(symbolic_weight.name.split("/")[2:]) for symbolic_weight in symbolic_weights
-                )
-                missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
-                unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
-
-    return missing_layers, unexpected_layers
+        return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
-def load_tf_weights(model, resolved_archive_file):
+class TFPreTrainingLoss:
+    """
+    Loss function suitable for pre training, that is, the task of pretraining a language model by combining NSP + MLM.
+
+    .. note::
+
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
+
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        masked_lm_active_loss = tf.not_equal(tf.reshape(labels["labels"], (-1,)), -100)
+        masked_lm_reduced_logits = tf.boolean_mask(
+            tf.reshape(logits[0], (-1, shape_list(logits[0])[2])), masked_lm_active_loss
+        )
+        masked_lm_labels = tf.boolean_mask(tf.reshape(labels["labels"], (-1,)), masked_lm_active_loss)
+        next_sentence_active_loss = tf.not_equal(tf.reshape(labels["next_sentence_label"], (-1,)), -100)
+        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits[1], (-1, 2)), next_sentence_active_loss)
+        next_sentence_label = tf.boolean_mask(
+            tf.reshape(labels["next_sentence_label"], (-1,)), next_sentence_active_loss
+        )
+        masked_lm_loss = loss_fn(masked_lm_labels, masked_lm_reduced_logits)
+        next_sentence_loss = loss_fn(next_sentence_label, next_sentence_reduced_logits)
+        masked_lm_loss = tf.reshape(masked_lm_loss, (-1, shape_list(next_sentence_loss)[0]))
+        masked_lm_loss = tf.reduce_mean(masked_lm_loss, 0)
+
+        return masked_lm_loss + next_sentence_loss
+
+
+def old_load_tf_weights(model, resolved_archive_file):
     """
     Load the TF weights from a H5 file.
-
     Args:
         model (:obj:`tf.keras.models.Model`):
             The model to load the weights into.
@@ -298,6 +313,84 @@ def load_tf_weights(model, resolved_archive_file):
                         weight_value_tuples.append((symbolic_weight, array))
 
     K.batch_set_value(weight_value_tuples)
+
+
+def load_tf_weights(model, resolved_archive_file):
+    """
+    Detect missing and unexpected layers.
+
+    Args:
+        model (:obj:`tf.keras.models.Model`):
+            The model to load the weights into.
+        resolved_archive_file (:obj:`str`):
+            The location of the H5 file.
+
+    Returns:
+        Two lists, one for the missing layers, and another one for the unexpected layers.
+    """
+    missing_layers = []
+    unexpected_layers = []
+
+    with h5py.File(resolved_archive_file, "r") as f:
+        saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+        model_layers_name_value = {layer.name: layer for layer in model.layers}
+        model_layers_name = set(model_layers_name_value.keys())
+        renamed_saved_h5_model_layers_names = set(
+            name.replace("nsp___", "").replace("mlm___", "") for name in saved_h5_model_layers_name
+        )
+        missing_layers = list(model_layers_name - renamed_saved_h5_model_layers_names)
+        unexpected_layers = list(renamed_saved_h5_model_layers_names - model_layers_name)
+        saved_weight_names_set = set()
+        symbolic_weights_names = set()
+        weight_value_tuples = []
+
+        for layer_name in saved_h5_model_layers_name:
+            if layer_name.replace("nsp___", "").replace("mlm___", "") in model_layers_name:
+                g = f[layer_name]
+                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
+                layer = model_layers_name_value[layer_name.replace("nsp___", "").replace("mlm___", "")]
+                symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
+                saved_weight_names_values = {}
+
+                for weight_name in saved_weight_names:
+                    name = (
+                        "/".join(weight_name.split("/")[1:])
+                        .replace("weight:0", "embeddings:0")
+                        .replace("nsp___", "")
+                        .replace("mlm___", "")
+                    )
+                    saved_weight_names_values[name] = np.asarray(g[weight_name])
+
+                    saved_weight_names_set.add(name)
+
+                for symbolic_weight in symbolic_weights:
+                    symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
+                    saved_weight_value = None
+
+                    if symbolic_weight_name in saved_weight_names_values:
+                        saved_weight_value = saved_weight_names_values[symbolic_weight_name]
+                    elif symbolic_weight_name in saved_weight_names_values:
+                        saved_weight_value = saved_weight_names_values[symbolic_weight_name]
+
+                    if saved_weight_value is not None:
+                        if K.int_shape(symbolic_weight) != saved_weight_value.shape:
+                            try:
+                                array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
+                            except AssertionError as e:
+                                e.args += (K.int_shape(symbolic_weight), saved_weight_value.shape)
+                                raise e
+                        else:
+                            array = saved_weight_value
+
+                        weight_value_tuples.append((symbolic_weight, array))
+
+                    symbolic_weights_names.add(symbolic_weight_name)
+
+    K.batch_set_value(weight_value_tuples)
+    missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
+    unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
+
+    return missing_layers, unexpected_layers
 
 
 class TFNextSentencePredictionLoss:
@@ -555,27 +648,52 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`new_num_tokens` is :obj:`None`
         """
         word_embeddings = self._get_word_embeddings(old_embeddings)
-        if new_num_tokens is None:
-            return word_embeddings
-        old_num_tokens, old_embedding_dim = word_embeddings.shape
-        if old_num_tokens == new_num_tokens:
-            return word_embeddings
-
         # initialize new embeddings
         # todo: initializer range is not always passed in config.
         init_range = getattr(self.config, "initializer_range", 0.02)
-        new_embeddings = self.add_weight(
-            "weight",
-            shape=[new_num_tokens, old_embedding_dim],
-            initializer=get_initializer(init_range),
-            dtype=tf.float32,
-        )
-        init_weights = new_embeddings.numpy()
 
-        # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
-        new_embeddings.assign(init_weights)
+        if new_num_tokens is None:
+            if self.base_model_prefix in ["bert"]:
+                word_embeddings.build([])
+
+            return word_embeddings
+
+        # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
+        # This will be removed once all the TF models will be updated to the new design
+        if self.base_model_prefix in ["bert"]:
+            if len(word_embeddings.weights) == 0:
+                word_embeddings.build([])
+
+            old_num_tokens, old_embedding_dim = word_embeddings.weights[0].shape
+        else:
+            old_num_tokens, old_embedding_dim = word_embeddings.shape
+
+        if old_num_tokens == new_num_tokens:
+            return word_embeddings
+
+        # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
+        # This will be removed once all the TF models will be updated to the new design
+        if self.base_model_prefix in ["bert"]:
+            new_embeddings = tf.keras.layers.Embedding(
+                input_dim=new_num_tokens,
+                output_dim=old_embedding_dim,
+                embeddings_initializer=get_initializer(initializer_range=init_range),
+                name="word_embeddings",
+            )
+            new_embeddings.build([])
+        else:
+            new_embeddings = self.add_weight(
+                "weight",
+                shape=[new_num_tokens, old_embedding_dim],
+                initializer=get_initializer(init_range),
+                dtype=tf.float32,
+            )
+            init_weights = new_embeddings.numpy()
+
+            # Copy token embeddings from the previous weights
+            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+            init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+            new_embeddings.assign(init_weights)
 
         return new_embeddings
 
@@ -813,7 +931,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            load_tf_weights(model, resolved_archive_file)
+            # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
+            # This will be removed once all the TF models will be updated to the new design
+            if model.base_model_prefix in ["bert"]:
+                missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file)
+            else:
+                old_load_tf_weights(model, resolved_archive_file)
+
+                with h5py.File(resolved_archive_file, "r") as f:
+                    if "layer_names" not in f.attrs and "model_weights" in f:
+                        f = f["model_weights"]
+                    hdf5_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+                model_layer_names = set(layer.name for layer in model.layers)
+                missing_keys = list(model_layer_names - hdf5_layer_names)
+                unexpected_keys = list(hdf5_layer_names - model_layer_names)
         except OSError:
             raise OSError(
                 "Unable to load weights from h5 file. "
@@ -821,8 +952,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
-
-        missing_keys, unexpected_keys = detect_tf_missing_unexpected_layers(model, resolved_archive_file)
 
         if cls.authorized_missing_keys is not None:
             for pat in cls.authorized_missing_keys:
@@ -1119,18 +1248,18 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         return output
 
 
-def shape_list(x: tf.Tensor) -> List[int]:
+def shape_list(tensor: tf.Tensor) -> List[int]:
     """
     Deal with dynamic shape in tensorflow cleanly.
 
     Args:
-        x (:obj:`tf.Tensor`): The tensor we want the shape of.
+        tensor (:obj:`tf.Tensor`): The tensor we want the shape of.
 
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-    static = x.shape.as_list()
-    dynamic = tf.shape(x)
+    static = tensor.shape.as_list()
+    dynamic = tf.shape(tensor)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
