@@ -19,7 +19,7 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 #### XSUM:
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz
+wget https://cdn-datasets.huggingface.co/summarization/xsum.tar.gz
 tar -xzvf xsum.tar.gz
 export XSUM_DIR=${PWD}/xsum
 ```
@@ -29,7 +29,7 @@ To use your own data, copy that files format. Each article to be summarized is o
 #### CNN/DailyMail
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm_v2.tgz
+wget https://cdn-datasets.huggingface.co/summarization/cnn_dm_v2.tgz
 tar -xzvf cnn_dm_v2.tgz  # empty lines removed
 mv cnn_cln cnn_dm
 export CNN_DIR=${PWD}/cnn_dm
@@ -39,7 +39,7 @@ this should make a directory called `cnn_dm/` with 6 files.
 #### WMT16 English-Romanian Translation Data:
 download with this command:
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
+wget https://cdn-datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
 ```
@@ -47,7 +47,7 @@ this should make a directory called `wmt_en_ro/` with 6 files.
 
 #### WMT English-German:
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_de.tgz
+wget https://cdn-datasets.huggingface.co/translation/wmt_en_de.tgz
 tar -xzvf wmt_en_de.tgz
 export DATA_DIR=${PWD}/wmt_en_de
 ```
