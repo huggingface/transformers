@@ -1304,6 +1304,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
         self.init_kwargs = copy.deepcopy(kwargs)
+        self.name_or_path = kwargs.pop("name_or_path", "")
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
@@ -1376,6 +1377,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             raise ValueError(
                 "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
             )
+
+    def __repr__(self) -> str:
+        return (f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path={self.name_or_path}, "
+                f"vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
+                f"do_lower_case={self.do_lower_case}, padding_side={self.padding_side}, "
+                f"special_tokens={self.special_tokens_map_extended})")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
@@ -1618,6 +1625,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
 
+        init_kwargs['name_or_path'] = pretrained_model_name_or_path
+
         # Instantiate tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -1753,7 +1762,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         vocab_files = self.save_vocabulary(save_directory)
 
-        return file_names + (vocab_files, added_tokens_file)
+        return file_names + vocab_files + (vocab_files, added_tokens_file)
+
+    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
+        raise NotImplementedError
 
     @add_end_docstrings(
         ENCODE_KWARGS_DOCSTRING,

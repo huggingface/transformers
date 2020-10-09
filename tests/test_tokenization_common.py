@@ -206,9 +206,41 @@ class TokenizerTesterMixin:
 
                 shutil.rmtree(tmpdirname)
 
-        # Now let's start the test
         tokenizers = self.get_tokenizers(model_max_length=42)
         for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Isolate this from the other tests because we save additional tokens/etc
+                tmpdirname = tempfile.mkdtemp()
+
+                sample_text = " He is very happy, UNwant\u00E9d,running"
+                tokenizer.add_tokens(["bim", "bambam"])
+                additional_special_tokens = tokenizer.additional_special_tokens
+                additional_special_tokens.append("new_additional_special_token")
+                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
+                before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
+                before_vocab = tokenizer.get_vocab()
+                tokenizer.save_pretrained(tmpdirname)
+
+                after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
+                after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
+                after_vocab = after_tokenizer.get_vocab()
+                self.assertListEqual(before_tokens, after_tokens)
+                self.assertDictEqual(before_vocab, after_vocab)
+                self.assertIn("bim", after_vocab)
+                self.assertIn("bambam", after_vocab)
+                self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+                self.assertEqual(after_tokenizer.model_max_length, 42)
+
+                tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
+                self.assertEqual(tokenizer.model_max_length, 43)
+
+                shutil.rmtree(tmpdirname)
+
+        # Test that we can also use the non-legacy saving format for fast tokenizers
+        tokenizers = self.get_tokenizers(model_max_length=42)
+        for tokenizer in tokenizers:
+            if not tokenizer.is_fast:
+                continue
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()

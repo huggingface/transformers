@@ -537,7 +537,7 @@ class T5Converter(SpmConverter):
         )
 
 
-CONVERTERS = {
+SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BertTokenizer": BertConverter,
     "BertGenerationTokenizer": BertGenerationConverter,
@@ -574,10 +574,10 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
 
-    if tokenizer_class_name not in CONVERTERS:
+    if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
         raise ValueError(f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance. "
-                         f"No converter was found. Currently available slow->fast convertors: {list(CONVERTERS.keys())}")
+                         f"No converter was found. Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}")
 
-    converter_class = CONVERTERS[tokenizer_class_name]
+    converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
 
     return converter_class(transformer_tokenizer).converted()
