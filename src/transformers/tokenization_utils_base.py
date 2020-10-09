@@ -1379,9 +1379,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
 
     def __repr__(self) -> str:
-        return (f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path={self.name_or_path}, "
+        return (f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}', "
                 f"vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
-                f"do_lower_case={self.do_lower_case}, padding_side={self.padding_side}, "
+                f"do_lower_case={self.do_lower_case}, padding_side='{self.padding_side}', "
                 f"special_tokens={self.special_tokens_map_extended})")
 
     @classmethod
@@ -1676,7 +1676,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return tokenizer
 
-    def save_pretrained(self, save_directory: str, legacy_format: bool = True) -> Tuple[str]:
+    def save_pretrained(self, save_directory: str, legacy_format: bool = True, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
         Save the full tokenizer state.
 
@@ -1701,6 +1701,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 a separate added_tokens files or in the unified JSON file format for the `tokenizers` library.
                 It's only possible to save a Fast tokenizer in the unified JSON format and this format is incompatible
                 with "slow" tokenizers (not powered by the `tokenizers` library).
+            filename_prefix: (:obj:`str`, `optional`):
+                A prefix to add to the names of the files saved by the tokenizer.
 
         Returns:
             A tuple of :obj:`str`: The files saved.
@@ -1710,8 +1712,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return
         os.makedirs(save_directory, exist_ok=True)
 
-        special_tokens_map_file = os.path.join(save_directory, SPECIAL_TOKENS_MAP_FILE)
-        tokenizer_config_file = os.path.join(save_directory, TOKENIZER_CONFIG_FILE)
+        special_tokens_map_file = os.path.join(save_directory, (filename_prefix or "") + SPECIAL_TOKENS_MAP_FILE)
+        tokenizer_config_file = os.path.join(save_directory, (filename_prefix or "") + TOKENIZER_CONFIG_FILE)
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
         if len(self.init_inputs) > 0:
@@ -1742,29 +1744,44 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
-        return self._save_pretrained(save_directory=save_directory, file_names=file_names, legacy_format=legacy_format)
+        return self._save_pretrained(save_directory=save_directory, file_names=file_names, legacy_format=legacy_format, filename_prefix=filename_prefix)
 
-    def _save_pretrained(self, save_directory: str, file_names: Tuple[str], legacy_format: bool = True) -> Tuple[str]:
+    def _save_pretrained(self, save_directory: str, file_names: Tuple[str], legacy_format: bool = True, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """ Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
             Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens}
-            using the specific :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast._save_pretrained`
+            using the specific :meth:`~transformers.tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`
         """
         if not legacy_format:
             raise ValueError("Only fast tokenizers (instances of PretrainedTokenizerFast) can be saved in non legacy format.")
 
-        added_tokens_file = os.path.join(save_directory, ADDED_TOKENS_FILE)
+        added_tokens_file = os.path.join(save_directory, (filename_prefix or "") + ADDED_TOKENS_FILE)
         added_vocab = self.get_added_vocab()
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, ensure_ascii=False)
                 f.write(out_str)
 
-        vocab_files = self.save_vocabulary(save_directory)
+        vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
         return file_names + vocab_files + (vocab_files, added_tokens_file)
 
-    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        """ Save only the vocabulary of the tokenizer (vocabulary + added tokens).
+
+            This method won't save the configuration and special token mappings of the tokenizer.
+            Use :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBast._save_pretrained` to save
+            the whole state of the tokenizer.
+
+            Args:
+                save_directory (:obj:`str`):
+                    The directory in which to save the vocabulary.
+                filename_prefix (:obj:`str`, `optional`):
+                    An optional prefix to add to the named of the saved files.
+
+            Returns:
+                :obj:`Tuple(str)`: Paths to the files saved.
+        """
         raise NotImplementedError
 
     @add_end_docstrings(

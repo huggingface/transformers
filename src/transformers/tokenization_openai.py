@@ -18,6 +18,7 @@
 import json
 import os
 import re
+from typing import Optional, Tuple
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
@@ -204,22 +205,12 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the vocabulary and special tokens file to a directory.
-
-        Args:
-            vocab_path (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
-        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
+        vocab_file = os.path.join(save_directory, (filename_prefix or "") + VOCAB_FILES_NAMES["vocab_file"])
+        merge_file = os.path.join(save_directory, (filename_prefix or "") + VOCAB_FILES_NAMES["merges_file"])
 
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

@@ -189,27 +189,17 @@ class MarianTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
-        save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
+        save_json(self.encoder, save_dir / ((filename_prefix or "") + self.vocab_files_names["vocab"]))
 
         for orig, f in zip(["source.spm", "target.spm"], self.spm_files):
-            dest_path = save_dir / Path(f).name
+            dest_path = save_dir / ((filename_prefix or "") + Path(f).name)
             if not dest_path.exists():
                 copyfile(f, save_dir / orig)
 
-        return tuple(save_dir / f for f in self.vocab_files_names)
+        return tuple(save_dir / ((filename_prefix or "") + f) for f in self.vocab_files_names)
 
     def get_vocab(self) -> Dict:
         vocab = self.encoder.copy()
