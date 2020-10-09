@@ -90,7 +90,7 @@ extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
 extras["retrieval"] = ["faiss-cpu", "datasets"]
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "comet_ml"] + extras[
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras[
     "retrieval"
 ]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
