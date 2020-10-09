@@ -130,6 +130,7 @@ class ProphetNetModelTester:
             disable_ngram_loss=self.disable_ngram_loss,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
+            return_dict=True,
         )
 
         return (
@@ -248,7 +249,7 @@ class ProphetNetModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_value_states = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -257,15 +258,15 @@ class ProphetNetModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -287,7 +288,7 @@ class ProphetNetModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -305,18 +306,16 @@ class ProphetNetModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)[
-            "last_hidden_state"
-        ]
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
 
     def create_and_check_generate_with_past_key_value_states(
         self,
@@ -362,7 +361,11 @@ class ProphetNetModelTester:
             torch.manual_seed(0)
             model = model_class(config=config).to(torch_device).eval()
             # load state dict copies weights but does not tie them
-            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
+
+            if model_class == ProphetNetForConditionalGeneration:
+                model.prophetnet.encoder.load_state_dict(model.prophetnet.decoder.state_dict(), strict=False)
+            else:
+                model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
 
             torch.manual_seed(0)
             tied_config = copy.deepcopy(config)
@@ -374,6 +377,7 @@ class ProphetNetModelTester:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
+                return_dict=True,
             )
 
             tied_model_result = tied_model(
@@ -381,6 +385,7 @@ class ProphetNetModelTester:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
+                return_dict=True,
             )
 
             # check that models has less parameters
@@ -500,6 +505,30 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_fast_integration(*config_and_inputs)
 
+    def test_shared_weights(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
+
+    def test_shift_labels_via_shift_left(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
+
+    def test_decoder_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
+
+    def test_decoder_model_attn_mask_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_decoder_model_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate_with_past_key_value_states(*config_and_inputs)
+
+    def test_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
 
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
@@ -570,10 +599,8 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
 
         # decoder outputs
-        decoder_outputs = model.prophetnet.decoder(
-            decoder_prev_ids, encoder_hidden_states=encoder_outputs, encoder_padding_mask=None
-        )
-        predicting_streams = decoder_outputs[0][:, 1:]
+        decoder_outputs = model.prophetnet.decoder(decoder_prev_ids, encoder_hidden_states=encoder_outputs)
+        predicting_streams = decoder_outputs[0].view(1, model.config.ngram + 1, 12, -1)[:, 1:]
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
         self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
@@ -604,7 +631,6 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=99, return_tensors="pt").input_ids
         input_ids = input_ids.to(torch_device)
         # actually 98 tokens are used. max_length=100 contains bos and eos.
-        # print(' '.join(tokenizer.tokenize(ARTICLE_TO_SUMMARIZE)[:98]))
         summary_ids = model.generate(
             input_ids, num_beams=4, length_penalty=1.0, no_repeat_ngram_size=3, early_stopping=True
         )

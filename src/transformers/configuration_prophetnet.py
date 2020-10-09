@@ -55,6 +55,7 @@ class ProphetNetConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
+        decoder_start_token_id=0,
         ngram=2,
         num_buckets=32,
         relative_max_distance=128,
@@ -67,6 +68,7 @@ class ProphetNetConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
             **common_kwargs,
         )
         self.vocab_size = vocab_size
