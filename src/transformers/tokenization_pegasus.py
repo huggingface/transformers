@@ -49,7 +49,7 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Dont use reserved words added_token_encoder, added_tokens_decoder because of
+        # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
         assert len(self.added_tokens_decoder) == 0
         self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
@@ -58,7 +58,7 @@ class PegasusTokenizer(ReformerTokenizer):
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token (str) in an id using the vocab. """
+        """ Converts a token (str) to an id using the vocab. """
         if token in self.decoder:
             return self.decoder[token]
         elif token in self.added_tokens_decoder:
@@ -67,7 +67,7 @@ class PegasusTokenizer(ReformerTokenizer):
         return sp_id + self.offset
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the vocab."""
+        """Converts an index (integer) to a token (str) using the vocab."""
         if index in self.encoder:
             return self.encoder[index]
         elif index in self.added_tokens_encoder:
@@ -80,11 +80,6 @@ class PegasusTokenizer(ReformerTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model) + self.offset
-
-    def get_vocab(self) -> Dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
@@ -109,12 +104,12 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        Build model inputs from a sequence or a pair of sequences for sequence classification tasks
         by concatenating and adding special tokens.
         A Pegasus sequence has the following format, where ``X`` represents the sequence:
 
         - single sequence: ``X </s>``
-        - pair of sequences: ``A B </s>``  (not intended use)
+        - pair of sequences: ``A B </s>`` (not intended use)
 
         BOS is never used.
         Pairs of sequences are not the expected use case, but they will be handled without a separator.

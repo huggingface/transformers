@@ -186,7 +186,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
             print('We have added', num_added_toks, 'tokens')
-            # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+            # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
             model.resize_token_embeddings(len(tokenizer))
         """
         new_tokens = [str(tok) for tok in new_tokens]
