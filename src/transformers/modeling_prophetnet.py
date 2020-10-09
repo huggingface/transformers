@@ -120,23 +120,10 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # init special `NgramMultiheadAttention`
         if isinstance(module, NgramMultiheadAttention):
-            #            if module.qkv_same_dim:
             module.in_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-            #            else:
-            #                module.key_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-            #                module.value_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-            #                module.query_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-
             module.out_proj.weight.data.normal_(mean=0.0, std=self.config.init_std)
-
-            #            if module.in_proj_bias is not None:
             module.in_proj_bias.data.zero_()
             module.out_proj.bias.data.zero_()
-        #            if module.key_proj_bias is not None:
-        #                module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
-        #            if module.value_proj_bias is not None:
-        #                module.value_proj_bias.data.normal_(mean=0.0, std=self.config.init_std)
-
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
@@ -414,20 +401,14 @@ class NgramMultiheadAttention(nn.Module):
         self,
         embed_dim,
         num_heads,
-        #        kdim=None,
-        #        vdim=None,
         dropout=0.0,
         output_dropout=0.0,
-        #        encoder_decoder_attention=False,
         ngram=2,
         num_buckets=32,
         relative_max_distance=128,
     ):
         super().__init__()
         self.embed_dim = embed_dim
-        self.kdim = embed_dim
-        self.vdim = embed_dim
-        self.qkv_same_dim = True
 
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
@@ -440,33 +421,18 @@ class NgramMultiheadAttention(nn.Module):
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
 
-        #        self.encoder_decoder_attention = encoder_decoder_attention
-
         self.relative_linear = nn.Linear(embed_dim, num_buckets * num_heads)
-        #        if self.qkv_same_dim:
+
         self.in_proj_weight = nn.Parameter(torch.Tensor(3 * embed_dim, embed_dim))
-
-        #        else:
-        #            self.key_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.kdim))
-        #            self.value_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.vdim))
-        #            self.query_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
-
-        #        if bias:
         self.in_proj_bias = nn.Parameter(torch.Tensor(3 * embed_dim))
-        #        else:
-        #            self.register_parameter("in_proj_bias", None)
 
-        #        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+#        self.key_proj = nn.Linear(embed_dim, embed_dim)
+#        self.value_proj = nn.Linear(embed_dim, embed_dim)
+#        self.query_proj = nn.Linear(embed_dim, embed_dim)
+
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=True)
 
-        #        if add_bias_kv:
-        #            self.key_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
-        #            self.value_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
-        #        else:
-        #        self.key_proj_bias = self.value_proj_bias = None
-
         self.onnx_trace = False
-        self.cache_key = "self"
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -485,6 +451,7 @@ class NgramMultiheadAttention(nn.Module):
         output_attentions=False,
     ):
         tgt_len, bsz, embed_dim = hidden_states.size()
+
         assert embed_dim == self.embed_dim
         assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
 
@@ -497,16 +464,9 @@ class NgramMultiheadAttention(nn.Module):
         q, k, v = self.in_proj_qkv(hidden_states)
         q *= self.scaling
 
-        #        if self.key_proj_bias is not None:
-        #            assert self.value_proj_bias is not None
-        #            k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
-        #            v = torch.cat([v, self.value_proj_bias.repeat(1, bsz, 1)])
-
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-        if k is not None:
-            k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-        if v is not None:
-            v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
         h_list = hidden_states.chunk(1 + self.ngram, dim=0)
 
@@ -715,44 +675,24 @@ class NgramMultiheadAttention(nn.Module):
         return result
 
     def in_proj_qkv(self, query):
-        return self._in_proj(query).chunk(3, dim=-1)
+#        self.query_proj.weight = nn.Parameter(self.in_proj_weight[:16, :])
+#        self.key_proj.weight = nn.Parameter(self.in_proj_weight[16:32, :])
+#        self.value_proj.weight = nn.Parameter(self.in_proj_weight[32:, :])
+#
+#        self.query_proj.bias = nn.Parameter(self.in_proj_bias[:16])
+#        self.key_proj.bias = nn.Parameter(self.in_proj_bias[16:32])
+#        self.value_proj.bias = nn.Parameter(self.in_proj_bias[32:])
+#
+#        query = self.query_proj(query)
+#        key = self.key_proj(query)
+#        value = self.value_proj(query)
 
-    def in_proj_q(self, query):
-        if self.qkv_same_dim:
-            return self._in_proj(query, end=self.embed_dim)
-        else:
-            bias = self.in_proj_bias
-            if bias is not None:
-                bias = bias[: self.embed_dim]
-            return F.linear(query, self.query_proj_weight, bias)
+#        import ipdb; ipdb.set_trace()
+        qkv_projection = F.linear(query, self.in_proj_weight, self.in_proj_bias)
+        query_comp, key_comp, value_comp = qkv_projection.chunk(3, dim=-1)
 
-    def in_proj_k(self, key):
-        if self.qkv_same_dim:
-            return self._in_proj(key, start=self.embed_dim, end=2 * self.embed_dim)
-        else:
-            weight = self.key_proj_weight
-            bias = self.in_proj_bias
-            if bias is not None:
-                bias = bias[self.embed_dim : 2 * self.embed_dim]
-            return F.linear(key, weight, bias)
-
-    def in_proj_v(self, value):
-        if self.qkv_same_dim:
-            return self._in_proj(value, start=2 * self.embed_dim)
-        else:
-            weight = self.value_proj_weight
-            bias = self.in_proj_bias
-            if bias is not None:
-                bias = bias[2 * self.embed_dim :]
-            return F.linear(value, weight, bias)
-
-    def _in_proj(self, input, start=0, end=None):
-        weight = self.in_proj_weight
-        bias = self.in_proj_bias
-        weight = weight[start:end, :]
-        if bias is not None:
-            bias = bias[start:end]
-        return F.linear(input, weight, bias)
+        return query_comp, key_comp, value_comp
+#        return query, key, value
 
 
 class ProphetNetEncoderLayer(nn.Module):
@@ -770,7 +710,6 @@ class ProphetNetEncoderLayer(nn.Module):
 
         # 2nd residual block
         self.feed_forward = FeedForwardBlock(config, config.encoder_ffn_dim)
-        #        self.final_layer_norm = LayerNorm(config.hidden_size)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(self, hidden_states, attention_mask, output_attentions=False):
@@ -1126,10 +1065,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             ngram_causal_mask.shape[:1] + (batch_size,) + ngram_causal_mask.shape[1:]
         )
 
-        # TODO (PVP, QWeizhen) - Check if this is correct
         if attention_mask is not None:
             extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * -10000.0
             extended_attention_mask = extended_attention_mask.expand((self.ngram, batch_size, seq_length, seq_length))
+            # n-gram stream attention_mask should always be 0
             extended_attention_mask = torch.cat(
                 [extended_attention_mask, torch.zeros_like(extended_attention_mask)], dim=-1
             )
