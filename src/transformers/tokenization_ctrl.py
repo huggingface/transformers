@@ -223,7 +223,6 @@ class CTRLTokenizer(PreTrainedTokenizer):
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
