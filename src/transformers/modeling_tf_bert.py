@@ -552,7 +552,7 @@ class TFBertPreTrainingHeads(tf.keras.layers.Layer):
 class TFBertMainLayer(tf.keras.layers.Layer):
     config_class = BertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
 
         self.num_hidden_layers = config.num_hidden_layers
@@ -562,7 +562,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.embeddings = TFBertEmbeddings(config=config, name="embeddings")
         self.encoder = TFBertEncoder(config=config, name="encoder")
-        self.pooler = TFBertPooler(config=config, name="pooler")
+        self.pooler = TFBertPooler(config=config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -681,7 +681,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(hidden_states=sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -969,7 +969,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
 
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions/decoder/bias", r"pooler"]
+    authorized_missing_keys = [r"position_ids", r"predictions/decoder/bias"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -978,7 +978,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             logger.warning("If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.initializer_range = config.initializer_range
-        self.bert = TFBertMainLayer(config=config, name="bert")
+        self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
         self.cls = TFBertOnlyMLMHead(config=config, name="cls")
 
     def get_output_embeddings(self):
@@ -1052,7 +1052,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions/decoder/bias", r"pooler"]
+    authorized_missing_keys = [r"position_ids", r"predictions/decoder/bias"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1064,7 +1064,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             )
 
         self.initializer_range = config.initializer_range
-        self.bert = TFBertMainLayer(config=config, name="bert")
+        self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
         self.cls = TFBertOnlyMLMHead(config=config, name="cls")
 
     def get_output_embeddings(self):
@@ -1464,13 +1464,12 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config=config, name="bert")
+        self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
@@ -1546,13 +1545,12 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config=config, name="bert")
+        self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
         self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(initializer_range=config.initializer_range),
