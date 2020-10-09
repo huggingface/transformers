@@ -428,25 +428,34 @@ class ProphetNetModelTester:
     def check_fast_integration(
         self,
         config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
+        *args,
     ):
+        input_ids = torch.tensor([[7, 4, 78, 0, 24, 52, 43]], device=torch_device, dtype=torch.long)
+        decoder_input_ids = torch.tensor([[12, 62, 25, 11, 47, 15, 14]], device=torch_device, dtype=torch.long)
+        attention_mask = torch.tensor([[1, 1, 1, 0, 1, 0, 0]], device=torch_device, dtype=torch.long)
+        decoder_attention_mask = torch.tensor([[1, 1, 1, 0, 0, 1, 0]], device=torch_device, dtype=torch.long)
+        lm_labels = torch.tensor([[62, 25, 11, 47, 15, 14, 24]], device=torch_device, dtype=torch.long)
         torch.manual_seed(0)
+        config.ngram = 4
         model = ProphetNetForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            return_dict=True
-        )
+        with torch.no_grad():
+            result = model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                labels=lm_labels,
+                return_dict=True,
+            )
 
-        import ipdb; ipdb.set_trace()
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.234, device=torch_device), atol=1e-3))
+
+        expected_logit_slice = torch.tensor(
+            [-0.0544, 0.0091, -0.0378, -0.1237, -0.0582, -0.0591, 0.0049], device=torch_device
+        )
+        self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -489,6 +498,7 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_fast_integration(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_fast_integration(*config_and_inputs)
 
 
 class ProphetNetModelIntegrationTest(unittest.TestCase):

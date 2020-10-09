@@ -120,22 +120,22 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # init special `NgramMultiheadAttention`
         if isinstance(module, NgramMultiheadAttention):
-#            if module.qkv_same_dim:
+            #            if module.qkv_same_dim:
             module.in_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-#            else:
-#                module.key_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-#                module.value_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-#                module.query_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+            #            else:
+            #                module.key_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+            #                module.value_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+            #                module.query_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
 
             module.out_proj.weight.data.normal_(mean=0.0, std=self.config.init_std)
 
-#            if module.in_proj_bias is not None:
+            #            if module.in_proj_bias is not None:
             module.in_proj_bias.data.zero_()
             module.out_proj.bias.data.zero_()
-#            if module.key_proj_bias is not None:
-#                module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
-#            if module.value_proj_bias is not None:
-#                module.value_proj_bias.data.normal_(mean=0.0, std=self.config.init_std)
+        #            if module.key_proj_bias is not None:
+        #                module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
+        #            if module.value_proj_bias is not None:
+        #                module.value_proj_bias.data.normal_(mean=0.0, std=self.config.init_std)
 
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
@@ -414,20 +414,20 @@ class NgramMultiheadAttention(nn.Module):
         self,
         embed_dim,
         num_heads,
-#        kdim=None,
-#        vdim=None,
+        #        kdim=None,
+        #        vdim=None,
         dropout=0.0,
         output_dropout=0.0,
-#        encoder_decoder_attention=False,
+        #        encoder_decoder_attention=False,
         ngram=2,
         num_buckets=32,
         relative_max_distance=128,
     ):
         super().__init__()
         self.embed_dim = embed_dim
-        self.kdim = kdim if kdim is not None else embed_dim
-        self.vdim = vdim if vdim is not None else embed_dim
-        self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim
+        self.kdim = embed_dim
+        self.vdim = embed_dim
+        self.qkv_same_dim = True
 
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
@@ -440,30 +440,30 @@ class NgramMultiheadAttention(nn.Module):
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
 
-#        self.encoder_decoder_attention = encoder_decoder_attention
+        #        self.encoder_decoder_attention = encoder_decoder_attention
 
         self.relative_linear = nn.Linear(embed_dim, num_buckets * num_heads)
-#        if self.qkv_same_dim:
+        #        if self.qkv_same_dim:
         self.in_proj_weight = nn.Parameter(torch.Tensor(3 * embed_dim, embed_dim))
 
-#        else:
-#            self.key_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.kdim))
-#            self.value_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.vdim))
-#            self.query_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+        #        else:
+        #            self.key_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.kdim))
+        #            self.value_proj_weight = nn.Parameter(torch.Tensor(embed_dim, self.vdim))
+        #            self.query_proj_weight = nn.Parameter(torch.Tensor(embed_dim, embed_dim))
 
-#        if bias:
+        #        if bias:
         self.in_proj_bias = nn.Parameter(torch.Tensor(3 * embed_dim))
-#        else:
-#            self.register_parameter("in_proj_bias", None)
+        #        else:
+        #            self.register_parameter("in_proj_bias", None)
 
-#        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        #        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=True)
 
-#        if add_bias_kv:
-#            self.key_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
-#            self.value_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
-#        else:
-#        self.key_proj_bias = self.value_proj_bias = None
+        #        if add_bias_kv:
+        #            self.key_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
+        #            self.value_proj_bias = nn.Parameter(torch.Tensor(1, 1, embed_dim))
+        #        else:
+        #        self.key_proj_bias = self.value_proj_bias = None
 
         self.onnx_trace = False
         self.cache_key = "self"
@@ -497,10 +497,10 @@ class NgramMultiheadAttention(nn.Module):
         q, k, v = self.in_proj_qkv(hidden_states)
         q *= self.scaling
 
-#        if self.key_proj_bias is not None:
-#            assert self.value_proj_bias is not None
-#            k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
-#            v = torch.cat([v, self.value_proj_bias.repeat(1, bsz, 1)])
+        #        if self.key_proj_bias is not None:
+        #            assert self.value_proj_bias is not None
+        #            k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
+        #            v = torch.cat([v, self.value_proj_bias.repeat(1, bsz, 1)])
 
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
