@@ -425,6 +425,29 @@ class ProphetNetModelTester:
                     )
                 )
 
+    def check_fast_integration(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        torch.manual_seed(0)
+        model = ProphetNetForConditionalGeneration(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            return_dict=True
+        )
+
+        import ipdb; ipdb.set_trace()
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -463,6 +486,9 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_fast_integration(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
 
 
 class ProphetNetModelIntegrationTest(unittest.TestCase):
