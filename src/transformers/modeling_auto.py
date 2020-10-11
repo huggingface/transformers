@@ -24,6 +24,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -82,6 +83,7 @@ from .modeling_bert import (
     BertModel,
 )
 from .modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
+from .modeling_blenderbot import BlenderbotForConditionalGeneration
 from .modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -129,7 +131,7 @@ from .modeling_funnel import (
     FunnelForTokenClassification,
     FunnelModel,
 )
-from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
+from .modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 from .modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
 from .modeling_longformer import (
     LongformerForMaskedLM,
@@ -353,6 +355,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
         (MBartConfig, MBartForConditionalGeneration),
+        (BlenderbotConfig, BlenderbotForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
@@ -377,6 +380,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForSequenceClassification),
         (FunnelConfig, FunnelForSequenceClassification),
         (DebertaConfig, DebertaForSequenceClassification),
+        (GPT2Config, GPT2ForSequenceClassification),
     ]
 )
 
@@ -528,7 +532,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 class AutoModel:
     r"""
     This is a generic model class that will be instantiated as one of the base model classes of the library
-    when created with the when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
+    when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
     :meth:`~transformers.AutoModel.from_config` class methods.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).

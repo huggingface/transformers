@@ -614,7 +614,7 @@ class SquadProcessor(DataProcessor):
         Args:
             data_dir: Directory containing the data files used for training and evaluating.
             filename: None by default, specify this if the evaluation file has a different name than the original one
-                which is `train-v1.1.json` and `train-v2.0.json` for squad versions 1.1 and 2.0 respectively.
+                which is `dev-v1.1.json` and `dev-v2.0.json` for squad versions 1.1 and 2.0 respectively.
         """
         if data_dir is None:
             data_dir = ""

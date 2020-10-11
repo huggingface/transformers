@@ -17,8 +17,6 @@
 import warnings
 from typing import List, Optional
 
-from tokenizers.processors import RobertaProcessing
-
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_utils import AddedToken
 from .utils import logging
@@ -344,6 +342,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = RobertaTokenizer
 
     def __init__(
         self,
@@ -358,36 +357,21 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        trim_offsets=True,
         **kwargs
     ):
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        kwargs.setdefault("pad_token", pad_token)
-        kwargs.setdefault("sep_token", sep_token)
-        kwargs.setdefault("cls_token", cls_token)
-        kwargs.setdefault("mask_token", mask_token)
-
         super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            unk_token=unk_token,
+            vocab_file,
+            merges_file,
+            errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
             add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
             **kwargs,
-        )
-
-        # This will add the necessary special tokens to the vocabulary if needed
-        self.sanitize_special_tokens()
-
-        self.backend_tokenizer._tokenizer.post_processor = RobertaProcessing(
-            sep=(sep_token, self.sep_token_id),
-            cls=(cls_token, self.cls_token_id),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
         )
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):

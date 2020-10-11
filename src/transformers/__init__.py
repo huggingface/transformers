@@ -33,6 +33,7 @@ from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPIN
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
+from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -151,14 +152,15 @@ from .pipelines import (
 from .retrieval_rag import RagRetriever
 
 # Tokenizers
-from .tokenization_albert import AlbertTokenizer
+from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
-from .tokenization_camembert import CamembertTokenizer
+from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
+from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_deberta import DebertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -178,18 +180,18 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_layoutlm import LayoutLMTokenizer, LayoutLMTokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
-from .tokenization_mbart import MBartTokenizer
+from .tokenization_mbart import MBartTokenizer, MBartTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from .tokenization_pegasus import PegasusTokenizer
+from .tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
 from .tokenization_phobert import PhobertTokenizer
 from .tokenization_rag import RagTokenizer
-from .tokenization_reformer import ReformerTokenizer
+from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
-from .tokenization_t5 import T5Tokenizer
-from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
+from .tokenization_t5 import T5Tokenizer, T5TokenizerFast
+from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     BatchEncoding,
@@ -201,11 +203,19 @@ from .tokenization_utils_base import (
 )
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
-from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
 
 # Trainer
-from .trainer_utils import EvalPrediction, TrainerState, set_seed
+from .trainer_callback import (
+    DefaultFlowCallback,
+    PrinterCallback,
+    ProgressCallback,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+)
+from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
@@ -301,6 +311,7 @@ if is_torch_available():
         BertGenerationEncoder,
         load_tf_weights_in_bert_generation,
     )
+    from .modeling_blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
     from .modeling_camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -375,6 +386,7 @@ if is_torch_available():
     from .modeling_gpt2 import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
+        GPT2ForSequenceClassification,
         GPT2LMHeadModel,
         GPT2Model,
         GPT2PreTrainedModel,
@@ -528,7 +540,8 @@ if is_torch_available():
     from .tokenization_marian import MarianTokenizer
 
     # Trainer
-    from .trainer import EvalPrediction, Trainer, set_seed, torch_distributed_zero_first
+    from .trainer import Trainer
+    from .trainer_pt_utils import torch_distributed_zero_first
 else:
     from .utils.dummy_pt_objects import *
 
