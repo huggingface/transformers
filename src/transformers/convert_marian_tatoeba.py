@@ -3,10 +3,10 @@ from typing import List, Tuple
 
 import numpy as np
 from transformers.convert_marian_to_pytorch import (
-    remove_suffix, remove_prefix,
-    convert_all_sentencepiece_models, ORG_NAME, convert_hf_name_to_opus_name,
-    get_system_metadata, lmap, make_registry, DEFAULT_MODEL_DIR, _parse_readme,
+    remove_suffix, remove_prefix, convert_all_sentencepiece_models, ORG_NAME, get_system_metadata, lmap, make_registry, _parse_readme,
 )
+from transformers.marian_constituents import GROUP_MEMBERS
+import os
 try:
     import pandas as pd
 except ImportError:
@@ -14,9 +14,13 @@ except ImportError:
 
 import shutil
 
+DEFAULT_REPO = "Tatoeba-Challenge"
+DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, 'models')
+LANG_CODE_URL = 'https://datahub.io/core/language-codes/r/language-codes-3b2.csv'
+
 class TatoebaCodeResolver:
-    def __init__(self):
-        import pandas as pd
+    def __init__(self, save_dir='marian_converted'):
+        assert Path(DEFAULT_REPO).exists(), 'need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git'
         reg = make_tatoeba_registry()
         self.registry = reg
         reg_df = pd.DataFrame(reg, columns=['id', 'prepro', 'url_model', 'url_test_set'])
@@ -61,10 +65,9 @@ class TatoebaCodeResolver:
         metadata_new['prefer_old'] = metadata_new.long_pair.isin([])
         self.metadata = metadata_new
         self.tab = pd.read_csv('iso-639-3.csv', sep='\t').rename(columns=lambda x: x.lower())
-        LANG_CODE_URL = 'https://datahub.io/core/language-codes/r/language-codes-3b2.csv'
+
         # wget.download(LANG_CODE_URL)
-        mapper = pd.read_csv('language-codes-3b2.csv',
-                             )
+        mapper = pd.read_csv('language-codes-3b2.csv')
         mapper.columns = ['a3', 'a2', 'ref']
         a3to2 = mapper.set_index('a3')
         a2to3 = mapper.set_index('a2')
@@ -72,17 +75,22 @@ class TatoebaCodeResolver:
         before = len(more_3_to_2)
         more_3_to_2.update(a3to2.a2.to_dict())
         self.more_3_to_2 = more_3_to_2
-        self.model_card_dir = Path('marian_converted')
+        self.model_card_dir = Path(save_dir)
 
-    def convert_model(self, tatoeba_ids):
+    def convert_model(self, tatoeba_ids, dry_run=False):
         entries_to_convert = [x for x in self.registry if x[0] in tatoeba_ids]
-        convert_all_sentencepiece_models(entries_to_convert)
-
-
-    def write_card(self, model_id):
-        content, mmeta = self.write_model_card(model_id, repo_root='Tatoeba-Challenge', save_dir=self.model_card_dir,
-                                               dry_run=False, extra_metadata=self.metadata.loc[model_id].drop('2m'))
-        return content
+        converted_paths = convert_all_sentencepiece_models(entries_to_convert)
+        for path in converted_paths:
+            long_pair = remove_prefix(path.name, 'opus-mt-').split('-')  # eg. heb-eng
+            assert len(long_pair) == 2
+            new_p_src = self.get_two_letter_code(long_pair[0])
+            new_p_tgt = self.get_two_letter_code(long_pair[1])
+            hf_model_id = f'opus-mt-{new_p_src}-{new_p_tgt}'
+            new_path = path.parent.joinpath()  # opus-mt-he-en
+            shutil.mv(path, new_path)
+            metadata_row = self.metadata.loc[hf_model_id].drop('2m')
+            content, mmeta = self.write_model_card(hf_model_id, repo_root=DEFAULT_REPO, save_dir=self.model_card_dir,
+                                                   dry_run=dry_run, extra_metadata=metadata_row)
 
     def download_everything(self):
         raise NotImplementedError()
@@ -105,7 +113,7 @@ class TatoebaCodeResolver:
             print(f'Three letter monolingual code: {code}')
             return [code], False
 
-    def resolve_lang_code(self, r):
+    def resolve_lang_code(self, r) -> Tuple[List[str], str, str]:
         """R is a row in ported"""
         short_pair = r.short_pair
         src, tgt = short_pair.split('-')
@@ -118,17 +126,19 @@ class TatoebaCodeResolver:
 
     def write_model_card(
             self,
-            hf_model_name: str,
+            hf_model_id: str,
             repo_root="Tatoeba-Challenge",
             dry_run=False,
-            save_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
             extra_metadata={}
     ) -> str:
         """Copy the most recent model's readme section from opus, and add metadata.
         upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
         """
-        hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
-        opus_name: str = "FIXME" #convert_hf_name_to_opus_name(hf_model_name)
+        short_pair = remove_prefix(hf_model_id, ORG_NAME)
+        lang_tags, src_multilingual, tgt_multilingual = self.resolve_lang_code(extra_metadata)
+        opus_name = f'{src_multilingual}-{tgt_multilingual}'
+        #opus_name: str = self.convert_hf_name_to_opus_name(hf_model_name)
+
         assert repo_root in ('OPUS-MT-train', 'Tatoeba-Challenge')
         opus_readme_path = Path(repo_root).joinpath('models', opus_name, 'README.md')
         assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
@@ -138,8 +148,8 @@ class TatoebaCodeResolver:
         readme_url = f"https://github.com/Helsinki-NLP/{repo_root}/tree/master/models/{opus_name}/README.md"
 
         s, t = ",".join(opus_src), ",".join(opus_tgt)
-        lang_tags, src_multilingual, tgt_multilingual = self.resolve_lang_code(extra_metadata)
-        metadata = {'hf_name': hf_model_name, 'source_languages': s, 'target_languages': t,
+
+        metadata = {'hf_name': short_pair, 'source_languages': s, 'target_languages': t,
                     'opus_readme_url': readme_url,
                     'original_repo': repo_root, 'tags': ['translation'], 'languages': lang_tags,
                     }
@@ -154,7 +164,7 @@ class TatoebaCodeResolver:
 
         # combine with opus markdown
 
-        extra_markdown = f"### {hf_model_name}\n\n* source group: {metadata['src_name']} \n* target group: {metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
+        extra_markdown = f"### {short_pair}\n\n* source group: {metadata['src_name']} \n* target group: {metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
 
         content = opus_readme_path.open().read()
         content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
@@ -172,13 +182,11 @@ class TatoebaCodeResolver:
         content += sec3
         if dry_run:
             return content, metadata
-        sub_dir = self.model_card_dir / f'opus-mt-{extra_metadata.short_pair}'
+        sub_dir = self.model_card_dir / hf_model_id
         sub_dir.mkdir(exist_ok=True)
         dest = sub_dir / "README.md"
         dest.open("w").write(content)
         pd.Series(metadata).to_json(sub_dir / 'metadata.json')
-
-        # if dry_run:
         return content, metadata
 
 
@@ -303,3 +311,8 @@ def dedup(lst):
         else:
             new_lst.append(item)
     return new_lst
+
+
+if __name__ == '__main__':
+    resolver = TatoebaCodeResolver()
+    resolver.convert_model(['heb-eng', 'eng-heb'])
