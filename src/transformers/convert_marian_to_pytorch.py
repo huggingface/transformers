@@ -25,7 +25,7 @@ def remove_suffix(text: str, suffix: str):
 
 def remove_prefix(text: str, prefix: str):
     if text.startswith(prefix):
-        return text[len(prefix):]
+        return text[len(prefix) :]
     return text  # or whatever
 
 
@@ -104,9 +104,11 @@ def find_model_file(dest_dir):  # this one better
 
 
 # Group Names Logic: change long opus model names to something shorter, like opus-mt-en-ROMANCE
-ROM_GROUP = "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO+es_EC+es_ES+es_GT" \
-            "+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR+pt_PT+gl+lad+an+mwl+it+it_IT+co" \
-            "+nap+scn+vec+sc+ro+la"
+ROM_GROUP = (
+    "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO+es_EC+es_ES+es_GT"
+    "+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR+pt_PT+gl+lad+an+mwl+it+it_IT+co"
+    "+nap+scn+vec+sc+ro+la"
+)
 GROUPS = [
     ("cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh", "ZH"),
     (ROM_GROUP, "ROMANCE"),
@@ -125,16 +127,16 @@ GROUP_TO_OPUS_NAME = {
     "opus-mt-de-ZH": "de-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-en_el_es_fi-en_el_es_fi": "en+el+es+fi-en+el+es+fi",
     "opus-mt-en-ROMANCE": "en-fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
-                          "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
-                          "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la",
+    "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
+    "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la",
     "opus-mt-en-CELTIC": "en-ga+cy+br+gd+kw+gv",
     "opus-mt-es-NORWAY": "es-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
     "opus-mt-fi_nb_no_nn_ru_sv_en-SAMI": "fi+nb+no+nn+ru+sv+en-se+sma+smj+smn+sms",
     "opus-mt-fi-ZH": "fi-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-fi-NORWAY": "fi-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
     "opus-mt-ROMANCE-en": "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
-                          "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
-                          "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la-en",
+    "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
+    "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la-en",
     "opus-mt-CELTIC-en": "ga+cy+br+gd+kw+gv-en",
     "opus-mt-sv-ZH": "sv-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-sv-NORWAY": "sv-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
@@ -184,15 +186,15 @@ front_matter = """---
 """
 
 DEFAULT_REPO = "Tatoeba-Challenge"
-DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, 'models')
+DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
 
 
 def write_model_card(
-        hf_model_name: str,
-        repo_root=DEFAULT_REPO,
-        save_dir=Path("marian_converted"),
-        dry_run=False,
-        extra_metadata={},
+    hf_model_name: str,
+    repo_root=DEFAULT_REPO,
+    save_dir=Path("marian_converted"),
+    dry_run=False,
+    extra_metadata={},
 ) -> str:
     """Copy the most recent model's readme section from opus, and add metadata.
     upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
@@ -223,8 +225,10 @@ def write_model_card(
 
     # combine with opus markdown
 
-    extra_markdown = f"### {hf_model_name}\n\n* source group: {metadata['src_name']} \n* target group: " \
-                     f"{metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
+    extra_markdown = (
+        f"### {hf_model_name}\n\n* source group: {metadata['src_name']} \n* target group: "
+        f"{metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
+    )
 
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
@@ -232,10 +236,10 @@ def write_model_card(
     print(splat[3])
     content = "*".join(splat)
     content = (
-            front_matter.format(metadata["src_alpha2"])
-            + extra_markdown
-            + "\n* "
-            + content.replace("download", "download original weights")
+        front_matter.format(metadata["src_alpha2"])
+        + extra_markdown
+        + "\n* "
+        + content.replace("download", "download original weights")
     )
 
     items = "\n\n".join([f"- {k}: {v}" for k, v in metadata.items()])
@@ -251,9 +255,6 @@ def write_model_card(
 
     # if dry_run:
     return content, metadata
-
-
-
 
 
 def make_registry(repo_path="Opus-MT-train/models"):
@@ -273,18 +274,18 @@ def make_registry(repo_path="Opus-MT-train/models"):
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
-def convert_all_sentencepiece_models(model_list=None, repo_path=None):
+def convert_all_sentencepiece_models(model_list=None, repo_path=None, dest_dir=Path("marian_converted")):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
-    dest_dir = Path("marian_converted")
+    dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
-    save_paths= []
+    save_paths = []
     if model_list is None:
         model_list: list = make_registry(repo_path=repo_path)
     for k, prepro, download, test_set_url in tqdm(model_list):
         if "SentencePiece" not in prepro:  # dont convert BPE models.
             continue
-        if not os.path.exists(save_dir / k / "pytorch_model.bin"):
+        if not os.path.exists(save_dir / k):
             download_and_unzip(download, save_dir / k)
         pair_name = convert_opus_name_to_hf_name(k)
         convert(save_dir / k, dest_dir / f"opus-mt-{pair_name}")
@@ -306,7 +307,7 @@ def fetch_test_set(test_set_url):
     gold = lmap(str.strip, lns[1::4])
     mar_model = lmap(str.strip, lns[2::4])
     assert (
-            len(gold) == len(mar_model) == len(src)
+        len(gold) == len(mar_model) == len(src)
     ), f"Gold, marian and source lengths {len(gold)}, {len(mar_model)}, {len(src)} mismatched"
     os.remove(fname)
     return src, mar_model, gold
@@ -371,15 +372,6 @@ def add_special_tokens_to_vocab(model_dir: Path) -> None:
     print(f"added {num_added} tokens to vocab")
     save_json(vocab, model_dir / "vocab.json")
     save_tokenizer_config(model_dir)
-
-
-def save_tokenizer(self, save_directory):
-    dest = Path(save_directory)
-    src_path = Path(self.init_kwargs["source_spm"])
-
-    for dest_name in {"source.spm", "target.spm", "tokenizer_config.json"}:
-        shutil.copyfile(src_path.parent / dest_name, dest / dest_name)
-    save_json(self.encoder, dest / "vocab.json")
 
 
 def check_equal(marian_cfg, k1, k2):
@@ -463,7 +455,7 @@ class OpusState:
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
         assert (
-                hidden_size == cfg["dim-emb"] == 512
+            hidden_size == cfg["dim-emb"] == 512
         ), f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512"
 
         # Process decoder.yml
@@ -510,9 +502,9 @@ class OpusState:
         extra = []
         for k in self.state_keys:
             if (
-                    k.startswith("encoder_l")
-                    or k.startswith("decoder_l")
-                    or k in [CONFIG_KEY, "Wemb", "Wpos", "decoder_ff_logit_out_b"]
+                k.startswith("encoder_l")
+                or k.startswith("decoder_l")
+                or k in [CONFIG_KEY, "Wemb", "Wpos", "decoder_ff_logit_out_b"]
             ):
                 continue
             else:
@@ -556,7 +548,7 @@ class OpusState:
 
         assert not self.extra_keys, f"Failed to convert {self.extra_keys}"
         assert (
-                model.model.shared.padding_idx == self.pad_token_id
+            model.model.shared.padding_idx == self.pad_token_id
         ), f"Padding tokens {model.model.shared.padding_idx} and {self.pad_token_id} mismatched"
         return model
 
@@ -578,14 +570,14 @@ def convert(source_dir: Path, dest_dir):
 
     add_special_tokens_to_vocab(source_dir)
     tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
-    save_tokenizer(tokenizer, dest_dir)
+    tokenizer.save_pretrained(dest_dir)
 
     opus_state = OpusState(source_dir)
     assert opus_state.cfg["vocab_size"] == len(
         tokenizer.encoder
     ), f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
     # save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
-    # ^^ Save human readable marian config for debugging
+    # ^^ Uncomment to save human readable marian config for debugging
 
     model = opus_state.load_marian_model()
     model = model.half()
