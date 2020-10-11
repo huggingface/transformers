@@ -532,7 +532,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 class AutoModel:
     r"""
     This is a generic model class that will be instantiated as one of the base model classes of the library
-    when created with the when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
+    when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
     :meth:`~transformers.AutoModel.from_config` class methods.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
