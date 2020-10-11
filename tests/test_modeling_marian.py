@@ -284,7 +284,7 @@ class TatoebaConversionTester(unittest.TestCase):
 
     @cached_property
     def resolver(self):
-        self.resolver = TatoebaCodeResolver(save_dir='test_marian_conversion')
+        return TatoebaCodeResolver(save_dir='test_marian_conversion')
 
     def test_name_converter(self):
         for hf_name, opus_name in [('he-en', 'heb-eng'), ('en-es', 'eng-esp'), ('aav-esp', 'aav-es')]:
@@ -292,4 +292,4 @@ class TatoebaConversionTester(unittest.TestCase):
             assert convert_hf_name_to_opus_name(hf_name) == opus_name
 
     def test_resolver(self):
-        self.resolver
+        self.resolver.convert_model(['heb-eng'])
