@@ -1,16 +1,13 @@
+import argparse
 import os
 from pathlib import Path
 from typing import List, Tuple
 
-import numpy as np
-
 from transformers.convert_marian_to_pytorch import (
-    ORG_NAME,
+    FRONT_MATTER_TEMPLATE,
     _parse_readme,
     convert_all_sentencepiece_models,
     get_system_metadata,
-    lmap,
-    make_registry,
     remove_prefix,
     remove_suffix,
 )
@@ -28,6 +25,7 @@ ISO_URL = "https://cdn-datasets.huggingface.co/language_codes/iso-639-3.csv"
 ISO_PATH = "lang_code_data/iso-639-3.csv"
 LANG_CODE_PATH = "lang_code_data/language-codes-3b2.csv"
 
+
 class TatoebaConverter:
     """Convert Tatoeba-Challenge models to huggingface format.
     Steps:
@@ -39,16 +37,14 @@ class TatoebaConverter:
 
     def __init__(self, save_dir="marian_converted"):
         assert Path(DEFAULT_REPO).exists(), "need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git"
-        reg = make_tatoeba_registry()
+        reg = self.make_tatoeba_registry()
         self.download_metadata()
         self.registry = reg
         reg_df = pd.DataFrame(reg, columns=["id", "prepro", "url_model", "url_test_set"])
         assert reg_df.id.value_counts().max() == 1
         reg_df = reg_df.set_index("id")
-        _get_src = lambda x: x.split("-")[0]
-        _get_tgt = lambda x: x.split("-")[1]
-        reg_df["src"] = reg_df.reset_index().id.apply(_get_src).values
-        reg_df["tgt"] = reg_df.reset_index().id.apply(_get_tgt).values
+        reg_df["src"] = reg_df.reset_index().id.apply(lambda x: x.split("-")[0]).values
+        reg_df["tgt"] = reg_df.reset_index().id.apply(lambda x: x.split("-")[1]).values
 
         released_cols = [
             "url_base",
@@ -90,17 +86,14 @@ class TatoebaConverter:
         self.metadata = metadata_new
         assert self.metadata.short_pair.value_counts().max() == 1, "Multiple metadata entries for a short pair"
         self.metadata = self.metadata.set_index("short_pair")
-        self.tab = pd.read_csv(ISO_PATH, sep="\t").rename(columns=lambda x: x.lower())
 
         # wget.download(LANG_CODE_URL)
         mapper = pd.read_csv(LANG_CODE_PATH)
         mapper.columns = ["a3", "a2", "ref"]
-        a3to2 = mapper.set_index("a3")
-        a2to3 = mapper.set_index("a2")
-        more_3_to_2 = self.tab.set_index("id").part1.dropna().to_dict()
-        before = len(more_3_to_2)
-        more_3_to_2.update(a3to2.a2.to_dict())
-        self.more_3_to_2 = more_3_to_2
+        self.iso_table = pd.read_csv(ISO_PATH, sep="\t").rename(columns=lambda x: x.lower())
+        more_3_to_2 = self.iso_table.set_index("id").part1.dropna().to_dict()
+        more_3_to_2.update(mapper.set_index("a3").a2.to_dict())
+        self.alpha3_to_alpha2 = more_3_to_2
         self.model_card_dir = Path(save_dir)
         self.constituents = GROUP_MEMBERS
 
@@ -119,7 +112,7 @@ class TatoebaConverter:
             self.write_model_card(hf_model_id, dry_run=dry_run)
 
     def get_two_letter_code(self, three_letter_code):
-        return self.more_3_to_2.get(three_letter_code, three_letter_code)
+        return self.alpha3_to_alpha2.get(three_letter_code, three_letter_code)
 
     def expand_group_to_two_letter_codes(self, grp_name):
         return [self.get_two_letter_code(x) for x in self.constituents[grp_name]]
@@ -191,7 +184,7 @@ class TatoebaConverter:
         metadata.update(extra_metadata)
         metadata.update(get_system_metadata(repo_root))
 
-        # combine with opus markdown
+        # combine with Tatoeba markdown
 
         extra_markdown = f"### {short_pair}\n\n* source group: {metadata['src_name']} \n* target group: {metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
 
@@ -203,7 +196,7 @@ class TatoebaConverter:
         # BETTER FRONT MATTER LOGIC
 
         content = (
-            front_matter.format(lang_tags)
+            FRONT_MATTER_TEMPLATE.format(lang_tags)
             + extra_markdown
             + "\n* "
             + content.replace("download", "download original " "weights")
@@ -224,124 +217,32 @@ class TatoebaConverter:
     def download_metadata(self):
         Path(LANG_CODE_PATH).parent.mkdir(exist_ok=True)
         import wget
+
         if not os.path.exists(ISO_PATH):
             wget.download(ISO_URL, ISO_PATH)
         if not os.path.exists(LANG_CODE_PATH):
             wget.download(LANG_CODE_URL, LANG_CODE_PATH)
 
+    @staticmethod
+    def make_tatoeba_registry(repo_path=DEFAULT_MODEL_DIR):
+        if not (Path(repo_path) / "zho-eng" / "README.md").exists():
+            raise ValueError(
+                f"repo_path:{repo_path} does not exist: "
+                "You must run: git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git before calling."
+            )
+        results = {}
+        for p in Path(repo_path).iterdir():
+            if len(p.name) != 7:
+                continue
+            lns = list(open(p / "README.md").readlines())
+            results[p.name] = _parse_readme(lns)
+        return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
-def _process_benchmark_table_row(x):
-    fields = lmap(str.strip, x.replace("\t", "").split("|")[1:-1])
-    assert len(fields) == 3
-    return (fields[0], float(fields[1]), float(fields[2]))
-
-
-def process_last_benchmark_table(readme_path) -> List[Tuple[str, float, float]]:
-    md_content = Path(readme_path).open().read()
-    entries = md_content.split("## Benchmarks")[-1].strip().split("\n")[2:]
-    data = lmap(_process_benchmark_table_row, entries)
-    return data
-
-
-def check_if_models_are_dominated(old_repo_path="OPUS-MT-train/models", new_repo_path="Tatoeba-Challenge/models/"):
-    """Make a blacklist for models where we have already ported the same language pair, and the ported model has
-    higher BLEU score."""
-    import pandas as pd
-
-    newest_released, old_reg, released = get_released_df(new_repo_path, old_repo_path)
-
-    short_to_new_bleu = newest_released.set_index("short_pair").bleu
-
-    assert released.groupby("short_pair").pair.nunique().max() == 1
-
-    short_to_long = released.groupby("short_pair").pair.first().to_dict()
-
-    overlap_short = old_reg.index.intersection(released.short_pair.unique())
-    overlap_long = [short_to_long[o] for o in overlap_short]
-    new_reported_bleu = [short_to_new_bleu[o] for o in overlap_short]
-
-    def get_old_bleu(o) -> float:
-        pat = old_repo_path + "/{}/README.md"
-        bm_data = process_last_benchmark_table(pat.format(o))
-        tab = pd.DataFrame(bm_data, columns=["testset", "bleu", "chr-f"])
-        tato_bleu = tab.loc[lambda x: x.testset.str.startswith("Tato")].bleu
-        if tato_bleu.shape[0] > 0:
-            return tato_bleu.iloc[0]
-        else:
-            return np.nan
-
-    old_bleu = [get_old_bleu(o) for o in overlap_short]
-    cmp_df = pd.DataFrame(
-        dict(short=overlap_short, long=overlap_long, old_bleu=old_bleu, new_bleu=new_reported_bleu)
-    ).fillna(-1)
-
-    dominated = cmp_df[cmp_df.old_bleu > cmp_df.new_bleu]
-    whitelist_df = cmp_df[cmp_df.old_bleu <= cmp_df.new_bleu]
-    blacklist = dominated.long.unique().tolist()  # 3 letter codes
-    return whitelist_df, dominated, blacklist
-
-
-def get_released_df(new_repo_path, old_repo_path):
-    import pandas as pd
-
-    released_cols = [
-        "url_base",
-        "pair",  # (ISO639-3/ISO639-5 codes),
-        "short_pair",  # (reduced codes),
-        "chrF2_score",
-        "bleu",
-        "brevity_penalty",
-        "ref_len",
-        "src_name",
-        "tgt_name",
-    ]
-    released = pd.read_csv(f"{new_repo_path}/released-models.txt", sep="\t", header=None).iloc[:-1]
-    released.columns = released_cols
-    old_reg = make_registry(repo_path=old_repo_path)
-    old_reg = pd.DataFrame(old_reg, columns=["id", "prepro", "url_model", "url_test_set"])
-    assert old_reg.id.value_counts().max() == 1
-    old_reg = old_reg.set_index("id")
-    released["fname"] = released["url_base"].apply(
-        lambda x: remove_suffix(remove_prefix(x, "https://object.pouta.csc.fi/Tatoeba-Challenge/opus"), ".zip")
-    )
-    released["2m"] = released.fname.str.startswith("2m")
-    released["date"] = pd.to_datetime(released["fname"].apply(lambda x: remove_prefix(remove_prefix(x, "2m-"), "-")))
-    newest_released = released.dsort("date").drop_duplicates(["short_pair"], keep="first")
-    return newest_released, old_reg, released
-
-
-def make_tatoeba_registry(repo_path=DEFAULT_MODEL_DIR):
-    if not (Path(repo_path) / "zho-eng" / "README.md").exists():
-        raise ValueError(
-            f"repo_path:{repo_path} does not exist: "
-            "You must run: git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git before calling."
-        )
-    results = {}
-    for p in Path(repo_path).iterdir():
-        if len(p.name) != 7:
-            continue
-        lns = list(open(p / "README.md").readlines())
-        results[p.name] = _parse_readme(lns)
-    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
-
-
-front_matter = """---
-language: 
-{}
-tags:
-- translation
-
-license: apache-2.0
----
-
-"""
-
-
-# three letter code -> (group/language name, {constituents...}
-# if this language is on the target side the constituents can be used as target language codes.
-# if the language is on the source side they are supported natively without special codes.
 
 GROUP_MEMBERS = {
+    # three letter code -> (group/language name, {constituents...}
+    # if this language is on the target side the constituents can be used as target language codes.
+    # if the language is on the source side they are supported natively without special codes.
     "aav": ("Austro-Asiatic languages", {"hoc", "hoc_Latn", "kha", "khm", "khm_Latn", "mnw", "vie", "vie_Hani"}),
     "afa": (
         "Afro-Asiatic languages",
@@ -1335,9 +1236,6 @@ def dedup(lst):
         else:
             new_lst.append(item)
     return new_lst
-
-
-import argparse
 
 
 if __name__ == "__main__":

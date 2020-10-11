@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import shutil
 import socket
 import time
 import warnings
@@ -174,17 +173,16 @@ def get_system_metadata(repo_root):
     )
 
 
-front_matter = """---
-    language: 
-    {}
-    tags:
-    - translation
+FRONT_MATTER_TEMPLATE = """---
+language:
+{}
+tags:
+- translation
 
-    license: apache-2.0
-    ---
+license: apache-2.0
+---
 
 """
-
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
 
@@ -236,7 +234,7 @@ def write_model_card(
     print(splat[3])
     content = "*".join(splat)
     content = (
-        front_matter.format(metadata["src_alpha2"])
+        FRONT_MATTER_TEMPLATE.format(metadata["src_alpha2"])
         + extra_markdown
         + "\n* "
         + content.replace("download", "download original weights")
@@ -604,11 +602,7 @@ def unzip(zip_path: str, dest_dir: str) -> None:
 
 if __name__ == "__main__":
     """
-    To bulk convert, run
-    >>> from transformers.convert_marian_to_pytorch import make_tatoeba_registry, convert_all_sentencepiece_models
-    >>> reg = make_tatoeba_registry()
-    >>> convert_all_sentencepiece_models(model_list=reg)  # saves to marian_converted
-    (bash) aws s3 sync marian_converted s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
+    Tatoeba conversion instructions in scripts/tatoeba/README.md
     """
     parser = argparse.ArgumentParser()
     # Required parameters

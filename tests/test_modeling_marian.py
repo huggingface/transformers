@@ -276,29 +276,3 @@ class TestConversionUtils(unittest.TestCase):
             "en-de",
         ]
         self.assertListEqual(expected_opus_names, converted_opus_names)
-
-
-import tempfile
-
-from transformers.convert_marian_tatoeba import TatoebaConverter
-from transformers.convert_marian_to_pytorch import convert_hf_name_to_opus_name, convert_opus_name_to_hf_name
-
-
-class TatoebaConversionTester(unittest.TestCase):
-    @cached_property
-    def resolver(self):
-        tmp_dir = tempfile.mkdtemp()
-        return TatoebaConverter(save_dir=tmp_dir)
-
-    def test_name_converter(self):
-        for hf_name, opus_name in [("he-en", "heb-eng"), ("en-es", "eng-esp"), ("aav-esp", "aav-es")]:
-            assert convert_opus_name_to_hf_name(opus_name) == hf_name
-            assert convert_hf_name_to_opus_name(hf_name) == opus_name
-
-    @slow
-    def test_resolver(self):
-        self.resolver.convert_models(["heb-eng"])
-
-    def test_model_card(self):
-        content, mmeta = self.resolver.write_model_card("opus-mt-he-en", dry_run=True)
-        assert mmeta["long_pair"] == "heb-eng"
