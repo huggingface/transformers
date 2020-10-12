@@ -279,7 +279,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = TFT5Model.from_pretrained('t5-small')
+        model = TFT5Model.from_pretrained("t5-small")
         self.assertIsNotNone(model)
 
 

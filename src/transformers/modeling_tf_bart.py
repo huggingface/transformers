@@ -344,7 +344,9 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm") # TODO: conditional
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(
+            epsilon=1e-5, name="final_layer_norm"
+        )  # TODO: conditional
         # TODO: layernorm_embedding
 
     def call(
@@ -445,9 +447,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
         )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else tf.identity
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+            if config.normalize_embedding
+            else tf.identity
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
+        self.layer_norm = (
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+            if config.add_final_layer_norm
+            else None
+        )
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.output_hidden_states = config.output_hidden_states
@@ -872,14 +880,14 @@ class TFBartModel(TFPretrainedBartModel):
         else:
             decoder_padding_mask, causal_mask = None, None
         assert decoder_input_ids is not None
-        assert isinstance(encoder_outputs, TFBaseModelOutput) or encoder_outputs is None, f'{type(encoder_outputs)}'
+        assert isinstance(encoder_outputs, TFBaseModelOutput) or encoder_outputs is None, f"{type(encoder_outputs)}"
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=inputs,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=True, # may need fix later
+                return_dict=True,  # may need fix later
             )
         assert isinstance(encoder_outputs, TFBaseModelOutput)
         # elif return_dict and isinstance(encoder_outputs, TFBaseModelOutput):
@@ -889,9 +897,6 @@ class TFBartModel(TFPretrainedBartModel):
         #         hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
         #         attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
         #     )
-
-
-
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         assert len(encoder_outputs.last_hidden_state.shape) == 3
@@ -1124,7 +1129,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     def _reorder_cache(past, beam_idx):
         assert len(past) == 2
         (encoder_out, decoder_cached_states) = past
-        #enc_out, enc_mask = encoder_out
+        # enc_out, enc_mask = encoder_out
 
         reordered_past = []
         for layer_past in decoder_cached_states:
@@ -1134,8 +1139,8 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             reordered_past.append(layer_past_new)
-        #new_enc_out = enc_out if enc_out is None else tf.gather(enc_out[0], beam_idx, axis=0)
-        #new_enc_mask = enc_mask if enc_mask is None else tf.gather(enc_out[1], beam_idx, axis=0)
+        # new_enc_out = enc_out if enc_out is None else tf.gather(enc_out[0], beam_idx, axis=0)
+        # new_enc_mask = enc_mask if enc_mask is None else tf.gather(enc_out[1], beam_idx, axis=0)
 
         past = (encoder_out, reordered_past)
         return past
