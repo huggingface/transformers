@@ -200,19 +200,16 @@ class MarianTokenizer(PreTrainedTokenizer):
         Returns:
             :obj:`Tuple(str)`: Paths to the files saved.
         """
-        dest_dir = Path(save_directory)
-        assert dest_dir.is_dir(), f"{save_directory} should be a directory"
-        save_json(self.encoder, dest_dir / self.vocab_files_names["vocab"])
-        src_dir = Path(self.spm_files[0]).parent
+        save_dir = Path(save_directory)
+        assert save_dir.is_dir(), f"{save_directory} should be a directory"
+        save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
 
         for orig, f in zip(["source.spm", "target.spm"], self.spm_files):
-            dest_path = dest_dir / orig
+            dest_path = save_dir / Path(f).name
             if not dest_path.exists():
-                copyfile(f, dest_path)
-        cfg_path = src_dir.joinpath("tokenizer_config.json")
-        if cfg_path.exists():
-            copyfile(cfg_path, "tokenizer_config.json")
-        return tuple(dest_dir / f for f in self.vocab_files_names)
+                copyfile(f, save_dir / orig)
+
+        return tuple(save_dir / f for f in self.vocab_files_names)
 
     def get_vocab(self) -> Dict:
         vocab = self.encoder.copy()
