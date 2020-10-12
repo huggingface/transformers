@@ -14,425 +14,100 @@
 # limitations under the License.
 """ Convert slow tokenizers checkpoints in fast (serialization format of the `tokenizers` library) """
 
-
 import argparse
 import os
 
-from transformers import (
-    ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    WEIGHTS_NAME,
-    XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    AlbertConfig,
-    BertConfig,
-    CamembertConfig,
-    CTRLConfig,
-    DistilBertConfig,
-    ElectraConfig,
-    FlaubertConfig,
-    GPT2Config,
-    LxmertConfig,
-    OpenAIGPTConfig,
-    RobertaConfig,
-    T5Config,
-    TFAlbertForPreTraining,
-    TFBertForPreTraining,
-    TFBertForQuestionAnswering,
-    TFBertForSequenceClassification,
-    TFCamembertForMaskedLM,
-    TFCTRLLMHeadModel,
-    TFDistilBertForMaskedLM,
-    TFDistilBertForQuestionAnswering,
-    TFElectraForPreTraining,
-    TFFlaubertWithLMHeadModel,
-    TFGPT2LMHeadModel,
-    TFLxmertForPreTraining,
-    TFLxmertVisualFeatureEncoder,
-    TFOpenAIGPTLMHeadModel,
-    TFRobertaForMaskedLM,
-    TFRobertaForSequenceClassification,
-    TFT5ForConditionalGeneration,
-    TFTransfoXLLMHeadModel,
-    TFXLMRobertaForMaskedLM,
-    TFXLMWithLMHeadModel,
-    TFXLNetLMHeadModel,
-    TransfoXLConfig,
-    XLMConfig,
-    XLMRobertaConfig,
-    XLNetConfig,
-    cached_path,
-    is_torch_available,
-    load_pytorch_checkpoint_in_tf2_model,
-)
-from transformers.file_utils import hf_bucket_url
+import transformers
+from transformers.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
 from transformers.utils import logging
-
-
-if is_torch_available():
-    import numpy as np
-    import torch
-
-    from transformers import (
-        AlbertForPreTraining,
-        BertForPreTraining,
-        BertForQuestionAnswering,
-        BertForSequenceClassification,
-        CamembertForMaskedLM,
-        CTRLLMHeadModel,
-        DistilBertForMaskedLM,
-        DistilBertForQuestionAnswering,
-        ElectraForPreTraining,
-        FlaubertWithLMHeadModel,
-        GPT2LMHeadModel,
-        LxmertForPreTraining,
-        LxmertVisualFeatureEncoder,
-        OpenAIGPTLMHeadModel,
-        RobertaForMaskedLM,
-        RobertaForSequenceClassification,
-        T5ForConditionalGeneration,
-        TransfoXLLMHeadModel,
-        XLMRobertaForMaskedLM,
-        XLMWithLMHeadModel,
-        XLNetLMHeadModel,
-    )
 
 
 logging.set_verbosity_info()
 
-MODEL_CLASSES = {
-    "bert": (
-        BertConfig,
-        TFBertForPreTraining,
-        BertForPreTraining,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "bert-large-uncased-whole-word-masking-finetuned-squad": (
-        BertConfig,
-        TFBertForQuestionAnswering,
-        BertForQuestionAnswering,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "bert-large-cased-whole-word-masking-finetuned-squad": (
-        BertConfig,
-        TFBertForQuestionAnswering,
-        BertForQuestionAnswering,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "bert-base-cased-finetuned-mrpc": (
-        BertConfig,
-        TFBertForSequenceClassification,
-        BertForSequenceClassification,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "gpt2": (
-        GPT2Config,
-        TFGPT2LMHeadModel,
-        GPT2LMHeadModel,
-        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlnet": (
-        XLNetConfig,
-        TFXLNetLMHeadModel,
-        XLNetLMHeadModel,
-        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlm": (
-        XLMConfig,
-        TFXLMWithLMHeadModel,
-        XLMWithLMHeadModel,
-        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlm-roberta": (
-        XLMRobertaConfig,
-        TFXLMRobertaForMaskedLM,
-        XLMRobertaForMaskedLM,
-        XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "transfo-xl": (
-        TransfoXLConfig,
-        TFTransfoXLLMHeadModel,
-        TransfoXLLMHeadModel,
-        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "openai-gpt": (
-        OpenAIGPTConfig,
-        TFOpenAIGPTLMHeadModel,
-        OpenAIGPTLMHeadModel,
-        OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "roberta": (
-        RobertaConfig,
-        TFRobertaForMaskedLM,
-        RobertaForMaskedLM,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "roberta-large-mnli": (
-        RobertaConfig,
-        TFRobertaForSequenceClassification,
-        RobertaForSequenceClassification,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "camembert": (
-        CamembertConfig,
-        TFCamembertForMaskedLM,
-        CamembertForMaskedLM,
-        CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "flaubert": (
-        FlaubertConfig,
-        TFFlaubertWithLMHeadModel,
-        FlaubertWithLMHeadModel,
-        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "distilbert": (
-        DistilBertConfig,
-        TFDistilBertForMaskedLM,
-        DistilBertForMaskedLM,
-        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "distilbert-base-distilled-squad": (
-        DistilBertConfig,
-        TFDistilBertForQuestionAnswering,
-        DistilBertForQuestionAnswering,
-        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "lxmert": (
-        LxmertConfig,
-        TFLxmertForPreTraining,
-        LxmertForPreTraining,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "lxmert-visual-feature-encoder": (
-        LxmertConfig,
-        TFLxmertVisualFeatureEncoder,
-        LxmertVisualFeatureEncoder,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "ctrl": (
-        CTRLConfig,
-        TFCTRLLMHeadModel,
-        CTRLLMHeadModel,
-        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "albert": (
-        AlbertConfig,
-        TFAlbertForPreTraining,
-        AlbertForPreTraining,
-        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "t5": (
-        T5Config,
-        TFT5ForConditionalGeneration,
-        T5ForConditionalGeneration,
-        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "electra": (
-        ElectraConfig,
-        TFElectraForPreTraining,
-        ElectraForPreTraining,
-        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-}
+logger = logging.get_logger(__name__)
 
 
-def convert_pt_checkpoint_to_tf(
-    model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False, use_cached_models=True
-):
-    if model_type not in MODEL_CLASSES:
-        raise ValueError("Unrecognized model type, should be one of {}.".format(list(MODEL_CLASSES.keys())))
+FAST_TOKENIZER_CLASSES = {name + "Fast": getattr(transformers, name + "Fast") for name in SLOW_TO_FAST_CONVERTERS}
 
-    config_class, model_class, pt_model_class, aws_config_map = MODEL_CLASSES[model_type]
 
-    # Initialise TF model
-    if config_file in aws_config_map:
-        config_file = cached_path(aws_config_map[config_file], force_download=not use_cached_models)
-    config = config_class.from_json_file(config_file)
-    config.output_hidden_states = True
-    config.output_attentions = True
-    print("Building TensorFlow model from configuration: {}".format(str(config)))
-    tf_model = model_class(config)
-
-    # Load weights from tf checkpoint
-    if pytorch_checkpoint_path in aws_config_map.keys():
-        pytorch_checkpoint_url = hf_bucket_url(pytorch_checkpoint_path, filename=WEIGHTS_NAME)
-        pytorch_checkpoint_path = cached_path(pytorch_checkpoint_url, force_download=not use_cached_models)
-    # Load PyTorch checkpoint in tf2 model:
-    tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
-
-    if compare_with_pt_model:
-        tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
-
-        state_dict = torch.load(pytorch_checkpoint_path, map_location="cpu")
-        pt_model = pt_model_class.from_pretrained(
-            pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, force_download):
+    if tokenizer_name is not None and tokenizer_name not in FAST_TOKENIZER_CLASSES:
+        raise ValueError(
+            "Unrecognized tokenizer name, should be one of {}.".format(list(FAST_TOKENIZER_CLASSES.keys()))
         )
 
-        with torch.no_grad():
-            pto = pt_model(**pt_model.dummy_inputs)
-
-        np_pt = pto[0].numpy()
-        np_tf = tfo[0].numpy()
-        diff = np.amax(np.abs(np_pt - np_tf))
-        print("Max absolute difference between models outputs {}".format(diff))
-        assert diff <= 2e-2, "Error, model absolute difference is >2e-2: {}".format(diff)
-
-    # Save pytorch-model
-    print("Save TensorFlow model to {}".format(tf_dump_path))
-    tf_model.save_weights(tf_dump_path, save_format="h5")
-
-
-def convert_all_pt_checkpoints_to_tf(
-    args_model_type,
-    tf_dump_path,
-    model_shortcut_names_or_path=None,
-    config_shortcut_names_or_path=None,
-    compare_with_pt_model=False,
-    use_cached_models=False,
-    remove_cached_files=False,
-    only_convert_finetuned_models=False,
-):
-
-    if args_model_type is None:
-        model_types = list(MODEL_CLASSES.keys())
+    if tokenizer_name is None:
+        tokenizer_names = FAST_TOKENIZER_CLASSES
     else:
-        model_types = [args_model_type]
+        tokenizer_names = {tokenizer_name: getattr(transformers, tokenizer_name + "Fast")}
 
-    for j, model_type in enumerate(model_types, start=1):
-        print("=" * 100)
-        print(" Converting model type {}/{}: {}".format(j, len(model_types), model_type))
-        print("=" * 100)
-        if model_type not in MODEL_CLASSES:
-            raise ValueError(
-                "Unrecognized model type {}, should be one of {}.".format(model_type, list(MODEL_CLASSES.keys()))
-            )
+    print(f"Loading tokenizer classes: {tokenizer_names}")
 
-        config_class, model_class, pt_model_class, aws_model_maps, aws_config_map = MODEL_CLASSES[model_type]
+    for tokenizer_name in tokenizer_names:
+        tokenizer_class = FAST_TOKENIZER_CLASSES[tokenizer_name]
 
-        if model_shortcut_names_or_path is None:
-            model_shortcut_names_or_path = list(aws_model_maps.keys())
-        if config_shortcut_names_or_path is None:
-            config_shortcut_names_or_path = model_shortcut_names_or_path
+        if checkpoint_name is None:
+            add_prefix = True
+            checkpoint_names = list(tokenizer_class.max_model_input_sizes.keys())
+        else:
+            add_prefix = False
+            checkpoint_names = [checkpoint_name]
 
-        for i, (model_shortcut_name, config_shortcut_name) in enumerate(
-            zip(model_shortcut_names_or_path, config_shortcut_names_or_path), start=1
-        ):
-            print("-" * 100)
-            if "-squad" in model_shortcut_name or "-mrpc" in model_shortcut_name or "-mnli" in model_shortcut_name:
-                if not only_convert_finetuned_models:
-                    print("    Skipping finetuned checkpoint {}".format(model_shortcut_name))
-                    continue
-                model_type = model_shortcut_name
-            elif only_convert_finetuned_models:
-                print("    Skipping not finetuned checkpoint {}".format(model_shortcut_name))
-                continue
-            print(
-                "    Converting checkpoint {}/{}: {} - model_type {}".format(
-                    i, len(aws_config_map), model_shortcut_name, model_type
-                )
-            )
-            print("-" * 100)
+        print(f"For tokenizer {tokenizer_class.__class__.__name__} loading checkpoints: {checkpoint_names}")
 
-            if config_shortcut_name in aws_config_map:
-                config_file = cached_path(aws_config_map[config_shortcut_name], force_download=not use_cached_models)
+        for checkpoint in checkpoint_names:
+            print(f"Loading {tokenizer_class.__class__.__name__} {checkpoint}")
+
+            # Load tokenizer
+            tokenizer = tokenizer_class.from_pretrained(checkpoint, force_download=force_download)
+
+            # Save fast tokenizer
+            print("Save fast tokenizer to {} with prefix {}".format(dump_path, checkpoint))
+
+            # For organization names we create sub-directories
+            if add_prefix and "/" in checkpoint:
+                checkpoint_directory, checkpoint_prefix_name = checkpoint.split("/")
+                dump_path_full = os.path.join(dump_path, checkpoint_directory)
             else:
-                config_file = cached_path(config_shortcut_name, force_download=not use_cached_models)
+                checkpoint_prefix_name = checkpoint
+                dump_path_full = dump_path
 
-            if model_shortcut_name in aws_model_maps:
-                model_file = cached_path(aws_model_maps[model_shortcut_name], force_download=not use_cached_models)
-            else:
-                model_file = cached_path(model_shortcut_name, force_download=not use_cached_models)
-
-            if os.path.isfile(model_shortcut_name):
-                model_shortcut_name = "converted_model"
-
-            convert_pt_checkpoint_to_tf(
-                model_type=model_type,
-                pytorch_checkpoint_path=model_file,
-                config_file=config_file,
-                tf_dump_path=os.path.join(tf_dump_path, model_shortcut_name + "-tf_model.h5"),
-                compare_with_pt_model=compare_with_pt_model,
+            file_names = tokenizer.save_pretrained(
+                dump_path_full, legacy_format=False, filename_prefix=checkpoint_prefix_name if add_prefix else None
             )
-            if remove_cached_files:
-                os.remove(config_file)
-                os.remove(model_file)
+            print("=> File names {}".format(file_names))
+
+            for file_name in file_names:
+                if not file_name.endswith("tokenizer.json"):
+                    os.remove(file_name)
+                    print("=> removing {}".format(file_name))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--tf_dump_path", default=None, type=str, required=True, help="Path to the output Tensorflow dump file."
+        "--dump_path", default=None, type=str, required=True, help="Path to output generated fast tokenizer files."
     )
     parser.add_argument(
-        "--model_type",
+        "--tokenizer_name",
         default=None,
         type=str,
-        help="Model type selected in the list of {}. If not given, will download and convert all the models from AWS.".format(
-            list(MODEL_CLASSES.keys())
+        help="Optional tokenizer type selected in the list of {}. If not given, will download and convert all the checkpoints from AWS.".format(
+            list(FAST_TOKENIZER_CLASSES.keys())
         ),
     )
     parser.add_argument(
-        "--pytorch_checkpoint_path",
+        "--checkpoint_name",
         default=None,
         type=str,
-        help="Path to the PyTorch checkpoint path or shortcut name to download from AWS. "
-        "If not given, will download and convert all the checkpoints from AWS.",
+        help="Optional checkpoint name. If not given, will download and convert the canonical checkpoints from AWS.",
     )
     parser.add_argument(
-        "--config_file",
-        default=None,
-        type=str,
-        help="The config json file corresponding to the pre-trained model. \n"
-        "This specifies the model architecture. If not given and "
-        "--pytorch_checkpoint_path is not given or is a shortcut name"
-        "use the configuration associated to the shortcut name on the AWS",
-    )
-    parser.add_argument(
-        "--compare_with_pt_model", action="store_true", help="Compare Tensorflow and PyTorch model predictions."
-    )
-    parser.add_argument(
-        "--use_cached_models",
+        "--force_download",
         action="store_true",
-        help="Use cached models if possible instead of updating to latest checkpoint versions.",
+        help="Re-dowload checkpoints.",
     )
-    parser.add_argument(
-        "--remove_cached_files",
-        action="store_true",
-        help="Remove pytorch models after conversion (save memory when converting in batches).",
-    )
-    parser.add_argument("--only_convert_finetuned_models", action="store_true", help="Only convert finetuned models.")
     args = parser.parse_args()
 
-    # if args.pytorch_checkpoint_path is not None:
-    #     convert_pt_checkpoint_to_tf(args.model_type.lower(),
-    #                                 args.pytorch_checkpoint_path,
-    #                                 args.config_file if args.config_file is not None else args.pytorch_checkpoint_path,
-    #                                 args.tf_dump_path,
-    #                                 compare_with_pt_model=args.compare_with_pt_model,
-    #                                 use_cached_models=args.use_cached_models)
-    # else:
-    convert_all_pt_checkpoints_to_tf(
-        args.model_type.lower() if args.model_type is not None else None,
-        args.tf_dump_path,
-        model_shortcut_names_or_path=[args.pytorch_checkpoint_path]
-        if args.pytorch_checkpoint_path is not None
-        else None,
-        config_shortcut_names_or_path=[args.config_file] if args.config_file is not None else None,
-        compare_with_pt_model=args.compare_with_pt_model,
-        use_cached_models=args.use_cached_models,
-        remove_cached_files=args.remove_cached_files,
-        only_convert_finetuned_models=args.only_convert_finetuned_models,
-    )
+    convert_slow_checkpoint_to_fast(args.tokenizer_name, args.checkpoint_name, args.dump_path, args.force_download)

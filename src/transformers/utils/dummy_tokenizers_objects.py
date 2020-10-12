@@ -234,3 +234,10 @@ class XLNetTokenizerFast:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_tokenizers(self)
+
+
+SLOW_TO_FAST_CONVERTERS = None
+
+
+def convert_slow_tokenizer(*args, **kwargs):
+    requires_tokenizers(convert_slow_tokenizer)
