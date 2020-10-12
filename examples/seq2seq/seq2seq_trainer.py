@@ -6,9 +6,19 @@ from torch import nn
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import Trainer
+from transformers.configuration_fsmt import FSMTConfig
 from transformers.file_utils import is_torch_tpu_available
-from transformers.optimization import Adafactor, AdamW, get_linear_schedule_with_warmup
-from transformers.trainer import get_tpu_sampler
+from transformers.optimization import (
+    Adafactor,
+    AdamW,
+    get_constant_schedule,
+    get_constant_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
+    get_cosine_with_hard_restarts_schedule_with_warmup,
+    get_linear_schedule_with_warmup,
+    get_polynomial_decay_schedule_with_warmup,
+)
+from transformers.trainer_pt_utils import get_tpu_sampler
 
 
 try:
@@ -19,6 +29,16 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+arg_to_scheduler = {
+    "linear": get_linear_schedule_with_warmup,
+    "cosine": get_cosine_schedule_with_warmup,
+    "cosine_w_restarts": get_cosine_with_hard_restarts_schedule_with_warmup,
+    "polynomial": get_polynomial_decay_schedule_with_warmup,
+    "constant": get_constant_schedule,
+    "constant_w_warmup": get_constant_schedule_with_warmup,
+}
+arg_to_scheduler_choices = sorted(arg_to_scheduler.keys())
+
 
 class Seq2SeqTrainer(Trainer):
     def __init__(self, config, data_args, *args, **kwargs):
@@ -26,8 +46,7 @@ class Seq2SeqTrainer(Trainer):
         self.config = config
         self.data_args = data_args
         self.max_gen_length = data_args.val_max_target_length
-        self.pad_token_id = self.config.pad_token_id
-        self.vocab_size = self.config.vocab_size
+        self.vocab_size = self.config.tgt_vocab_size if isinstance(self.config, FSMTConfig) else self.config.vocab_size
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
@@ -62,9 +81,21 @@ class Seq2SeqTrainer(Trainer):
                 )
 
         if self.lr_scheduler is None:
-            self.lr_scheduler = get_linear_schedule_with_warmup(
+            self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
+        else:  # ignoring --lr_scheduler
+            logger.warn("scheduler is passed to `Seq2SeqTrainer`, `--lr_scheduler` arg is ignored.")
+
+    def _get_lr_scheduler(self, num_training_steps):
+        schedule_func = arg_to_scheduler[self.args.lr_scheduler]
+        if self.args.lr_scheduler == "constant":
+            scheduler = schedule_func(self.optimizer)
+        elif self.args.lr_scheduler == "constant_w_warmup":
+            scheduler = schedule_func(self.optimizer, num_warmup_steps=self.args.warmup_steps)
+        else:
+            scheduler = schedule_func(
                 self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
             )
+        return scheduler
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -87,18 +118,18 @@ class Seq2SeqTrainer(Trainer):
         labels = inputs.pop("labels")
         outputs = model(**inputs, use_cache=False)
         logits = outputs[0]
-        return self._compute_loss(logits, labels, ignore_index=self.pad_token_id)
+        return self._compute_loss(logits, labels)
 
-    def _compute_loss(self, logits, labels, ignore_index):
+    def _compute_loss(self, logits, labels):
         if self.args.label_smoothing == 0:
             # Same behavior as modeling_bart.py
-            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
             assert logits.shape[-1] == self.vocab_size
             loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
             loss, nll_loss = label_smoothed_nll_loss(
-                lprobs, labels, self.args.label_smoothing, ignore_index=ignore_index
+                lprobs, labels, self.args.label_smoothing, ignore_index=self.config.pad_token_id
             )
         return loss
 
@@ -137,14 +168,12 @@ class Seq2SeqTrainer(Trainer):
                     max_length=self.max_gen_length,
                 )
                 # in case the batch is shorter than max length, the output should be padded
-                generated_tokens = self._pad_tensors_to_max_len(
-                    generated_tokens, self.max_gen_length, self.pad_token_id
-                )
+                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, self.max_gen_length)
 
             labels_out = inputs.get("labels")
             # Call forward again to get loss # TODO: avoidable?
             outputs = model(**inputs, use_cache=False)
-            loss = self._compute_loss(outputs[1], labels_out, self.pad_token_id)
+            loss = self._compute_loss(outputs[1], labels_out)
             loss = loss.mean().item()
             if self.args.prediction_loss_only:
                 return (loss, None, None)
@@ -152,11 +181,11 @@ class Seq2SeqTrainer(Trainer):
             logits = generated_tokens if self.args.predict_with_generate else outputs[1]
 
         labels_out = labels_out.detach()
-        labels = self._pad_tensors_to_max_len(labels_out, self.max_gen_length, self.pad_token_id)
+        labels = self._pad_tensors_to_max_len(labels_out, self.max_gen_length)
         return (loss, logits.detach(), labels)
 
-    def _pad_tensors_to_max_len(self, tensor, max_length, pad_token_id):
-        padded_tensor = pad_token_id * torch.ones(
+    def _pad_tensors_to_max_len(self, tensor, max_length):
+        padded_tensor = self.config.pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
         )
         padded_tensor[:, : tensor.shape[-1]] = tensor

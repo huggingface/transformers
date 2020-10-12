@@ -4,7 +4,8 @@ import tempfile
 from unittest.mock import patch
 
 from transformers.testing_utils import slow
-from transformers.trainer_utils import TrainerState, set_seed
+from transformers.trainer_callback import TrainerState
+from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import main
 from .test_seq2seq_examples import MBART_TINY
@@ -26,7 +27,7 @@ def test_finetune_trainer():
 def test_finetune_trainer_slow():
     # TODO(SS): This will fail on devices with more than 1 GPU.
     # There is a missing call to __init__process_group somewhere
-    output_dir = run_trainer(eval_steps=2, max_len="32", model_name=MARIAN_MODEL, num_train_epochs=3)
+    output_dir = run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=3)
 
     # Check metrics
     logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
