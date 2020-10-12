@@ -12,7 +12,6 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 - `MBartForConditionalGeneration`
 - `FSMTForConditionalGeneration`
 - `T5ForConditionalGeneration`
-    
 
 ## Datasets
 
@@ -100,7 +99,7 @@ All finetuning bash scripts call finetune.py (or distillation.py) with reasonabl
 To see all the possible command line options, run:
 
 ```bash
- ./finetune.py --help 
+./finetune.py --help
 ```
 
 ### Finetuning Training Params
@@ -192,7 +191,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ### Fine-tuning using Seq2SeqTrainer
 To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer` releated `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument to calculate BLEU and ROUGE metrics.
 
-With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set. 
+With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set.
 
 To see all the possible command line options, run:
 
@@ -265,6 +264,7 @@ export DATA_DIR=cnn_dm
     --fp16 \
     --bs 32
 ```
+
 ### Multi-GPU Evaluation
 here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
 because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
@@ -391,6 +391,17 @@ runtime: 13H on V-100 16GB GPU.
 pytest examples/seq2seq/
 ```
 
+### Converting pytorch-lightning checkpoints
+pytorch lightning ``-do_predict`` often fails, after you are done training, the best way to evaluate your model is to convert it.
+
+This should be done for you, with a file called `{save_dir}/best_tfmr`. 
+
+If that file doesn't exist but you have a lightning `.ckpt` file, you can run
+```bash
+python convert_pl_checkpoint_to_hf.py PATH_TO_CKPT  randomly_initialized_hf_model_path save_dir/best_tfmr
+```
+Then either `run_eval` or `run_distributed_eval` with `save_dir/best_tfmr` (see previous sections)
+
 
 ## Experimental Features 
 These features are harder to use and not always useful.
@@ -419,4 +430,3 @@ uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
 The feature is still experimental, because:
 + we can make it much more robust if we have memory mapped/preprocessed datasets.
 + The speedup over sortish sampler is not that large at the moment.
-

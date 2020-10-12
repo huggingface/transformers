@@ -337,7 +337,7 @@ XLM_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         langs (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
