@@ -818,6 +818,10 @@ else:
     from .utils.dummy_tf_objects import *
 
 
+if is_flax_available():
+    from .modeling_flax_bert import FlaxBertModel
+    from .modeling_flax_roberta import FlaxRobertaModel
+
 if not is_tf_available() and not is_torch_available():
     logger.warning(
         "Neither PyTorch nor TensorFlow >= 2.0 have been found."
