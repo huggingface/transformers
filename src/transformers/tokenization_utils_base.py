@@ -159,9 +159,9 @@ class BatchEncoding(UserDict):
             Dictionary of lists/arrays/tensors returned by the encode/batch_encode methods ('input_ids',
             'attention_mask', etc.).
         encoding (:obj:`tokenizers.Encoding` or :obj:`Sequence[tokenizers.Encoding]`, `optional`):
-            If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/character
-            space to token space the :obj:`tokenizers.Encoding` instance or list of instance (for batches) hold these
-            informations.
+            If the tokenizer is a fast tokenizer which outputs additional information like mapping from word/character
+            space to token space the :obj:`tokenizers.Encoding` instance or list of instance (for batches) hold this
+            information.
         tensor_type (:obj:`Union[None, str, TensorType]`, `optional`):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
@@ -1131,7 +1131,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_length  (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return the lengths of the encoded inputs.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to print informations and warnings.
+                Whether or not to print more information and warnings.
             **kwargs: passed to the :obj:`self.tokenize()` method
 
         Return:
@@ -2309,7 +2309,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to print informations and warnings.
+                Whether or not to print more information and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
