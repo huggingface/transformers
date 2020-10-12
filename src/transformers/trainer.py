@@ -692,7 +692,8 @@ class Trainer:
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
-                if ((step + 1) % self.args.gradient_accumulation_steps != 0) and self.args.local_rank != -1 and _use_ddp_no_sync:
+                if ((step + 1) % self.args.gradient_accumulation_steps != 0) and self.args.local_rank != -1 \
+                        and _use_ddp_no_sync:
                     with model.no_sync():
                         tr_loss += self.training_step(model, inputs)
                 else:
