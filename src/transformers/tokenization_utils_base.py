@@ -23,13 +23,11 @@ import json
 import os
 import warnings
 from collections import OrderedDict, UserDict
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
-from tokenizers import AddedToken
-from tokenizers import Encoding as EncodingFast
 
 from .file_utils import (
     add_end_docstrings,
@@ -37,6 +35,7 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
     torch_required,
 )
@@ -45,8 +44,32 @@ from .utils import logging
 
 if is_tf_available():
     import tensorflow as tf
+
 if is_torch_available():
     import torch
+
+if is_tokenizers_available():
+    from tokenizers import AddedToken
+    from tokenizers import Encoding as EncodingFast
+else:
+
+    @dataclass
+    class AddedToken:
+        """AddedToken represents a token to be added to a Tokenizer
+        An AddedToken can have special options defining the way it should behave.
+        """
+
+        content: str = field(default_factory=str)
+        single_word: bool = False
+        lstrip: bool = False
+        rstrip: bool = False
+        normalized: bool = True
+
+    @dataclass
+    class EncodingFast:
+        """ This is dummy class because without the `tokenizers` library we don't have these objects anyway """
+
+        pass
 
 
 logger = logging.get_logger(__name__)

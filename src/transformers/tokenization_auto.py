@@ -59,7 +59,6 @@ from .configuration_utils import PretrainedConfig
 from .file_utils import is_sentencepiece_available, is_tokenizers_available
 from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BertTokenizer
-from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotSmallTokenizer
@@ -89,6 +88,7 @@ from .utils import logging
 
 if is_sentencepiece_available():
     from .tokenization_albert import AlbertTokenizer
+    from .tokenization_bert_generation import BertGenerationTokenizer
     from .tokenization_camembert import CamembertTokenizer
     from .tokenization_marian import MarianTokenizer
     from .tokenization_mbart import MBartTokenizer
@@ -99,6 +99,7 @@ if is_sentencepiece_available():
     from .tokenization_xlnet import XLNetTokenizer
 else:
     AlbertTokenizer = None
+    BertGenerationTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
@@ -201,7 +202,11 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
-SLOW_TOKENIZER_MAPPING = {k: v[0] for k, v in TOKENIZER_MAPPING.items()}
+SLOW_TOKENIZER_MAPPING = {
+    k: (v[0] if v[0] is not None else v[1])
+    for k, v in TOKENIZER_MAPPING.items()
+    if (v[0] is not None or v[1] is not None)
+}
 
 
 class AutoTokenizer:

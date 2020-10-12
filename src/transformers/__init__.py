@@ -157,7 +157,6 @@ from .retrieval_rag import RagRetriever
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
-from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
@@ -190,12 +189,12 @@ from .tokenization_utils_base import (
     TensorType,
     TokenSpan,
 )
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 
 
 if is_sentencepiece_available():
     from .tokenization_albert import AlbertTokenizer
+    from .tokenization_bert_generation import BertGenerationTokenizer
     from .tokenization_camembert import CamembertTokenizer
     from .tokenization_marian import MarianTokenizer
     from .tokenization_mbart import MBartTokenizer
@@ -233,6 +232,7 @@ if is_tokenizers_available():
     from .tokenization_roberta_fast import RobertaTokenizerFast
     from .tokenization_squeezebert_fast import SqueezeBertTokenizerFast
     from .tokenization_t5_fast import T5TokenizerFast
+    from .tokenization_utils_fast import PreTrainedTokenizerFast
     from .tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
     from .tokenization_xlnet_fast import XLNetTokenizerFast
 else:
@@ -570,7 +570,6 @@ if is_torch_available():
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
     )
-    from .tokenization_marian import MarianTokenizer
 
     # Trainer
     from .trainer import Trainer

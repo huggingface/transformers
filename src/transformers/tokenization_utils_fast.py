@@ -27,8 +27,7 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 
-from .convert_slow_tokenizer import convert_slow_tokenizer
-from .file_utils import add_end_docstrings
+from .file_utils import add_end_docstrings, is_sentencepiece_available
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -44,6 +43,11 @@ from .tokenization_utils_base import (
 )
 from .utils import logging
 
+
+if is_sentencepiece_available():
+    from .convert_slow_tokenizer import convert_slow_tokenizer
+else:
+    convert_slow_tokenizer = None
 
 logger = logging.get_logger(__name__)
 
@@ -85,9 +89,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if fast_tokenizer_file is not None:
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
-        elif slow_tokenizer is not None:
+        elif slow_tokenizer is not None and convert_slow_tokenizer is not None:
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif self.slow_tokenizer_class is not None:
+        elif self.slow_tokenizer_class is not None and convert_slow_tokenizer is not None:
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         else:
@@ -95,7 +99,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "Couldn't instantiate the backend tokenizer from one of: "
                 "(1) a `tokenizers` library serialization file, "
                 "(2) a slow tokenizer instance to convert or "
-                "(3) an equivalent slow tokenizer class to instantiate and convert."
+                "(3) an equivalent slow tokenizer class to instantiate and convert. "
+                "You need to have sentencepiece installed to convert a slow tokenizer to a fast one."
             )
 
         self._tokenizer = fast_tokenizer
