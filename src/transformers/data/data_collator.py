@@ -4,9 +4,15 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
+from ..file_utils import is_tokenizers_available
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_base import BatchEncoding, PaddingStrategy
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
+
+
+if is_tokenizers_available():
+    from ..tokenization_utils_fast import PreTrainedTokenizerFast
+else:
+    PreTrainedTokenizerFast = PreTrainedTokenizer
 
 
 InputDataClass = NewType("InputDataClass", Any)
