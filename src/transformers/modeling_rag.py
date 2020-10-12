@@ -406,7 +406,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`)
@@ -836,7 +836,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 Mask values selected in ``[0, 1]``:
 
                 - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **maked**.
+                - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
@@ -1221,7 +1221,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 Mask values selected in ``[0, 1]``:
 
                 - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **maked**.
+                - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             context_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
