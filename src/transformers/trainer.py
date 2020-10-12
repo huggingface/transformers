@@ -106,9 +106,6 @@ if version.parse(torch.__version__) < version.parse("1.2"):
 else:
     _use_ddp_no_sync = True
 
-if is_nlp_available():
-    import nlp
-
 if is_datasets_available():
     import datasets
 
