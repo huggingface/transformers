@@ -222,6 +222,17 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertFalse(_is_punctuation("A"))
         self.assertFalse(_is_punctuation(" "))
 
+    def test_clean_text(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
+        self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]])
+
+        self.assertListEqual(
+            [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
+        )
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
