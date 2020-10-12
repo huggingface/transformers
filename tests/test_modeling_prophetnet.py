@@ -56,7 +56,7 @@ class ProphetNetModelTester:
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        ngram=1,
+        ngram=2,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -95,7 +95,10 @@ class ProphetNetModelTester:
         self.is_encoder_decoder = is_encoder_decoder
 
         self.scope = None
-        self.decoder_key_length = 2 * decoder_seq_length
+        self.decoder_key_length = decoder_seq_length
+        self.base_model_out_len = 7
+        self.num_hidden_states_types = 3  # encoder, decoder_main, decoder_ngram
+        self.decoder_attention_idx = 2
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -249,7 +252,7 @@ class ProphetNetModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        past_key_values = outputs["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -288,7 +291,7 @@ class ProphetNetModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -532,10 +535,7 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        #        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased", use_cdn=False)
-        model = ProphetNetForConditionalGeneration.from_pretrained(
-            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased"
-        )
+        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased")
         model.to(torch_device)
 
         # encoder-decoder outputs
@@ -582,14 +582,15 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
             attention_mask=None,
             encoder_outputs=None,
             decoder_input_ids=decoder_prev_ids,
+            return_dict=True,
         )
-        output_predited_logis = output[0]
+        output_predited_logits = output[0]
         expected_shape = torch.Size((1, 12, 30522))
-        self.assertEqual(output_predited_logis.shape, expected_shape)
+        self.assertEqual(output_predited_logits.shape, expected_shape)
         expected_slice = torch.tensor(
             [[[-7.6213, -7.9008, -7.9979], [-7.6834, -7.8467, -8.2187], [-7.5326, -7.4762, -8.1914]]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4))
 
         # encoder outputs
         encoder_outputs = model.prophetnet.encoder(encoder_ids)[0]
@@ -601,18 +602,17 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
 
         # decoder outputs
-        decoder_outputs = model.prophetnet.decoder(decoder_prev_ids, encoder_hidden_states=encoder_outputs)
-        predicting_streams = decoder_outputs[0].view(1, model.config.ngram + 1, 12, -1)[:, 1:]
+        decoder_outputs = model.prophetnet.decoder(
+            decoder_prev_ids, encoder_hidden_states=encoder_outputs, return_dict=True
+        )
+        predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 12, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
         self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_cnndm_inference(self):
-        #        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm", use_cdn=False)
-        model = ProphetNetForConditionalGeneration.from_pretrained(
-            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased-cnndm"
-        )
+        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
         model.to(torch_device)
 
         tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")

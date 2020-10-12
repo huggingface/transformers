@@ -185,6 +185,8 @@ class ModelTesterMixin:
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
@@ -229,8 +231,14 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = 4
-                decoder_attention_idx = 1
+                correct_outlen = (
+                    self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 4
+                )
+                decoder_attention_idx = (
+                    self.model_tester.decoder_attention_idx
+                    if hasattr(self.model_tester, "decoder_attention_idx")
+                    else 1
+                )
 
                 # loss is at first position
                 if "labels" in inputs_dict:
@@ -259,7 +267,14 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)

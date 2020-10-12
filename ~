@@ -17,8 +17,9 @@
 import copy
 import logging
 import math
+from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+
 
 import numpy as np
 import torch
@@ -27,7 +28,7 @@ from torch import Tensor, nn
 
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, ModelOutput
 from .modeling_outputs import BaseModelOutput
 from .modeling_utils import PreTrainedModel
 
@@ -148,13 +149,12 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    ngram_logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -204,19 +204,17 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state_ngram: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@dataclass
 class ProphetNetDecoderModelOutput(ModelOutput):
     """
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
@@ -247,13 +245,12 @@ class ProphetNetDecoderModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state_ngram: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_ngram: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -734,7 +731,7 @@ class NgramMultiheadAttention(nn.Module):
         attn = torch.cat([attn_main, attn_ngram], 0).view(-1, bsz, embed_dim)
 
         if output_attentions:
-            attn_weights = attn_probs_main.view(bsz, self.num_heads, real_tgt_len, -1)
+            attn_weights = attn_probs_main
             attn_weights_ngram = attn_weights_ngram.view(self.ngram, bsz, self.num_heads, real_tgt_len, -1).transpose(
                 0, 1
             )  # .view(bsz, self.num_heads, tgt_len, src_len)r
@@ -941,7 +938,6 @@ class ProphetNetDecoderLayer(nn.Module):
         )
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             # 2nd residual block
             attention_output, cross_attn_weights = self.cross_attn(
@@ -1332,7 +1328,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # decoder layers
         all_main_stream_hidden_states = () if output_hidden_states else None
-        all_ngram_stream_hidden_states = () if output_hidden_states and self.config.ngram > 0 else None
+        all_ngram_stream_hidden_states = () if output_hidden_states else None
+        all_cross_attn_hidden_states = () if output_hidden_states else None
 
         all_main_stream_attns = () if output_attentions else None
         all_ngram_stream_attns = () if output_attentions else None
@@ -1341,10 +1338,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
-                all_main_stream_hidden_states += (hidden_states[:sequence_length],)
-                if self.config.ngram > 0:
-                    all_ngram_stream_hidden_states += (hidden_states[sequence_length:],)
-
+                all_main_stream_hidden_states += (hidden_states,)
             layer_state = past_key_values[idx] if past_key_values is not None else None
             hidden_states, layer_self_attn, layer_self_attn_ngram, layer_cross_attn, layer_past = decoder_layer(
                 hidden_states,
@@ -1360,40 +1354,23 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             )
             if use_cache:
                 present_key_values += (layer_past,)
-
             if output_attentions:
                 all_main_stream_attns += (layer_self_attn,)
                 all_ngram_stream_attns += (layer_self_attn_ngram,)
                 all_cross_attns += (layer_cross_attn,)
 
-        last_hidden_state = hidden_states[:sequence_length].transpose(0, 1)
-        last_hidden_state_ngram = hidden_states[sequence_length:].transpose(0, 1) if self.config.ngram > 0 else None
+        last_hidden_state = hidden_states.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1) if encoder_hidden_states is not None else None
 
         if not return_dict:
             return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    last_hidden_state_ngram,
-                    present_key_values,
-                    all_main_stream_hidden_states,
-                    all_ngram_stream_hidden_states,
-                    all_main_stream_attns,
-                    all_ngram_stream_attns,
-                    all_cross_attns,
-                ]
-                if v is not None
+                v for v in [last_hidden_state, present_key_values, all_main_stream_hidden_states, all_main_stream_attns] if v is not None
             )
         return ProphetNetDecoderModelOutput(
             last_hidden_state=last_hidden_state,
-            last_hidden_state_ngram=last_hidden_state_ngram,
             past_key_values=present_key_values,
             hidden_states=all_main_stream_hidden_states,
-            hidden_states_ngram=all_ngram_stream_hidden_states,
             attentions=all_main_stream_attns,
-            ngram_attentions=all_ngram_stream_attns,
-            cross_attentions=all_cross_attns,
         )
 
 
@@ -1497,13 +1474,9 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             return decoder_outputs + encoder_outputs
         return ProphetNetSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            last_hidden_state_ngram=decoder_outputs.last_hidden_state_ngram,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_ngram_hidden_states=decoder_outputs.hidden_states_ngram,
             decoder_attentions=decoder_outputs.attentions,
-            decoder_ngram_attentions=decoder_outputs.ngram_attentions,
-            decoder_cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1578,31 +1551,27 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             decoder_input_ids.shape if decoder_input_ids is not None else decoder_inputs_embeds.shape[:2]
         )
 
-        predicting_streams = outputs[1].view(batch_size, self.config.ngram, sequence_length, -1)
-        predict_logits = self.lm_head(predicting_streams)
-
-        logits = predict_logits[:, 0]
-        logits_ngram = predict_logits[:, 1:] if self.config.ngram > 1 else None
+        predicting_streams = outputs[0].view(batch_size, self.config.ngram + 1, sequence_length, -1)[:, 1:]
 
         loss = None
         if labels is not None:
             # fine-tune
-            loss = self._compute_loss(predict_logits, labels)
+            logits = self.lm_head(predicting_streams)
+            loss = self._compute_loss(logits, labels)
+
+            logits = logits[:, 0]
+        else:
+            logits = self.lm_head(predicting_streams[:, 0])
 
         if not return_dict:
-            all_logits = tuple(v for v in [logits, logits_ngram] if v is not None)
-            return (loss,) + all_logits + outputs[2:] if loss is not None else all_logits + outputs[2:]
+            return (loss, logits) + outputs[1:] if loss is not None else (logits,) + outputs[1:]
         else:
             return ProphetNetSeq2SeqLMOutput(
                 loss=loss,
                 logits=logits,
-                logits_ngram=logits_ngram,
                 past_key_values=outputs.past_key_values,
                 decoder_hidden_states=outputs.decoder_hidden_states,
-                decoder_ngram_hidden_states=outputs.decoder_ngram_hidden_states,
                 decoder_attentions=outputs.decoder_attentions,
-                decoder_ngram_attentions=outputs.decoder_ngram_attentions,
-                decoder_cross_attentions=outputs.decoder_cross_attentions,
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
                 encoder_hidden_states=outputs.encoder_hidden_states,
                 encoder_attentions=outputs.encoder_attentions,

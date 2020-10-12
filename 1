@@ -17,8 +17,9 @@
 import copy
 import logging
 import math
+from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+
 
 import numpy as np
 import torch
@@ -27,7 +28,7 @@ from torch import Tensor, nn
 
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, ModelOutput
 from .modeling_outputs import BaseModelOutput
 from .modeling_utils import PreTrainedModel
 
@@ -149,7 +150,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -204,8 +205,8 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state_ngram: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -216,7 +217,6 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@dataclass
 class ProphetNetDecoderModelOutput(ModelOutput):
     """
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
@@ -247,8 +247,8 @@ class ProphetNetDecoderModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state_ngram: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1372,18 +1372,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    last_hidden_state_ngram,
-                    present_key_values,
-                    all_main_stream_hidden_states,
-                    all_ngram_stream_hidden_states,
-                    all_main_stream_attns,
-                    all_ngram_stream_attns,
-                    all_cross_attns,
-                ]
-                if v is not None
+                v for v in [last_hidden_state, last_hidden_state_ngram, present_key_values, all_main_stream_hidden_states, all_ngram_stream_hidden_states, all_main_stream_attns, all_ngram_stream_attns, all_cross_attns] if v is not None
             )
         return ProphetNetDecoderModelOutput(
             last_hidden_state=last_hidden_state,
