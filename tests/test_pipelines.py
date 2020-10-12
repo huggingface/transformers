@@ -10,6 +10,7 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
 
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
+TF_NER_FINETUNED_MODELS = ["Narsil/small"]
 
 # xlnet-base-cased disabled for now, since it crashes TF2
 FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased"]
@@ -802,6 +803,14 @@ class NerPipelineTests(unittest.TestCase):
         mandatory_keys = {"entity_group", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_tf
+    def test_tf_only_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
+        for model_name in TF_NER_FINETUNED_MODELS:
+            # We don't specificy framework='tf' but it gets detected automatically
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
             self._test_ner_pipeline(nlp, mandatory_keys)
 
 
