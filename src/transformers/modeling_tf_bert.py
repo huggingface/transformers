@@ -430,6 +430,10 @@ class TFBertEncoder(tf.keras.layers.Layer):
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+        
+        if tf.executing_eagerly():
+            if not return_dict:
+                return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
@@ -588,7 +592,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -616,11 +620,12 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         else:
             input_ids = inputs
 
-        if return_dict:
-            logger.warning("The `return_dict` parameter cannot be changed. Since the v4.0 the TensorFlow models will always return a dictionary.")
-
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.return_dict
+
+        if not return_dict and tf.executing_eagerly():
+            logger.warning("Since the v4.0 the TensorFlow models will always return a dictionary in graph mode and the `return_dict` parameter is set to True.")
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -682,6 +687,13 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        if tf.executing_eagerly():
+            if not return_dict:
+                return (
+                    sequence_output,
+                    pooled_output,
+                ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -935,6 +947,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
             labels = input_ids.pop("labels", labels)
             next_sentence_label = input_ids.pop("next_sentence_label", next_sentence_label)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -957,6 +970,10 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
             d_labels = {"labels": labels}
             d_labels["next_sentence_label"] = next_sentence_label
             total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
+        
+        if tf.executing_eagerly():
+            if not return_dict:
+                return (prediction_scores, seq_relationship_score) + outputs[2:]
 
         return TFBertForPreTrainingOutput(
             loss=total_loss,
@@ -1019,6 +1036,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         elif isinstance(input_ids, (dict, BatchEncoding)):
             labels = input_ids.pop("labels", labels)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -1040,6 +1058,12 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             shifted_prediction_scores = prediction_scores[:, :-1]
             labels = labels[:, 1:]
             lm_loss = self.compute_loss(labels=labels, logits=shifted_prediction_scores)
+        
+        if tf.executing_eagerly():
+            if not return_dict:
+                output = (prediction_scores,) + outputs[2:]
+
+                return ((prediction_scores,) + output) if lm_loss is not None else output
 
         return TFCausalLMOutput(
             loss=lm_loss,
@@ -1115,6 +1139,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         elif isinstance(input_ids, (dict, BatchEncoding)):
             labels = input_ids.pop("labels", labels)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -1131,6 +1156,12 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output=sequence_output, training=training)
         masked_lm_loss = None if labels is None else self.compute_loss(labels=labels, logits=prediction_scores)
+
+        if tf.executing_eagerly():
+            if not return_dict:
+                output = (prediction_scores,) + outputs[2:]
+
+                return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return TFMaskedLMOutput(
             loss=masked_lm_loss,
@@ -1204,6 +1235,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         elif isinstance(input_ids, (dict, BatchEncoding)):
             next_sentence_label = input_ids.pop("next_sentence_label", next_sentence_label)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -1235,6 +1267,10 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 =======
 >>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
+
+        if tf.executing_eagerly():
+            if not return_dict:
+                return (seq_relationship_scores,) + outputs[2:]
 
         return TFNextSentencePredictorOutput(
             loss=next_sentence_loss,
@@ -1299,6 +1335,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         elif isinstance(input_ids, (dict, BatchEncoding)):
             labels = input_ids.pop("labels", labels)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -1315,6 +1352,12 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         pooled_output = self.dropout(inputs=pooled_output, training=training)
         logits = self.classifier(inputs=pooled_output)
         loss = None if labels is None else self.compute_loss(labels=labels, logits=logits)
+
+        if tf.executing_eagerly():
+            if not return_dict:
+                output = (logits,) + outputs[2:]
+
+                return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
             loss=loss,
@@ -1429,6 +1472,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             if inputs_embeds is not None
             else None
         )
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=flat_input_ids,
             attention_mask=flat_attention_mask,
@@ -1446,6 +1490,12 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         logits = self.classifier(inputs=pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels=labels, logits=reshaped_logits)
+
+        if tf.executing_eagerly():
+            if not return_dict:
+                output = (reshaped_logits,) + outputs[2:]
+
+                return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
             loss=loss,
@@ -1511,6 +1561,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         elif isinstance(input_ids, (dict, BatchEncoding)):
             labels = input_ids.pop("labels", labels)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -1527,6 +1578,12 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         sequence_output = self.dropout(inputs=sequence_output, training=training)
         logits = self.classifier(inputs=sequence_output)
         loss = None if labels is None else self.compute_loss(labels=labels, logits=logits)
+
+        if tf.executing_eagerly():
+            if not return_dict:
+                output = (logits,) + outputs[2:]
+
+                return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
             loss=loss,
@@ -1599,6 +1656,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             start_positions = input_ids.pop("start_positions", start_positions)
             end_positions = input_ids.pop("end_positions", start_positions)
 
+        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -1622,6 +1680,12 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
             total_loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
+        
+        if tf.executing_eagerly():
+            if not return_dict:
+                output = (start_logits, end_logits) + outputs[2:]
+
+                return ((total_loss,) + output) if total_loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
             loss=total_loss,
