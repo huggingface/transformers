@@ -71,6 +71,8 @@ class T5Config(PretrainedConfig):
         initializer_factor (:obj:`float`, `optional`, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
     """
     model_type = "t5"
 
@@ -91,6 +93,7 @@ class T5Config(PretrainedConfig):
         is_encoder_decoder=True,
         pad_token_id=0,
         eos_token_id=1,
+        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(
@@ -113,6 +116,7 @@ class T5Config(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
+        self.gradient_checkpointing = gradient_checkpointing
 
     @property
     def max_position_embeddings(self):
