@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.utils.checkpoint
 
 from .configuration_t5 import T5Config
 from .file_utils import (
@@ -754,7 +755,29 @@ class T5Stack(T5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(
+            if getattr(self.config, "gradient_checkpointing", False):
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask=extended_attention_mask,
+                    position_bias=position_bias,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_extended_attention_mask,
+                    encoder_decoder_position_bias=encoder_decoder_position_bias,
+                    head_mask=head_mask[i],
+                    past_key_value=past_key_value,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
+            else:
+                layer_outputs = layer_module(
                 hidden_states,
                 attention_mask=extended_attention_mask,
                 position_bias=position_bias,
@@ -765,7 +788,8 @@ class T5Stack(T5PreTrainedModel):
                 past_key_value=past_key_value,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-            )
+            ) 
+      
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
