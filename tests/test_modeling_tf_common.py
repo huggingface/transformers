@@ -863,10 +863,6 @@ class TFModelTesterMixin:
             if getattr(model, "compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                print("model", model_class.__name__)
-                print("prepared_for_class", prepared_for_class.keys())
-                print("inputs_dict", inputs_dict.keys())
-                print("diff", list(prepared_for_class.keys() - inputs_dict.keys()))
                 added_label = prepared_for_class[
                     sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
                 ]

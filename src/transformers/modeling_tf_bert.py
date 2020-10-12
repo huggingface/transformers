@@ -258,7 +258,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
             attention_probs = attention_probs * head_mask
 
         attention_output = tf.einsum("BNTS,BSNH->BTNH", attention_probs, value_tensor)
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        outputs = (attention_output, attention_probs)
 
         return outputs
 
@@ -408,12 +408,12 @@ class TFBertEncoder(tf.keras.layers.Layer):
         return_dict=True,
         training=False,
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_hidden_states = tf.TensorArray(tf.float32, size=0, dynamic_size=True, element_shape=hidden_states.shape)
+        all_attentions = None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states.write(i, hidden_states)
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
@@ -424,20 +424,28 @@ class TFBertEncoder(tf.keras.layers.Layer):
             )
             hidden_states = layer_outputs[0]
 
+            if all_attentions is None:
+                all_attentions = tf.TensorArray(tf.float32, size=0, dynamic_size=True, element_shape=layer_outputs[1].shape)
+
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions.write(i, layer_outputs[1])
 
         # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states.write(all_hidden_states.size(), hidden_states)
         
         if tf.executing_eagerly():
             if not return_dict:
                 return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        output = TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states.stack(), attentions=all_attentions.stack()
         )
+
+        all_hidden_states.close()
+        all_attentions.close()
+
+        return output
 
 
 class TFBertPooler(tf.keras.layers.Layer):
@@ -857,7 +865,7 @@ class TFBertModel(TFBertPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -869,7 +877,7 @@ class TFBertModel(TFBertPreTrainedModel):
         training=False,
     ):
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -908,7 +916,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -937,19 +945,19 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
 
         """
 
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
-            next_sentence_label = input_ids[10] if len(input_ids) > 10 else next_sentence_label
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+            next_sentence_label = inputs[10] if len(inputs) > 10 else next_sentence_label
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
-            next_sentence_label = input_ids.pop("next_sentence_label", next_sentence_label)
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1010,7 +1018,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1028,17 +1036,17 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1114,7 +1122,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1131,17 +1139,17 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
         """
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1176,19 +1184,17 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFBertMainLayer(config=config, name="bert")
-        self.cls = TFBertOnlyNSPHead(config=config, name="cls")
+        self.bert = TFBertMainLayer(config, name="bert")
+        self.nsp = TFBertNSPHead(config, name="nsp___cls")
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1196,48 +1202,34 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=True,
+        return_dict=None,
         next_sentence_label=None,
         training=False,
     ):
         r"""
         Return:
-
         Examples::
-
             >>> import tensorflow as tf
             >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
-
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
             >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
             >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
-
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
-<<<<<<< HEAD
-=======
-
-<<<<<<< HEAD
->>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
-=======
->>>>>>> f45fece2... Fix return_dict to True
-        if isinstance(input_ids, (tuple, list)):
-            next_sentence_label = input_ids[9] if len(input_ids) > 9 else next_sentence_label
+        if isinstance(inputs, (tuple, list)):
+            next_sentence_label = inputs[9] if len(inputs) > 9 else next_sentence_label
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            next_sentence_label = input_ids.pop("next_sentence_label", next_sentence_label)
-
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1249,28 +1241,17 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             training=training,
         )
         pooled_output = outputs[1]
-<<<<<<< HEAD
         seq_relationship_scores = self.nsp(pooled_output)
 
-=======
-        seq_relationship_scores = self.cls(pooled_output=pooled_output)
->>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
         next_sentence_loss = (
             None
             if next_sentence_label is None
             else self.compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
         )
-<<<<<<< HEAD
 
         if not return_dict:
             output = (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
-=======
->>>>>>> da240438... Better model design for BERT + LM pretraining for BERT + more robust custom TF weights loading
-
-        if tf.executing_eagerly():
-            if not return_dict:
-                return (seq_relationship_scores,) + outputs[2:]
 
         return TFNextSentencePredictorOutput(
             loss=next_sentence_loss,
@@ -1309,7 +1290,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1327,17 +1308,17 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1536,7 +1517,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1553,17 +1534,17 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        if isinstance(input_ids, (tuple, list)):
-            labels = input_ids[9] if len(input_ids) > 9 else labels
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            labels = input_ids.pop("labels", labels)
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1623,7 +1604,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1646,19 +1627,19 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        if isinstance(input_ids, (tuple, list)):
-            start_positions = input_ids[9] if len(input_ids) > 9 else start_positions
-            end_positions = input_ids[10] if len(input_ids) > 10 else end_positions
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[9] if len(inputs) > 9 else start_positions
+            end_positions = inputs[10] if len(inputs) > 10 else end_positions
 
-            if len(input_ids) > 9:
-                input_ids = input_ids[:9]
-        elif isinstance(input_ids, (dict, BatchEncoding)):
-            start_positions = input_ids.pop("start_positions", start_positions)
-            end_positions = input_ids.pop("end_positions", start_positions)
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(
-            inputs=input_ids,
+            inputs=inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
