@@ -853,7 +853,7 @@ class TFBertModel(TFBertPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         training=False,
     ):
         outputs = self.bert(
@@ -904,7 +904,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         labels=None,
         next_sentence_label=None,
         training=False,
@@ -1001,7 +1001,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         labels=None,
         training=False,
     ):
@@ -1098,7 +1098,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         labels=None,
         training=False,
     ):
@@ -1165,7 +1165,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         next_sentence_label=None,
         training=False,
     ):
@@ -1281,7 +1281,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         labels=None,
         training=False,
     ):
@@ -1370,7 +1370,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         labels=None,
         training=False,
     ):
@@ -1494,7 +1494,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         labels=None,
         training=False,
     ):
@@ -1574,7 +1574,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
         start_positions=None,
         end_positions=None,
         training=False,
