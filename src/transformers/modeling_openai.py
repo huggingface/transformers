@@ -748,8 +748,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
-    authorized_missing_keys = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -761,7 +759,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
     @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/dialogrpt",
+        checkpoint="openai-gpt",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
