@@ -957,7 +957,8 @@ class TFBartModel(TFPretrainedBartModel):
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
-    authorized_missing_keys = [r"final_logits_bias", r"encoder\.version", r"decoder\.version"]
+    authorized_missing_keys = [r"final_logits_bias", r"encoder\.version", r"decoder\.version",
+                               "model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)

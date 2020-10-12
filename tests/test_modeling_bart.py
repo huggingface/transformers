@@ -580,6 +580,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",
+            truncation_strategy="only_first",
             truncation=True,
             return_tensors="pt",
         )
