@@ -16,6 +16,7 @@
 import logging
 import math
 import random
+import warnings
 from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
@@ -36,6 +37,7 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from .tokenization_utils_base import BatchEncoding
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -46,10 +48,23 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     :param torch.Tensor x:
     :return tf.Tensor:
     """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indicies = tf.cumsum(mask, axis=1).type_as(mask) * mask
-    return incremental_indicies.long() + padding_idx
+    incremental_indices = tf.cumsum(mask, axis=1).type_as(mask) * mask
+    return incremental_indices.long() + padding_idx
+
+
+def print_tensor(msg, t):  # DELEMETME
+    # assert t.shape
+    ndim = len(t.shape)
+    if ndim == 1:
+        slice = t[:3]
+    elif ndim == 2:
+        slice = t[:3, :3]
+    elif ndim == 3:
+        slice = t[:3, :3, :3]
+    elif ndim == 4:
+        slice = t[:3, :3, :3, :3]
+    print(f"{msg}: {slice}")
 
 
 logger = logging.getLogger(__name__)
@@ -344,10 +359,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(
-            epsilon=1e-5, name="final_layer_norm"
-        )  # TODO: conditional
-        # TODO: layernorm_embedding
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
         self,
@@ -419,7 +431,6 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-# @keras_serializable  # TODO(SS): Is this needed/helpful?
 class TFBartDecoder(tf.keras.layers.Layer):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
@@ -481,7 +492,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.use_cache
-
+        if use_cache:
+            assert not training, "Training + use cache are incompatible"
         if unused:
             raise TypeError(f"Ignoring kwargs {unused}")
         # check attention mask and invert
@@ -494,8 +506,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         if use_cache:
             input_ids = input_ids[:, -1:]
-            positions = positions[:, -1:]  # happens after we embed them
-            # assert input_ids.ne(self.padding_idx).any()
+            positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         if self.do_blenderbot_90_layernorm:
@@ -535,10 +546,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
-                x = self.layer_norm(x)
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
+
+        if self.layer_norm is not None:  # same as if config.add_final_layer_norm
+            x = self.layer_norm(x)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
@@ -550,6 +562,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = list(all_self_attns) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
+        encoder_hidden_states = tf.transpose(
+            encoder_hidden_states, perm=(1, 0, 2)
+        )  # undo initial transpose, could be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
         if not return_dict:
@@ -771,9 +786,6 @@ def gelu(x):
     return x * cdf
 
 
-import warnings
-
-
 class LearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -806,6 +818,7 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
+@keras_serializable
 class TFBartModel(TFPretrainedBartModel):
     def __init__(self, config: BartConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -817,7 +830,6 @@ class TFBartModel(TFPretrainedBartModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
-        # padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
@@ -859,6 +871,8 @@ class TFBartModel(TFPretrainedBartModel):
         return_dict=None,
         **unused
     ):
+        if "past_key_values" in unused:
+            raise ValueError("dont do that")
         assert decoder_input_ids is not None, "TF Bart requires decoder_input_ids, got None"
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if decoder_input_ids is None:  # GLUE MODE
@@ -937,15 +951,13 @@ class TFBartModel(TFPretrainedBartModel):
         return self.shared
 
 
-from .tokenization_utils_base import BatchEncoding
-
-
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.",
     BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
+    authorized_missing_keys = [r"final_logits_bias", r"encoder\.version", r"decoder\.version"]
 
     def __init__(self, config: BartConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
@@ -1002,7 +1014,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         elif isinstance(inputs, (dict, BatchEncoding)):
             if "inputs" in inputs:
                 warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
-                input_ids = inputs.get("inputs")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
@@ -1040,7 +1051,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            decoder_cached_states=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1106,6 +1117,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
             decoder_cached_states = None
         else:
+            assert len(past) == 2
             encoder_outputs, decoder_cached_states = past
             if isinstance(encoder_outputs, tuple):
                 assert isinstance(encoder_outputs[0], tf.Tensor)
@@ -1119,7 +1131,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         return {
             "inputs": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "decoder_cached_states": decoder_cached_states,
+            "past_key_values": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
@@ -1145,13 +1157,26 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         past = (encoder_out, reordered_past)
         return past
 
-    def prepare_scores_for_generation(self, scores, cur_len, max_length):
-        raise NotImplementedError("FIXME: This never gets called, but should.")
-        if self.config.force_bos_token_to_be_generated and cur_len == 1:
-            # force bos token to be generated: discussion https://github.com/huggingface/transformers/pull/6526
-            self._force_token_ids_generation(scores, self.config.bos_token_id)
-        if cur_len == max_length - 1 and self.config.eos_token_ids[0] is not None:
-            self._force_token_ids_generation(scores, self.config.eos_token_ids[0])
+    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+        if cur_len == 1 and self.config.force_bos_token_to_be_generated:
+            self._force_token_ids_generation(logits, self.config.bos_token_id)
+        elif cur_len == max_length - 1 and self.config.eos_token_id is not None:
+            self._force_token_ids_generation(logits, self.config.eos_token_id)
+        return logits
+
+    def _force_token_ids_generation(self, scores, token_id) -> None:
+        """force one of token_ids to be generated by setting prob of all other tokens to 0 (logprob=-float("inf"))"""
+        output_list = []
+
+        # Is there a better way to do scores[:, [x for if x != token_id]] = -float("inf") in TF?
+        bs, vocab_size = scores.shape
+        for x in range(vocab_size):
+            if x == token_id:
+                output_list.append(tf.convert_to_tensor([-float("inf")] * bs, dtype=scores.dtype))
+            else:
+                output_list.append(scores[:, x])
+        scores = tf.stack(output_list, axis=1, name="scores")
+        assert scores.shape == (bs, vocab_size)
         return scores
 
     def get_output_embeddings(self):
