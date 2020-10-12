@@ -17,6 +17,8 @@
 
 import argparse
 
+import torch
+
 from transformers import logging
 from transformers.modeling_prophetnet import ProphetNetForConditionalGeneration
 from transformers.modeling_xlm_prophetnet import XLMProphetNetForConditionalGeneration
@@ -49,24 +51,24 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
             prophetnet_checkpoint_path, output_loading_info=True
         )
 
+    special_keys = ["key_proj", "value_proj", "query_proj"]
+
     mapping = {
-        "ngram_self_attn_layer_norm": "self_attn_layer_norm",
+        "self_attn": "ngram_self_attn",
         "cross_attn": "encoder_attn",
         "cross_attn_layer_norm": "encoder_attn_layer_norm",
         "feed_forward_layer_norm": "final_layer_norm",
         "feed_forward": "",
         "intermediate": "fc1",
         "output": "fc2",
-        "key_proj_bias": "bias_k",
-        "value_proj_bias": "bias_v",
-        "key_proj_weight": "k_proj_weight",
-        "value_proj_weight": "v_proj_weight",
-        "query_proj_weight": "q_proj_weight",
         "key_proj": "k_proj",
-        "value_proj": "v_proj",
         "query_proj": "q_proj",
+        "value_proj": "v_proj",
         "word_embeddings": "embed_tokens",
         "embeddings_layer_norm": "emb_layer_norm",
+        "relative_pos_embeddings": "relative_linear",
+        "ngram_embeddings": "ngram_input_embed",
+        "position_embeddings": "embed_positions",
     }
 
     for key in loading_info["missing_keys"]:
@@ -83,7 +85,9 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
         for attribute in attributes:
             if attribute in mapping:
                 old_attribute = mapping[attribute]
-            else:
+                if not hasattr(old_model, old_attribute) and len(old_attribute) > 0:
+                    old_attribute = attribute
+            elif hasattr(old_model, attribute):
                 old_attribute = attribute
 
             if attribute == "weight":
@@ -98,18 +102,29 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 logger.info(f"{attribute} is initialized")
                 is_key_init = True
                 break
-            elif attribute in [
-                "in_proj_weight",
-                "key_proj_weight",
-                "value_proj_weight",
-                "query_proj_weight",
-                "in_proj_bias",
-                "key_proj_bias",
-                "value_proj_bias",
-            ]:
-                old_model_weight = getattr(old_model, old_attribute)
-                assert getattr(model, attribute).shape == old_model_weight.shape, "Shapes have to match!"
-                setattr(model, attribute, old_model_weight)
+            elif attribute in special_keys and hasattr(old_model, "in_proj_weight"):
+                embed_dim = old_model.in_proj_weight.shape[0] // 3
+                param = getattr(model, attribute)
+                param.weight.shape == old_model.in_proj_weight[:embed_dim, :].shape, "Shapes have to match"
+                param.bias.shape == old_model.in_proj_bias[:embed_dim].shape, "Shapes have to match"
+                if attribute == "query_proj":
+                    model.query_proj.weight = torch.nn.Parameter(old_model.in_proj_weight[:embed_dim, :])
+                    model.query_proj.bias = torch.nn.Parameter(old_model.in_proj_bias[:embed_dim])
+
+                elif attribute == "key_proj":
+                    model.key_proj.weight = torch.nn.Parameter(old_model.in_proj_weight[embed_dim : 2 * embed_dim, :])
+                    model.key_proj.bias = torch.nn.Parameter(old_model.in_proj_bias[embed_dim : 2 * embed_dim])
+                elif attribute == "value_proj":
+                    model.value_proj.weight = torch.nn.Parameter(old_model.in_proj_weight[2 * embed_dim :, :])
+                    model.value_proj.bias = torch.nn.Parameter(old_model.in_proj_bias[2 * embed_dim :])
+                is_key_init = True
+                break
+            elif attribute == "position_embeddings":
+                assert (
+                    model.position_embeddings.weight.shape[-1] == getattr(old_model, old_attribute).weight.shape[-1]
+                ), "Shapes have to match"
+                assert model.position_embeddings.weight.shape[0] == 512, "Shapes have to match"
+                model.position_embeddings.weight = torch.nn.Parameter(old_model.embed_positions.weight[:512, :])
                 is_key_init = True
                 break
 
@@ -122,6 +137,8 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 if old_attribute == "":
                     old_model = old_model
                 else:
+                    if not hasattr(old_model, old_attribute):
+                        raise ValueError(f"{old_model} does not have {old_attribute}")
                     old_model = getattr(old_model, old_attribute)
 
         if not is_key_init:

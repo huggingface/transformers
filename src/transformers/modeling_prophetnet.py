@@ -196,10 +196,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
 
     def max_positions(self):
         """Maximum number of supported positions."""
-        if self.padding_idx is not None:
-            return self.num_embeddings - self.padding_idx - 1
-        else:
-            return self.num_embeddings
+        return self.num_embeddings
 
     def _forward(self, positions):
         return super().forward(positions)
@@ -446,22 +443,6 @@ class NgramMultiheadAttention(nn.Module):
         self.relative_pos_embeddings = nn.Linear(embed_dim, num_buckets * num_heads)
 
         self.onnx_trace = False
-
-        # TODO: remap weights
-        # TODO(delete after)
-        self.relative_linear = nn.Linear(embed_dim, num_buckets * num_heads)
-        self.relative_pos_embeddings = self.relative_linear
-
-        self.in_proj_weight = nn.Parameter(torch.Tensor(3 * embed_dim, embed_dim))
-        self.in_proj_bias = nn.Parameter(torch.Tensor(3 * embed_dim))
-
-        self.query_proj.weight = nn.Parameter(self.in_proj_weight[:embed_dim, :])
-        self.key_proj.weight = nn.Parameter(self.in_proj_weight[embed_dim : 2 * embed_dim, :])
-        self.value_proj.weight = nn.Parameter(self.in_proj_weight[2 * embed_dim :, :])
-
-        self.query_proj.bias = nn.Parameter(self.in_proj_bias[:embed_dim])
-        self.key_proj.bias = nn.Parameter(self.in_proj_bias[embed_dim : 2 * embed_dim])
-        self.value_proj.bias = nn.Parameter(self.in_proj_bias[2 * embed_dim :])
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -762,7 +743,6 @@ class ProphetNetDecoderLayer(nn.Module):
 
         # ngram_self
         # 2nd residual block
-        #        self.encoder_attn = SelfAttention(
         self.cross_attn = SelfAttention(
             self.embed_dim,
             config.num_decoder_attention_heads,
@@ -770,24 +750,11 @@ class ProphetNetDecoderLayer(nn.Module):
             encoder_decoder_attention=True,
             output_dropout=config.dropout,
         )
-        #        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
         self.cross_attn_layer_norm = LayerNorm(self.embed_dim)
 
         # 3rd residual block
         self.feed_forward = FeedForwardBlock(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(self.embed_dim)
-
-        # TODO(delete later)
-        self.ngram_self_attn = NgramMultiheadAttention(
-            self.embed_dim,
-            config.num_attention_heads,
-            dropout=config.attention_dropout,
-            output_dropout=config.dropout,
-            ngram=config.ngram,
-        )
-        self.ngram_self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.self_attn = self.ngram_self_attn
-        self.self_attn_layer_norm = self.ngram_self_attn_layer_norm
 
     def forward(
         self,
@@ -807,7 +774,6 @@ class ProphetNetDecoderLayer(nn.Module):
             layer_state = {}
 
         # 1st residual block
-        #        ngram_attention_output, self_attn_weights = self.ngram_self_attn(
         ngram_attention_output, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             layer_state=layer_state,
@@ -819,7 +785,6 @@ class ProphetNetDecoderLayer(nn.Module):
             real_positions=real_positions,
             output_attentions=output_attentions,
         )
-        #        hidden_states = self.ngram_self_attn_layer_norm(hidden_states + ngram_attention_output)
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
         if encoder_hidden_states is not None:
@@ -932,14 +897,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         # weights
         self.word_embeddings = word_embeddings
-        #        self.embed_positions = LearnedPositionalEmbedding(
-        #            config.max_position_embeddings, embed_dim, self.padding_idx
-        #        )
-        self.embed_positions = LearnedPositionalEmbedding(
-            config.max_position_embeddings + 1 + self.padding_idx, embed_dim, self.padding_idx
+        self.position_embeddings = LearnedPositionalEmbedding(
+            config.max_position_embeddings, embed_dim, self.padding_idx
         )
-        #        self.embed_positions.weight = nn.Parameter(self.embed_positions.weight[:-1, :])
-
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.embeddings_layer_norm = LayerNorm(embed_dim)
 
@@ -972,7 +932,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         elif input_ids is not None and inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        embed_pos, real_positions = self.embed_positions(inputs_embeds.shape[:2], inputs_embeds.device)
+        embed_pos, real_positions = self.position_embeddings(inputs_embeds.shape[:2], inputs_embeds.device)
         x = inputs_embeds + embed_pos
         x = self.embeddings_layer_norm(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -1025,26 +985,16 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.embed_scale = None
         embed_dim = config.hidden_size
 
-        # weights
         self.word_embeddings = word_embeddings
-        # remap weights and enable this
-        #        self.embed_positions = LearnedPositionalEmbedding(
-        #            config.max_position_embeddings, embed_dim, self.padding_idx
-        #        )
-        self.embed_positions = LearnedPositionalEmbedding(
-            config.max_position_embeddings + 2 + self.padding_idx, embed_dim, self.padding_idx
+        self.position_embeddings = LearnedPositionalEmbedding(
+            config.max_position_embeddings, embed_dim, self.padding_idx
         )
-        #        self.embed_positions.weight = nn.Parameter(self.embed_positions.weight[:-2, :])
 
         self.ngram_embeddings = nn.Embedding(self.ngram, embed_dim, None)
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
         self.embeddings_layer_norm = LayerNorm(embed_dim)
 
         self.init_weights()
-
-        # TODO(delete later)
-        self.ngram_input_embed = nn.Embedding(self.ngram, embed_dim, None)
-        self.ngram_embeddings = self.ngram_input_embed
 
     def cal_and_buffer_finetune_relative_positions(self, real_positions):
         n_tokens = real_positions.size(-1)
@@ -1171,7 +1121,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             # invert mask
             encoder_attention_mask = encoder_attention_mask.eq(0)
 
-        main_stream_pos_embed, real_positions = self.embed_positions(
+        main_stream_pos_embed, real_positions = self.position_embeddings(
             (batch_size, sequence_length),
             device=inputs_embeds.device,
             past_key_values=past_key_values,
@@ -1183,7 +1133,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(
                 real_positions
             )
-        predicting_stream_pos_embed = self.embed_positions._forward(real_positions + 1)
+        predicting_stream_pos_embed = self.position_embeddings._forward(real_positions + 1)
 
         if self.embed_scale is not None:
             inputs_embeds *= self.embed_scal

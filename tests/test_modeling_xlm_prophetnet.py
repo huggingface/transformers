@@ -29,8 +29,11 @@ if is_torch_available():
 class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
+        #        model = XLMProphetNetForConditionalGeneration.from_pretrained(
+        #            "patrickvonplaten/xprophetnet-large-wiki100-cased", use_cdn=False
+        #        )
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased",
+            "/home/patrick/hugging_face/microsoft/xprophetnet-large-wiki100-cased"
         )
         model.to(torch_device)
 
@@ -71,8 +74,11 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_ntg_hidden_states(self):
+        #        model = XLMProphetNetForConditionalGeneration.from_pretrained(
+        #            "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
+        #        )
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg",
+            "/home/patrick/hugging_face/microsoft/xprophetnet-large-wiki100-cased-xglue-ntg"
         )
         model.to(torch_device)
 
@@ -95,8 +101,11 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_xprophetnet_ntg_inference(self):
+        #        model = XLMProphetNetForConditionalGeneration.from_pretrained(
+        #            "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
+        #        )
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg",
+            "/home/patrick/hugging_face/microsoft/xprophetnet-large-wiki100-cased-xglue-ntg"
         )
         model.to(torch_device)
 

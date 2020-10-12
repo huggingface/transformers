@@ -454,11 +454,10 @@ class ProphetNetModelTester:
                 labels=lm_labels,
                 return_dict=True,
             )
-
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.234, device=torch_device), atol=1e-3))
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.2925, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
-            [-0.0544, 0.0091, -0.0378, -0.1237, -0.0582, -0.0591, 0.0049], device=torch_device
+            [-0.1565, 0.0418, 0.1207, 0.0030, 0.0665, 0.0467, 0.0412], device=torch_device
         )
         self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
@@ -533,7 +532,10 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased")
+        #        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased", use_cdn=False)
+        model = ProphetNetForConditionalGeneration.from_pretrained(
+            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased"
+        )
         model.to(torch_device)
 
         # encoder-decoder outputs
@@ -607,7 +609,10 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_cnndm_inference(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
+        #        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm", use_cdn=False)
+        model = ProphetNetForConditionalGeneration.from_pretrained(
+            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased-cnndm"
+        )
         model.to(torch_device)
 
         tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
