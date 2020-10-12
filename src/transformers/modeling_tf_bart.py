@@ -174,7 +174,8 @@ class TFEncoderLayer(tf.keras.layers.Layer):
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         assert not config.normalize_before, "MBART Not Supported"
-        self.self_attn_layer_norm = FIXMENORM(self.embed_dim, name="self_attn_layer_norm")
+
+        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.dropout_wt = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = gelu
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
@@ -246,7 +247,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = FIXMENORM(embed_dim, name="layernorm_embedding")
+        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
     def call(
         self,
@@ -332,7 +333,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.activation_fn = gelu
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = FIXMENORM(self.embed_dim, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = Attention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -340,10 +341,11 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             encoder_decoder_attention=True,
             name="encoder_attn",
         )
-        self.encoder_attn_layer_norm = FIXMENORM(self.embed_dim, name="encoder_attn_layer_norm")
+        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = FIXMENORM(self.embed_dim, name="final_layer_norm")
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm") # TODO: conditional
+        # TODO: layernorm_embedding
 
     def call(
         self,
@@ -443,9 +445,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
         )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (
-            FIXMENORM(config.d_model, name="layernorm_embedding") if config.normalize_embedding else tf.identity
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else tf.identity
         )
-        self.layer_norm = FIXMENORM(config.d_model, name="layer_norm") if config.add_final_layer_norm else None
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.output_hidden_states = config.output_hidden_states
@@ -790,10 +792,6 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
         return super().call(positions + self.offset)  # super object is not callable for some reason
-
-
-def FIXMENORM(normalized_shape, eps=1e-5, elementwise_affine=True, **kwargs):
-    return tf.keras.layers.LayerNormalization(epsilon=1e-5, **kwargs)
 
 
 @add_start_docstrings(
