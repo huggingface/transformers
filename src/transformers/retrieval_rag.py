@@ -36,7 +36,7 @@ from .utils import logging
 
 
 if is_datasets_available():
-    from datasets import load_dataset
+    from datasets import load_dataset, load_from_disk
 
 if is_faiss_available():
     import faiss
@@ -115,7 +115,7 @@ class LegacyIndex:
         self.passages = self._load_passages()
         self.vector_size = vector_size
         self.index = None
-        self._index_initialize = False
+        self._index_initialized = False
 
     def _resolve_path(self, index_path, filename):
         assert os.path.isdir(index_path) or is_remote_url(index_path), "Please specify a valid ``index_path``."
@@ -157,7 +157,7 @@ class LegacyIndex:
         ), "Deserialized index_id_to_db_id should match faiss index size"
 
     def is_initialized(self):
-        return self._index_initialize
+        return self._index_initialized
 
     def init_index(self):
         index = faiss.IndexHNSWFlat(self.vector_size + 1, 512)
@@ -165,7 +165,7 @@ class LegacyIndex:
         index.hnsw.efConstruction = 200
         self.index = index
         self._deserialize_index()
-        self._index_initialize = True
+        self._index_initialized = True
 
     def get_doc_dicts(self, doc_ids: np.array):
         doc_list = []
@@ -190,65 +190,17 @@ class LegacyIndex:
         return np.array(ids), np.array(vectors)
 
 
-class HFIndex:
-    """
-    A wrapper around an instance of :class:`~datasets.Datasets`. If ``index_path`` is set to ``None``,
-    we load the pre-computed index available with the :class:`~datasets.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
-
-    Args:
-        dataset (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``datasets.list_datasets()``).
-        dataset_split (:obj:`str`, optional, defaults to ``train``)
-            Which split of the ``dataset`` to load.
-        index_name (:obj:`str`, optional, defaults to ``train``)
-            The index_name of the index associated with the ``dataset``. The index loaded from ``index_path`` will be saved under this name.
-        index_path (:obj:`str`, optional, defaults to ``None``)
-            The path to the serialized faiss index on disk.
-    """
-
-    def __init__(
-        self,
-        dataset_name: str,
-        dataset_split: str,
-        index_name: str,
-        vector_size: int,
-        index_path: Optional[str] = None,
-        use_dummy_dataset=False,
-    ):
-        super().__init__()
-        self.dataset_name = dataset_name
-        self.dataset_split = dataset_split
-        self.index_name = index_name
+class HFIndexBase:
+    def __init__(self, vector_size, dataset):
         self.vector_size = vector_size
-        self.index_path = index_path
-        self.use_dummy_dataset = use_dummy_dataset
-        self._index_initialize = False
-
-        logger.info("Loading passages from {}".format(self.dataset_name))
-        self.dataset = load_dataset(
-            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
-        )
-        self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
-
-    def is_initialized(self):
-        return self._index_initialize
+        self.dataset = dataset
+        self._index_initialized = False
 
     def init_index(self):
-        if self.index_path is not None:
-            logger.info("Loading index from {}".format(self.index_path))
-            self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
-        else:
-            logger.info("Loading index from {}".format(self.dataset_name + " with index name " + self.index_name))
-            self.dataset = load_dataset(
-                self.dataset_name,
-                with_embeddings=True,
-                with_index=True,
-                split=self.dataset_split,
-                index_name=self.index_name,
-                dummy=self.use_dummy_dataset,
-            )
-            self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
-        self._index_initialize = True
+        raise NotImplementedError()
+
+    def is_initialized(self):
+        return self._index_initialized
 
     def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
         return [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
@@ -261,6 +213,103 @@ class HFIndex:
             if len(vectors[i]) < n_docs:
                 vectors[i] = np.vstack([vectors[i], np.zeros((n_docs - len(vectors[i]), self.vector_size))])
         return np.array(ids), np.array(vectors)  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
+
+
+class CanonicalHFIndex(HFIndexBase):
+    """
+    A wrapper around an instance of :class:`~datasets.Datasets`. If ``index_path`` is set to ``None``,
+    we load the pre-computed index available with the :class:`~datasets.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
+
+    Args:
+        vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
+        dataset_name (:obj:`str`, optional, defaults to ``wiki_dpr``):
+            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``datasets.list_datasets()``).
+        dataset_split (:obj:`str`, optional, defaults to ``train``)
+            Which split of the ``dataset`` to load.
+        index_name (:obj:`str`, optional, defaults to ``train``)
+            The index_name of the index associated with the ``dataset``. The index loaded from ``index_path`` will be saved under this name.
+        index_path (:obj:`str`, optional, defaults to ``None``)
+            The path to the serialized faiss index on disk.
+        use_dummy_dataset (:obj:`bool`, optional, defaults to ``False``): If True, use the dummy configuration of the dataset for tests.
+    """
+
+    def __init__(
+        self,
+        vector_size: int,
+        dataset_name: str = "wiki_dpr",
+        dataset_split: str = "train",
+        index_name: Optional[str] = None,
+        index_path: Optional[str] = None,
+        use_dummy_dataset=False,
+    ):
+        if int(index_path is None) + int(index_name is None) != 1:
+            raise ValueError("Please provide `index_name` or `index_path`.")
+        self.dataset_name = dataset_name
+        self.dataset_split = dataset_split
+        self.index_name = index_name
+        self.index_path = index_path
+        self.use_dummy_dataset = use_dummy_dataset
+        logger.info("Loading passages from {}".format(self.dataset_name))
+        dataset = load_dataset(
+            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
+        )
+        dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
+        super().__init__(vector_size, dataset)
+
+    def init_index(self):
+        if self.index_path is not None:
+            logger.info("Loading index from {}".format(self.index_path))
+            self.dataset.load_faiss_index("embeddings", file=self.index_path)
+        else:
+            logger.info("Loading index from {}".format(self.dataset_name + " with index name " + self.index_name))
+            self.dataset = load_dataset(
+                self.dataset_name,
+                with_embeddings=True,
+                with_index=True,
+                split=self.dataset_split,
+                index_name=self.index_name,
+                dummy=self.use_dummy_dataset,
+            )
+            self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
+        self._index_initialized = True
+
+
+class CustomHFIndex(HFIndexBase):
+    """
+    A wrapper around an instance of :class:`~datasets.Datasets`.
+    The dataset and the index are both loaded from the indicated paths on disk.
+
+    Args:
+        vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
+        dataset_path (:obj:`str`):
+            The path to the serialized dataset on disk.
+            The dataset should have 3 columns: title (str), text (str) and embeddings (arrays of dimension vector_size)
+        index_path (:obj:`str`)
+            The path to the serialized faiss index on disk.
+    """
+
+    def __init__(
+        self,
+        vector_size: int,
+        dataset_path: str,
+        index_path: str,
+    ):
+        self.dataset_path = dataset_path
+        self.index_path = index_path
+        logger.info("Loading passages from {}".format(dataset_path))
+        dataset = load_from_disk(dataset_path)
+        if len({"title", "text", "embeddings"} - set(dataset.column_names)) > 0:
+            raise ValueError(
+                "Dataset at {} should be one dataset with the following columns: "
+                "title (str), text (str) and embeddings (arrays of dimension vector_size)".format(dataset_path)
+            )
+        dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
+        super().__init__(vector_size, dataset)
+
+    def init_index(self):
+        logger.info("Loading index from {}".format(self.index_path))
+        self.dataset.load_faiss_index("embeddings", file=self.index_path)
+        self._index_initialized = True
 
 
 class RagRetriever:
@@ -284,21 +333,24 @@ class RagRetriever:
         requires_datasets(self)
         requires_faiss(self)
         super().__init__()
-        self.index = (
-            LegacyIndex(
+        if config.index_name == "legacy":
+            self.index = LegacyIndex(
                 config.retrieval_vector_size,
                 config.index_path or LEGACY_INDEX_PATH,
             )
-            if config.index_name == "legacy"
-            else HFIndex(
-                config.dataset,
-                config.dataset_split,
-                config.index_name,
-                config.retrieval_vector_size,
-                config.index_path,
-                config.use_dummy_dataset,
+        elif config.index_name == "custom":
+            self.index = CustomHFIndex(
+                vector_size=config.retrieval_vector_size, dataset_path=config.dataset, index_path=config.index_path
             )
-        )
+        else:
+            self.index = CanonicalHFIndex(
+                vector_size=config.retrieval_vector_size,
+                dataset_name=config.dataset,
+                dataset_split=config.dataset_split,
+                index_name=config.index_name,
+                index_path=config.index_path,
+                use_dummy_dataset=config.use_dummy_dataset,
+            )
         self.generator_tokenizer = generator_tokenizer
         self.question_encoder_tokenizer = question_encoder_tokenizer
 
