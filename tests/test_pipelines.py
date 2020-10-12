@@ -824,6 +824,7 @@ class PipelineCommonTests(unittest.TestCase):
         for task in self.pipelines:
             with self.subTest(msg="Testing TF defaults with TF and {}".format(task)):
                 pipeline(task, framework="tf")
+                pipeline(task)
 
     @require_torch
     @slow
@@ -832,3 +833,4 @@ class PipelineCommonTests(unittest.TestCase):
         for task in self.pipelines:
             with self.subTest(msg="Testing Torch defaults with PyTorch and {}".format(task)):
                 pipeline(task, framework="pt")
+                pipeline(task)
