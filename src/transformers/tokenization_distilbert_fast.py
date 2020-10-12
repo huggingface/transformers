@@ -14,13 +14,14 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-from .tokenization_bert import BertTokenizer
+from .tokenization_bert_fast import BertTokenizerFast
+from .tokenization_distilbert import DistilBertTokenizer
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -30,7 +31,15 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-vocab.txt",
         "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-vocab.txt",
         "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
-    }
+    },
+    "tokenizer_file": {
+        "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-tokenizer.json",
+        "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-tokenizer.json",
+        "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-tokenizer.json",
+        "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-tokenizer.json",
+        "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-tokenizer.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -53,14 +62,14 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-class DistilBertTokenizer(BertTokenizer):
+class DistilBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a DistilBERT tokenizer.
+    Construct a "fast" DistilBERT tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DistilBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 
@@ -69,3 +78,4 @@ class DistilBertTokenizer(BertTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = DistilBertTokenizer

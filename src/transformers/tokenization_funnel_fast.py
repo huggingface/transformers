@@ -16,13 +16,14 @@
 
 from typing import List, Optional
 
-from .tokenization_bert import BertTokenizer
+from .tokenization_bert_fast import BertTokenizerFast
+from .tokenization_funnel import FunnelTokenizer
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 _model_names = [
     "small",
@@ -49,20 +50,32 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "funnel-transformer/large-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/vocab.txt",
         "funnel-transformer/xlarge": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge/vocab.txt",
         "funnel-transformer/xlarge-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge-base/vocab.txt",
-    }
+    },
+    "tokenizer_file": {
+        "funnel-transformer/small": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small/tokenizer.json",
+        "funnel-transformer/small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small-base/tokenizer.json",
+        "funnel-transformer/medium": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium/tokenizer.json",
+        "funnel-transformer/medium-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium-base/tokenizer.json",
+        "funnel-transformer/intermediate": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate/tokenizer.json",
+        "funnel-transformer/intermediate-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate-base/tokenizer.json",
+        "funnel-transformer/large": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large/tokenizer.json",
+        "funnel-transformer/large-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/tokenizer.json",
+        "funnel-transformer/xlarge": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge/tokenizer.json",
+        "funnel-transformer/xlarge-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge-base/tokenizer.json",
+    },
 }
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
 PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case": True} for name in _model_names}
 
 
-class FunnelTokenizer(BertTokenizer):
+class FunnelTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a Funnel Transformer tokenizer.
+    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.FunnelTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    :class:`~transformers.FunnelTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 
@@ -70,14 +83,13 @@ class FunnelTokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    slow_tokenizer_class = FunnelTokenizer
     cls_token_type_id: int = 2
 
     def __init__(
         self,
         vocab_file,
         do_lower_case=True,
-        do_basic_tokenize=True,
-        never_split=None,
         unk_token="<unk>",
         sep_token="<sep>",
         pad_token="<pad>",
@@ -85,15 +97,15 @@ class FunnelTokenizer(BertTokenizer):
         mask_token="<mask>",
         bos_token="<s>",
         eos_token="</s>",
+        clean_text=True,
         tokenize_chinese_chars=True,
         strip_accents=None,
+        wordpieces_prefix="##",
         **kwargs
     ):
         super().__init__(
             vocab_file,
             do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -101,8 +113,10 @@ class FunnelTokenizer(BertTokenizer):
             mask_token=mask_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            clean_text=clean_text,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            wordpieces_prefix=wordpieces_prefix,
             **kwargs,
         )
 

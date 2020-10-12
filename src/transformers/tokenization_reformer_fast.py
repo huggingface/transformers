@@ -19,10 +19,15 @@ import os
 from shutil import copyfile
 from typing import Optional, Tuple
 
-import sentencepiece as spm
-
-from .tokenization_utils import PreTrainedTokenizer
+from .file_utils import is_sentencepiece_available
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
+
+
+if is_sentencepiece_available():
+    from .tokenization_reformer import ReformerTokenizer
+else:
+    ReformerTokenizer = None
 
 
 logger = logging.get_logger(__name__)
@@ -34,7 +39,7 @@ SPIECE_UNDERLINE = "▁"
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to file names for serializing Tokenizer instances
 ####################################################
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
@@ -43,7 +48,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/spiece.model"
-    }
+    },
+    "tokenizer_file": {
+        "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/tokenizer.json"
+    },
 }
 
 ####################################################
@@ -54,12 +62,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class ReformerTokenizer(PreTrainedTokenizer):
+class ReformerTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a Reformer tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Construct a "fast" Reformer tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
+    <https://github.com/google/sentencepiece>`__ .
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
@@ -85,6 +94,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = ReformerTokenizer
 
     def __init__(
         self,
@@ -96,6 +106,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            vocab_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
@@ -104,50 +115,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
         )
 
         self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
-
-    @property
-    def vocab_size(self):
-        return self.sp_model.get_piece_size()
-
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.vocab_file)
-
-    def _tokenize(self, text, sample=False):
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        return pieces
-
-    def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
-        return self.sp_model.piece_to_id(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        return token
-
-    def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

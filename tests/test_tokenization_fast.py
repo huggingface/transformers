@@ -1059,7 +1059,6 @@ class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
         [
             Tokenizer("Albert", AlbertTokenizerFast, AlbertTokenizer, "vocab_file", None, None),
             Tokenizer("Camembert", CamembertTokenizerFast, CamembertTokenizer, "vocab_file", None, None),
-            Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
             Tokenizer(
                 "MBart",
                 MBartTokenizerFast,
@@ -1070,6 +1069,7 @@ class SentencePieceFastTokenizerTest(CommonFastTokenizerTest):
             ),
             Tokenizer("Pegasus", PegasusTokenizerFast, PegasusTokenizer, "vocab_file", None, None),
             Tokenizer("Reformer", ReformerTokenizerFast, ReformerTokenizer, "vocab_file", None, None),
+            Tokenizer("T5", T5TokenizerFast, T5Tokenizer, "vocab_file", None, None),
             Tokenizer("XLMRoberta", XLMRobertaTokenizerFast, XLMRobertaTokenizer, "vocab_file", None, None),
             Tokenizer("XLNet", XLNetTokenizerFast, XLNetTokenizer, "vocab_file", None, None),
         ]

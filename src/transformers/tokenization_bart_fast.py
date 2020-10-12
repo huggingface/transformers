@@ -15,7 +15,8 @@
 
 from typing import List, Optional
 
-from .tokenization_roberta import RobertaTokenizer
+from .tokenization_bart import BartTokenizer
+from .tokenization_roberta_fast import RobertaTokenizerFast
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
+tokenizer_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-tokenizer.json"
 _all_bart_models = [
     "facebook/bart-base",
     "facebook/bart-large",
@@ -37,22 +39,15 @@ _all_bart_models = [
 ]
 
 
-class BartTokenizer(RobertaTokenizer):
-    r"""
-    Construct a BART tokenizer.
-
-    :class:`~transformers.BartTokenizer` is identical to :class:`~transformers.RobertaTokenizer` and adds a new
-    :meth:`~transformers.BartTokenizer.prepare_seq2seq_batch`
-
-    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
-    the initialization parameters and other methods.
-    """
+class BartTokenizerFast(RobertaTokenizerFast):
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
     pretrained_vocab_files_map = {
         "vocab_file": {m: vocab_url for m in _all_bart_models},
         "merges_file": {m: merges_url for m in _all_bart_models},
+        "tokenizer_file": {m: tokenizer_url for m in _all_bart_models},
     }
+    slow_tokenizer_class = BartTokenizer
 
     def prepare_seq2seq_batch(
         self,
@@ -120,13 +115,13 @@ class BartTokenizer(RobertaTokenizer):
 
             - **input_ids** -- List of token ids to be fed to the encoder.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **labels** -- List of token ids for tgt_texts
+            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
+            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
+                This does not include causal mask, which is built by the model.
 
             The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
         """
-        kwargs.pop("src_lang", None)
-        kwargs.pop("tgt_lang", None)
         if max_length is None:
             max_length = self.model_max_length
         model_inputs: BatchEncoding = self(

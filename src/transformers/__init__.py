@@ -155,43 +155,31 @@ from .retrieval_rag import RagRetriever
 
 # Tokenizers
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer, BartTokenizerFast
-from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
+from .tokenization_bart import BartTokenizer
+from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
-from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_deberta import DebertaTokenizer
-from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
-from .tokenization_dpr import (
-    DPRContextEncoderTokenizer,
-    DPRContextEncoderTokenizerFast,
-    DPRQuestionEncoderTokenizer,
-    DPRQuestionEncoderTokenizerFast,
-    DPRReaderTokenizer,
-    DPRReaderTokenizerFast,
-)
-from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
+from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
+from .tokenization_electra import ElectraTokenizer
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
-from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
-from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_layoutlm import LayoutLMTokenizer, LayoutLMTokenizerFast
-from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
-from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
-from .tokenization_mbart import MBartTokenizer, MBartTokenizerFast
-from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
-from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from .tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
+from .tokenization_funnel import FunnelTokenizer
+from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_layoutlm import LayoutLMTokenizer
+from .tokenization_longformer import LongformerTokenizer
+from .tokenization_lxmert import LxmertTokenizer
+from .tokenization_mobilebert import MobileBertTokenizer
+from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_phobert import PhobertTokenizer
 from .tokenization_rag import RagTokenizer
-from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
-from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
-from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
-from .tokenization_t5 import T5Tokenizer, T5TokenizerFast
+from .tokenization_retribert import RetriBertTokenizer
+from .tokenization_roberta import RobertaTokenizer
+from .tokenization_squeezebert import SqueezeBertTokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
@@ -204,17 +192,49 @@ from .tokenization_utils_base import (
 )
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
 
 
 if is_sentencepiece_available():
     from .tokenization_albert import AlbertTokenizer
+    from .tokenization_camembert import CamembertTokenizer
+    from .tokenization_marian import MarianTokenizer
+    from .tokenization_mbart import MBartTokenizer
+    from .tokenization_pegasus import PegasusTokenizer
+    from .tokenization_reformer import ReformerTokenizer
+    from .tokenization_t5 import T5Tokenizer
+    from .tokenization_xlm_roberta import XLMRobertaTokenizer
+    from .tokenization_xlnet import XLNetTokenizer
 else:
     from .utils.dummy_sentencepiece_objects import *
 
 if is_tokenizers_available():
     from .tokenization_albert_fast import AlbertTokenizerFast
+    from .tokenization_bart_fast import BartTokenizerFast
+    from .tokenization_bert_fast import BertTokenizerFast
+    from .tokenization_camembert_fast import CamembertTokenizerFast
+    from .tokenization_distilbert_fast import DistilBertTokenizerFast
+    from .tokenization_dpr_fast import (
+        DPRContextEncoderTokenizerFast,
+        DPRQuestionEncoderTokenizerFast,
+        DPRReaderTokenizerFast,
+    )
+    from .tokenization_electra_fast import ElectraTokenizerFast
+    from .tokenization_funnel_fast import FunnelTokenizerFast
+    from .tokenization_gpt2_fast import GPT2TokenizerFast
+    from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from .tokenization_longformer_fast import LongformerTokenizerFast
+    from .tokenization_lxmert_fast import LxmertTokenizerFast
+    from .tokenization_mbart_fast import MBartTokenizerFast
+    from .tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from .tokenization_openai_fast import OpenAIGPTTokenizerFast
+    from .tokenization_pegasus_fast import PegasusTokenizerFast
+    from .tokenization_reformer_fast import ReformerTokenizerFast
+    from .tokenization_retribert_fast import RetriBertTokenizerFast
+    from .tokenization_roberta_fast import RobertaTokenizerFast
+    from .tokenization_squeezebert_fast import SqueezeBertTokenizerFast
+    from .tokenization_t5_fast import T5TokenizerFast
+    from .tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
+    from .tokenization_xlnet_fast import XLNetTokenizerFast
 else:
     from .utils.dummy_tokenizers_objects import *
 

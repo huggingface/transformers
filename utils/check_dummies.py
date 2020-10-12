@@ -286,7 +286,7 @@ def check_dummies(overwrite=False):
     if sentencepiece_dummies != actual_sentencepiece_dummies:
         if overwrite:
             print("Updating transformers.utils.dummy_sentencepiece_objects.py as the main __init__ has new objects.")
-            with open(pt_file, "w", encoding="utf-8") as f:
+            with open(sentencepiece_file, "w", encoding="utf-8") as f:
                 f.write(sentencepiece_dummies)
         else:
             raise ValueError(

@@ -16,17 +16,20 @@
 
 
 import os
-import re
-import warnings
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-import sentencepiece as spm
-
-from .file_utils import add_start_docstrings
-from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .file_utils import add_start_docstrings, is_sentencepiece_available
+from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
+
+
+if is_sentencepiece_available():
+    from .tokenization_t5 import T5Tokenizer
+else:
+    T5Tokenizer = None
 
 
 logger = logging.get_logger(__name__)
@@ -35,7 +38,7 @@ logger = logging.get_logger(__name__)
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to file names for serializing Tokenizer instances
 ####################################################
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
@@ -48,7 +51,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
         "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
         "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-    }
+    },
+    "tokenizer_file": {
+        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
+        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
+        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
+        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
+        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
+    },
 }
 
 ####################################################
@@ -63,12 +73,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class T5Tokenizer(PreTrainedTokenizer):
+class T5TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+    Construct a "fast" T5 tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
+    <https://github.com/google/sentencepiece>`__ .
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
@@ -100,6 +111,9 @@ class T5Tokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = T5Tokenizer
+
+    prefix_tokens: List[int] = []
 
     def __init__(
         self,
@@ -111,16 +125,12 @@ class T5Tokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         **kwargs
     ):
-        # Add extra_ids to the special token list
-        if extra_ids > 0:
-            if additional_special_tokens is None:
-                additional_special_tokens = []
-            additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids)])
-
         super().__init__(
+            vocab_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
@@ -128,57 +138,18 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
-    @property
-    def vocab_size(self):
-        return self.sp_model.get_piece_size() + self._extra_ids
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
 
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-        # normal case: some special tokens
-        if token_ids_1 is None:
-            return ([0] * len(token_ids_0)) + [1]
-        return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-
-    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
-        """Do not add eos again if user already added it."""
-        if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-            warnings.warn(
-                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated eos tokens being added."
-            )
-            return token_ids
-        else:
-            return token_ids + [self.eos_token_id]
+        return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -200,64 +171,12 @@ class T5Tokenizer(PreTrainedTokenizer):
         Returns:
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-        token_ids_0 = self._add_eos_if_not_present(token_ids_0)
+        token_ids_0 = token_ids_0 + [self.eos_token_id]
         if token_ids_1 is None:
-            return token_ids_0
+            return self.prefix_tokens + token_ids_0
         else:
-            token_ids_1 = self._add_eos_if_not_present(token_ids_1)
-            return token_ids_0 + token_ids_1
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.vocab_file)
-
-    def _tokenize(self, text, sample=False):
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        return pieces
-
-    def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
-        if token.startswith("<extra_id_"):
-            match = re.match(r"<extra_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1
-        return self.sp_model.piece_to_id(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        else:
-            token = "<extra_id_{}>".format(self.vocab_size - 1 - index)
-        return token
-
-    def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
+            token_ids_1 = token_ids_1 + [self.eos_token_id]
+            return self.prefix_tokens + token_ids_0 + token_ids_1
 
     @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
@@ -273,6 +192,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         if max_length is None:
             max_length = self.max_len
+        self.prefix_tokens = []
         model_inputs = self(
             src_texts,
             add_special_tokens=True,
@@ -287,6 +207,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
+        # set prefix_tokens for target text
+        self.prefix_tokens = [self.pad_token_id]
         labels_and_decoder_mask = self(
             tgt_texts,
             add_special_tokens=True,
@@ -297,4 +219,5 @@ class T5Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         model_inputs["labels"] = labels_and_decoder_mask["input_ids"]
+        self.prefix_tokens = []
         return model_inputs

@@ -9,8 +9,10 @@ from torch.utils.data.dataset import Dataset
 
 from filelock import FileLock
 
-from ...tokenization_bart import BartTokenizer, BartTokenizerFast
-from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from ...tokenization_bart import BartTokenizer
+from ...tokenization_bart_fast import BartTokenizerFast
+from ...tokenization_roberta import RobertaTokenizer
+from ...tokenization_roberta_fast import RobertaTokenizerFast
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_xlm_roberta import XLMRobertaTokenizer
 from ...utils import logging

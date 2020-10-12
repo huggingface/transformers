@@ -9,3 +9,75 @@ class AlbertTokenizer:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_sentencepiece(self)
+
+
+class CamembertTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class MarianTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class MBartTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class PegasusTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class ReformerTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class T5Tokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class XLMRobertaTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class XLNetTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
