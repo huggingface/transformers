@@ -31,6 +31,8 @@ IGNORE_NON_TESTED = [
     "BertLMHeadModel",  # Needs to be setup as decoder.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
+    "ProphetNetEncoder",  # Building part of bigger (tested) model.
+    "ProphetNetDecoder",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
@@ -43,6 +45,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
     "test_modeling_tf_camembert.py",
     "test_modeling_tf_xlm_roberta.py",
+    "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
     "test_modeling_pegasus.py",
     "test_modeling_mbart.py",
@@ -54,6 +57,8 @@ IGNORE_NON_DOCUMENTED = [
     "DPREncoder",  # Building part of bigger (documented) model.
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
     "T5Stack",  # Building part of bigger (tested) model.
+    "ProphetNetEncoder",  # Building part of bigger (tested) model.
+    "ProphetNetDecoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (documented) model (should it be a TFPreTrainedModel ?)
 ]
 
@@ -61,6 +66,7 @@ IGNORE_NON_DOCUMENTED = [
 MODEL_NAME_TO_DOC_FILE = {
     "openai": "gpt.rst",
     "transfo_xl": "transformerxl.rst",
+    "xlm_prophetnet": "xlmprophetnet.rst",
     "xlm_roberta": "xlmroberta.rst",
     "bert_generation": "bertgeneration.rst",
 }
@@ -242,6 +248,9 @@ def _get_model_name(module):
     splits = module.__name__.split("_")
     # Secial case for transfo_xl
     if splits[-1] == "xl":
+        return "_".join(splits[-2:])
+    # Secial case for xlm_prophetnet
+    if splits[-1] == "prophetnet" and splits[-2] == "xlm":
         return "_".join(splits[-2:])
     # Secial case for xlm_roberta
     if splits[-1] == "roberta" and splits[-2] == "xlm":
