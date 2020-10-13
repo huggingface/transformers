@@ -86,13 +86,18 @@ class BartSummarizationDistiller(SummarizationModule):
                 del self.teacher.model.encoder
             except AttributeError:  # T5
                 del self.teacher.encoder
-        # Intermediate supervision: Decide which layers to supervise
-        if hparams.supervise_forward:
-            self.e_matches = get_layers_to_supervise(n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers)
-            self.d_matches = get_layers_to_supervise(n_student=len(self.d_layer_ids), n_teacher=teacher_decoder_layers)
-        else:  # student layer should emulate hidden states of the teacher layer it was copied from
-            self.e_matches = self.e_layer_ids
-            self.d_matches = self.d_layer_ids
+
+        self.e_matches = None
+        self.d_matches = None
+
+        if hparams.student_base_model is None or hparams.teacher == hparams.student_base_model:
+            # Intermediate supervision: Decide which layers to supervise
+            if hparams.supervise_forward:
+                self.e_matches = get_layers_to_supervise(n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers)
+                self.d_matches = get_layers_to_supervise(n_student=len(self.d_layer_ids), n_teacher=teacher_decoder_layers)
+            else:  # student layer should emulate hidden states of the teacher layer it was copied from
+                self.e_matches = self.e_layer_ids
+                self.d_matches = self.d_layer_ids
 
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -145,16 +150,23 @@ class BartSummarizationDistiller(SummarizationModule):
         # assert is_frozen(self.teacher) copied_decoder_layers
         pad_token_id = self.tokenizer.pad_token_id
         input_ids, src_mask, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
-        if isinstance(self.model, T5ForConditionalGeneration):
-            decoder_input_ids = self.model._shift_right(labels)
+        if isinstance(self.teacher, T5ForConditionalGeneration):
+            print('Teacher model: T5ForConditionalGeneration')
+            teacher_decoder_input_ids = self.teacher._shift_right(labels)
         else:
-            decoder_input_ids = shift_tokens_right(labels, pad_token_id)
+            teacher_decoder_input_ids = shift_tokens_right(labels, pad_token_id)
+
+        if isinstance(self.model, T5ForConditionalGeneration):
+            print('Student model: T5ForConditionalGeneration')
+            student_decoder_input_ids = self.model._shift_right(labels)
+        else:
+            student_decoder_input_ids = shift_tokens_right(labels, pad_token_id)
 
         # noinspection PyCallingNonCallable
         lm_logits, dec_hidden, enc_outputs, enc_hidden_state = self(
             input_ids,
             attention_mask=src_mask,
-            decoder_input_ids=decoder_input_ids,
+            decoder_input_ids=student_decoder_input_ids,
             output_hidden_states=True,
             output_attentions=False,
             use_cache=False,
@@ -175,32 +187,30 @@ class BartSummarizationDistiller(SummarizationModule):
         def zero_tensor():
             return torch.tensor(0.0).type_as(student_lm_loss)
 
-        hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor()
-        if self.different_encoder:  # compute encoder hidden state loss
+        loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
+        if self.different_encoder:
             with torch.no_grad():
-                teacher_enc_hid = self.teacher.get_encoder()(
-                    input_ids, attention_mask=src_mask, output_hidden_states=True, return_dict=True
-                ).hidden_states
+                teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.get_encoder()(
+                    input_ids, attention_mask=src_mask, output_hidden_states=True
+                )
+            # DEPRECATE THIS
+            if self.hparams.alpha_encoder_loss > 0:
+                loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, src_mask)
 
-            hid_loss_enc = self.maybe_calc_hidden_loss(
-                src_mask,
-                enc_hidden_state,
-                teacher_enc_hid,
-                self.e_matches,
-                normalize_hidden=self.hparams.normalize_hidden,
-            )
+            hid_loss_enc = self.maybe_calc_hidden_loss(src_mask, enc_hidden_state, teacher_enc_hid, self.e_layer_ids)
+
+        teacher_enc_outputs = (enc_outputs,)
+        assert isinstance(teacher_enc_outputs, tuple), type(teacher_enc_outputs)
 
         with torch.no_grad():
-            outputs = self.teacher(
+            tloss, tlogits, tdec_hidden, _ = self.teacher(
                 input_ids,
                 attention_mask=src_mask,
-                encoder_outputs=(enc_outputs,),
+                encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
-                return_dict=True,
             )
-            tlogits, tdec_hidden = outputs.logits, outputs.decoder_hidden_states
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
@@ -211,9 +221,11 @@ class BartSummarizationDistiller(SummarizationModule):
         blended_loss = (
             self.alpha_ce * loss_ce
             + self.alpha_mlm * student_lm_loss
+            + self.hparams.alpha_encoder_loss * loss_encoder
             + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
-        return blended_loss, loss_ce, student_lm_loss, hid_loss_enc, hid_loss_dec
+        return blended_loss, loss_ce, student_lm_loss, loss_encoder, hid_loss_enc, hid_loss_dec
+
 
 
     @staticmethod
@@ -235,17 +247,10 @@ class BartSummarizationDistiller(SummarizationModule):
 
     @staticmethod
     def maybe_calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
-        comparable_shapes = True
-        if len(hidden_states) == len(hidden_states_T):
-            for hidden_state, hidden_state_T in zip(hidden_states, hidden_states_T):
-                if hidden_state.shape != hidden_state_T.shape:
-                    comparable_shapes = False
-                    break
-        else:
-            comparable_shapes = False
-        if comparable_shapes:
+        if matches:
             return calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden)
         else:
+            print('No matches, returning 0 for hidden loss')
             return 0.0
 
 def add_distill_args(parser):
