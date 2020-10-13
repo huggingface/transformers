@@ -16,7 +16,6 @@
 """ TF 2.0 BERT model. """
 
 
-import inspect
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -49,7 +48,6 @@ from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
     TFNextSentencePredictionLoss,
     TFPreTrainedModel,
-    TFPreTrainingLoss,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
@@ -89,6 +87,39 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "wietsedv/bert-base-dutch-cased",
     # See all BERT models at https://huggingface.co/models?filter=bert
 ]
+
+
+class TFBertPreTrainingLoss:
+    """
+    Loss function suitable for pre training, that is, the task of pretraining a language model by combining NSP + MLM.
+
+    .. note::
+
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
+
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        masked_lm_active_loss = tf.not_equal(tf.reshape(labels["labels"], (-1,)), -100)
+        masked_lm_reduced_logits = tf.boolean_mask(
+            tf.reshape(logits[0], (-1, shape_list(logits[0])[2])), masked_lm_active_loss
+        )
+        masked_lm_labels = tf.boolean_mask(tf.reshape(labels["labels"], (-1,)), masked_lm_active_loss)
+        next_sentence_active_loss = tf.not_equal(tf.reshape(labels["next_sentence_label"], (-1,)), -100)
+        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits[1], (-1, 2)), next_sentence_active_loss)
+        next_sentence_label = tf.boolean_mask(
+            tf.reshape(labels["next_sentence_label"], (-1,)), next_sentence_active_loss
+        )
+        masked_lm_loss = loss_fn(masked_lm_labels, masked_lm_reduced_logits)
+        next_sentence_loss = loss_fn(next_sentence_label, next_sentence_reduced_logits)
+        masked_lm_loss = tf.reshape(masked_lm_loss, (-1, shape_list(next_sentence_loss)[0]))
+        masked_lm_loss = tf.reduce_mean(masked_lm_loss, 0)
+
+        return masked_lm_loss + next_sentence_loss
 
 
 class TFBertEmbeddings(tf.keras.layers.Layer):
@@ -957,7 +988,7 @@ Bert Model with two heads on top as done during the pre-training:
     """,
     BERT_START_DOCSTRING,
 )
-class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
+class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config, *inputs, **kwargs):
