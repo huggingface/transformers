@@ -15,7 +15,7 @@
 """ Base classes common to both the slow and the fast tokenization classes:
     PreTrainedTokenizerBase (host all the user fronting encoding methodes)
     Special token mixing (host the special tokens logic) and
-    BatchEncoding (wrap the dictionnary of output with special method for the Fast tokenizers)
+    BatchEncoding (wrap the dictionary of output with special method for the Fast tokenizers)
 """
 
 import copy
@@ -249,7 +249,7 @@ class BatchEncoding(UserDict):
 
     def tokens(self, batch_index: int = 0) -> List[str]:
         """
-        Return the list of tokens (sub-parts of the input strings after word/subword splitting and before converstion
+        Return the list of tokens (sub-parts of the input strings after word/subword splitting and before conversion
         to integer indices) at a given batch index (only works for the output of a fast tokenizer).
 
         Args:
@@ -1121,7 +1121,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return overflowing token sequences.
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not to return special tokens mask information.
+                Whether or not to return special tokens mask information.
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return :obj:`(char_start, char_end)` for each token.
 
@@ -1153,13 +1153,13 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
             - **special_tokens_mask** -- List of 0s and 1s, with 0 specifying added special tokens and 1 specifying
-              regual sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
+              regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
             - **length** -- The length of the inputs (when :obj:`return_length=True`)
 """
 
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
-        - **vocab_files_names** (:obj:`Dict[str, str]`) -- A ditionary with, as keys, the ``__init__`` keyword name of
+        - **vocab_files_names** (:obj:`Dict[str, str]`) -- A dictionary with, as keys, the ``__init__`` keyword name of
           each vocabulary file required by the model, and as associated values, the filename for saving the associated
           file (string).
         - **pretrained_vocab_files_map** (:obj:`Dict[str, Dict[str, str]]`) -- A dictionary of dictionaries, with the
@@ -1170,7 +1170,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
           :obj:`short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
           inputs of this model, or :obj:`None` if the model has no maximum input size.
         - **pretrained_init_configuration** (:obj:`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
-          :obj:`short-cut-names` of the pretrained models, and as associated values, a dictionnary of specific
+          :obj:`short-cut-names` of the pretrained models, and as associated values, a dictionary of specific
           arguments to pass to the ``__init__`` method of the tokenizer class for this pretrained model when loading the
           tokenizer with the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`
           method.
@@ -1688,7 +1688,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
            modifying :obj:`tokenizer.do_lower_case` after creation).
 
         Args:
-            save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
+            save_directory (:obj:`str`): The path to a directory where the tokenizer will be saved.
 
         Returns:
             A tuple of :obj:`str`: The files saved.
@@ -2383,7 +2383,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         batch_size = len(encoded_inputs["input_ids"])
         assert all(
             len(v) == batch_size for v in encoded_inputs.values()
-        ), "Some items in the output dictionnary have a different batch size than others."
+        ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(len(inputs) for inputs in encoded_inputs["input_ids"])
@@ -2547,7 +2547,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
 
-        # Build output dictionnary
+        # Build output dictionary
         encoded_inputs["input_ids"] = sequence
         if return_token_type_ids:
             encoded_inputs["token_type_ids"] = token_type_ids
@@ -2819,7 +2819,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formated with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
