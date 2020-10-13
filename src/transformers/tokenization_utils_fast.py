@@ -105,7 +105,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         self._tokenizer = fast_tokenizer
 
-        kwargs = copy.deepcopy(slow_tokenizer.init_kwargs)
+        if slow_tokenizer is not None:
+            kwargs = copy.deepcopy(slow_tokenizer.init_kwargs)
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)

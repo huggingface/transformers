@@ -17,9 +17,9 @@
 import os
 import unittest
 
+from transformers import BertGenerationTokenizer
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow
-from transformers import BertGenerationTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 

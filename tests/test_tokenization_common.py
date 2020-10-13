@@ -14,17 +14,18 @@
 # limitations under the License.
 
 
+import inspect
 import os
 import pickle
-import inspect
 import re
 import shutil
 import tempfile
 from collections import OrderedDict
+from itertools import takewhile
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.testing_utils import require_tf, require_torch, slow, get_tests_dir
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast, is_torch_available
+from transformers.testing_utils import get_tests_dir, require_tf, require_torch, slow
 from transformers.tokenization_utils import AddedToken
 
 
@@ -65,6 +66,7 @@ def merge_model_tokenizer_mappings(
 
     return model_tokenizer_mapping
 
+
 class TokenizerTesterMixin:
 
     tokenizer_class = None
@@ -73,16 +75,23 @@ class TokenizerTesterMixin:
     space_between_special_tokens = False
     from_pretrained_kwargs = {}
     from_pretrained_filter = None
-    from_pretrained_vocab_key = 'vocab_file'
+    from_pretrained_vocab_key = "vocab_file"
 
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
         self.tokenizers_list = [
-            (tokenizer, pretrained_name, dict(t for t in self.from_pretrained_kwargs) if self.from_pretrained_kwargs else {})
+            (
+                tokenizer,
+                pretrained_name,
+                dict(t for t in self.from_pretrained_kwargs) if self.from_pretrained_kwargs else {},
+            )
             for tokenizer in [self.tokenizer_class, self.rust_tokenizer_class]
-            for pretrained_name in self.tokenizer_class.pretrained_vocab_files_map[self.from_pretrained_vocab_key].keys()
-            if self.from_pretrained_filter is None or (self.from_pretrained_filter is not None and self.from_pretrained_filter(tokenizer, pretrained_name))
+            for pretrained_name in self.tokenizer_class.pretrained_vocab_files_map[
+                self.from_pretrained_vocab_key
+            ].keys()
+            if self.from_pretrained_filter is None
+            or (self.from_pretrained_filter is not None and self.from_pretrained_filter(tokenizer, pretrained_name))
         ]
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
@@ -155,8 +164,8 @@ class TokenizerTesterMixin:
 
         signature = inspect.signature(self.rust_tokenizer_class.__init__)
 
-        self.assertIn('tokenizer_file', signature.parameters)
-        self.assertIsNone(signature.parameters['tokenizer_file'].default)
+        self.assertIn("tokenizer_file", signature.parameters)
+        self.assertIsNone(signature.parameters["tokenizer_file"].default)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -510,7 +519,7 @@ class TokenizerTesterMixin:
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
         self.assertEqual(
             len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
-            len(self.tokenizer_class.max_model_input_sizes)
+            len(self.tokenizer_class.max_model_input_sizes),
         )
 
         weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
@@ -1981,7 +1990,9 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-            with self.subTest("{} ({}, {})".format(tokenizer.__class__.__name__, pretrained_name, tokenizer.__class__.__name__)):
+            with self.subTest(
+                "{} ({}, {})".format(tokenizer.__class__.__name__, pretrained_name, tokenizer.__class__.__name__)
+            ):
 
                 returned_tensor = "pt" if is_torch_available() else "tf"
 
@@ -2028,7 +2039,7 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(tokens[key].shape), 2)
                     self.assertEqual(tokens[key].shape[-1], 6)
 
-    def test_pretokenized_inputs(self):
+    def test_compare_pretokenized_inputs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -2434,7 +2445,7 @@ class TokenizerTesterMixin:
                 tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
                 self.assertSequenceEqual(tokens_r, tokens_p)
 
-    def test_add_special_tokens(self):
+    def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -2473,7 +2484,7 @@ class TokenizerTesterMixin:
                         for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
-    def test_prepare_for_model(self):
+    def test_compare_prepare_for_model(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)

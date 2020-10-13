@@ -24,7 +24,6 @@ from transformers.tokenization_dpr import (
 from transformers.tokenization_dpr_fast import (
     DPRContextEncoderTokenizerFast,
     DPRQuestionEncoderTokenizerFast,
-    DPRReaderOutput,
     DPRReaderTokenizerFast,
 )
 from transformers.tokenization_utils_base import BatchEncoding

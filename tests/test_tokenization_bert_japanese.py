@@ -21,10 +21,10 @@ import unittest
 from transformers.testing_utils import custom_tokenizers
 from transformers.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
-    WordpieceTokenizer,
     BertJapaneseTokenizer,
     CharacterTokenizer,
     MecabTokenizer,
+    WordpieceTokenizer,
 )
 
 from .test_tokenization_common import TokenizerTesterMixin
