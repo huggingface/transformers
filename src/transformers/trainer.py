@@ -208,7 +208,7 @@ class Trainer:
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
 
             The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be able to choose
-            different architectures according to hyper parameters (such as layer count, sizes of inner layers etc).
+            different architectures according to hyper parameters (such as layer count, sizes of inner layers, dropout probabilities etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
