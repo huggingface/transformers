@@ -1093,7 +1093,7 @@ def is_tensor(x):
 class ModelOutput(OrderedDict):
     """
     Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes. Otherwise behaves like a
+    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a
     regular python dictionary.
 
     .. warning::
