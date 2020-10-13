@@ -206,6 +206,7 @@ class Trainer:
         model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
+
             The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be able to choose
             different architectures according to hyper parameters (such as layer count, sizes of inner layers etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
