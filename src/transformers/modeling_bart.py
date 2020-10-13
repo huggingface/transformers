@@ -217,12 +217,6 @@ def _make_linear_from_emb(emb):
     return lin_layer
 
 
-# Helper Functions, mostly for making masks
-def _check_shapes(shape_1, shape2):
-    if shape_1 != shape2:
-        raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
-
-
 def shift_tokens_right(input_ids, pad_token_id):
     """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
     prev_output_tokens = input_ids.clone()

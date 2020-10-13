@@ -18,10 +18,10 @@ import unittest
 
 from transformers import is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_tf, require_torch, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
@@ -214,6 +214,7 @@ TOLERANCE = 1e-4
 
 
 @require_tf
+@require_torch
 class TFBartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
@@ -277,6 +278,8 @@ class TFBartModelIntegrationTest(unittest.TestCase):
 
 
 @require_tf
+@require_torch
+@slow
 class FasterTFBartModelIntegrationTests(unittest.TestCase):
     """These tests are useful for debugging since they operate on a model with 1 encoder layer and 1 decoder layer."""
 

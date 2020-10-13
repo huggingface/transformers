@@ -23,6 +23,7 @@ import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras.layers import Dense, LayerNormalization
 
+from .activations_tf import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
@@ -84,7 +85,7 @@ BART_START_DOCSTRING = r"""
 
 BART_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`tf.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
                Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
@@ -92,7 +93,7 @@ BART_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        decoder_input_ids (:obj:`tf.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, 1, tgt_seq_len, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens and future tokens, as in the paper.
@@ -100,7 +101,6 @@ BART_INPUTS_DOCSTRING = r"""
             See diagram 1 in the paper for more info on the default strategy
 """
 LARGE_NEGATIVE = -1e8
-T = tf.Tensor
 
 
 def causal_attention_mask(nd, ns, dtype):
@@ -113,7 +113,7 @@ def causal_attention_mask(nd, ns, dtype):
     return tf.cast(m, dtype) * LARGE_NEGATIVE
 
 
-def invert_mask(attention_mask: T):
+def invert_mask(attention_mask: tf.Tensor):
     """Turns 1->0, 0->1, False->True, True-> False"""
     assert attention_mask._rank() == 2
     attention_mask = tf.cast(attention_mask, tf.bool)
@@ -139,7 +139,9 @@ class TFPretrainedBartModel(TFPreTrainedModel):
         return dummy_inputs
 
     def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
+        decoder_start_token_id = (
+            self.config.decoder_start_token_id
+        )  # Different than torch torch would use eos_token_id
         pad_token_id = self.config.pad_token_id
 
         assert (
@@ -168,9 +170,6 @@ class TFPretrainedBartModel(TFPreTrainedModel):
 
 
 # Helper Functions, mostly for making masks
-def _check_shapes(shape_1, shape2):
-    if shape_1 != shape2:
-        raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
 
 
 def make_padding_mask(input_ids, padding_idx=1):
@@ -195,14 +194,14 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.dropout_wt = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = gelu
+        self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.fc1 = Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         self.normalize_before = config.normalize_before
 
-    def call(self, x, encoder_padding_mask, output_attentions=False, training=False):
+    def call(self, x, encoder_padding_mask, training=False):
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -217,9 +216,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         residual = x
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, attn_weights = self.self_attn(
-            query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
-        )
+        x, attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
         assert x.shape == residual.shape
         x = self.dropout_wt(x, training=training)
         x = residual + x
@@ -286,14 +283,14 @@ class TFBartEncoder(tf.keras.layers.Layer):
         attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
+        return_dict=None,
         training=False,
-        return_dict=True,
     ):
         """
         Args:
-            input_ids (LongTensor): tokens in the source language of shape
+            input_ids (Tensor): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (torch.LongTensor): indicating which indices are padding tokens.
+            attention_mask (Tensor): indicating which indices are padding tokens.
         Returns:
             namedtuple:
                 - **x** (Tensor): the last encoder layer's output of
@@ -307,6 +304,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
         """
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         # check attention mask and invert
         if attention_mask is not None:
             assert attention_mask._rank() == 2
@@ -362,7 +361,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             name="self_attn",
         )
         self.dropout = config.dropout
-        self.activation_fn = gelu
+        self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -387,7 +386,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         causal_mask=None,
         decoder_padding_mask=None,
         training=False,
-    ):
+    ) -> Tuple:
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -398,11 +397,12 @@ class TFDecoderLayer(tf.keras.layers.Layer):
                 for each head (default: return average over heads).
 
         Returns:
-            encoded output of shape `(seq_len, batch, embed_dim)`
+
+            Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
 
         residual = x
-        y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
+        y = x
 
         if layer_state is None:
             layer_state = {}
@@ -421,7 +421,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
 
-        x, encoder_attn_weights = self.encoder_attn(
+        x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,  # could be None
             value=encoder_hidden_states,
@@ -502,13 +502,14 @@ class TFBartDecoder(tf.keras.layers.Layer):
         use_cache=False,
         output_attentions=False,
         output_hidden_states=False,
+        return_dict=None,
         training=False,
-        return_dict=True,
         **unused,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if use_cache:
             assert not training, "Training + use cache are incompatible"
         if unused:
@@ -632,7 +633,7 @@ class Attention(tf.keras.layers.Layer):
 
         self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
-    def _shape(self, tensor: T, dim_0, bsz) -> T:
+    def _shape(self, tensor: tf.Tensor, dim_0, bsz) -> tf.Tensor:
         reshaped_T_B_D = tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim))
         return tf.transpose(reshaped_T_B_D, perm=(1, 0, 2))
 
@@ -646,7 +647,6 @@ class Attention(tf.keras.layers.Layer):
         static_kv: bool = False,
         attn_mask: Optional[Tensor] = None,
         training=False,
-        output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel
 
@@ -720,7 +720,7 @@ class Attention(tf.keras.layers.Layer):
             src_len,
         )
         if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights: T = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+            attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
             if key_padding_mask.dtype == tf.bool:
                 key_padding_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
             extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask, 1), 2)
@@ -736,7 +736,7 @@ class Attention(tf.keras.layers.Layer):
         attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
         attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
         attn_output = self.out_proj(attn_output)
-        attn_weights: T = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
         return attn_output, attn_weights
 
     def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
@@ -794,17 +794,6 @@ class Attention(tf.keras.layers.Layer):
         return new_key_padding_mask
 
 
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    Original Implementation of the gelu activation function in Google Bert repo when initially created.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
-    return x * cdf
-
-
 class LearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -821,7 +810,7 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
         num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
-    def call(self, input_ids: T, use_cache=False):
+    def call(self, input_ids: tf.Tensor, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_ids.shape[:2]
 
@@ -870,7 +859,7 @@ class TFBartModel(TFPretrainedBartModel):
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         else:
-            decoder_padding_mask = invert_mask(T)
+            decoder_padding_mask = invert_mask(tf.Tensor)
 
         causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
         return decoder_input_ids, decoder_padding_mask, causal_lm_mask
@@ -888,6 +877,7 @@ class TFBartModel(TFPretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
         **unused
     ):
         if "past_key_values" in unused:
@@ -897,12 +887,10 @@ class TFBartModel(TFPretrainedBartModel):
         if decoder_input_ids is None:  # Classification
             use_cache = False
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if not use_cache:
             decoder_input_ids, decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
                 inputs,
@@ -938,8 +926,10 @@ class TFBartModel(TFPretrainedBartModel):
         )
         if not return_dict:
             # Attention and hidden_states will be [] or None if they aren't needed
-            assert isinstance(decoder_outputs[0], T), f"got type {type(decoder_outputs[0])} for first decoder output"
-            return tuple(x for x in decoder_outputs + encoder_outputs if x is not None)
+            assert isinstance(
+                decoder_outputs[0], tf.Tensor
+            ), f"got type {type(decoder_outputs[0])} for first decoder output"
+            return tuple(x for x in decoder_outputs + encoder_outputs.to_tuple() if x is not None)
         else:
             return TFSeq2SeqModelOutput(
                 last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1059,7 +1049,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
                 past_key_values = kwargs.pop("past_key_value_states")
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         outputs: TFSeq2SeqModelOutput = self.model(
             input_ids,
