@@ -120,11 +120,7 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 is_key_init = True
                 break
             elif attribute == "position_embeddings":
-                assert (
-                    model.position_embeddings.weight.shape[-1] == getattr(old_model, old_attribute).weight.shape[-1]
-                ), "Shapes have to match"
-                assert model.position_embeddings.weight.shape[0] == 512, "Shapes have to match"
-                model.position_embeddings.weight = torch.nn.Parameter(old_model.embed_positions.weight[:512, :])
+                model.position_embeddings.weight = torch.nn.Parameter(old_model.embed_positions.weight)
                 is_key_init = True
                 break
 

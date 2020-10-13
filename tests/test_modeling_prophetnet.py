@@ -51,7 +51,8 @@ class ProphetNetModelTester:
         decoder_ffn_dim=32,
         num_decoder_layers=4,
         num_decoder_attention_heads=4,
-        max_position_embeddings=30,
+        decoder_max_position_embeddings=30,
+        encoder_max_position_embeddings=30,
         is_encoder_decoder=True,
         pad_token_id=0,
         bos_token_id=1,
@@ -91,7 +92,8 @@ class ProphetNetModelTester:
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
         self.disable_ngram_loss = disable_ngram_loss
-        self.max_position_embeddings = max_position_embeddings
+        self.encoder_max_position_embeddings = encoder_max_position_embeddings
+        self.decoder_max_position_embeddings = decoder_max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
 
         self.scope = None
@@ -131,7 +133,8 @@ class ProphetNetModelTester:
             num_buckets=self.num_buckets,
             relative_max_distance=self.relative_max_distance,
             disable_ngram_loss=self.disable_ngram_loss,
-            max_position_embeddings=self.max_position_embeddings,
+            decoder_max_position_embeddings=self.decoder_max_position_embeddings,
+            encoder_max_position_embeddings=self.encoder_max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
             return_dict=True,
         )
@@ -613,9 +616,10 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_cnndm_inference(self):
         model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
+        model.config.max_length = 512
         model.to(torch_device)
 
-        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
+        tokenizer = ProphetNetTokenizer.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
 
         ARTICLE_TO_SUMMARIZE = "USTC was founded in Beijing by the Chinese Academy of Sciences (CAS) in September 1958. The Director of CAS, Mr. Guo Moruo was appointed the first president of USTC. USTC's founding mission was to develop a high-level science and technology workforce, as deemed critical for development of China's economy, defense, and science and technology education. The establishment was hailed as \"A Major Event in the History of Chinese Education and Science.\" CAS has supported USTC by combining most of its institutes with the departments of the university. USTC is listed in the top 16 national key universities, becoming the youngest national key university.".lower()
         input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=511, return_tensors="pt").input_ids

@@ -287,7 +287,7 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
 
         assert (
             decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        ), "self.model.config.decoder_start_token_id has to be defined. In ProphetNet it is usually set to the pad_token_id. See ProphetNet docs for more information"
 
         # shift inputs to the right
         shifted_input_ids = input_ids.new_zeros(input_ids.shape)
@@ -347,10 +347,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
             real_positions = positions
         return super().forward(positions), real_positions
 
-    def max_positions(self):
-        """Maximum number of supported positions."""
-        return self.num_embeddings
-
     def _forward(self, positions):
         return super().forward(positions)
 
@@ -363,7 +359,6 @@ class SelfAttention(nn.Module):
         embed_dim,
         num_heads,
         dropout=0.0,
-        encoder_decoder_attention=False,  # otherwise self_attention
         output_dropout=0.0,
     ):
         super().__init__()
@@ -373,75 +368,67 @@ class SelfAttention(nn.Module):
         self.output_dropout = output_dropout
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
-
-        self.encoder_decoder_attention = encoder_decoder_attention
-
         self.key_proj = nn.Linear(embed_dim, embed_dim)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.query_proj = nn.Linear(embed_dim, embed_dim)
 
         self.out_proj = nn.Linear(embed_dim, embed_dim)
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
     def forward(
         self,
-        query,
-        key: Optional[Tensor],
+        hidden_states,
+        key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
         attn_mask: Optional[Tensor] = None,
         output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
-        static_kv: bool = self.encoder_decoder_attention
-        tgt_len, bsz, embed_dim = query.size()
+
+        tgt_len, bsz, embed_dim = hidden_states.size()
+        is_cross_attention = key_value_states is not None
+        cache_key = "encoder_decoder" if is_cross_attention else "self"
+
         assert embed_dim == self.embed_dim
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # reuse k,v and encoder_attention_mask
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                if static_kv:
-                    key = None
+        assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
+        # get here for encoder decoder cause of is_cross_attention
+
+        # previous time steps are cached - no need to recompute key and value if they are static
+        layer_state = layer_state if layer_state is not None else {}
+        saved_state = layer_state.get(cache_key, None)
+
+        query_states = self.query_proj(hidden_states) / (self.head_dim ** 0.5)
+        query_states = self._shape(query_states, tgt_len, bsz)
+
+        if not is_cross_attention:
+            # self-attention
+            key_states = self.key_proj(hidden_states)
+            key_states = self._shape(key_states, -1, bsz)
+            value_states = self.value_proj(hidden_states)
+            value_states = self._shape(value_states, -1, bsz)
+        elif saved_state is None:
+            # cross-attention without layer state
+            key_states = self.key_proj(key_value_states)
+            key_states = self._shape(key_states, -1, bsz)
+            value_states = self.value_proj(key_value_states)
+            value_states = self._shape(value_states, -1, bsz)
         else:
-            saved_state = None
-            layer_state = {}
-
-        q = self.query_proj(query) * self.scaling
-        if static_kv:
-            if key is None:
-                k = v = None
-            else:
-                k = self.key_proj(key)
-                v = self.value_proj(key)
-        else:
-            k = self.key_proj(query)
-            v = self.value_proj(query)
-
-        q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-        if v is not None:
-            v = self._shape(v, -1, bsz)
-
-        if saved_state is not None:
-            k, v, attention_mask = self._use_saved_state(k, v, saved_state, attention_mask, static_kv, bsz)
+            key_states = saved_state["prev_key_states"].view(bsz * self.num_heads, -1, self.head_dim)
+            value_states = saved_state["prev_value_states"].view(bsz * self.num_heads, -1, self.head_dim)
 
         # Update cache
-        layer_state[self.cache_key] = {
-            "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_attention_mask": attention_mask if not static_kv else None,
-        }
+        if is_cross_attention:
+            layer_state[cache_key] = {
+                "prev_key_states": key_states.view(bsz, self.num_heads, -1, self.head_dim),
+                "prev_value_states": value_states.view(bsz, self.num_heads, -1, self.head_dim),
+            }
 
-        assert k is not None
-        src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
+        assert key_states is not None
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -468,8 +455,8 @@ class SelfAttention(nn.Module):
             training=self.training,
         )
 
-        assert v is not None
-        attn_output = torch.bmm(attn_probs, v)
+        assert value_states is not None
+        attn_output = torch.bmm(attn_probs, value_states)
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
@@ -479,58 +466,6 @@ class SelfAttention(nn.Module):
             attn_weights = None
         attn_output = F.dropout(attn_output, p=self.output_dropout, training=self.training)
         return attn_output, attn_weights
-
-    def _use_saved_state(self, k, v, saved_state, attention_mask, static_kv, bsz):
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        if "prev_key" in saved_state:
-            _prev_key = saved_state["prev_key"]
-            assert _prev_key is not None
-            prev_key = _prev_key.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                k = prev_key
-            else:
-                assert k is not None
-                k = torch.cat([prev_key, k], dim=1)
-        if "prev_value" in saved_state:
-            _prev_value = saved_state["prev_value"]
-            assert _prev_value is not None
-            prev_value = _prev_value.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                v = prev_value
-            else:
-                assert v is not None
-                v = torch.cat([prev_value, v], dim=1)
-        assert k is not None and v is not None
-        prev_attention_mask: Optional[Tensor] = saved_state.get("prev_attention_mask", None)
-        attention_mask = self._cat_prev_attention_mask(attention_mask, prev_attention_mask, bsz, k.size(1), static_kv)
-        return k, v, attention_mask
-
-    @staticmethod
-    def _cat_prev_attention_mask(
-        attention_mask: Optional[Tensor],
-        prev_attention_mask: Optional[Tensor],
-        batch_size: int,
-        src_len: int,
-        static_kv: bool,
-    ) -> Optional[Tensor]:
-        # saved key padding masks have shape (bsz, seq_len)
-        if prev_attention_mask is not None:
-            if static_kv:
-                new_attention_mask = prev_attention_mask
-            else:
-                new_attention_mask = torch.cat([prev_attention_mask, attention_mask], dim=1)
-
-        elif attention_mask is not None:
-            filler = torch.zeros(
-                batch_size,
-                src_len - attention_mask.size(1),
-                dtype=attention_mask.dtype,
-                device=attention_mask.device,
-            )
-            new_attention_mask = torch.cat([filler, attention_mask], dim=1)
-        else:
-            new_attention_mask = prev_attention_mask
-        return new_attention_mask
 
 
 class FeedForwardBlock(nn.Module):
@@ -582,8 +517,6 @@ class NgramMultiheadAttention(nn.Module):
         self.ngram = ngram
 
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
-
         # key, value, query projection
         self.key_proj = nn.Linear(embed_dim, embed_dim)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
@@ -605,7 +538,6 @@ class NgramMultiheadAttention(nn.Module):
         hidden_states,
         layer_state=None,
         need_weights=True,
-        static_kv=False,
         self_attn_mask=None,
         ngram_mask_matrix=None,
         i_buckets_main_stream=None,
@@ -628,7 +560,7 @@ class NgramMultiheadAttention(nn.Module):
         k = self.key_proj(hidden_states)
         v = self.value_proj(hidden_states)
 
-        q *= self.scaling
+        q = q / (self.head_dim ** 0.5)
 
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -649,17 +581,10 @@ class NgramMultiheadAttention(nn.Module):
             # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
             if "prev_key" in saved_state:
                 prev_key = saved_state["prev_key"].view(bsz * self.num_heads, -1, self.head_dim)
-                if static_kv:
-                    assert False, "static_kv not supprt in ngram decoder"
-                    k = prev_key
-                else:
-                    k_main = torch.cat((prev_key, k_main), dim=1)
+                k_main = torch.cat((prev_key, k_main), dim=1)
             if "prev_value" in saved_state:
                 prev_value = saved_state["prev_value"].view(bsz * self.num_heads, -1, self.head_dim)
-                if static_kv:
-                    v = prev_value
-                else:
-                    v_main = torch.cat((prev_value, v_main), dim=1)
+                v_main = torch.cat((prev_value, v_main), dim=1)
             # Update cache
             layer_state["self"] = {
                 "prev_key": k_main.view(bsz, self.num_heads, -1, self.head_dim),
@@ -863,8 +788,7 @@ class ProphetNetEncoderLayer(nn.Module):
 
         # 1st residual block
         attention_output, attn_weights = self.self_attn(
-            query=hidden_states,
-            key=hidden_states,
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -901,7 +825,6 @@ class ProphetNetDecoderLayer(nn.Module):
             self.embed_dim,
             config.num_decoder_attention_heads,
             dropout=config.attention_dropout,
-            encoder_decoder_attention=True,
             output_dropout=config.dropout,
         )
         self.cross_attn_layer_norm = LayerNorm(self.embed_dim)
@@ -945,8 +868,8 @@ class ProphetNetDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             # 2nd residual block
             attention_output, cross_attn_weights = self.cross_attn(
-                query=hidden_states,
-                key=encoder_hidden_states,
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attn_mask,
                 layer_state=layer_state,  # mutates layer state
             )
@@ -1049,13 +972,12 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         self.dropout = config.dropout
         embed_dim = word_embeddings.embedding_dim
         self.padding_idx = word_embeddings.padding_idx
-        self.max_source_positions = config.max_position_embeddings
         self.embed_scale = None
 
         # weights
         self.word_embeddings = word_embeddings
         self.position_embeddings = LearnedPositionalEmbedding(
-            config.max_position_embeddings, embed_dim, self.padding_idx
+            config.encoder_max_position_embeddings, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.embeddings_layer_norm = LayerNorm(embed_dim)
@@ -1144,7 +1066,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         self.word_embeddings = word_embeddings
         self.position_embeddings = LearnedPositionalEmbedding(
-            config.max_position_embeddings, embed_dim, self.padding_idx
+            config.decoder_max_position_embeddings, embed_dim, self.padding_idx
         )
 
         self.ngram_embeddings = nn.Embedding(self.ngram, embed_dim, None)
@@ -1161,7 +1083,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             or self._finetune_i_bucket_main_stream is None
             or self._finetune_i_bucket_main_stream.device != real_positions.device
         ):
-            fake_positions = torch.arange(1, self.max_target_positions + 1).repeat(1, 1)
+            fake_positions = torch.arange(1, self.max_target_positions).repeat(1, 1)
             finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream = cal_relative_positions_buckets(
                 self.num_buckets, self.relative_max_distance, fake_positions
             )
@@ -1586,7 +1508,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # fine-tune
             loss = self._compute_loss(predict_logits, labels)
 
         if not return_dict:

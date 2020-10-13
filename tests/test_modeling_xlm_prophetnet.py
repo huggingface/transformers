@@ -64,7 +64,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             decoder_prev_ids,
             encoder_hidden_states=encoder_outputs,
         )
-        predicting_streams = decoder_outputs[0].view(1, model.config.ngram + 1, 14, -1)[:, 1:]
+        predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 14, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
         self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
@@ -99,8 +99,11 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
         )
         model.to(torch_device)
+        model.config.max_length = 512
 
-        tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased-xglue-ntg")
+        tokenizer = XLMProphetNetTokenizer.from_pretrained(
+            "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg"
+        )
 
         EN_SENTENCE = "Microsoft Corporation intends to officially end free support for the Windows 7 operating system after January 14, 2020, according to the official portal of the organization. From that day, users of this system will not be able to receive security updates, which could make their computers vulnerable to cyber attacks."
         RU_SENTENCE = "орпорация Microsoft намерена официально прекратить бесплатную поддержку операционной системы Windows 7 после 14 января 2020 года, сообщается на официальном портале организации . С указанного дня пользователи этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми к кибератакам."
