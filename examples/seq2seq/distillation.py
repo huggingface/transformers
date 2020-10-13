@@ -40,24 +40,43 @@ class BartSummarizationDistiller(SummarizationModule):
         hparams.model_name_or_path = str(save_dir)  # Tell lightning we are training the student
         teacher = AutoModelForSeq2SeqLM.from_pretrained(hparams.teacher).eval()
         use_task_specific_params(teacher, hparams.task)  # We copy good generation parameters to student by default
-        student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
-            teacher, e=hparams.student_encoder_layers, d=hparams.student_decoder_layers, save_path=save_dir
-        )
+        
+        e_layer_ids, d_layer_ids = None, None
+        if hparams.student_base_model is not None:
+            student = AutoModelForSeq2SeqLM.from_pretrained(hparams.student_base_model).eval()
+            use_task_specific_params(student, hparams.task)
+        else:
+            student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
+                teacher, e=hparams.student_encoder_layers, d=hparams.student_decoder_layers, save_path=save_dir
+            )
+        
         if hparams.length_penalty != -1:
             student.config.length_penalty = hparams.length_penalty
         super().__init__(hparams, model=student, config=student.config)
         model_type = student.config.model_type
-        self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]
+
+        student_encoder_layers, student_decoder_layers = None, None
 
         if model_type == "t5":
             teacher_encoder_layers = len(teacher.get_encoder().block)
             teacher_decoder_layers = len(teacher.get_decoder().block)
+            student_encoder_layers = len(student.get_encoder().block)
+            student_decoder_layers = len(student.get_decoder().block)
         else:
             teacher_encoder_layers = teacher.config.encoder_layers
             teacher_decoder_layers = teacher.config.decoder_layers
+            student_encoder_layers = student.config.encoder_layers
+            student_decoder_layers = student.config.decoder_layers
 
-        self.different_encoder = hparams.student_encoder_layers != teacher_encoder_layers
-        self.different_decoder = hparams.student_decoder_layers != teacher_decoder_layers
+        self.different_encoder = student_encoder_layers != teacher_encoder_layers
+        self.different_decoder = student_decoder_layers != teacher_decoder_layers
+
+        if e_layer_ids is None or d_layer_ids is None:
+           e_layer_ids = list(range(student_encoder_layers))
+           d_layer_ids = list(range(student_decoder_layers))
+
+        
+        self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]
 
         self.teacher = teacher
         freeze_params(self.teacher)
@@ -163,7 +182,7 @@ class BartSummarizationDistiller(SummarizationModule):
                     input_ids, attention_mask=src_mask, output_hidden_states=True, return_dict=True
                 ).hidden_states
 
-            hid_loss_enc = self.calc_hidden_loss(
+            hid_loss_enc = self.maybe_calc_hidden_loss(
                 src_mask,
                 enc_hidden_state,
                 teacher_enc_hid,
@@ -185,7 +204,7 @@ class BartSummarizationDistiller(SummarizationModule):
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
-            hid_loss_dec = self.calc_hidden_loss(
+            hid_loss_dec = self.maybe_calc_hidden_loss(
                 dec_mask, dec_hidden, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
             )
 
@@ -195,6 +214,7 @@ class BartSummarizationDistiller(SummarizationModule):
             + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
         return blended_loss, loss_ce, student_lm_loss, hid_loss_enc, hid_loss_dec
+
 
     @staticmethod
     def calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
@@ -213,12 +233,27 @@ class BartSummarizationDistiller(SummarizationModule):
         masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
         return masked_mse
 
+    @staticmethod
+    def maybe_calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
+        comparable_shapes = True
+        if len(hidden_states) == len(hidden_states_T):
+            for hidden_state, hidden_state_T in zip(hidden_states, hidden_states_T):
+                if hidden_state.shape != hidden_state_T.shape:
+                    comparable_shapes = False
+                    break
+        else:
+            comparable_shapes = False
+        if comparable_shapes:
+            return calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden)
+        else:
+            return 0.0
 
 def add_distill_args(parser):
     parser.add_argument("--teacher", type=str)
     parser.add_argument("--alpha_ce", default=0.8, type=float)
     parser.add_argument("--alpha_mlm", default=0.2, type=float)
     parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
+    parser.add_argument("--student_base_model", type=str, required=False)
     parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
     parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
     parser.add_argument("--no_teacher", action="store_true", default=False)
@@ -261,6 +296,7 @@ def create_module(args):
     args.setup_cls: str = module_cls.__name__
     print(f"using module {args.setup_cls}")
     model = module_cls(args)
+    print('Created model!')
     return model
 
 
