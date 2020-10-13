@@ -13,8 +13,6 @@
 #   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
 #
 
-
-import logging
 import sys
 from typing import Dict
 
