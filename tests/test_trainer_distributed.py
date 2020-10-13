@@ -101,4 +101,20 @@ if __name__ == "__main__":
             logger.error(p.metrics)
             exit(1)
 
+        trainer.args.eval_accumulation_steps = 2
+
+        metrics = trainer.evaluate()
+        logger.info(metrics)
+        if metrics["eval_success"] is not True:
+            logger.error(metrics)
+            exit(1)
+
+        p = trainer.predict(dataset)
+        logger.info(p.metrics)
+        if p.metrics["eval_success"] is not True:
+            logger.error(p.metrics)
+            exit(1)
+
+        trainer.args.eval_accumulation_steps = None
+
     logger.info("🔥 All distributed tests successful")
