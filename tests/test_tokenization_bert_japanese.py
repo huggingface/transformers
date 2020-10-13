@@ -19,9 +19,9 @@ import pickle
 import unittest
 
 from transformers.testing_utils import custom_tokenizers
-from transformers.tokenization_bert import WordpieceTokenizer
 from transformers.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
+    WordpieceTokenizer,
     BertJapaneseTokenizer,
     CharacterTokenizer,
     MecabTokenizer,

@@ -18,6 +18,7 @@ import os
 import unittest
 
 from transformers.tokenization_layoutlm import VOCAB_FILES_NAMES, LayoutLMTokenizer
+from transformers.tokenization_layoutlm_fast import LayoutLMTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -25,6 +26,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = LayoutLMTokenizer
+    rust_tokenizer_class = LayoutLMTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()

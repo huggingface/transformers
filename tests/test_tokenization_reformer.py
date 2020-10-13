@@ -19,7 +19,8 @@ import unittest
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow
-from transformers.tokenization_reformer import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
+from transformers.tokenization_reformer import SPIECE_UNDERLINE, ReformerTokenizer
+from transformers.tokenization_reformer_fast import ReformerTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

@@ -20,7 +20,8 @@ import unittest
 from transformers import BatchEncoding
 from transformers.file_utils import cached_property
 from transformers.testing_utils import _torch_available
-from transformers.tokenization_t5 import T5Tokenizer, T5TokenizerFast
+from transformers.tokenization_t5 import T5Tokenizer
+from transformers.tokenization_t5_fast import T5TokenizerFast
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
 from .test_tokenization_common import TokenizerTesterMixin

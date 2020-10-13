@@ -17,7 +17,8 @@
 import os
 import unittest
 
-from transformers.tokenization_funnel import VOCAB_FILES_NAMES, FunnelTokenizer, FunnelTokenizerFast
+from transformers.tokenization_funnel import VOCAB_FILES_NAMES, FunnelTokenizer
+from transformers.tokenization_funnel_fast import FunnelTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

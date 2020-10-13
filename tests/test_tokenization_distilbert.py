@@ -15,7 +15,8 @@
 
 
 from transformers.testing_utils import slow
-from transformers.tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from transformers.tokenization_distilbert import DistilBertTokenizer
+from transformers.tokenization_distilbert_fast import DistilBertTokenizerFast
 
 from .test_tokenization_bert import BertTokenizationTest
 

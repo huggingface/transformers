@@ -19,7 +19,8 @@ import unittest
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import slow
-from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer
+from transformers.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

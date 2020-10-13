@@ -18,7 +18,8 @@ import os
 import unittest
 
 from transformers.testing_utils import slow
-from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
+from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+from transformers.tokenization_xlnet_fast import XLNetTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

@@ -121,6 +121,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         self,
         vocab_file,
         merges_file,
+        tokenizer_file=None,
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
@@ -130,6 +131,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         super().__init__(
             vocab_file,
             merges_file,
+            tokenizer_file=tokenizer_file,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

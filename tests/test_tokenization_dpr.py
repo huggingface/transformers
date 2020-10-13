@@ -17,11 +17,14 @@
 from transformers.testing_utils import slow
 from transformers.tokenization_dpr import (
     DPRContextEncoderTokenizer,
-    DPRContextEncoderTokenizerFast,
     DPRQuestionEncoderTokenizer,
-    DPRQuestionEncoderTokenizerFast,
     DPRReaderOutput,
     DPRReaderTokenizer,
+)
+from transformers.tokenization_dpr_fast import (
+    DPRContextEncoderTokenizerFast,
+    DPRQuestionEncoderTokenizerFast,
+    DPRReaderOutput,
     DPRReaderTokenizerFast,
 )
 from transformers.tokenization_utils_base import BatchEncoding

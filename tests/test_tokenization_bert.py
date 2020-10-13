@@ -22,12 +22,12 @@ from transformers.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     BertTokenizer,
-    BertTokenizerFast,
     WordpieceTokenizer,
     _is_control,
     _is_punctuation,
     _is_whitespace,
 )
+from transformers.tokenization_bert_fast import BertTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

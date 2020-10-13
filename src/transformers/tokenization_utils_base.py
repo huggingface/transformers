@@ -1594,7 +1594,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # We instantiate fast tokenizers based on a slow tokenizer for now
         # In the future we can also use a direct way based on saving/instantiating
         # tokenizer's Tokenizer directly from it's serialization JSON
-        if cls.slow_tokenizer_class is not None:
+        if ('tokenizer_file' not in resolved_vocab_files or resolved_vocab_files['tokenizer_file'] is None) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,

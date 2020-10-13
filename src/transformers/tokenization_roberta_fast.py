@@ -145,6 +145,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         self,
         vocab_file,
         merges_file,
+        tokenizer_file=None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -159,6 +160,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         super().__init__(
             vocab_file,
             merges_file,
+            tokenizer_file=tokenizer_file,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
