@@ -104,20 +104,27 @@ class TFBertPreTrainingLoss:
         )
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        masked_lm_active_loss = tf.not_equal(tf.reshape(labels["labels"], (-1,)), -100)
+        masked_lm_active_loss = tf.not_equal(x=tf.reshape(tensor=labels["labels"], shape=(-1,)), y=-100)
         masked_lm_reduced_logits = tf.boolean_mask(
-            tf.reshape(logits[0], (-1, shape_list(logits[0])[2])), masked_lm_active_loss
+            tensor=tf.reshape(tensor=logits[0], shape=(-1, shape_list(tensor=logits[0])[2])),
+            mask=masked_lm_active_loss,
         )
-        masked_lm_labels = tf.boolean_mask(tf.reshape(labels["labels"], (-1,)), masked_lm_active_loss)
-        next_sentence_active_loss = tf.not_equal(tf.reshape(labels["next_sentence_label"], (-1,)), -100)
-        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits[1], (-1, 2)), next_sentence_active_loss)
+        masked_lm_labels = tf.boolean_mask(
+            tensor=tf.reshape(tensor=labels["labels"], shape=(-1,)), mask=masked_lm_active_loss
+        )
+        next_sentence_active_loss = tf.not_equal(
+            x=tf.reshape(tensor=labels["next_sentence_label"], shape=(-1,)), y=-100
+        )
+        next_sentence_reduced_logits = tf.boolean_mask(
+            tensor=tf.reshape(tensor=logits[1], shape=(-1, 2)), mask=next_sentence_active_loss
+        )
         next_sentence_label = tf.boolean_mask(
-            tf.reshape(labels["next_sentence_label"], (-1,)), next_sentence_active_loss
+            tensor=tf.reshape(tensor=labels["next_sentence_label"], shape=(-1,)), mask=next_sentence_active_loss
         )
-        masked_lm_loss = loss_fn(masked_lm_labels, masked_lm_reduced_logits)
-        next_sentence_loss = loss_fn(next_sentence_label, next_sentence_reduced_logits)
-        masked_lm_loss = tf.reshape(masked_lm_loss, (-1, shape_list(next_sentence_loss)[0]))
-        masked_lm_loss = tf.reduce_mean(masked_lm_loss, 0)
+        masked_lm_loss = loss_fn(y_true=masked_lm_labels, y_pred=masked_lm_reduced_logits)
+        next_sentence_loss = loss_fn(y_true=next_sentence_label, y_pred=next_sentence_reduced_logits)
+        masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, shape_list(tensor=next_sentence_loss)[0]))
+        masked_lm_loss = tf.reduce_mean(input_tensor=masked_lm_loss, axis=0)
 
         return masked_lm_loss + next_sentence_loss
 
@@ -160,7 +167,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range),
             )
 
-        super().build(input_shape)
+        super().build(input_shape=input_shape)
 
     def call(
         self,
@@ -190,9 +197,15 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
+            return self._embedding(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
+                inputs_embeds=inputs_embeds,
+                training=training,
+            )
         elif mode == "linear":
-            return self._linear(input_ids)
+            return self._linear(input_ids=input_ids)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
@@ -201,26 +214,26 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = shape_list(tensor=input_ids)
         else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = shape_list(tensor=inputs_embeds)[:-1]
 
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
+            position_ids = tf.range(start=seq_length, dtype=tf.int32)[tf.newaxis, :]
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+            token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
+            inputs_embeds = tf.gather(params=self.word_embeddings, indices=input_ids)
 
-        position_embeddings = tf.cast(self.position_embeddings(position_ids), inputs_embeds.dtype)
-        token_type_embeddings = tf.cast(self.token_type_embeddings(token_type_ids), inputs_embeds.dtype)
+        position_embeddings = tf.cast(x=self.position_embeddings(position_ids), dtype=inputs_embeds.dtype)
+        token_type_embeddings = tf.cast(x=self.token_type_embeddings(token_type_ids), dtype=inputs_embeds.dtype)
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings, training=training)
+        embeddings = self.LayerNorm(inputs=embeddings)
+        embeddings = self.dropout(inputs=embeddings, training=training)
 
         return embeddings
 
@@ -234,12 +247,12 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
+        batch_size = shape_list(tensor=input_ids)[0]
+        length = shape_list(tensor=input_ids)[1]
+        x = tf.reshape(tensor=input_ids, shape=(-1, self.hidden_size))
+        logits = tf.matmul(a=x, b=self.word_embeddings, transpose_b=True)
 
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return tf.reshape(tensor=logits, shape=(batch_size, length, self.vocab_size))
 
 
 class TFBertSelfAttention(tf.keras.layers.Layer):
@@ -459,12 +472,14 @@ class TFBertEncoder(tf.keras.layers.Layer):
         return_dict=True,
         training=False,
     ):
-        all_hidden_states = tf.TensorArray(tf.float32, size=0, dynamic_size=True, element_shape=hidden_states.shape)
+        all_hidden_states = tf.TensorArray(
+            dtype=tf.float32, size=0, dynamic_size=True, element_shape=hidden_states.shape
+        )
         all_attentions = None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states.write(i, hidden_states)
+                all_hidden_states = all_hidden_states.write(index=i, value=hidden_states)
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
@@ -477,15 +492,15 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
             if all_attentions is None:
                 all_attentions = tf.TensorArray(
-                    tf.float32, size=0, dynamic_size=True, element_shape=layer_outputs[1].shape
+                    dtype=tf.float32, size=0, dynamic_size=True, element_shape=layer_outputs[1].shape
                 )
 
             if output_attentions:
-                all_attentions = all_attentions.write(i, layer_outputs[1])
+                all_attentions = all_attentions.write(index=i, value=layer_outputs[1])
 
         # Add last layer
         if output_hidden_states:
-            all_hidden_states.write(all_hidden_states.size(), hidden_states)
+            all_hidden_states = all_hidden_states.write(index=all_hidden_states.size(), value=hidden_states)
 
         if tf.executing_eagerly():
             if not return_dict:
@@ -523,7 +538,7 @@ class TFBertPooler(tf.keras.layers.Layer):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
 
@@ -569,7 +584,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states=hidden_states)
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = self.input_embeddings(input_ids=hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
 
         return hidden_states
@@ -676,7 +691,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -757,7 +772,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if tf.executing_eagerly():
             if not return_dict:
@@ -912,7 +927,6 @@ BERT_INPUTS_DOCSTRING = r"""
     BERT_START_DOCSTRING,
 )
 class TFBertModel(TFBertPreTrainedModel):
-    authorized_missing_keys = [r"position_ids"]
     authorized_unexpected_keys = [r"cls"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -952,7 +966,7 @@ class TFBertModel(TFBertPreTrainedModel):
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -989,8 +1003,6 @@ Bert Model with two heads on top as done during the pre-training:
     BERT_START_DOCSTRING,
 )
 class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
-    authorized_missing_keys = [r"position_ids"]
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1048,7 +1060,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1100,8 +1112,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
 
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions/decoder/bias"]
+    authorized_unexpected_keys = [r"pooler", r"seq_relationship"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1157,7 +1168,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1209,8 +1220,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions/decoder/bias"]
+    authorized_unexpected_keys = [r"pooler", r"seq_relationship"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1232,11 +1242,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
         if new_num_tokens is not None:
-            self.cls.predictions.decoder = tf.keras.layers.Dense(
-                new_num_tokens,
-                kernel_initializer=get_initializer(self.initializer_range),
-                use_bias=False,
-                name="decoder",
+            self.cls.predictions.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
             )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1279,7 +1286,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1328,6 +1335,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
+    authorized_unexpected_keys = [r"predictions"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1378,7 +1387,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1433,6 +1442,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     BERT_START_DOCSTRING,
 )
 class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
+    authorized_unexpected_keys = [r"cls"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1486,7 +1497,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1539,6 +1550,8 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     BERT_START_DOCSTRING,
 )
 class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
+    authorized_unexpected_keys = [r"cls"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1601,7 +1614,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1678,7 +1691,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
-    authorized_unexpected_keys = [r"pooler"]
+    authorized_unexpected_keys = [r"pooler", r"cls"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1732,7 +1745,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1785,7 +1798,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     BERT_START_DOCSTRING,
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
-    authorized_unexpected_keys = [r"pooler"]
+    authorized_unexpected_keys = [r"pooler", r"cls"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1845,7 +1858,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             token_type_ids,
             training,
         ) = input_analysis(
-            self.call,
+            func=self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

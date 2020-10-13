@@ -255,12 +255,21 @@ def input_analysis(func, inputs, **kwargs):
                         "The tensor named %s does not belong to the authorized list of names %s "
                         % (input.name, parameter_names)
                     )
-            else:
+            elif isinstance(input, tf.Tensor) or input is None:
                 output[parameter_names[i]] = input
+            else:
+                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(input))
     elif isinstance(inputs, (dict, BatchEncoding)):
         output = dict(inputs)
+
+        for k, v in output.items():
+            if not isinstance(v, tf.Tensor):
+                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(input))
     else:
-        output[parameter_names[0]] = inputs
+        if isinstance(inputs, tf.Tensor) or inputs is None:
+            output[parameter_names[0]] = inputs
+        else:
+            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(inputs))
 
     for name in parameter_names:
         if name not in list(output.keys()):
@@ -332,11 +341,27 @@ def load_tf_weights(model, resolved_archive_file):
 
     with h5py.File(resolved_archive_file, "r") as f:
         saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
-        model_layers_name_value = {layer.name: layer for layer in model.layers}
+        model_layers_name_value = {}
+
+        for layer in model.layers:
+            name = layer.name
+
+            if "dropout" == re.split("_\d+", name)[0]:
+                name = "dropout"
+
+            model_layers_name_value[name] = layer
+
         model_layers_name = set(model_layers_name_value.keys())
-        renamed_saved_h5_model_layers_names = set(
-            name.replace("nsp___", "").replace("mlm___", "") for name in saved_h5_model_layers_name
-        )
+        renamed_saved_h5_model_layers_names = set()
+
+        for layer_name in saved_h5_model_layers_name:
+            name = layer_name.replace("nsp___", "").replace("mlm___", "")
+
+            if "dropout" == re.split("_\d+", name)[0]:
+                name = "dropout"
+
+            renamed_saved_h5_model_layers_names.add(name)
+
         missing_layers = list(model_layers_name - renamed_saved_h5_model_layers_names)
         unexpected_layers = list(renamed_saved_h5_model_layers_names - model_layers_name)
         saved_weight_names_set = set()
@@ -363,8 +388,6 @@ def load_tf_weights(model, resolved_archive_file):
 
                     if symbolic_weight_name in saved_weight_names_values:
                         saved_weight_value = saved_weight_names_values[symbolic_weight_name]
-                    elif symbolic_weight_name in saved_weight_names_values:
-                        saved_weight_value = saved_weight_names_values[symbolic_weight_name]
 
                     if saved_weight_value is not None:
                         if K.int_shape(symbolic_weight) != saved_weight_value.shape:
@@ -381,6 +404,7 @@ def load_tf_weights(model, resolved_archive_file):
                     symbolic_weights_names.add(symbolic_weight_name)
 
     K.batch_set_value(weight_value_tuples)
+
     missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
     unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
 
