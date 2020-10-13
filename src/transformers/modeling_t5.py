@@ -762,18 +762,9 @@ class T5Stack(T5PreTrainedModel):
                         return module(*inputs, output_attentions)
 
                     return custom_forward
-                
-                def forward_wrapper(layer_module, *args, **kwargs):
-                    """
-                    Converts the forward function's output
-                    to a tuple.
-                    """
-                    return tuple(
-                        layer_module(*args, **kwargs))
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    #create_custom_forward(layer_module),
-                    forward_wrapper(layer_module),
+                    create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask=extended_attention_mask,
                     position_bias=position_bias,
