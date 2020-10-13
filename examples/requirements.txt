@@ -13,6 +13,7 @@ streamlit
 elasticsearch
 nltk
 pandas
+pyarrow==0.17.1
 datasets
 fire
 pytest
