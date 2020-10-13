@@ -420,7 +420,6 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
-# Copied from transformers.modeling_tf_bert.TFBertIntermediate
 class TFLongformerIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -445,7 +444,6 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertOutput
 class TFLongformerOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -468,7 +466,6 @@ class TFLongformerOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertPooler
 class TFLongformerPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)

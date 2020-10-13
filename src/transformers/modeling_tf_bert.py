@@ -645,6 +645,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             tf.print(
                 "Since the v4.0 the TensorFlow models will always return a dictionary in graph mode and the `return_dict` parameter is set to True."
             )
+            return_dict = True
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
