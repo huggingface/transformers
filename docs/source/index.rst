@@ -251,6 +251,7 @@ conversion utilities for the following models:
     model_doc/gpt
     model_doc/gpt2
     model_doc/pegasus
+    model_doc/prophetnet
     model_doc/rag
     model_doc/reformer
     model_doc/retribert
@@ -259,6 +260,7 @@ conversion utilities for the following models:
     model_doc/t5
     model_doc/transformerxl
     model_doc/xlm
+    model_doc/xlmprophetnet
     model_doc/xlmroberta
     model_doc/xlnet
 
