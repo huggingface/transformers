@@ -868,7 +868,8 @@ BERT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. Since
-            the v4.0 this parameter is always set to True.
+            the v4.0 this parameter is always set to :obj:`True` in graph mode. The :obj:`False` value is deprecated and
+            this parameter will be removed in a future major version.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
