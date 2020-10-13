@@ -153,7 +153,7 @@ from .modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
-from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
 from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -381,6 +381,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForSequenceClassification),
         (DebertaConfig, DebertaForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
+        (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
     ]
 )
 
