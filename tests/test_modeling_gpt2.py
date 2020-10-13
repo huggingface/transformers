@@ -406,10 +406,6 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
-    def test_gpt2_batch_generation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
-        self.model_tester.check_batch_generation(*config_and_inputs)
-
     @slow
     def test_batch_generation(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
