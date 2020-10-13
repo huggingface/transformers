@@ -755,13 +755,13 @@ class TFModelTesterMixin:
                 # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
                 # This will be removed once all the TF models will be updated to the new design
                 if model.base_model_prefix in ["bert"]:
-                    old_embd.word_embeddings.build([])
+                    old_embd.build([])
 
-                    old_size, _ = old_embd.word_embeddings.weights[0].shape
+                    old_size, _ = old_embd.word_embeddings.shape
 
                     model.resize_token_embeddings(size)
 
-                    new_size, _ = old_embd.word_embeddings.weights[0].shape
+                    new_size, _ = old_embd.word_embeddings.shape
 
                     if size is None:
                         self.assertEqual(new_size, old_size)

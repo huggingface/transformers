@@ -385,7 +385,6 @@ def load_tf_weights(model, resolved_archive_file):
                 for weight_name in saved_weight_names:
                     name = (
                         "/".join(weight_name.split("/")[1:])
-                        .replace("weight:0", "embeddings:0")
                         .replace("nsp___", "")
                         .replace("mlm___", "")
                     )
@@ -683,47 +682,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         init_range = getattr(self.config, "initializer_range", 0.02)
 
         if new_num_tokens is None:
-            if self.base_model_prefix in ["bert"]:
-                word_embeddings.build([])
-
             return word_embeddings
 
         # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
         # This will be removed once all the TF models will be updated to the new design
-        if self.base_model_prefix in ["bert"]:
-            if len(word_embeddings.weights) == 0:
-                word_embeddings.build([])
-
-            old_num_tokens, old_embedding_dim = word_embeddings.weights[0].shape
-        else:
-            old_num_tokens, old_embedding_dim = word_embeddings.shape
+        old_num_tokens, old_embedding_dim = word_embeddings.shape
 
         if old_num_tokens == new_num_tokens:
             return word_embeddings
 
         # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
         # This will be removed once all the TF models will be updated to the new design
-        if self.base_model_prefix in ["bert"]:
-            new_embeddings = tf.keras.layers.Embedding(
-                input_dim=new_num_tokens,
-                output_dim=old_embedding_dim,
-                embeddings_initializer=get_initializer(initializer_range=init_range),
-                name="word_embeddings",
-            )
-            new_embeddings.build([])
-        else:
-            new_embeddings = self.add_weight(
-                "weight",
-                shape=[new_num_tokens, old_embedding_dim],
-                initializer=get_initializer(init_range),
-                dtype=tf.float32,
-            )
-            init_weights = new_embeddings.numpy()
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(init_range),
+            dtype=tf.float32,
+        )
+        init_weights = new_embeddings.numpy()
 
-            # Copy token embeddings from the previous weights
-            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-            init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
-            new_embeddings.assign(init_weights)
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        new_embeddings.assign(init_weights)
 
         return new_embeddings
 

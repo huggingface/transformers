@@ -97,7 +97,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.max_position_embeddings = config.max_position_embeddings
+        self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
+        self.initializer_range = config.initializer_range
         self.position_embeddings = tf.keras.layers.Embedding(
             input_dim=config.max_position_embeddings,
             output_dim=config.hidden_size,
@@ -110,24 +112,32 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             embeddings_initializer=get_initializer(initializer_range=config.initializer_range),
             name="token_type_embeddings",
         )
-        self.word_embeddings = tf.keras.layers.Embedding(
-            input_dim=config.vocab_size,
-            output_dim=config.hidden_size,
-            embeddings_initializer=get_initializer(initializer_range=config.initializer_range),
-            name="word_embeddings",
-        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+    
+    def build(self, input_shape):
+        """Build shared word embedding layer """
+        with tf.name_scope("word_embeddings"):
+            # Create and initialize weights. The random normal initializer was chosen
+            # arbitrarily, and works well.
+            self.word_embeddings = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.hidden_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        super().build(input_shape)
 
     def call(
         self,
         input_ids=None,
-        token_type_ids=None,
         position_ids=None,
+        token_type_ids=None,
         inputs_embeds=None,
+        mode="embedding",
         training=False,
     ):
         """
@@ -148,12 +158,21 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
+        if mode == "embedding":
+            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
+        elif mode == "linear":
+            return self._linear(input_ids)
+        else:
+            raise ValueError("mode {} is not valid.".format(mode))
+
+    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
+        """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            input_shape = shape_list(tensor=input_ids)
+            input_shape = shape_list(input_ids)
         else:
-            input_shape = shape_list(tensor=inputs_embeds)[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
 
         seq_length = input_shape[1]
 
@@ -161,16 +180,16 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
 
         if token_type_ids is None:
-            token_type_ids = tf.zeros(shape=input_shape)
+            token_type_ids = tf.fill(input_shape, 0)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(inputs=input_ids)
+            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
 
         position_embeddings = tf.cast(self.position_embeddings(position_ids), inputs_embeds.dtype)
         token_type_embeddings = tf.cast(self.token_type_embeddings(token_type_ids), inputs_embeds.dtype)
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(inputs=embeddings)
-        embeddings = self.dropout(inputs=embeddings, training=training)
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings, training=training)
 
         return embeddings
 
@@ -502,33 +521,34 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
 
 
 class TFBertLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
         self.transform = TFBertPredictionHeadTransform(config=config, name="transform")
-        self.decoder = tf.keras.layers.Dense(
-            config.vocab_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            use_bias=False,
-            name="decoder",
-        )
+        
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
+        super().build(input_shape)
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states=hidden_states)
-        hidden_states = self.decoder(hidden_states)
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = hidden_states + self.bias
 
         return hidden_states
 
 
 class TFBertOnlyMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
-        self.predictions = TFBertLMPredictionHead(config=config, name="predictions")
+        self.predictions = TFBertLMPredictionHead(config=config, input_embeddings=input_embeddings, name="predictions")
 
     def call(self, sequence_output):
         prediction_scores = self.predictions(hidden_states=sequence_output)
@@ -553,10 +573,10 @@ class TFBertOnlyNSPHead(tf.keras.layers.Layer):
 
 
 class TFBertPreTrainingHeads(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
-        self.predictions = TFBertLMPredictionHead(config=config, name="predictions")
+        self.predictions = TFBertLMPredictionHead(config=config, input_embeddings=input_embeddings, name="predictions")
         self.seq_relationship = tf.keras.layers.Dense(
             units=2,
             kernel_initializer=get_initializer(initializer_range=config.initializer_range),
@@ -591,7 +611,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.weights[0].shape[0]
+        self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -944,7 +964,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, name="bert")
-        self.cls = TFBertPreTrainingHeads(config=config, name="cls")
+        self.cls = TFBertPreTrainingHeads(config=config, input_embeddings=self.bert.embeddings, name="cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -1059,7 +1079,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
-        self.cls = TFBertOnlyMLMHead(config=config, name="cls")
+        self.cls = TFBertOnlyMLMHead(config=config, input_embeddings=self.bert.embeddings, name="cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -1171,7 +1191,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
-        self.cls = TFBertOnlyMLMHead(config=config, name="cls")
+        self.cls = TFBertOnlyMLMHead(config=config, input_embeddings=self.bert.embeddings, name="cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
