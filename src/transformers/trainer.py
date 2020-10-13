@@ -101,11 +101,6 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
-if version.parse(torch.__version__) < version.parse("1.2"):
-    _use_ddp_no_sync = False
-else:
-    _use_ddp_no_sync = True
-
 if is_datasets_available():
     import datasets
 
@@ -692,11 +687,7 @@ class Trainer:
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
-                if (
-                    ((step + 1) % self.args.gradient_accumulation_steps != 0)
-                    and self.args.local_rank != -1
-                    and _use_ddp_no_sync
-                ):
+                if ((step + 1) % self.args.gradient_accumulation_steps != 0) and self.args.local_rank != -1:
                     with model.no_sync():
                         tr_loss += self.training_step(model, inputs)
                 else:
