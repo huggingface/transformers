@@ -49,7 +49,7 @@ if is_torch_available():
                 return input_ids
 
 
-if __name__ == "__main__":
+def main():
     parser = HfArgumentParser((TrainingArguments,))
     sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
@@ -108,3 +108,12 @@ if __name__ == "__main__":
         trainer.args.eval_accumulation_steps = None
 
     logger.info("🔥 All distributed tests successful")
+
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
+
+
+if __name__ == "__main__":
+    main()
