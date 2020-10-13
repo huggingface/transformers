@@ -126,7 +126,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
     ):
         model = TF{{cookiecutter.camelcase_modelname}}Model(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        sequence_output, pooled_output = model(inputs)
+        sequence_output = model(inputs)[0]
 
         inputs = [input_ids, input_mask]
         result = model(inputs)
@@ -134,7 +134,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_{{cookiecutter.lowercase_modelname}}_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

@@ -48,6 +48,7 @@ from .modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    TFSequenceSummary,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -497,7 +498,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.embeddings = TF{{cookiecutter.camelcase_modelname}}Embeddings(config, name="embeddings")
         self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, name="encoder")
-        self.pooler = TF{{cookiecutter.camelcase_modelname}}Pooler(config, name="pooler")
+        self.config = config
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -609,17 +610,14 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
             return (
                 sequence_output,
-                pooled_output,
             ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -739,7 +737,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
     @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -751,9 +749,6 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
 
 @add_start_docstrings("""{{cookiecutter.camelcase_modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
 class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -773,7 +768,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
     @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -825,7 +820,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
@@ -836,42 +831,66 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
         )
 
 
+class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.Layer):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
+        )
+
+        self.config = config
+
+    def call(self, inputs, **kwargs):
+        x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = get_tf_activation(self.config.hidden_act)(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+
+        return x
+
+
 @add_start_docstrings(
-    """{{cookiecutter.camelcase_modelname}} Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """{{cookiecutter.uppercase_modelname}} Model transformer with a sequence classification/regression head on top 
+    e.g., for GLUE tasks. """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-
         self.num_labels = config.num_labels
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
-        )
+        self.classifier = TF{{cookiecutter.camelcase_modelname}}ClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        inputs=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+            self,
+            inputs,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
+            labels=None,
+            training=False,
+            **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -880,10 +899,17 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.config.return_dict
+
+        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
+            warnings.warn(
+                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
+            )
+            inputs = kwargs["input_ids"]
 
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
+
             if len(inputs) > 9:
                 inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
@@ -901,14 +927,12 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
             return_dict=return_dict,
             training=training,
         )
-
-        pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=training)
-        logits = self.classifier(pooled_output)
+        logits = self.classifier(outputs[0])
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
@@ -920,7 +944,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
 
 
 @add_start_docstrings(
-    """{{cookiecutter.camelcase_modelname}} Model with a multiple choice classification head on top (a linear layer on top of
+    """{{cookiecutter.uppercase_modelname}} Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
@@ -929,7 +953,9 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         super().__init__(config, *inputs, **kwargs)
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.sequence_summary = TFSequenceSummary(
+            config, initializer_range=config.initializer_range, name="sequence_summary"
+        )
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -946,7 +972,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
     @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -997,7 +1023,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         else:
             input_ids = inputs
 
-        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.config.return_dict
 
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -1027,14 +1053,14 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
             return_dict=return_dict,
             training=training,
         )
-        pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=training)
-        logits = self.classifier(pooled_output)
+        logits = self.sequence_summary(outputs[0])
+        logits = self.classifier(logits)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
+            output = (reshaped_logits,) + outputs[1:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
@@ -1044,16 +1070,12 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
             attentions=outputs.attentions,
         )
 
-
 @add_start_docstrings(
     """{{cookiecutter.camelcase_modelname}} Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFTokenClassificationLoss):
-
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1068,7 +1090,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
     @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1118,7 +1140,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
@@ -1130,14 +1152,11 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
 
 
 @add_start_docstrings(
-    """{{cookiecutter.camelcase_modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    """{{cookiecutter.modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFQuestionAnsweringLoss):
-
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1151,7 +1170,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
     @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1216,7 +1235,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
+            output = (start_logits, end_logits) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(

@@ -48,6 +48,7 @@ from .modeling_outputs import (
 )
 from .modeling_utils import (
     PreTrainedModel,
+    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -480,21 +481,6 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         )
 
 
-class {{cookiecutter.camelcase_modelname}}Pooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
 class {{cookiecutter.camelcase_modelname}}PredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -542,28 +528,6 @@ class {{cookiecutter.camelcase_modelname}}OnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-class {{cookiecutter.camelcase_modelname}}OnlyNSPHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, pooled_output):
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return seq_relationship_score
-
-
-class {{cookiecutter.camelcase_modelname}}PreTrainingHeads(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = {{cookiecutter.camelcase_modelname}}LMPredictionHead(config)
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, sequence_output, pooled_output):
-        prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
-
-
 class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
@@ -587,7 +551,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-{{cookiecutter.camelcase_modelname}}_START_DOCSTRING = r"""
+{{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -598,7 +562,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-{{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING = r"""
+{{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -645,7 +609,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
 
 @add_start_docstrings(
     "The bare {{cookiecutter.camelcase_modelname}} Model transformer outputting raw hidden-states without any specific head on top.",
-    {{cookiecutter.camelcase_modelname}}_START_DOCSTRING,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     """
@@ -672,7 +636,6 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
 
         self.embeddings = {{cookiecutter.camelcase_modelname}}Embeddings(config)
         self.encoder = {{cookiecutter.camelcase_modelname}}Encoder(config)
-        self.pooler = {{cookiecutter.camelcase_modelname}}Pooler(config)
 
         self.init_weights()
 
@@ -690,7 +653,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -779,20 +742,18 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
-@add_start_docstrings("""{{cookiecutter.camelcase_modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.camelcase_modelname}}_START_DOCSTRING)
+@add_start_docstrings("""{{cookiecutter.camelcase_modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
 class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -811,7 +772,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    @add_start_docstrings_to_callable({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -877,7 +838,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
@@ -902,42 +863,60 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
+class {{cookiecutter.camelcase_modelname}}ClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.config = config
+
+    def forward(self, features, **kwargs):
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = ACT2FN[self.config.hidden_act](x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
 
 @add_start_docstrings(
     """{{cookiecutter.camelcase_modelname}} Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    {{cookiecutter.camelcase_modelname}}_START_DOCSTRING,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = {{cookiecutter.camelcase_modelname}}ClassificationHead(config)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -960,10 +939,8 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
 
         loss = None
         if labels is not None:
@@ -976,7 +953,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -986,47 +963,46 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
             attentions=outputs.attentions,
         )
 
-
 @add_start_docstrings(
-    """{{cookiecutter.camelcase_modelname}} Model with a multiple choice classification head on top (a linear layer on top of
+    """{{cookiecutter.uppercase_modelname}} Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    {{cookiecutter.camelcase_modelname}}_START_DOCSTRING,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
+        checkpoint="google/{{cookiecutter.lowercase_modelname}}-small-discriminator",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1053,9 +1029,9 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
+        sequence_output = outputs[0]
 
-        pooled_output = self.dropout(pooled_output)
+        pooled_output = self.sequence_summary(sequence_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -1065,7 +1041,7 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
+            output = (reshaped_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -1079,7 +1055,7 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
 @add_start_docstrings(
     """{{cookiecutter.camelcase_modelname}} Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    {{cookiecutter.camelcase_modelname}}_START_DOCSTRING,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
@@ -1092,7 +1068,7 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -1151,7 +1127,7 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -1165,7 +1141,7 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
 @add_start_docstrings(
     """{{cookiecutter.camelcase_modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
-    {{cookiecutter.camelcase_modelname}}_START_DOCSTRING,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
@@ -1177,7 +1153,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.camelcase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -1247,7 +1223,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
+            output = (start_logits, end_logits) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
