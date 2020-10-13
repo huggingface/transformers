@@ -180,8 +180,7 @@ class RagRetrieverTest(TestCase):
             question_encoder=DPRConfig().to_dict(),
             generator=BartConfig().to_dict(),
             index_name="legacy",
-            index_path=self.tmpdirname,
-            passages_path=self.tmpdirname,
+            index_path=self.tmpdirname
         )
         retriever = RagRetriever(
             config, question_encoder_tokenizer=self.get_dpr_tokenizer(), generator_tokenizer=self.get_bart_tokenizer()
