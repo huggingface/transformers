@@ -297,7 +297,7 @@ def input_analysis(signature, inputs, **kwargs):
         if name not in list(output.keys()):
             output[name] = kwargs.pop(name, signature[name].default)
 
-    return output
+    return list(dict(sorted(output.items())).values())
 
 
 def old_load_tf_weights(model, resolved_archive_file):
