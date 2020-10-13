@@ -227,6 +227,32 @@ class GPT2Converter(Converter):
         return tokenizer
 
 
+class HerbertConverter(Converter):
+    def converted(self) -> Tokenizer:
+        suffix = "</w>"
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab,
+                merges,
+                dropout=None,
+                unk_token=self.original_tokenizer.unk_token,
+                end_of_word_suffix=suffix,
+            )
+        )
+
+        tokenizer.normalizer = normalizers.BertNormalizer(lowercase=False, strip_accents=False)
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+        tokenizer.decoder = decoders.BPEDecoder(suffix=suffix)
+        tokenizer.post_processor = processors.BertProcessing(
+            sep=("</s>", tokenizer.token_to_id("</s>")), cls=("<s>", tokenizer.token_to_id("<s>")),
+        )
+
+        return tokenizer
+
+
 class RobertaConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -549,6 +575,7 @@ CONVERTERS = {
     "DPRContextEncoderTokenizer": BertConverter,
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
+    "HerbertTokenizer": HerbertConverter,
     "LxmertTokenizer": BertConverter,
     "MBartTokenizer": MBartConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,

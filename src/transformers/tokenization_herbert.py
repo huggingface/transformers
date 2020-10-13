@@ -99,6 +99,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    slow_tokenizer_class = HerbertTokenizer
 
     def __init__(self, vocab_file, merges_file, dropout: Optional[float] = None, **kwargs):
         kwargs["cls_token"] = "<s>"
@@ -108,27 +109,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         kwargs["sep_token"] = "</s>"
 
         super().__init__(
-            tokenizer=self._build_fast_tokenizer(
-                vocab_file=vocab_file, merges_file=merges_file, dropout=dropout, unk_token=kwargs["unk_token"]
-            ),
+            vocab_file,
+            merges_file,
             **kwargs,
         )
-
-    def _build_fast_tokenizer(
-        self, vocab_file: str, merges_file: str, dropout: Optional[float], unk_token: str
-    ) -> CharBPETokenizer:
-        tokenizer = CharBPETokenizer(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            unk_token=unk_token,
-            suffix="</w>",
-            lowercase=False,
-            bert_normalizer=True,
-            split_on_whitespace_only=False,
-            dropout=dropout,
-        )
-        tokenizer._tokenizer.normalizer = BertNormalizer(lowercase=False, strip_accents=False)
-        tokenizer._tokenizer.post_processor = BertProcessing(
-            sep=("</s>", tokenizer.token_to_id("</s>")), cls=("<s>", tokenizer.token_to_id("<s>")),
-        )
-        return tokenizer
