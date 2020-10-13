@@ -1637,9 +1637,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if special_tokens_map_file is not None:
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
-
-            special_tokens_map = convert_added_tokens(special_tokens_map)
             for key, value in special_tokens_map.items():
+                if isinstance(value, dict):
+                    value = AddedToken(**value)
+                elif isinstance(value, list):
+                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
