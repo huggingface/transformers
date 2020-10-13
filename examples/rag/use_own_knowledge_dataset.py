@@ -1,12 +1,12 @@
 import os
 from functools import partial
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import List
-from pathlib import Path
 
+import faiss
 import torch
 from datasets import load_dataset
-import faiss
 
 from transformers import (
     DPRContextEncoder,
