@@ -443,7 +443,8 @@ class ProgressCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, **kwargs):
         if state.is_local_process_zero:
-            self.prediction_bar.close()
+            if self.prediction_bar is not None:
+                self.prediction_bar.close()
             self.prediction_bar = None
 
     def on_log(self, args, state, control, logs=None, **kwargs):

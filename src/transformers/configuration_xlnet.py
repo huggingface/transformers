@@ -204,7 +204,7 @@ class XLNetConfig(PretrainedConfig):
         if mem_len is None or mem_len == 0:
             warnings.warn(
                 "This config doesn't use attention memories, a core feature of XLNet."
-                " Consider setting `men_len` to a non-zero value, for example "
+                " Consider setting `mem_len` to a non-zero value, for example "
                 "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
                 " for accurate training performance as well as an order of magnitude faster inference."
                 " Starting from version 3.5.0, the default parameter will be 1024, following"

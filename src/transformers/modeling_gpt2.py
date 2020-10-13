@@ -429,7 +429,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
@@ -584,7 +584,7 @@ class GPT2Model(GPT2PreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
