@@ -57,7 +57,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_pegasus_large_seq2seq_truncation(self):
-        src_texts = ["This is going to be way too long" * 10000, "short example"]
+        src_texts = ["This is going to be way too long." * 150, "short example"]
         tgt_texts = ["not super long but more than 5 tokens", "tiny"]
         batch = self.pegasus_large_tokenizer.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts, max_target_length=5)
         assert batch.input_ids.shape == (2, 1024)

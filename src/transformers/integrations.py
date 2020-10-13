@@ -197,7 +197,7 @@ class TensorBoardCallback(TrainerCallback):
 
     Args:
         tb_writer (:obj:`SummaryWriter`, `optional`):
-            The writer to use. Will instatiate one if not set.
+            The writer to use. Will instantiate one if not set.
     """
 
     def __init__(self, tb_writer=None):

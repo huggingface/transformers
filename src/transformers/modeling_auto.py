@@ -162,7 +162,7 @@ from .modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
-from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
 from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -394,6 +394,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForSequenceClassification),
         (DebertaConfig, DebertaForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
+        (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
     ]
 )
 
@@ -522,7 +523,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
                 request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
                 messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
