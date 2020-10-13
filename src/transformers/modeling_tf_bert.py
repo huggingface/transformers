@@ -117,7 +117,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         # any TensorFlow checkpoint file
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-    
+
     def build(self, input_shape):
         """Build shared word embedding layer """
         with tf.name_scope("word_embeddings"):
@@ -526,7 +526,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.transform = TFBertPredictionHeadTransform(config=config, name="transform")
-        
+
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
@@ -645,7 +645,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -663,7 +663,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         if not return_dict and not tf.executing_eagerly():
             tf.print(
-                "Since the v4.0 the TensorFlow models will always return a dictionary in graph mode and the `return_dict` parameter is set to True."
+                "Since 🤗 Transformers v4.0, `return_dict=False` is deprecated and cannot be used in graph mode. Setting `return_dict=True`. Use TensorFlow eager mode to enable the `return_dict=False` behavior."
             )
             return_dict = True
 
@@ -920,7 +920,7 @@ class TFBertModel(TFBertPreTrainedModel):
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1016,7 +1016,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFPreTrainingLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1125,7 +1125,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1247,7 +1247,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1346,7 +1346,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1454,7 +1454,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1569,7 +1569,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1700,7 +1700,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1813,7 +1813,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             token_type_ids,
             training,
         ) = input_analysis(
-            inspect.signature(self.call).parameters,
+            self.call,
             inputs=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

@@ -1311,11 +1311,17 @@ class ModelOutput(OrderedDict):
         if name in self.keys() and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
             if is_tf_available() and isinstance(value, tf.Tensor):
+                # only the tensors that have a key name different of `hidden_states` or `attentions`
+                # (names of the keys that can be dropped or not) and that have a tensor with a first
+                # dim other than 0 or None, will be set. Otherwise, will be ignored.
                 if name not in ("hidden_states", "attentions") or (value.shape[0] != 0 and value.shape[0] is not None):
                     super().__setitem__(name, value)
             else:
                 super().__setitem__(name, value)
         if is_tf_available() and isinstance(value, tf.Tensor):
+            # only the tensors that have a key name different of `hidden_states` or `attentions`
+            # (names of the keys that can be dropped or not) and that have a tensor with a first
+            # dim other than 0 or None, will be set. Otherwise, will be ignored.
             if name not in ("hidden_states", "attentions") or (value.shape[0] != 0 and value.shape[0] is not None):
                 super().__setattr__(name, value)
         else:

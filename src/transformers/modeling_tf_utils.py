@@ -15,6 +15,7 @@
 # limitations under the License.
 """TF general model utils."""
 import functools
+import inspect
 import os
 import re
 import warnings
@@ -272,8 +273,8 @@ class TFPreTrainingLoss:
         return masked_lm_loss + next_sentence_loss
 
 
-def input_analysis(signature, inputs, **kwargs):
-    parameter_names = list(signature.keys())
+def input_analysis(func, inputs, **kwargs):
+    parameter_names = list(inspect.signature(func).parameters.keys())
     output = {}
 
     if isinstance(inputs, (tuple, list)):
@@ -383,11 +384,7 @@ def load_tf_weights(model, resolved_archive_file):
                 saved_weight_names_values = {}
 
                 for weight_name in saved_weight_names:
-                    name = (
-                        "/".join(weight_name.split("/")[1:])
-                        .replace("nsp___", "")
-                        .replace("mlm___", "")
-                    )
+                    name = "/".join(weight_name.split("/")[1:]).replace("nsp___", "").replace("mlm___", "")
                     saved_weight_names_values[name] = np.asarray(g[weight_name])
 
                     saved_weight_names_set.add(name)
