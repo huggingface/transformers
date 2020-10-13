@@ -5,10 +5,16 @@ from typing import List
 from pathlib import Path
 
 import torch
-from datasets import Dataset, load_dataset, load_from_disk
+from datasets import load_dataset
 import faiss
 
-from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast, RagRetriever, RagSequenceForGeneration, RagTokenizer
+from transformers import (
+    DPRContextEncoder,
+    DPRContextEncoderTokenizerFast,
+    RagRetriever,
+    RagSequenceForGeneration,
+    RagTokenizer,
+)
 
 
 torch.set_grad_enabled(False)
@@ -18,7 +24,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def split_text(text: str, n=100, character=" ") -> List[str]:
     """Split the text every ``n``-th occurence of ``character``"""
     text = text.split(character)
-    return [character.join(text[i:i + n]).strip() for i in range(0, len(text), n)]
+    return [character.join(text[i : i + n]).strip() for i in range(0, len(text), n)]
 
 
 def split_documents(documents: dict) -> dict:
@@ -32,43 +38,55 @@ def split_documents(documents: dict) -> dict:
 
 
 def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast) -> dict:
-    input_ids = ctx_tokenizer(documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt")["input_ids"]
+    """Compute the DPR embeddings of document passages"""
+    input_ids = ctx_tokenizer(
+        documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt"
+    )["input_ids"]
     embeddings = ctx_encoder(input_ids.to(device=device), return_dict=True).pooler_output
     return {"embeddings": embeddings.detach().cpu().numpy()}
 
 
-def main(tmp_dir: str):
+def main(
+    tmp_dir: str,
+    num_proc=2,
+    batch_size=16,
+    rag_model_name="facebook/rag-sequence-nq",
+    dpr_ctx_encoder_model_name="facebook/dpr-ctx_encoder-single-nq-base",
+):
 
-    ##############################
-    # Step 1 - Create your dataset
-    ##############################
+    ######################################
+    print("Step 1 - Create the dataset")
+    ######################################
 
     # The dataset needed for RAG must have three columns:
     # - title (string): title of the document
     # - text (string): text of a passage of the document
     # - embeddings (array of dimension d): DPR representation of the passage
 
-    # Let's say you have three documents in a tab-separated csv file with  columns "title" and "text"
+    # Let's say you have documents in tab-separated csv files with columns "title" and "text"
     csv_path = str(Path(__file__).parent / "test_data" / "my_knowledge_dataset.csv")
 
     # You can load a Dataset object this way
     dataset = load_dataset("csv", data_files=[csv_path], split="train", delimiter="\t", column_names=["title", "text"])
 
     # Then split the documents into passages of 100 words
-    dataset = dataset.map(split_documents, batched=True)
+    dataset = dataset.map(split_documents, batched=True, num_proc=num_proc)
 
     # And compute the embeddings
-    ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base").to(device=device)
-    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
-    dataset = dataset.map(partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer), batched=True, batch_size=16)
+    # TODO(QL): Use the DPR context encoder trained on the multiset/hybrid dataset instead of single NQ
+    ctx_encoder = DPRContextEncoder.from_pretrained(dpr_ctx_encoder_model_name).to(device=device)
+    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(dpr_ctx_encoder_model_name)
+    dataset = dataset.map(
+        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer), batched=True, batch_size=batch_size
+    )
 
     # And finally save your dataset
     dataset_path = os.path.join(tmp_dir, "my_knowledge_dataset")
     dataset.save_to_disk(dataset_path)
 
-    ##############################
-    # Step 2 - Index your dataset
-    ##############################
+    ######################################
+    print("Step 2 - Index the dataset")
+    ######################################
 
     # Let's use the Faiss implementation of HNSW for fast approximate nearest neighbor search
     d = 768  # vectors dimension
@@ -80,24 +98,26 @@ def main(tmp_dir: str):
     index_path = os.path.join(tmp_dir, "my_knowledge_dataset_hnsw_index.faiss")
     dataset.get_index("embeddings").save(index_path)
 
-    ##############################
-    # Step 3 - Load RAG
-    ##############################
+    ######################################
+    print("Step 3 - Load RAG")
+    ######################################
 
-    retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="custom", dataset=dataset_path, index_path=index_path)
-    model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
-    tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
+    retriever = RagRetriever.from_pretrained(
+        rag_model_name, index_name="custom", dataset=dataset_path, index_path=index_path
+    )
+    model = RagSequenceForGeneration.from_pretrained(rag_model_name, retriever=retriever)
+    tokenizer = RagTokenizer.from_pretrained(rag_model_name)
 
-    ##############################
-    # Step 4 - Have fun
-    ##############################
+    ######################################
+    print("Step 4 - Have fun")
+    ######################################
 
-    question = "Who confronted the Egyptian king ?"
-    input_ids = tokenizer.quesion_encoder(question, return_tensors="pt")["input_ids"]
+    question = "What does Moses' rod turn into ?"
+    input_ids = tokenizer.question_encoder(question, return_tensors="pt")["input_ids"]
     generated = model.generate(input_ids)
-    generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
-    print(question)
-    print(">>>", generated_string)
+    generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
+    print("Q:", question)
+    print("A:", generated_string)
 
 
 if __name__ == "__main__":
