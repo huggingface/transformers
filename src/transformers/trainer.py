@@ -895,7 +895,7 @@ class Trainer:
                 - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
-            :class:`transformers.trainer_utils.BestRun`: All the informations about the best run.
+            :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
         """
         if backend is None:
             backend = default_hp_search_backend()

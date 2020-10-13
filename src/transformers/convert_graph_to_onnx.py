@@ -211,7 +211,7 @@ def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokeniz
         pipeline_name: The kind of pipeline to use (ner, question-answering, etc.)
         framework: The actual model to convert the pipeline from ("pt" or "tf")
         model: The model name which will be loaded by the pipeline
-        tokenizer: The tokenizer name which will be loaded by the pipeline, defaut to the model's value
+        tokenizer: The tokenizer name which will be loaded by the pipeline, default to the model's value
 
     Returns: Pipeline object
 

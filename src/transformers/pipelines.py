@@ -1766,7 +1766,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probalities for each span to be
+        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be
         the actual answer.
 
         In addition, it filters out some unwanted/impossible cases like answer len being greater than
@@ -1807,7 +1807,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
         """
-        When decoding from token probalities, this method maps token indexes to actual word in
+        When decoding from token probabilities, this method maps token indexes to actual word in
         the initial context.
 
         Args:
