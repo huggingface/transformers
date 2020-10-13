@@ -764,7 +764,8 @@ class T5Stack(T5PreTrainedModel):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                    #create_custom_forward(layer_module),
+                    layer_module,
                     hidden_states,
                     attention_mask=extended_attention_mask,
                     position_bias=position_bias,
