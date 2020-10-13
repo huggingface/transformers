@@ -55,10 +55,10 @@ def main():
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        "Process rank: %s, device: %s, num_tpu_cores: %s",
+        "Process rank: %s, device: %s, tpu_num_cores: %s",
         training_args.local_rank,
         training_args.device,
-        training_args.num_tpu_cores,
+        training_args.tpu_num_cores,
     )
 
     # Essentially, what we want to verify in the distributed case is
