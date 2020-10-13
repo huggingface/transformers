@@ -608,10 +608,8 @@ class Trainer:
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-    def call_model_init(self, trial = None):
-        import six
-
-        model_init_argcount = six.get_function_code(self.model_init).co_argcount
+    def call_model_init(self, trial=None):
+        model_init_argcount = len(inspect.signature(self.model_init).parameters)
         if model_init_argcount == 0:
             model = self.model_init()
         elif model_init_argcount == 1:
