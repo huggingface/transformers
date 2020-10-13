@@ -982,7 +982,7 @@ class TextClassificationPipeline(Pipeline):
         outputs = super().__call__(*args, **kwargs)
 
         if self.model.config.num_labels == 1:
-            scores = 1 / (1 + np.exp(-outputs))
+            scores = 1.0 / (1.0 + np.exp(-outputs))
         else:
             scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         if self.return_all_scores:
