@@ -723,7 +723,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
-        if getattr(self.config, "xla_device", False):
+        if getattr(self.config, "xla_device", False) and is_torch_tpu_available():
             import torch_xla.core.xla_model as xm
 
             if xm.is_master_ordinal():
@@ -809,7 +809,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
                 request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
                 messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).

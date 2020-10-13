@@ -3,7 +3,10 @@ Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/m
 
 To create the package for pypi.
 
-1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
+1. Change the version in __init__.py, setup.py as well as docs/source/conf.py. Remove the master from the links in
+   the new models of the README:
+   (https://huggingface.co/transformers/master/model_doc/ -> https://huggingface.co/transformers/model_doc/)
+   then run `make fix-copies` to fix the index of the documentation.
 
 2. Unpin specific versions from setup.py that use a git install.
 
@@ -131,9 +134,7 @@ setup(
         "sacremoses",
     ],
     extras_require=extras,
-    entry_points={
-        "console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]
-    },
+    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",

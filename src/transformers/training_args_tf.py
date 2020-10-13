@@ -66,7 +66,7 @@ class TFTrainingArguments(TrainingArguments):
         logging_dir (:obj:`str`, `optional`):
             Tensorboard log directory. Will default to `runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter to log and evalulate the first :obj:`global_step` or not.
+            Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
             Number of update steps between two logs.
         save_steps (:obj:`int`, `optional`, defaults to 500):
@@ -86,7 +86,7 @@ class TFTrainingArguments(TrainingArguments):
         local_rank (:obj:`int`, `optional`, defaults to -1):
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
-            When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
+            When training on TPU, the number of TPU cores (automatically passed by launcher script).
         debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to activate the trace to record computation graphs and profiling information or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):

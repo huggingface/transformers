@@ -24,6 +24,7 @@ import tempfile
 # python utils/check_copies.py
 TRANSFORMERS_PATH = "src/transformers"
 PATH_TO_DOCS = "docs/source"
+REPO_PATH = "."
 
 
 def find_code_in_transformers(object_name):
@@ -175,7 +176,7 @@ def get_model_list():
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
-    with open(os.path.join("README.md"), "r", encoding="utf-8") as f:
+    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8") as f:
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
@@ -219,7 +220,17 @@ def split_long_line_with_indent(line, max_per_line, indent):
 def convert_to_rst(model_list, max_per_line=None):
     """ Convert `model_list` to rst format. """
     # Convert **[description](link)** to `description <link>`__
-    model_list = re.sub(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*", r"`\1 <\2>`__", model_list)
+    def _rep_link(match):
+        title, link = match.groups()
+        # Keep hard links for the models not released yet
+        if "master" in link or not link.startswith("https://huggingface.co/transformers"):
+            return f"`{title} <{link}>`__"
+        # Convert links to relative links otherwise
+        else:
+            link = link[len("https://huggingface.co/transformers/") : -len(".html")]
+            return f":doc:`{title} <{link}>`"
+
+    model_list = re.sub(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*", _rep_link, model_list)
 
     # Convert [description](link) to `description <link>`__
     model_list = re.sub(r"\[([^\]]*)\]\(([^\)]*)\)", r"`\1 <\2>`__", model_list)

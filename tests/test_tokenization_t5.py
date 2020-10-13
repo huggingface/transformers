@@ -14,19 +14,18 @@
 # limitations under the License.
 
 
-import os
 import unittest
 
 from transformers import BatchEncoding
 from transformers.file_utils import cached_property
-from transformers.testing_utils import _torch_available
+from transformers.testing_utils import _torch_available, get_tests_dir
 from transformers.tokenization_t5 import T5Tokenizer, T5TokenizerFast
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 FRAMEWORK = "pt" if _torch_available else "tf"
 

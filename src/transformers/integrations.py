@@ -2,13 +2,11 @@
 import math
 import os
 
-from .file_utils import is_torch_tpu_available
-from .trainer_callback import TrainerCallback
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
 
+# Import 3rd-party integrations first:
 
 try:
+    # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
     _has_comet = True
@@ -52,6 +50,14 @@ except ImportError:
         _has_tensorboard = True
     except ImportError:
         _has_tensorboard = False
+
+# No transformer imports above this point
+
+from .file_utils import is_torch_tpu_available
+from .trainer_callback import TrainerCallback
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
+from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -191,7 +197,7 @@ class TensorBoardCallback(TrainerCallback):
 
     Args:
         tb_writer (:obj:`SummaryWriter`, `optional`):
-            The writer to use. Will instatiate one if not set.
+            The writer to use. Will instantiate one if not set.
     """
 
     def __init__(self, tb_writer=None):

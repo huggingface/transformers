@@ -398,6 +398,7 @@ class BasicTokenizer(object):
         """
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        text = self._clean_text(text)
 
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
