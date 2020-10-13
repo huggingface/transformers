@@ -943,6 +943,9 @@ class TextClassificationPipeline(Pipeline):
     task identifier: :obj:`"sentiment-analysis"` (for classifying sequences according to positive or negative
     sentiments).
 
+    If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run
+    a softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
+
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task.
     See the up-to-date list of available models on
     `huggingface.co/models <https://huggingface.co/models?filter=text-classification>`__.
@@ -977,7 +980,11 @@ class TextClassificationPipeline(Pipeline):
             If ``self.return_all_scores=True``, one such dictionary is returned per label.
         """
         outputs = super().__call__(*args, **kwargs)
-        scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+
+        if self.model.config.num_labels == 1:
+            scores = 1.0 / (1.0 + np.exp(-outputs))
+        else:
+            scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         if self.return_all_scores:
             return [
                 [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
