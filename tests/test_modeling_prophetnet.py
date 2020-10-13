@@ -51,12 +51,13 @@ class ProphetNetModelTester:
         decoder_ffn_dim=32,
         num_decoder_layers=4,
         num_decoder_attention_heads=4,
-        max_position_embeddings=30,
+        decoder_max_position_embeddings=30,
+        encoder_max_position_embeddings=30,
         is_encoder_decoder=True,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        ngram=1,
+        ngram=2,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -91,11 +92,15 @@ class ProphetNetModelTester:
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
         self.disable_ngram_loss = disable_ngram_loss
-        self.max_position_embeddings = max_position_embeddings
+        self.encoder_max_position_embeddings = encoder_max_position_embeddings
+        self.decoder_max_position_embeddings = decoder_max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
 
         self.scope = None
-        self.decoder_key_length = 2 * decoder_seq_length
+        self.decoder_key_length = decoder_seq_length
+        self.base_model_out_len = 7
+        self.num_hidden_states_types = 3  # encoder, decoder_main, decoder_ngram
+        self.decoder_attention_idx = 2
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -128,7 +133,8 @@ class ProphetNetModelTester:
             num_buckets=self.num_buckets,
             relative_max_distance=self.relative_max_distance,
             disable_ngram_loss=self.disable_ngram_loss,
-            max_position_embeddings=self.max_position_embeddings,
+            decoder_max_position_embeddings=self.decoder_max_position_embeddings,
+            encoder_max_position_embeddings=self.encoder_max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
             return_dict=True,
         )
@@ -249,7 +255,7 @@ class ProphetNetModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        past_key_values = outputs["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -288,7 +294,7 @@ class ProphetNetModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -454,11 +460,10 @@ class ProphetNetModelTester:
                 labels=lm_labels,
                 return_dict=True,
             )
-
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.234, device=torch_device), atol=1e-3))
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.2925, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
-            [-0.0544, 0.0091, -0.0378, -0.1237, -0.0582, -0.0591, 0.0049], device=torch_device
+            [-0.1565, 0.0418, 0.1207, 0.0030, 0.0665, 0.0467, 0.0412], device=torch_device
         )
         self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
@@ -533,7 +538,7 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased")
+        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased")
         model.to(torch_device)
 
         # encoder-decoder outputs
@@ -580,14 +585,15 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
             attention_mask=None,
             encoder_outputs=None,
             decoder_input_ids=decoder_prev_ids,
+            return_dict=True,
         )
-        output_predited_logis = output[0]
+        output_predited_logits = output[0]
         expected_shape = torch.Size((1, 12, 30522))
-        self.assertEqual(output_predited_logis.shape, expected_shape)
+        self.assertEqual(output_predited_logits.shape, expected_shape)
         expected_slice = torch.tensor(
             [[[-7.6213, -7.9008, -7.9979], [-7.6834, -7.8467, -8.2187], [-7.5326, -7.4762, -8.1914]]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4))
 
         # encoder outputs
         encoder_outputs = model.prophetnet.encoder(encoder_ids)[0]
@@ -599,18 +605,21 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
 
         # decoder outputs
-        decoder_outputs = model.prophetnet.decoder(decoder_prev_ids, encoder_hidden_states=encoder_outputs)
-        predicting_streams = decoder_outputs[0].view(1, model.config.ngram + 1, 12, -1)[:, 1:]
+        decoder_outputs = model.prophetnet.decoder(
+            decoder_prev_ids, encoder_hidden_states=encoder_outputs, return_dict=True
+        )
+        predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 12, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
         self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_cnndm_inference(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
+        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
+        model.config.max_length = 512
         model.to(torch_device)
 
-        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
+        tokenizer = ProphetNetTokenizer.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
 
         ARTICLE_TO_SUMMARIZE = "USTC was founded in Beijing by the Chinese Academy of Sciences (CAS) in September 1958. The Director of CAS, Mr. Guo Moruo was appointed the first president of USTC. USTC's founding mission was to develop a high-level science and technology workforce, as deemed critical for development of China's economy, defense, and science and technology education. The establishment was hailed as \"A Major Event in the History of Chinese Education and Science.\" CAS has supported USTC by combining most of its institutes with the departments of the university. USTC is listed in the top 16 national key universities, becoming the youngest national key university.".lower()
         input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=511, return_tensors="pt").input_ids

@@ -109,7 +109,8 @@ class ProphetNetConfig(PretrainedConfig):
         num_decoder_attention_heads=16,
         attention_dropout=0.1,
         dropout=0.1,
-        max_position_embeddings=512,
+        encoder_max_position_embeddings=512,
+        decoder_max_position_embeddings=512,
         init_std=0.02,
         is_encoder_decoder=True,
         pad_token_id=0,
@@ -139,7 +140,8 @@ class ProphetNetConfig(PretrainedConfig):
         self.decoder_ffn_dim = decoder_ffn_dim
         self.num_decoder_layers = num_decoder_layers
         self.num_decoder_attention_heads = num_decoder_attention_heads
-        self.max_position_embeddings = max_position_embeddings
+        self.encoder_max_position_embeddings = encoder_max_position_embeddings
+        self.decoder_max_position_embeddings = decoder_max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
@@ -154,6 +156,10 @@ class ProphetNetConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.dropout = dropout
+
+    @property
+    def max_position_embeddings(self) -> int:
+        return self.encoder_max_position_embeddings
 
     @property
     def num_attention_heads(self) -> int:

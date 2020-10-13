@@ -33,11 +33,11 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/prophetnet-large-uncased": {"do_lower_case": True, "xprophetnet_tokenizer": False},
+    "microsoft/prophetnet-large-uncased": {"do_lower_case": True},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/prophetnet-large-uncased": 512,
+    "microsoft/prophetnet-large-uncased": 513,
 }
 
 

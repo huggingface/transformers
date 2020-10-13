@@ -35,11 +35,11 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/xprophetnet-large-wiki100-cased": {"do_lower_case": False, "xprophetnet_tokenizer": True},
+    "microsoft/xprophetnet-large-wiki100-cased": {"do_lower_case": False},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/xprophetnet-large-wiki100-cased": 512,
+    "microsoft/xprophetnet-large-wiki100-cased": 513,
 }
 
 
