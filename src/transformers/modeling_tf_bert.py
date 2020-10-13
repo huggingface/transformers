@@ -641,7 +641,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        if not return_dict and tf.executing_eagerly():
+        if not return_dict and not tf.executing_eagerly():
             tf.print(
                 "Since the v4.0 the TensorFlow models will always return a dictionary in graph mode and the `return_dict` parameter is set to True."
             )
