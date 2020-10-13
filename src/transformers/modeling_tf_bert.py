@@ -439,11 +439,13 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
         if tf.executing_eagerly():
             if not return_dict:
-                output = tuple(v for v in [hidden_states, all_hidden_states.stack(), all_attentions.stack()] if v is not None)
+                output = tuple(
+                    v for v in [hidden_states, all_hidden_states.stack(), all_attentions.stack()] if v is not None
+                )
 
                 all_hidden_states.close()
                 all_attentions.close()
-                
+
                 return output
 
         output = TFBaseModelOutput(
