@@ -1308,7 +1308,7 @@ class ModelOutput(OrderedDict):
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
-        if name in self.keys() and value is not None :
+        if name in self.keys() and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
             if is_tf_available and isinstance(value, tf.Tensor):
                 if name not in ("hidden_states", "attentions") or (value.shape[0] != 0 and value.shape[0] is not None):
@@ -1316,8 +1316,8 @@ class ModelOutput(OrderedDict):
             else:
                 super().__setitem__(name, value)
         if is_tf_available and isinstance(value, tf.Tensor):
-                if name not in ("hidden_states", "attentions") or (value.shape[0] != 0 and value.shape[0] is not None):
-                    super().__setattr__(name, value)
+            if name not in ("hidden_states", "attentions") or (value.shape[0] != 0 and value.shape[0] is not None):
+                super().__setattr__(name, value)
         else:
             super().__setattr__(name, value)
 

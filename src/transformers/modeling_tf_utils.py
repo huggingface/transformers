@@ -26,6 +26,8 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
 
+from transformers.tokenization_utils_base import BatchEncoding
+
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
@@ -268,6 +270,34 @@ class TFPreTrainingLoss:
         masked_lm_loss = tf.reduce_mean(masked_lm_loss, 0)
 
         return masked_lm_loss + next_sentence_loss
+
+
+def input_analysis(signature, inputs, **kwargs):
+    parameter_names = list(signature.keys())
+    output = {}
+
+    if isinstance(inputs, (tuple, list)):
+        for i, input in enumerate(inputs):
+            if type(input) == tf.Tensor:
+                if input.name in parameter_names:
+                    output[input.name] = input
+                else:
+                    raise ValueError(
+                        "The tensor named %s does not belong to the authorized list of names %s "
+                        % (input.name, parameter_names)
+                    )
+            else:
+                output[parameter_names[i]] = input
+    elif isinstance(inputs, (dict, BatchEncoding)):
+        output = dict(inputs)
+    else:
+        output[parameter_names[0]] = inputs
+
+    for name in parameter_names:
+        if name not in list(output.keys()):
+            output[name] = kwargs.pop(name, signature[name].default)
+
+    return output
 
 
 def old_load_tf_weights(model, resolved_archive_file):

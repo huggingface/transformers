@@ -502,6 +502,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            print(model_class.__name__)
             model = model_class(config)
             inputs = self._prepare_for_class(inputs_dict, model_class)
 
@@ -716,6 +717,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            print(model_class.__name__)
             model = model_class(config)
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
