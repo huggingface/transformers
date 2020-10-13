@@ -24,7 +24,6 @@ from .test_modeling_bert import BertModelTester
 from .test_modeling_bert_generation import BertGenerationEncoderTester
 from .test_modeling_common import ids_tensor
 from .test_modeling_gpt2 import GPT2ModelTester
-from .test_modeling_prophetnet import ProphetNetModelTester
 from .test_modeling_roberta import RobertaModelTester
 
 
@@ -42,7 +41,6 @@ if is_torch_available():
         EncoderDecoderConfig,
         EncoderDecoderModel,
         GPT2LMHeadModel,
-        ProphetNetForConditionalGeneration,
         RobertaForCausalLM,
         RobertaModel,
     )
