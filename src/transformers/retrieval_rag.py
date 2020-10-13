@@ -320,11 +320,29 @@ class RagRetriever:
     Args:
         config (:class:`~transformers.RagConfig`):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
+            You can load your own custom dataset with ``config.index_name="custom"`` or use a canonical one (default) from the datasets library
+            with ``config.index_name="wiki_dpr"`` for example.
         question_encoder_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer that was used to tokenize the question.
             It is used to decode the question and then use the generator_tokenizer.
         generator_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
+
+    Examples::
+        To load the default "wiki_dpr" dataset with 21M passages from wikipedia (index name is 'compressed' or 'exact')
+        >>> from transformers import RagRetriever
+        >>> retriever = RagRetriever.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', index_name='compressed')
+
+        To load your own indexed dataset built with the datasets library. More info on how to build the indexed dataset in examples/rag/use_own_knowledge_dataset.py
+        >>> from transformers import RagRetriever
+        >>> dataset_path = "path/to/my/dataset"  # dataset saved via `dataset.save_to_disk(...)`
+        >>> index_path = "path/to/my/index.faiss  # faiss index saved via `dataset.get_index("embeddings").save(...)`
+        >>> retriever = RagRetriever.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', index_name='custom', dataset=dataset_path, index_path=index_path)
+
+        To load the legacy index built originally for Rag's paper
+        >>> from transformers import RagRetriever
+        >>> retriever = RagRetriever.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', index_name='legacy')
+
     """
 
     _init_retrieval = True

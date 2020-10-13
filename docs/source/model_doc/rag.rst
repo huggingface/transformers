@@ -62,8 +62,7 @@ Rag specific outputs
 .. autoclass:: transformers.modeling_rag.RetrievAugLMOutput
     :members:
 
-
-RAGRetriever
+RagRetriever
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagRetriever
