@@ -35,6 +35,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    HerbertConfig,
     LayoutLMConfig,
     LongformerConfig,
     LxmertConfig,
@@ -73,6 +74,7 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_herbert import HerbertTokenizer, HerbertTokenizerFast
 from .tokenization_layoutlm import LayoutLMTokenizer, LayoutLMTokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
@@ -106,6 +108,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
         (CamembertConfig, (CamembertTokenizer, CamembertTokenizerFast)),
+        (HerbertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (PegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
         (MBartConfig, (MBartTokenizer, MBartTokenizerFast)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)),
