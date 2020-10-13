@@ -163,11 +163,14 @@ from .modeling_tf_xlnet import (
 from .utils import logging
 
 
+# Add modeling imports here
+
 logger = logging.get_logger(__name__)
 
 
 TF_MODEL_MAPPING = OrderedDict(
     [
+        # Base model mapping
         (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
@@ -192,6 +195,7 @@ TF_MODEL_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        # Model for pre-training mapping
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
@@ -215,6 +219,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        # Model with LM heads mapping
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -240,6 +245,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        # Model for Causal LM mapping
         (BertConfig, TFBertLMHeadModel),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -255,6 +261,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
+        # Model for Masked LM mapping
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
@@ -284,6 +291,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        # Model for Sequence Classification mapping
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
         (CamembertConfig, TFCamembertForSequenceClassification),
@@ -301,6 +309,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
+        # Model for Question Answering mapping
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (AlbertConfig, TFAlbertForQuestionAnswering),
         (CamembertConfig, TFCamembertForQuestionAnswering),
@@ -319,6 +328,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        # Model for Token Classification mapping
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (AlbertConfig, TFAlbertForTokenClassification),
         (CamembertConfig, TFCamembertForTokenClassification),
@@ -336,6 +346,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
+        # Model for Multiple Choice mapping
         (CamembertConfig, TFCamembertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),
         (XLMRobertaConfig, TFXLMRobertaForMultipleChoice),

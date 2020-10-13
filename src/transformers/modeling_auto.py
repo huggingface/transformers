@@ -59,9 +59,6 @@ from .configuration_auto import (
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings
-
-# Add modeling imports here
-
 from .modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -224,6 +221,8 @@ from .modeling_xlnet import (
 )
 from .utils import logging
 
+
+# Add modeling imports here
 
 logger = logging.get_logger(__name__)
 

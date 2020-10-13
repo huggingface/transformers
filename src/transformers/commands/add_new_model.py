@@ -4,8 +4,6 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import List
 
-import torch
-
 from cookiecutter.main import cookiecutter
 from transformers.commands import BaseTransformersCLICommand
 
@@ -59,6 +57,16 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         shutil.move(
             f"{directory}/test_modeling_{lowercase_model_name}.py",
             f"{path_to_transformer_root}/tests/test_modeling_{lowercase_model_name}.py",
+        )
+
+        shutil.move(
+            f"{directory}/modeling_tf_{lowercase_model_name}.py",
+            f"{path_to_transformer_root}/src/transformers/modeling_tf_{lowercase_model_name}.py",
+        )
+
+        shutil.move(
+            f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
+            f"{path_to_transformer_root}/tests/test_modeling_tf_{lowercase_model_name}.py",
         )
 
         from os import fdopen, remove
