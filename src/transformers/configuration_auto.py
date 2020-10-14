@@ -100,6 +100,7 @@ CONFIG_MAPPING = OrderedDict(
         ("albert", AlbertConfig),
         ("bert-generation", BertGenerationConfig),
         ("camembert", CamembertConfig),
+        ("herbert", HerbertConfig),
         ("xlm-roberta", XLMRobertaConfig),
         ("pegasus", PegasusConfig),
         ("marian", MarianConfig),
@@ -127,7 +128,6 @@ CONFIG_MAPPING = OrderedDict(
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
-        ("herbert", HerbertConfig),
     ]
 )
 
