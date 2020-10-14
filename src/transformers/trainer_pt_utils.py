@@ -207,7 +207,7 @@ class DistributedTensorGatherer:
     A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU
     by chunks.
 
-    If our dataset as 15 samples with a batch size of 2 on 3 processes and we gather then transfer on
+    If our dataset has 15 samples with a batch size of 2 on 3 processes and we gather then transfer on
     CPU at every step, our sampler will generate the following indices:
 
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0, 1, 2]
