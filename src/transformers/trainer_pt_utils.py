@@ -207,31 +207,45 @@ class DistributedTensorGatherer:
     A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU
     by chunks.
 
-    If our dataset has 15 samples with a batch size of 2 on 3 processes and we gather then transfer on
+    If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on
     CPU at every step, our sampler will generate the following indices:
 
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0, 1, 2]
+        :obj:`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
 
-    to get something of size a multiple of 2 * 3 = 6 (so that each process gets full batches). Then
+    to get something of size a multiple of 3 (so that each process gets the same dataset length). Then
     process 0, 1 and 2 will be responsible of making predictions for the following samples:
 
-    P0: [0, 1, 2, 3, 4, 5]    P1: [6, 7, 8, 9, 10, 11]    P2: [12, 13, 14, 0, 1, 2]
+        - P0: :obj:`[0, 1, 2, 3, 4, 5]`
+        - P1: :obj:`[6, 7, 8, 9, 10, 11]`
+        - P2: :obj:`[12, 13, 14, 15, 0, 1]`
 
     The first batch treated on each process will be
 
-    P0: [0, 1]    P1: [6, 7]    P2: [12, 13]
+        - P0: :obj:`[0, 1]`
+        - P1: :obj:`[6, 7]`
+        - P2: :obj:`[12, 13]`
 
     So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor)
     corresponding to the following indices:
 
-    [0, 1, 6, 7, 12, 13]
+        :obj:`[0, 1, 6, 7, 12, 13]`
 
     If we directly concatenate our results without taking any precautions, the user will then get
     the predictions for the indices in this order at the end of the prediction loop:
 
-    [0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 0, 4, 5, 10, 11, 1, 2]
+        :obj:`[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
 
     For some reason, that's not going to roll their boat. This class is there to solve that problem.
+
+    Args:
+
+        world_size (:obj:`int`):
+            The number of processes used in the distributed training.
+        num_samples (:obj:`int`):
+            The number of samples in our dataset.
+        make_multiple_of (:obj:`int`, `optional`):
+            If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
+            (by adding samples).
     """
 
     def __init__(self, world_size, num_samples, make_multiple_of=None):
@@ -244,6 +258,10 @@ class DistributedTensorGatherer:
         self._offsets = None
 
     def add_arrays(self, arrays):
+        """
+        Add :obj:`arrays` to the internal storage, Will initialize the storage to the full size at the first arrays
+        passed so that if we're bound to get an OOM, it happens at the beginning.
+        """
         if arrays is None:
             return
         if self._storage is None:
@@ -268,6 +286,10 @@ class DistributedTensorGatherer:
         return slice_len
 
     def finalize(self):
+        """
+        Return the properly gathered arrays and truncate to the number of samples (since the sampler added some extras
+        to get each process a dataset of the same length).
+        """
         if self._storage is None:
             return
         if self._offsets[0] != self.process_length:
