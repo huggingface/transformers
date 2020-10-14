@@ -115,7 +115,7 @@ def causal_attention_mask(nd, ns, dtype):
 
 def invert_mask(attention_mask: tf.Tensor):
     """Turns 1->0, 0->1, False->True, True-> False"""
-    assert attention_mask._rank() == 2
+    tf.debugging.assert_rank(attention_mask, 2)
     attention_mask = tf.cast(attention_mask, tf.bool)
     ret = tf.math.logical_not(attention_mask)
     assert ret.dtype == tf.bool
@@ -902,7 +902,6 @@ class TFBartModel(TFPretrainedBartModel):
         else:
             input_ids = inputs
 
-        # assert decoder_input_ids is not None, "TF Bart requires decoder_input_ids, got None"
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if decoder_input_ids is None:  # Classification
             use_cache = False
@@ -1008,6 +1007,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         **kwargs,
     ):
         """
+
         Examples::
 
             # Mask filling only works for bart-large
@@ -1086,54 +1086,29 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         past = outputs.past_key_values if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
-        if not return_dict:
+
+        if return_dict:
+            return TFSeq2SeqLMOutput(
+                loss=loss,
+                logits=logits,
+                past_key_values=past,  # index 1 of d outputs
+                decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
+                decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
+                encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
+                encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
+                encoder_attentions=outputs.encoder_attentions,  # 2 of e out
+            )
+        else:
             if past is not None:
                 decoder_outputs = (past,)
             else:
                 decoder_outputs = tuple(
                     [x for x in (outputs.decoder_hidden_states, outputs.decoder_attentions) if x is not None]
                 )
-            encoder_outputs = tuple(
-                [
-                    x
-                    for x in (
-                        outputs.encoder_last_hidden_state,
-                        outputs.encoder_hidden_states,
-                        outputs.encoder_attentions,
-                    )
-                    if x is not None
-                ]
-            )
-            output = (logits,) + decoder_outputs + encoder_outputs
+            enc_out = (outputs.encoder_last_hidden_state, outputs.encoder_hidden_states, outputs.encoder_attentions)
+            encoder_outputs = tuple(x for x in enc_out if x is not None)
+            output: Tuple = (logits,) + decoder_outputs + encoder_outputs
             return ((loss,) + output) if loss is not None else output
-
-        # Putting this before breaks tf compilation.
-        # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        # output_hidden_states = (
-        #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        # )
-        #
-        # # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
-        # # TF refuses to compile anymore.
-        # if not cast_bool_to_primitive(use_cache, self.config.use_cache):
-        #     decoder_outputs = decoder_outputs[:1] + (None,) + decoder_outputs[1:]
-        # if not cast_bool_to_primitive(output_hidden_states, self.config.output_hidden_states):
-        #     encoder_outputs = encoder_outputs[:1] + (None,) + encoder_outputs[1:]
-        #     decoder_outputs = decoder_outputs[:2] + (None,) + decoder_outputs[2:]
-        # if not cast_bool_to_primitive(output_attentions, self.config.output_attentions):
-        #     encoder_outputs = encoder_outputs + (None,)
-        #     decoder_outputs = decoder_outputs + (None,)
-
-        return TFSeq2SeqLMOutput(
-            loss=loss,
-            logits=logits,
-            past_key_values=past,  # index 1 of d outputs
-            decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
-            decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
-            encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
-            encoder_attentions=outputs.encoder_attentions,  # 2 of e out
-        )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
@@ -1166,8 +1141,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     def _reorder_cache(past, beam_idx):
         assert len(past) == 2
         (encoder_out, decoder_cached_states) = past
-        # enc_out, enc_mask = encoder_out
-
         reordered_past = []
         for layer_past in decoder_cached_states:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
@@ -1176,8 +1149,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             reordered_past.append(layer_past_new)
-        # new_enc_out = enc_out if enc_out is None else tf.gather(enc_out[0], beam_idx, axis=0)
-        # new_enc_mask = enc_mask if enc_mask is None else tf.gather(enc_out[1], beam_idx, axis=0)
 
         past = (encoder_out, reordered_past)
         return past
