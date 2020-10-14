@@ -51,7 +51,7 @@ def main(
     num_proc=2,
     batch_size=16,
     rag_model_name="facebook/rag-sequence-nq",
-    dpr_ctx_encoder_model_name="facebook/dpr-ctx_encoder-single-nq-base",
+    dpr_ctx_encoder_model_name="facebook/dpr-ctx_encoder-multiset-base",
 ):
 
     ######################################
@@ -73,7 +73,6 @@ def main(
     dataset = dataset.map(split_documents, batched=True, num_proc=num_proc)
 
     # And compute the embeddings
-    # TODO(QL): Use the DPR context encoder trained on the multiset/hybrid dataset instead of single NQ
     ctx_encoder = DPRContextEncoder.from_pretrained(dpr_ctx_encoder_model_name).to(device=device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(dpr_ctx_encoder_model_name)
     dataset = dataset.map(
@@ -81,8 +80,10 @@ def main(
     )
 
     # And finally save your dataset
-    dataset_path = os.path.join(tmp_dir, "my_knowledge_dataset")
-    dataset.save_to_disk(dataset_path)
+    passages_path = os.path.join(tmp_dir, "my_knowledge_dataset")
+    dataset.save_to_disk(passages_path)
+    # from datasets import load_from_disk
+    # dataset = load_from_disk(passages_path)  # to reload the dataset
 
     ######################################
     print("Step 2 - Index the dataset")
@@ -97,16 +98,19 @@ def main(
     # And save the index
     index_path = os.path.join(tmp_dir, "my_knowledge_dataset_hnsw_index.faiss")
     dataset.get_index("embeddings").save(index_path)
+    # dataset.load_faiss_index("embeddings", index_path)  # to reload the index
 
     ######################################
     print("Step 3 - Load RAG")
     ######################################
 
-    retriever = RagRetriever.from_pretrained(
-        rag_model_name, index_name="custom", dataset=dataset_path, index_path=index_path
-    )
+    # Easy way to load the model
+    retriever = RagRetriever.from_pretrained(rag_model_name, index_name="custom", indexed_dataset=dataset)
     model = RagSequenceForGeneration.from_pretrained(rag_model_name, retriever=retriever)
     tokenizer = RagTokenizer.from_pretrained(rag_model_name)
+
+    # For distributed fine-tuning you'll need to provide the paths instead, as the index needs to be loaded only in one process
+    # retriever = RagRetriever.from_pretrained(rag_model_name, index_name="custom", passages_path=passages_path, index_path=index_path)
 
     ######################################
     print("Step 4 - Have fun")
