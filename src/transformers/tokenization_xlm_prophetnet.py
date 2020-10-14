@@ -39,7 +39,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/xprophetnet-large-wiki100-cased": 513,
+    "microsoft/xprophetnet-large-wiki100-cased": 512,
 }
 
 

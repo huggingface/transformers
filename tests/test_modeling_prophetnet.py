@@ -51,8 +51,7 @@ class ProphetNetModelTester:
         decoder_ffn_dim=32,
         num_decoder_layers=4,
         num_decoder_attention_heads=4,
-        decoder_max_position_embeddings=30,
-        encoder_max_position_embeddings=30,
+        max_position_embeddings=30,
         is_encoder_decoder=True,
         pad_token_id=0,
         bos_token_id=1,
@@ -92,8 +91,7 @@ class ProphetNetModelTester:
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
         self.disable_ngram_loss = disable_ngram_loss
-        self.encoder_max_position_embeddings = encoder_max_position_embeddings
-        self.decoder_max_position_embeddings = decoder_max_position_embeddings
+        self.max_position_embeddings = max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
 
         self.scope = None
@@ -133,8 +131,7 @@ class ProphetNetModelTester:
             num_buckets=self.num_buckets,
             relative_max_distance=self.relative_max_distance,
             disable_ngram_loss=self.disable_ngram_loss,
-            decoder_max_position_embeddings=self.decoder_max_position_embeddings,
-            encoder_max_position_embeddings=self.encoder_max_position_embeddings,
+            max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
             return_dict=True,
         )

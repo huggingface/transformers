@@ -37,7 +37,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/prophetnet-large-uncased": 513,
+    "microsoft/prophetnet-large-uncased": 512,
 }
 
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ProphetNet model, ported from ProphetNet repo(fairseq version). """
+""" PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version). """
 
 import copy
 import logging
@@ -43,7 +43,7 @@ PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 PROPHETNET_START_DOCSTRING = r"""
-    Model and checkpoints are converted from ProphetNet and xProphetNet original Fairseq version repo.
+    Model and checkpoints are converted from ProphetNet and xProphetNet original Fairsequery_states version repo.
     Details can be found from <https://github.com/microsoft/ProphetNet>
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matters related to general usage and behavior.
@@ -104,6 +104,13 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
 """
 
 
+def softmax(x, dim, onnx_trace=False):
+    if onnx_trace:
+        return F.softmax(x.float(), dim=dim)
+    else:
+        return F.softmax(x, dim=dim, dtype=torch.float32)
+
+
 @dataclass
 class ProphetNetSeq2SeqLMOutput(ModelOutput):
     """
@@ -116,7 +123,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            :obj:`(2, batch_size, num_attn_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
@@ -127,7 +134,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
             Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
         decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            :obj:`(batch_size, num_attn_heads, sequence_length, sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
@@ -140,7 +147,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            :obj:`(batch_size, num_attn_heads, sequence_length, sequence_length)`.
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
@@ -173,7 +180,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
             If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            :obj:`(2, batch_size, num_attn_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
@@ -184,7 +191,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
             Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
         decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            :obj:`(batch_size, num_attn_heads, sequence_length, sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
@@ -197,7 +204,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            :obj:`(batch_size, num_attn_heads, sequence_length, sequence_length)`.
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
@@ -229,7 +236,7 @@ class ProphetNetDecoderModelOutput(ModelOutput):
             :obj:`(batch_size, 1, hidden_size)` is output.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            :obj:`(2, batch_size, num_attn_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
             :obj:`past_key_values` input) to speed up sequential decoding.
@@ -240,7 +247,7 @@ class ProphetNetDecoderModelOutput(ModelOutput):
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            :obj:`(batch_size, num_attn_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -311,44 +318,37 @@ class LearnedPositionalEmbedding(nn.Embedding):
     position ids are passed to the forward function.
     """
 
-    def __init__(
-        self,
-        num_embeddings: int,
-        embedding_dim: int,
-        padding_idx: int,
-    ):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.onnx_trace = False
+    def __init__(self, config: ProphetNetConfig):
+        super().__init__(config.max_position_embeddings, config.hidden_size, config.pad_token_id)
 
-    def forward(self, inputs_shape, device, attention_mask=None, past_key_values=None, positions=None):
-        """Input is expected to be of size [bsz x seqlen]."""
-        assert (positions is None) or (
+    def forward(self, inputs_shape, device, attention_mask=None, past_key_values=None, position_ids=None):
+        """Input is expected to be of size [batch_size x seqlen]."""
+        assert (position_ids is None) or (
             self.padding_idx is None
-        ), "If positions is pre-computed then padding_idx should not be set."
+        ), "If position_ids is pre-computed then padding_idx should not be set."
 
-        if positions is None:
+        if position_ids is None:
             if past_key_values is not None:
-                # positions is the same for every token when decoding a single step
+                # position_ids is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                prev_num_input_ids = past_key_values[0]["self"]["prev_key"].shape[2]
+                prev_num_input_ids = past_key_values[0]["self"]["prev_key_states"].shape[2]
                 num_input_ids = inputs_shape[1] + prev_num_input_ids
-                positions = torch.ones((1, 1), dtype=torch.long, device=device) * (
+                position_ids = torch.ones((1, 1), dtype=torch.long, device=device) * (
                     int(self.padding_idx + num_input_ids)
                 )
-
             else:
                 if attention_mask is None:
                     attention_mask = torch.ones(inputs_shape, dtype=torch.long, device=device)
-                positions = (
+
+                # retrieve position_ids from input_ids / attention_mask
+                position_ids = (
                     torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask
                 ).long() + self.padding_idx
-            real_positions = positions
-        else:
-            real_positions = positions
-        return super().forward(positions), real_positions
 
-    def _forward(self, positions):
-        return super().forward(positions)
+        return super().forward(position_ids), position_ids
+
+    def _forward(self, position_ids):
+        return super().forward(position_ids)
 
 
 class SelfAttention(nn.Module):
@@ -356,26 +356,29 @@ class SelfAttention(nn.Module):
 
     def __init__(
         self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        output_dropout=0.0,
+        config: ProphetNetConfig,
+        num_attn_heads: int,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.output_dropout = output_dropout
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.key_proj = nn.Linear(embed_dim, embed_dim)
-        self.value_proj = nn.Linear(embed_dim, embed_dim)
-        self.query_proj = nn.Linear(embed_dim, embed_dim)
+        hidden_size = config.hidden_size
 
-        self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.attention_dropout = config.attention_dropout
+        self.dropout = config.dropout
+        self.num_attn_heads = num_attn_heads
+        self.head_dim = hidden_size // num_attn_heads
 
-    def _shape(self, tensor, dim_0, bsz):
-        return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        assert (
+            self.head_dim * num_attn_heads == hidden_size
+        ), "`config.hidden_size` must be divisible by `config.num_encoder_attention_heads` and `config.num_decoder_attention_heads`"
+
+        self.key_proj = nn.Linear(hidden_size, hidden_size)
+        self.value_proj = nn.Linear(hidden_size, hidden_size)
+        self.query_proj = nn.Linear(hidden_size, hidden_size)
+
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
+
+    def _reshape(self, tensor, first_dim, batch_size):
+        return tensor.reshape(first_dim, batch_size * self.num_attn_heads, self.head_dim).transpose(0, 1)
 
     def forward(
         self,
@@ -386,89 +389,105 @@ class SelfAttention(nn.Module):
         attn_mask: Optional[Tensor] = None,
         output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time(SeqLen) x Batch x Channel"""
 
-        tgt_len, bsz, embed_dim = hidden_states.size()
+        sequence_length, batch_size, hidden_size = hidden_states.size()
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
         is_cross_attention = key_value_states is not None
-        cache_key = "encoder_decoder" if is_cross_attention else "self"
-
-        assert embed_dim == self.embed_dim
-        assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
-        # get here for encoder decoder cause of is_cross_attention
+        cache_key = "cross_attention" if is_cross_attention else "self"
+        assert list(hidden_states.size()) == [
+            sequence_length,
+            batch_size,
+            hidden_size,
+        ], f"Size of hidden states should be {sequence_length, batch_size, hidden_size}, but is {hidden_states.size()}"
 
         # previous time steps are cached - no need to recompute key and value if they are static
         layer_state = layer_state if layer_state is not None else {}
         saved_state = layer_state.get(cache_key, None)
 
         query_states = self.query_proj(hidden_states) / (self.head_dim ** 0.5)
-        query_states = self._shape(query_states, tgt_len, bsz)
+        query_states = self._reshape(query_states, sequence_length, batch_size)
 
         if not is_cross_attention:
             # self-attention
             key_states = self.key_proj(hidden_states)
-            key_states = self._shape(key_states, -1, bsz)
+            key_states = self._reshape(key_states, -1, batch_size)
             value_states = self.value_proj(hidden_states)
-            value_states = self._shape(value_states, -1, bsz)
+            value_states = self._reshape(value_states, -1, batch_size)
         elif saved_state is None:
             # cross-attention without layer state
             key_states = self.key_proj(key_value_states)
-            key_states = self._shape(key_states, -1, bsz)
+            key_states = self._reshape(key_states, -1, batch_size)
             value_states = self.value_proj(key_value_states)
-            value_states = self._shape(value_states, -1, bsz)
+            value_states = self._reshape(value_states, -1, batch_size)
         else:
-            key_states = saved_state["prev_key_states"].view(bsz * self.num_heads, -1, self.head_dim)
-            value_states = saved_state["prev_value_states"].view(bsz * self.num_heads, -1, self.head_dim)
+            key_states = saved_state["prev_key_states"].view(batch_size * self.num_attn_heads, -1, self.head_dim)
+            value_states = saved_state["prev_value_states"].view(batch_size * self.num_attn_heads, -1, self.head_dim)
 
         # Update cache
         if is_cross_attention:
             layer_state[cache_key] = {
-                "prev_key_states": key_states.view(bsz, self.num_heads, -1, self.head_dim),
-                "prev_value_states": value_states.view(bsz, self.num_heads, -1, self.head_dim),
+                "prev_key_states": key_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
+                "prev_value_states": value_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
             }
 
         assert key_states is not None
-        src_len = key_states.size(1)
+        key_sequence_length = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-        assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
+        assert attn_weights.size() == (batch_size * self.num_attn_heads, sequence_length, key_sequence_length)
 
         if attn_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = (
+                attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length) + attn_mask
+            )
+            attn_weights = attn_weights.view(batch_size * self.num_attn_heads, sequence_length, key_sequence_length)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
             attention_mask = None
         assert attention_mask is None or attention_mask.size()[:2] == (
-            bsz,
-            src_len,
-        )
+            batch_size,
+            key_sequence_length,
+        ), f"`attention_mask` should be `None` or of shape attention_mask.size()[:2] == {batch_size, key_sequence_length}, but is {attention_mask.shape[:2]}"
 
         if attention_mask is not None:  # don't attend to padding symbols
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
             reshaped = attention_mask.unsqueeze(1).unsqueeze(2)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size * self.num_attn_heads, sequence_length, key_sequence_length)
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_probs = F.dropout(
             attn_weights,
-            p=self.dropout,
+            p=self.attention_dropout,
             training=self.training,
         )
 
-        assert value_states is not None
         attn_output = torch.bmm(attn_probs, value_states)
-        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
+        assert attn_output.size() == (
+            batch_size * self.num_attn_heads,
+            sequence_length,
+            self.head_dim,
+        ), "`attn_output` should be of shape {batch_size * self.num_attn_heads, sequence_length, self.head_dim}, but is of shape {attn_output.size()}"
+        attn_output = attn_output.transpose(0, 1).contiguous().view(sequence_length, batch_size, hidden_size)
+
         attn_output = self.out_proj(attn_output)
+
         if output_attentions:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
         else:
             attn_weights = None
-        attn_output = F.dropout(attn_output, p=self.output_dropout, training=self.training)
+
+        attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
         return attn_output, attn_weights
 
 
 class FeedForwardBlock(nn.Module):
+    """
+    This is the residual two feed-forward layer block based on the original
+    Transformer implementation.
+    """
+
     def __init__(self, config: ProphetNetConfig, ffn_dim: int):
         super().__init__()
         self.activation_fn = ACT2FN[config.activation_function]
@@ -487,18 +506,11 @@ class FeedForwardBlock(nn.Module):
         return hidden_states
 
 
-def softmax(x, dim, onnx_trace=False):
-    if onnx_trace:
-        return F.softmax(x.float(), dim=dim)
-    else:
-        return F.softmax(x, dim=dim, dtype=torch.float32)
-
-
 class NgramMultiheadAttention(nn.Module):
     def __init__(
         self,
         embed_dim,
-        num_heads,
+        num_attn_heads,
         dropout=0.0,
         output_dropout=0.0,
         ngram=2,
@@ -510,13 +522,13 @@ class NgramMultiheadAttention(nn.Module):
 
         self.num_buckets = num_buckets
         self.relative_max_distance = relative_max_distance
-        self.num_heads = num_heads
+        self.num_attn_heads = num_attn_heads
         self.dropout = dropout
         self.output_dropout = output_dropout
-        self.head_dim = embed_dim // num_heads
+        self.head_dim = embed_dim // num_attn_heads
         self.ngram = ngram
 
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        assert self.head_dim * num_attn_heads == self.embed_dim, "embed_dim must be divisible by num_attn_heads"
         # key, value, query projection
         self.key_proj = nn.Linear(embed_dim, embed_dim)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
@@ -526,9 +538,13 @@ class NgramMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
         # rel position embeddings
-        self.relative_pos_embeddings = nn.Linear(embed_dim, num_buckets * num_heads)
+        self.relative_pos_embeddings = nn.Linear(embed_dim, num_buckets * num_attn_heads)
 
+        # for onnx runtime
         self.onnx_trace = False
+
+    def _reshape(self, tensor, first_dim, batch_size):
+        return tensor.reshape(first_dim, batch_size * self.num_attn_heads, self.head_dim).transpose(0, 1)
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -538,141 +554,163 @@ class NgramMultiheadAttention(nn.Module):
         hidden_states,
         layer_state=None,
         need_weights=True,
-        self_attn_mask=None,
-        ngram_mask_matrix=None,
-        i_buckets_main_stream=None,
+        attention_mask=None,
+        extended_predict_attention_mask=None,
+        main_relative_position_buckets=None,
         i_bucket_relative_stream=None,
-        real_positions=None,
-        output_attentions=False,
+        position_ids=None,
     ):
-        tgt_len, bsz, embed_dim = hidden_states.size()
+        sequence_length, batch_size, embed_dim = hidden_states.size()
 
         assert embed_dim == self.embed_dim
-        assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
+        assert list(hidden_states.size()) == [sequence_length, batch_size, embed_dim]
 
-        if layer_state is not None:  # reuse k,v and encoder_attention_mask
-            saved_state = layer_state.get("self", {})
-        else:
-            saved_state = None
-            layer_state = {}
+        # key and value of previous time steps are cached
+        layer_state = layer_state if layer_state is not None else {}
+        saved_state = layer_state.get("self", None)
 
-        q = self.query_proj(hidden_states)
-        k = self.key_proj(hidden_states)
-        v = self.value_proj(hidden_states)
+        # project
+        query_states = self.query_proj(hidden_states)
+        key_states = self.key_proj(hidden_states)
+        value_states = self.value_proj(hidden_states)
 
-        q = q / (self.head_dim ** 0.5)
+        # normalize
+        query_states = query_states / (self.head_dim ** 0.5)
 
-        q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-        k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-        v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        # reshape
+        query_states = self._reshape(query_states, sequence_length, batch_size)
+        key_states = self._reshape(key_states, -1, batch_size)
+        value_states = self._reshape(value_states, -1, batch_size)
 
-        h_list = hidden_states.chunk(1 + self.ngram, dim=0)
+        # chunk into main stream and predict stream
+        hidden_states_list = hidden_states.chunk(1 + self.ngram, dim=0)
 
-        q_list = q.chunk(1 + self.ngram, dim=1)
-        k_list = k.chunk(1 + self.ngram, dim=1)
-        v_list = v.chunk(1 + self.ngram, dim=1)
+        query_states_list = query_states.chunk(1 + self.ngram, dim=1)
+        key_states_list = key_states.chunk(1 + self.ngram, dim=1)
+        value_states_list = value_states.chunk(1 + self.ngram, dim=1)
 
-        h_main, h_predict_list = h_list[0], h_list[1:]
-        q_main, q_predict_list = q_list[0], q_list[1:]
-        k_main, k_predict_list = k_list[0], k_list[1:]
-        v_main, v_predict_list = v_list[0], v_list[1:]
+        main_hidden_states, hidden_states_predict_list = hidden_states_list[0], hidden_states_list[1:]
+        main_query_states, predict_query_states_list = query_states_list[0], query_states_list[1:]
+        main_key_states, predict_key_states_list = key_states_list[0], key_states_list[1:]
+        main_value_states, predict_value_states_list = value_states_list[0], value_states_list[1:]
 
+        # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
         if saved_state is not None:
-            # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-            if "prev_key" in saved_state:
-                prev_key = saved_state["prev_key"].view(bsz * self.num_heads, -1, self.head_dim)
-                k_main = torch.cat((prev_key, k_main), dim=1)
-            if "prev_value" in saved_state:
-                prev_value = saved_state["prev_value"].view(bsz * self.num_heads, -1, self.head_dim)
-                v_main = torch.cat((prev_value, v_main), dim=1)
-            # Update cache
-            layer_state["self"] = {
-                "prev_key": k_main.view(bsz, self.num_heads, -1, self.head_dim),
-                "prev_value": v_main.view(bsz, self.num_heads, -1, self.head_dim),
-            }
+            prev_main_key_states = saved_state["prev_key_states"].view(
+                batch_size * self.num_attn_heads, -1, self.head_dim
+            )
+            main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=1)
+            prev_main_value_states = saved_state["prev_value_states"].view(
+                batch_size * self.num_attn_heads, -1, self.head_dim
+            )
+            main_value_states = torch.cat((prev_main_value_states, main_value_states), dim=1)
 
-        real_tgt_len = tgt_len // (1 + self.ngram)
+        # Update cache
+        layer_state["self"] = {
+            "prev_key_states": main_key_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
+            "prev_value_states": main_value_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
+        }
 
-        attn_weights_main = torch.bmm(q_main, k_main.transpose(1, 2))
+        # get seq_length of main stream only
+        main_sequence_length = sequence_length // (1 + self.ngram)
 
-        main_relative_logits = self.main_stream_relative_logits(
-            h_main, attn_weights_main, real_positions, i_buckets_main_stream
+        # MAIN-STREAM
+        # main attn weights
+        main_attn_weights = torch.bmm(main_query_states, main_key_states.transpose(1, 2))
+
+        # retrieve relative position embeddings for each layer -> see paper for more details
+        main_relative_pos_embeddings = self.get_main_relative_pos_embeddings(
+            main_hidden_states, main_attn_weights, position_ids, main_relative_position_buckets
         )
-        attn_weights_main = attn_weights_main + main_relative_logits
+        main_attn_weights = main_attn_weights + main_relative_pos_embeddings
 
-        if self_attn_mask is not None:
-            attn_weights_main = attn_weights_main + self_attn_mask
+        if attention_mask is not None:
+            main_attn_weights = main_attn_weights + attention_mask
 
-        attn_probs_main = softmax(
-            attn_weights_main,
+        main_attn_probs = softmax(
+            main_attn_weights,
             dim=-1,
             onnx_trace=self.onnx_trace,
-        ).type_as(attn_weights_main)
-        attn_probs_main = F.dropout(attn_probs_main, p=self.dropout, training=self.training)
+        ).type_as(main_attn_weights)
 
-        attn_main = torch.bmm(attn_probs_main, v_main)
-        attn_main = attn_main.transpose(0, 1).contiguous().view(1, real_tgt_len, bsz, embed_dim)
-        attn_main = self.out_proj(attn_main)
+        main_attn_probs = F.dropout(main_attn_probs, p=self.dropout, training=self.training)
 
+        # project to attn_output
+        main_attn_output = torch.bmm(main_attn_probs, main_value_states)
+        main_attn_output = (
+            main_attn_output.transpose(0, 1).contiguous().view(1, main_sequence_length, batch_size, embed_dim)
+        )
+        main_attn_output = self.out_proj(main_attn_output)
+
+        # PREDICT-STREAM
         # [ngram, B*head, T, c]
-        q_ngram = torch.cat(q_predict_list, 0).view(self.ngram, -1, real_tgt_len, self.head_dim)
+        predict_query_states = torch.cat(predict_query_states_list, 0).view(
+            self.ngram, -1, main_sequence_length, self.head_dim
+        )
         # [ngram, B*head, 2*T, c]
-        k_ngram = torch.cat([torch.cat([k_main, k_p], 1).unsqueeze(0) for k_p in k_predict_list], 0)
-        # below code slower than above for loop
-        # k_ngram = torch.cat([k_main.unsqueeze(0).repeat(self.ngram, 1, 1, 1) , torch.cat(k_predict_list).view(self.ngram, -1, real_tgt_len, self.head_dim)], 2)
+        predict_key_states = torch.cat(
+            [torch.cat([main_key_states, key], 1).unsqueeze(0) for key in predict_key_states_list], 0
+        )
 
         # [ngram, T, B, C]
-        h_ngram = torch.cat(h_predict_list, 0).view(self.ngram, real_tgt_len, bsz, embed_dim)
+        predict_hidden_states = torch.cat(hidden_states_predict_list, 0).view(
+            self.ngram, main_sequence_length, batch_size, embed_dim
+        )
 
         # [ngram, B*head, 2*T, c]
-        v_ngram = torch.cat([torch.cat([v_main, v_p], 1).unsqueeze(0) for v_p in v_predict_list], 0)
-        # below code slower than above for loop
-        # v_ngram = torch.cat([v_main.unsqueeze(0).repeat(self.ngram, 1, 1, 1) , torch.cat(v_predict_list).view(self.ngram, -1, real_tgt_len, self.head_dim)], 2)
-
+        predict_value_states = torch.cat(
+            [torch.cat([main_value_states, v_p], 1).unsqueeze(0) for v_p in predict_value_states_list], 0
+        )
         # [ngram, B*head, T, 2*T]
-        attn_weights_ngram = torch.einsum("nbtc,nbsc->nbts", (q_ngram, k_ngram))
+        predict_attn_weights = torch.einsum("nbtc,nbsc->nbts", (predict_query_states, predict_key_states))
 
         # [ngram, B*head, T, S]
-        predict_relative_logits = self.ngram_relative_logits(
-            h_ngram, attn_weights_ngram, real_positions, i_bucket_relative_stream
+        # retrieve relative position embeddings for each layer -> see paper for more details
+        predict_relative_pos_embeddings = self.ngram_relative_logits(
+            predict_hidden_states, predict_attn_weights, position_ids, i_bucket_relative_stream
         )
+
         # [ngram, B*head, T, 2*T]
-        attn_weights_ngram = attn_weights_ngram + predict_relative_logits
+        predict_attn_weights = predict_attn_weights + predict_relative_pos_embeddings
 
-        if ngram_mask_matrix is not None:
-            attn_weights_ngram = attn_weights_ngram + ngram_mask_matrix
+        if extended_predict_attention_mask is not None:
+            predict_attn_weights = predict_attn_weights + extended_predict_attention_mask
 
-        attn_weights_ngram = softmax(
-            attn_weights_ngram,
+        predict_attn_probs = softmax(
+            predict_attn_weights,
             dim=-1,
             onnx_trace=self.onnx_trace,
-        ).type_as(attn_weights_ngram)
-        attn_weights_ngram = F.dropout(attn_weights_ngram, p=self.dropout, training=self.training)
+        ).type_as(predict_attn_weights)
+        predict_attn_probs = F.dropout(predict_attn_probs, p=self.dropout, training=self.training)
 
+        # project to attention output
         # [ngram, B*head, T, c]
-        attn_ngram = torch.einsum("nbts,nbsc->nbtc", (attn_weights_ngram, v_ngram))
+        predict_attn_output = torch.einsum("nbts,nbsc->nbtc", (predict_attn_probs, predict_value_states))
         # [ngram, T, B, C]
-        attn_ngram = attn_ngram.transpose(1, 2).contiguous().view(self.ngram, real_tgt_len, bsz, embed_dim)
-        attn_ngram = self.out_proj(attn_ngram)
+        predict_attn_output = (
+            predict_attn_output.transpose(1, 2)
+            .contiguous()
+            .view(self.ngram, main_sequence_length, batch_size, embed_dim)
+        )
+        predict_attn_output = self.out_proj(predict_attn_output)
 
+        # concat to single attn output
         # [1+ngram*T, B, C]
-        attn = torch.cat([attn_main, attn_ngram], 0).view(-1, bsz, embed_dim)
+        attn_output = torch.cat([main_attn_output, predict_attn_output], 0).view(-1, batch_size, embed_dim)
 
-        if output_attentions:
-            attn_weights = attn_probs_main.view(bsz, self.num_heads, real_tgt_len, -1)
-            attn_weights_ngram = attn_weights_ngram.view(self.ngram, bsz, self.num_heads, real_tgt_len, -1).transpose(
-                0, 1
-            )  # .view(bsz, self.num_heads, tgt_len, src_len)r
-        else:
-            attn_weights = attn_weights_ngram = None
+        # reshape into better form for `config.output_attentions`
+        main_attn_probs = main_attn_probs.view(batch_size, self.num_attn_heads, main_sequence_length, -1)
+        predict_attn_probs = predict_attn_probs.view(
+            self.ngram, batch_size, self.num_attn_heads, main_sequence_length, -1
+        ).transpose(0, 1)
 
-        attn = F.dropout(attn, p=self.output_dropout, training=self.training)
-        return attn, attn_weights, attn_weights_ngram
+        attn_output = F.dropout(attn_output, p=self.output_dropout, training=self.training)
+        return attn_output, main_attn_probs, predict_attn_probs
 
-    def main_stream_relative_logits(self, query, attn_weights, real_positions, i_bucket_main_stream):
+    def get_main_relative_pos_embeddings(self, query, attn_weights, position_ids, i_bucket_main_stream):
         # input query [T,B,C]
         # input attn_weights [T*head,T,S]
-        # input real_positions [B,T] or [1,1]
+        # input position_ids [B,T] or [1,1]
 
         T, B, _ = query.size()
         S = attn_weights.size(-1)
@@ -682,12 +720,12 @@ class NgramMultiheadAttention(nn.Module):
         else:
             # [B,T,S]
             relative_positions = (
-                torch.arange(1, S + 1).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(real_positions.device)
+                torch.arange(1, S + 1).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(position_ids.device)
             )
             # [B,T,1]
-            real_positions = real_positions.unsqueeze(0).repeat(B, T, 1)
+            position_ids = position_ids.unsqueeze(0).repeat(B, T, 1)
             # [B,T,S]
-            relative_positions = relative_positions - real_positions
+            relative_positions = relative_positions - position_ids
             # [B,T,T]
             i_buckets = _relative_positions_bucket(
                 self.num_buckets, self.relative_max_distance, relative_positions, False
@@ -698,7 +736,7 @@ class NgramMultiheadAttention(nn.Module):
         # [B,T,Buckets*head]
         values = self.relative_pos_embeddings(query)
         # [B,T,Buckets,head]
-        values = values.view(values.size(0), values.size(1), self.num_buckets, self.num_heads)
+        values = values.view(values.size(0), values.size(1), self.num_buckets, self.num_attn_heads)
         # [B,head,Buckets,T]
         values = values.transpose(1, 3)
         # [B,head,T,Buckets]
@@ -707,7 +745,7 @@ class NgramMultiheadAttention(nn.Module):
         values = values.reshape(attn_weights.size(0), attn_weights.size(1), -1)
 
         # => [B,head*T,T] => [B*head,T,T]
-        i_buckets = i_buckets.repeat(1, self.num_heads, 1).view(attn_weights.size(0), attn_weights.size(1), -1)
+        i_buckets = i_buckets.repeat(1, self.num_attn_heads, 1).view(attn_weights.size(0), attn_weights.size(1), -1)
         # [B*head*T,Buckets]
         values = values.reshape(-1, values.size(-1))
         # [B*head*T,T]
@@ -719,10 +757,10 @@ class NgramMultiheadAttention(nn.Module):
 
         return result
 
-    def ngram_relative_logits(self, query, attn_weights, real_positions, i_bucket_relative_stream):
+    def ngram_relative_logits(self, query, attn_weights, position_ids, i_bucket_relative_stream):
         # input query [ngram, T,B,C]
         # input attn_weights [ngram, B*head,T,S]
-        # input real_positions [B,T] or [1,1]
+        # input position_ids [B,T] or [1,1]
         # input i_bucket_relative_stream [B,T, 2*T] or None
 
         N, T, B, _ = query.size()
@@ -732,13 +770,13 @@ class NgramMultiheadAttention(nn.Module):
             i_buckets = i_bucket_relative_stream
         else:
             # [B,T,S]
-            assert real_positions[0][0] == S - 1, "memory position is 1 2 3 4 5(S-1)"
-            relative_positions = torch.arange(0, S).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(real_positions.device)
+            assert position_ids[0][0] == S - 1, "memory position is 1 2 3 4 5(S-1)"
+            relative_positions = torch.arange(0, S).unsqueeze(0).unsqueeze(0).repeat(B, T, 1).to(position_ids.device)
             # [B,T,1]
-            real_positions = real_positions.unsqueeze(0).repeat(B, T, 1)
+            position_ids = position_ids.unsqueeze(0).repeat(B, T, 1)
             relative_positions = relative_positions
             # [B,T,2*T] or [B,T,S]
-            relative_positions = relative_positions - real_positions
+            relative_positions = relative_positions - position_ids
             i_buckets = _relative_positions_bucket(
                 self.num_buckets, self.relative_max_distance, relative_positions, False
             )
@@ -748,14 +786,14 @@ class NgramMultiheadAttention(nn.Module):
         # [ngram, B, T, bucket*head]
         values = self.relative_pos_embeddings(query)
         # [ngram, B, T, bucket, head]
-        values = values.view(*values.size()[:-1], self.num_buckets, self.num_heads)
+        values = values.view(*values.size()[:-1], self.num_buckets, self.num_attn_heads)
         # [ngram, B, head, T, bucket]
         values = values.permute(0, 1, 4, 2, 3)
         # [ngram*B*head, T, bucket]
         values = values.reshape(N * BH, T, -1)
 
         # [ngram, B, head*T, S]
-        i_buckets = i_buckets.unsqueeze(0).repeat(N, 1, self.num_heads, 1)
+        i_buckets = i_buckets.unsqueeze(0).repeat(N, 1, self.num_attn_heads, 1)
 
         values = values.reshape(-1, values.size(-1))
         i_buckets = i_buckets.view(-1, i_buckets.size(-1)).long()
@@ -773,10 +811,8 @@ class ProphetNetEncoderLayer(nn.Module):
 
         # 1st residual block
         self.self_attn = SelfAttention(
-            config.hidden_size,
+            config,
             config.num_encoder_attention_heads,
-            dropout=config.attention_dropout,
-            output_dropout=config.dropout,
         )
         self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
@@ -822,10 +858,8 @@ class ProphetNetDecoderLayer(nn.Module):
         # ngram_self
         # 2nd residual block
         self.cross_attn = SelfAttention(
-            self.embed_dim,
+            config,
             config.num_decoder_attention_heads,
-            dropout=config.attention_dropout,
-            output_dropout=config.dropout,
         )
         self.cross_attn_layer_norm = LayerNorm(self.embed_dim)
 
@@ -839,12 +873,12 @@ class ProphetNetDecoderLayer(nn.Module):
         encoder_hidden_states=None,
         encoder_attn_mask=None,
         layer_state=None,
-        self_attn_mask=None,
+        attention_mask=None,
         output_attentions=False,
-        ngram_mask_matrix=None,
-        i_buckets_main_stream=None,
+        extended_predict_attention_mask=None,
+        main_relative_position_buckets=None,
         i_bucket_relative_stream=None,
-        real_positions=None,
+        position_ids=None,
     ):
         # one main stream and ngram predicting streams
         if layer_state is None:
@@ -855,12 +889,11 @@ class ProphetNetDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             layer_state=layer_state,
             need_weights=False,
-            self_attn_mask=self_attn_mask,
-            ngram_mask_matrix=ngram_mask_matrix,
-            i_buckets_main_stream=i_buckets_main_stream,
+            attention_mask=attention_mask,
+            extended_predict_attention_mask=extended_predict_attention_mask,
+            main_relative_position_buckets=main_relative_position_buckets,
             i_bucket_relative_stream=i_bucket_relative_stream,
-            real_positions=real_positions,
-            output_attentions=output_attentions,
+            position_ids=position_ids,
         )
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
@@ -924,34 +957,34 @@ def _relative_positions_bucket(num_buckets, max_distance, relative_positions, is
     return result
 
 
-def cal_relative_positions_buckets(num_buckets, max_distance, real_positions):
+def cal_relative_positions_buckets(num_buckets, max_distance, position_ids):
     # main stream
-    main_stream_relative_positions = real_positions.unsqueeze(1)
+    main_stream_relative_positions = position_ids.unsqueeze(1)
     # [B,T,T/S]
-    main_stream_relative_positions = main_stream_relative_positions.repeat(1, real_positions.size(-1), 1)
+    main_stream_relative_positions = main_stream_relative_positions.repeat(1, position_ids.size(-1), 1)
     # [B,T,1]
-    real_positions_main = real_positions.unsqueeze(-1)
-    main_stream_relative_positions = main_stream_relative_positions - real_positions_main
+    position_ids_main = position_ids.unsqueeze(-1)
+    main_stream_relative_positions = main_stream_relative_positions - position_ids_main
 
     # predicting stream
     # input shift
-    real_positions_shift_predicting_stream = real_positions - 1
+    position_ids_shift_predicting_stream = position_ids - 1
     # [B,1, 2*T]
     predicting_stream_relative_positions = torch.cat(
-        (real_positions_shift_predicting_stream, real_positions), dim=-1
+        (position_ids_shift_predicting_stream, position_ids), dim=-1
     ).unsqueeze(1)
     # [B,T, 2*T]
-    predicting_stream_relative_positions = predicting_stream_relative_positions.repeat(1, real_positions.size(-1), 1)
+    predicting_stream_relative_positions = predicting_stream_relative_positions.repeat(1, position_ids.size(-1), 1)
     # [B,T, 1]
-    real_positions_predicting_stream = real_positions.unsqueeze(-1)
-    predicting_stream_relative_positions = predicting_stream_relative_positions - real_positions_predicting_stream
-    i_buckets_main_stream = _relative_positions_bucket(
+    position_ids_predicting_stream = position_ids.unsqueeze(-1)
+    predicting_stream_relative_positions = predicting_stream_relative_positions - position_ids_predicting_stream
+    main_relative_position_buckets = _relative_positions_bucket(
         num_buckets, max_distance, main_stream_relative_positions, is_bidirectional=False
     )
     i_bucket_relative_stream = _relative_positions_bucket(
         num_buckets, max_distance, predicting_stream_relative_positions, is_bidirectional=False
     )
-    return i_buckets_main_stream, i_bucket_relative_stream
+    return main_relative_position_buckets, i_bucket_relative_stream
 
 
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
@@ -976,9 +1009,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         # weights
         self.word_embeddings = word_embeddings
-        self.position_embeddings = LearnedPositionalEmbedding(
-            config.encoder_max_position_embeddings, embed_dim, self.padding_idx
-        )
+        self.position_embeddings = LearnedPositionalEmbedding(config)
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
         self.embeddings_layer_norm = LayerNorm(embed_dim)
 
@@ -1011,7 +1042,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         elif input_ids is not None and inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        embed_pos, real_positions = self.position_embeddings(inputs_embeds.shape[:2], inputs_embeds.device)
+        embed_pos, position_ids = self.position_embeddings(inputs_embeds.shape[:2], inputs_embeds.device)
         x = inputs_embeds + embed_pos
         x = self.embeddings_layer_norm(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -1065,9 +1096,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         embed_dim = config.hidden_size
 
         self.word_embeddings = word_embeddings
-        self.position_embeddings = LearnedPositionalEmbedding(
-            config.decoder_max_position_embeddings, embed_dim, self.padding_idx
-        )
+        self.position_embeddings = LearnedPositionalEmbedding(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, embed_dim, None)
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
@@ -1075,20 +1104,20 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         self.init_weights()
 
-    def cal_and_buffer_finetune_relative_positions(self, real_positions):
-        n_tokens = real_positions.size(-1)
-        batch_size = real_positions.size(0)
+    def cal_and_buffer_finetune_relative_positions(self, position_ids):
+        n_tokens = position_ids.size(-1)
+        batch_size = position_ids.size(0)
         if (
             not hasattr(self, "_finetune_i_bucket_main_stream")
             or self._finetune_i_bucket_main_stream is None
-            or self._finetune_i_bucket_main_stream.device != real_positions.device
+            or self._finetune_i_bucket_main_stream.device != position_ids.device
         ):
             fake_positions = torch.arange(1, self.max_target_positions).repeat(1, 1)
             finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream = cal_relative_positions_buckets(
                 self.num_buckets, self.relative_max_distance, fake_positions
             )
-            self._finetune_i_bucket_main_stream = finetune_i_bucket_main_stream.to(real_positions.device)
-            self._finetune_i_bucket_predicting_stream = finetune_i_bucket_predicting_stream.to(real_positions.device)
+            self._finetune_i_bucket_main_stream = finetune_i_bucket_main_stream.to(position_ids.device)
+            self._finetune_i_bucket_predicting_stream = finetune_i_bucket_predicting_stream.to(position_ids.device)
         finetune_i_bucket_main_stream = self._finetune_i_bucket_main_stream[:, :n_tokens, :n_tokens].repeat(
             batch_size, 1, 1
         )
@@ -1166,7 +1195,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         Args:
             input_ids (LongTensor): previous decoder outputs of shape
-                `(batch, tgt_len)`, for teacher forcing
+                `(batch, sequence_length)`, for teacher forcing
             encoder_hidden_states: output from the encoder, used for
                 encoder-side attention
             encoder_attention_mask: for ignoring pad tokens
@@ -1175,7 +1204,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         Returns:
             tuple:
-                - the decoder's features of next n-grams, with shape `(batch, self.ngram * tgt_len, embed_dim)`
+                - the decoder's features of next n-grams, with shape `(batch, self.ngram * sequence_length, embed_dim)`
                 - hidden states
                 - attentions
 
@@ -1200,19 +1229,19 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             # invert mask
             encoder_attention_mask = encoder_attention_mask.eq(0)
 
-        main_stream_pos_embed, real_positions = self.position_embeddings(
+        main_stream_pos_embed, position_ids = self.position_embeddings(
             (batch_size, sequence_length),
             device=inputs_embeds.device,
             past_key_values=past_key_values,
         )
 
         if past_key_values is not None:
-            i_buckets_main_stream, i_bucket_relative_stream = None, None
+            main_relative_position_buckets, i_bucket_relative_stream = None, None
         else:
-            i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(
-                real_positions
+            main_relative_position_buckets, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(
+                position_ids
             )
-        predicting_stream_pos_embed = self.position_embeddings._forward(real_positions + 1)
+        predicting_stream_pos_embed = self.position_embeddings._forward(position_ids + 1)
 
         if self.embed_scale is not None:
             inputs_embeds *= self.embed_scal
@@ -1232,15 +1261,15 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, batch_size, 1)
                 for ngram in range(self.ngram)
             ]
-            self_attn_mask = None
-            ngram_mask_matrix = None
+            extended_attention_mask = None
+            extended_predict_attention_mask = None
         else:
             ngram_hidden_states = [
                 (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1)
                 for ngram in range(self.ngram)
             ]
-            self_attn_mask = self.prepare_attention_mask(hidden_states, attention_mask)
-            ngram_mask_matrix = self.prepare_attention_mask_ngram(hidden_states, attention_mask)
+            extended_attention_mask = self.prepare_attention_mask(hidden_states, attention_mask)
+            extended_predict_attention_mask = self.prepare_attention_mask_ngram(hidden_states, attention_mask)
         # TODO in train [(1+ngram)*T, B, C], in inference [T+ngram, B, C]
         hidden_states = torch.cat([hidden_states] + ngram_hidden_states, 0)
 
@@ -1268,24 +1297,30 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     all_ngram_stream_hidden_states += (hidden_states[sequence_length:],)
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
-            hidden_states, layer_self_attn, layer_self_attn_ngram, layer_cross_attn, layer_past = decoder_layer(
+            (
+                hidden_states,
+                layer_self_attn,
+                layer_self_predict_attn_output,
+                layer_cross_attn,
+                layer_past,
+            ) = decoder_layer(
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attn_mask=encoder_attention_mask,
                 layer_state=layer_state,
-                self_attn_mask=self_attn_mask,
+                attention_mask=extended_attention_mask,
                 output_attentions=output_attentions,
-                ngram_mask_matrix=ngram_mask_matrix,
-                i_buckets_main_stream=i_buckets_main_stream,
+                extended_predict_attention_mask=extended_predict_attention_mask,
+                main_relative_position_buckets=main_relative_position_buckets,
                 i_bucket_relative_stream=i_bucket_relative_stream,
-                real_positions=real_positions,
+                position_ids=position_ids,
             )
             if use_cache:
                 present_key_values += (layer_past,)
 
             if output_attentions:
                 all_main_stream_attns += (layer_self_attn,)
-                all_ngram_stream_attns += (layer_self_attn_ngram,)
+                all_ngram_stream_attns += (layer_self_predict_attn_output,)
                 all_cross_attns += (layer_cross_attn,)
 
         last_hidden_state = hidden_states[:sequence_length].transpose(0, 1)
