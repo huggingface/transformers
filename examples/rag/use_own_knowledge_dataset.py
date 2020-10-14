@@ -1,8 +1,10 @@
+import logging
 import os
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List
+from typing import List, Optional
 
 import faiss
 import torch
@@ -11,12 +13,14 @@ from datasets import load_dataset
 from transformers import (
     DPRContextEncoder,
     DPRContextEncoderTokenizerFast,
+    HfArgumentParser,
     RagRetriever,
     RagSequenceForGeneration,
     RagTokenizer,
 )
 
 
+logger = logging.getLogger(__name__)
 torch.set_grad_enabled(False)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -48,14 +52,13 @@ def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRCon
 
 def main(
     tmp_dir: str,
-    num_proc=2,
-    batch_size=16,
-    rag_model_name="facebook/rag-sequence-nq",
-    dpr_ctx_encoder_model_name="facebook/dpr-ctx_encoder-multiset-base",
+    rag_example_args: "RagExampleArguments",
+    processing_args: "ProcessingArguments",
+    index_hnsw_args: "IndexHnswArguments",
 ):
 
     ######################################
-    print("Step 1 - Create the dataset")
+    logger.info("Step 1 - Create the dataset")
     ######################################
 
     # The dataset needed for RAG must have three columns:
@@ -64,19 +67,25 @@ def main(
     # - embeddings (array of dimension d): DPR representation of the passage
 
     # Let's say you have documents in tab-separated csv files with columns "title" and "text"
-    csv_path = str(Path(__file__).parent / "test_data" / "my_knowledge_dataset.csv")
+    assert os.path.isfile(rag_example_args.csv_path), "Please provide a valid path to a csv file"
 
     # You can load a Dataset object this way
-    dataset = load_dataset("csv", data_files=[csv_path], split="train", delimiter="\t", column_names=["title", "text"])
+    dataset = load_dataset(
+        "csv", data_files=[rag_example_args.csv_path], split="train", delimiter="\t", column_names=["title", "text"]
+    )
+
+    # More info about loading csv files in the documentation: https://huggingface.co/docs/datasets/loading_datasets.html?highlight=csv#csv-files
 
     # Then split the documents into passages of 100 words
-    dataset = dataset.map(split_documents, batched=True, num_proc=num_proc)
+    dataset = dataset.map(split_documents, batched=True, num_proc=processing_args.num_proc)
 
     # And compute the embeddings
-    ctx_encoder = DPRContextEncoder.from_pretrained(dpr_ctx_encoder_model_name).to(device=device)
-    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(dpr_ctx_encoder_model_name)
+    ctx_encoder = DPRContextEncoder.from_pretrained(rag_example_args.dpr_ctx_encoder_model_name).to(device=device)
+    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(rag_example_args.dpr_ctx_encoder_model_name)
     dataset = dataset.map(
-        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer), batched=True, batch_size=batch_size
+        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer),
+        batched=True,
+        batch_size=processing_args.batch_size,
     )
 
     # And finally save your dataset
@@ -86,13 +95,11 @@ def main(
     # dataset = load_from_disk(passages_path)  # to reload the dataset
 
     ######################################
-    print("Step 2 - Index the dataset")
+    logger.info("Step 2 - Index the dataset")
     ######################################
 
     # Let's use the Faiss implementation of HNSW for fast approximate nearest neighbor search
-    d = 768  # vectors dimension
-    m = 128  # hnsw parameter. Higher is more accurate but takes more time to index (default is 32, 128 should be ok)
-    index = faiss.IndexHNSWFlat(d, m, faiss.METRIC_INNER_PRODUCT)
+    index = faiss.IndexHNSWFlat(index_hnsw_args.d, index_hnsw_args.m, faiss.METRIC_INNER_PRODUCT)
     dataset.add_faiss_index("embeddings", custom_index=index)
 
     # And save the index
@@ -101,29 +108,88 @@ def main(
     # dataset.load_faiss_index("embeddings", index_path)  # to reload the index
 
     ######################################
-    print("Step 3 - Load RAG")
+    logger.info("Step 3 - Load RAG")
     ######################################
 
     # Easy way to load the model
-    retriever = RagRetriever.from_pretrained(rag_model_name, index_name="custom", indexed_dataset=dataset)
-    model = RagSequenceForGeneration.from_pretrained(rag_model_name, retriever=retriever)
-    tokenizer = RagTokenizer.from_pretrained(rag_model_name)
+    retriever = RagRetriever.from_pretrained(
+        rag_example_args.rag_model_name, index_name="custom", indexed_dataset=dataset
+    )
+    model = RagSequenceForGeneration.from_pretrained(rag_example_args.rag_model_name, retriever=retriever)
+    tokenizer = RagTokenizer.from_pretrained(rag_example_args.rag_model_name)
 
-    # For distributed fine-tuning you'll need to provide the paths instead, as the index needs to be loaded only in one process
+    # For distributed fine-tuning you'll need to provide the paths instead, as the dataset and the index are loaded separately.
     # retriever = RagRetriever.from_pretrained(rag_model_name, index_name="custom", passages_path=passages_path, index_path=index_path)
 
     ######################################
-    print("Step 4 - Have fun")
+    logger.info("Step 4 - Have fun")
     ######################################
 
-    question = "What does Moses' rod turn into ?"
+    question = rag_example_args.question or "What does Moses' rod turn into ?"
     input_ids = tokenizer.question_encoder(question, return_tensors="pt")["input_ids"]
     generated = model.generate(input_ids)
     generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
-    print("Q:", question)
-    print("A:", generated_string)
+    logger.info("Q: " + question)
+    logger.info("A: " + generated_string)
+
+
+@dataclass
+class RagExampleArguments:
+    csv_path: str = field(
+        default=str(Path(__file__).parent / "test_data" / "my_knowledge_dataset.csv"),
+        metadata={"help": "Path to a tab-separated csv file with columns 'title' and 'text'"},
+    )
+    question: Optional[str] = field(
+        default=None,
+        metadata={"help": "Question that is passed as input to RAG. Default is 'What does Moses' rod turn into ?'."},
+    )
+    rag_model_name: str = field(
+        default="facebook/rag-sequence-nq",
+        metadata={"help": "The RAG model to use. Either 'facebook/rag-sequence-nq' or 'facebook/rag-token-nq'"},
+    )
+    dpr_ctx_encoder_model_name: str = field(
+        default="facebook/dpr-ctx_encoder-multiset-base",
+        metadata={
+            "help": "The DPR context encoder model to use. Either 'facebook/dpr-ctx_encoder-single-nq-base' or 'facebook/dpr-ctx_encoder-multiset-base'"
+        },
+    )
+
+
+@dataclass
+class ProcessingArguments:
+    num_proc: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The number of processes to use to split the documents into passages. Default is single process."
+        },
+    )
+    batch_size: int = field(
+        default=16,
+        metadata={
+            "help": "The batch size to use when computing the passages embeddings using the DPR context encoder."
+        },
+    )
+
+
+@dataclass
+class IndexHnswArguments:
+    d: int = field(
+        default=768,
+        metadata={"help": "The dimension of the embeddings to pass to the HNSW Faiss index."},
+    )
+    m: int = field(
+        default=128,
+        metadata={
+            "help": "The number of bi-directional links created for every new element during the HNSW index construction."
+        },
+    )
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+    logger.setLevel(logging.INFO)
+
+    parser = HfArgumentParser((RagExampleArguments, ProcessingArguments, IndexHnswArguments))
+    rag_example_args, processing_args, index_hnsw_args = parser.parse_args_into_dataclasses()
     with TemporaryDirectory() as tmp_dir:
-        main(tmp_dir)
+        main(tmp_dir, rag_example_args, processing_args, index_hnsw_args)
