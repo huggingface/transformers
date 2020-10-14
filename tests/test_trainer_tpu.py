@@ -1,16 +1,8 @@
-# This test is meant to be run in torch.distributed,
-# on a machine with multiple GPUs, in the following way:
+# This test is meant to be run in on an instance with TPUs like this:
 #
-#   python -m torch.distributed.launch --nproc_per_node 2 ./tests/test_trainer_distributed.py
+#   python examples/xla_spawn.py --num_cores=8 tests/test_trainer_tpu.py
 #
-# Replace 2 with the number of GPUs you have.
-#
-# You can also run it as a standalone file to test identical behavior in nn.DataParallel:
-#   python ./tests/test_trainer_distributed.py
-# and in single-GPU mode:
-#   CUDA_VISIBLE_DEVICES=0 python ./tests/test_trainer_distributed.py
-# and in CPU mode:
-#   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
+# Replace 8 with the number of TPU cores you have.
 #
 
 import sys
@@ -57,23 +49,22 @@ if is_torch_available():
                 return input_ids
 
 
-if __name__ == "__main__":
+def main():
     parser = HfArgumentParser((TrainingArguments,))
     sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
+        "Process rank: %s, device: %s, tpu_num_cores: %s",
         training_args.local_rank,
         training_args.device,
-        training_args.n_gpu,
-        training_args.local_rank != -1,
+        training_args.tpu_num_cores,
     )
 
     # Essentially, what we want to verify in the distributed case is
     # that we get all samples back, in the right order.
     # (this is crucial for prediction for instance)
-    for dataset_length in [101, 40, 7]:
+    for dataset_length in [1001, 256, 15]:
         dataset = DummyDataset(dataset_length)
 
         def compute_metrics(p: EvalPrediction) -> Dict:
@@ -117,3 +108,12 @@ if __name__ == "__main__":
         trainer.args.eval_accumulation_steps = None
 
     logger.info("🔥 All distributed tests successful")
+
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
+
+
+if __name__ == "__main__":
+    main()

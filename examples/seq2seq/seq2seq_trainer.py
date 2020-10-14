@@ -174,7 +174,7 @@ class Seq2SeqTrainer(Trainer):
             # Call forward again to get loss # TODO: avoidable?
             outputs = model(**inputs, use_cache=False)
             loss = self._compute_loss(outputs[1], labels_out)
-            loss = loss.mean().item()
+            loss = loss.mean().detach()
             if self.args.prediction_loss_only:
                 return (loss, None, None)
 
