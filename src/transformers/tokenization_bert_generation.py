@@ -15,7 +15,9 @@
 """ Tokenization class for model BertGeneration."""
 
 
-from typing import List
+import os
+from shutil import copyfile
+from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -55,6 +57,8 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = {"vocab_file": {"bert_for_seq_generation": tokenizer_url}}
+    max_model_input_sizes = {"bert_for_seq_generation": 512}
     prefix_tokens: List[int] = []
 
     def __init__(
@@ -122,3 +126,16 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)

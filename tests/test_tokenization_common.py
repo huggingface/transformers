@@ -80,19 +80,24 @@ class TokenizerTesterMixin:
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
-        self.tokenizers_list = [
-            (
-                tokenizer,
-                pretrained_name,
-                dict(t for t in self.from_pretrained_kwargs) if self.from_pretrained_kwargs else {},
-            )
-            for tokenizer in [self.tokenizer_class, self.rust_tokenizer_class]
-            for pretrained_name in self.tokenizer_class.pretrained_vocab_files_map[
-                self.from_pretrained_vocab_key
-            ].keys()
-            if self.from_pretrained_filter is None
-            or (self.from_pretrained_filter is not None and self.from_pretrained_filter(tokenizer, pretrained_name))
-        ]
+        if self.test_rust_tokenizer:
+            self.tokenizers_list = [
+                (
+                    tokenizer,
+                    pretrained_name,
+                    dict(t for t in self.from_pretrained_kwargs) if self.from_pretrained_kwargs else {},
+                )
+                for tokenizer in [self.tokenizer_class, self.rust_tokenizer_class]
+                for pretrained_name in self.tokenizer_class.pretrained_vocab_files_map[
+                    self.from_pretrained_vocab_key
+                ].keys()
+                if self.from_pretrained_filter is None
+                or (
+                    self.from_pretrained_filter is not None and self.from_pretrained_filter(tokenizer, pretrained_name)
+                )
+            ]
+        else:
+            self.tokenizers_list = []
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
