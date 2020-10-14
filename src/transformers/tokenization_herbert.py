@@ -51,7 +51,7 @@ class HerbertTokenizer(XLMTokenizer):
     Peculiarities:
 
     - uses BERT's pre-tokenizer: BaseTokenizer splits tokens on spaces, and also on punctuation.
-    Each occurence of a punctuation character will be treated separately.
+      Each occurence of a punctuation character will be treated separately.
 
     - Such pretokenized input is BPE subtokenized
 
@@ -96,7 +96,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     Peculiarities:
 
     - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation.
-    Each occurence of a punctuation character will be treated separately.
+      Each occurence of a punctuation character will be treated separately.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
