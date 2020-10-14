@@ -500,6 +500,7 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
             )
 
+        output = [[output[i * num_beams + j] for j in range(num_beams)] for i in range(batch_size)]
         return output
 
     def _generate_no_beam_search(
