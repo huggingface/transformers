@@ -36,7 +36,7 @@ from .utils import logging
 
 
 if is_datasets_available():
-    from datasets import load_dataset, load_from_disk, Dataset
+    from datasets import Dataset, load_dataset, load_from_disk
 
 if is_faiss_available():
     import faiss
