@@ -1,8 +1,19 @@
-from typing import Optional, List
+# coding=utf-8
+# Copyright 2020 The Google AI Language Team Authors, Allegro.pl, Facebook Inc. and the HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-from tokenizers import CharBPETokenizer
-from tokenizers.normalizers import BertNormalizer
-from tokenizers.processors import BertProcessing
+from typing import Optional, List
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -122,10 +133,10 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        An CamemBERT sequence has the following format:
+        An HerBERT, like BERT sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -137,10 +148,11 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
 
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         cls = [self.cls_token_id]
         sep = [self.sep_token_id]
+        if token_ids_1 is None:
+            return cls + token_ids_0 + sep
+
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
@@ -178,7 +190,12 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        CamemBERT, like RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
+        HerBERT, like BERT sequence pair mask has the following format:
+
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -187,11 +204,12 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
