@@ -149,6 +149,7 @@ class BartSummarizationDistiller(SummarizationModule):
     def _step(self, batch):
         # assert is_frozen(self.teacher) copied_decoder_layers
         pad_token_id = self.tokenizer.pad_token_id
+        print(f'pad_token_id: {pad_token_id}, tokenizer: {type(self.tokenizer)}')
         input_ids, src_mask, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
         if isinstance(self.teacher, T5ForConditionalGeneration):
             #print('Teacher model: T5ForConditionalGeneration')
@@ -187,13 +188,14 @@ class BartSummarizationDistiller(SummarizationModule):
         def zero_tensor():
             return torch.tensor(0.0).type_as(student_lm_loss)
 
+        teacher_enc_outputs =(enc_outputs,)
+
         hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor()
         if self.different_encoder:  # compute encoder hidden state loss
             with torch.no_grad():
-                teacher_enc_hid = self.teacher.get_encoder()(
-                    input_ids, attention_mask=src_mask, output_hidden_states=True, return_dict=True
-                ).hidden_states
-
+                teacher_enc_outputs, teacher_enc_hid = self.teacher.get_encoder()(
+                    input_ids, attention_mask=src_mask, output_hidden_states=True
+                )
             hid_loss_enc = self.maybe_calc_hidden_loss(
                 src_mask,
                 enc_hidden_state,
@@ -201,13 +203,14 @@ class BartSummarizationDistiller(SummarizationModule):
                 self.e_matches,
                 normalize_hidden=self.hparams.normalize_hidden,
             )
+     
 
-
+        teacher_mask = input_ids.ne(pad_token_id)
         with torch.no_grad():
             outputs = self.teacher(
                 input_ids,
-                attention_mask=src_mask,
-                encoder_outputs=(enc_outputs,),
+                attention_mask=teacher_mask,
+                encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=teacher_decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
@@ -316,6 +319,13 @@ def distill_main(args):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     model = create_module(args)
+    
+    #if args.student_base_model:
+    #    print('Calling forward on teacher and student')
+    #    teacher = ft_main(args, model=model.teacher)
+    #    student = ft_main(args, model=model.model)
+    #    print('Called forward on teacher and student')
+    #else:
     return ft_main(args, model=model)
 
 
