@@ -212,6 +212,24 @@ class TFAutoModelWithLMHead:
         requires_tf(self)
 
 
+class TFBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFBartModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

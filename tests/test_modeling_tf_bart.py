@@ -74,6 +74,7 @@ class ModelTester:
             eos_token_ids=[2],
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.pad_token_id,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -94,8 +95,8 @@ def prepare_bart_inputs_dict(
 
 
 @require_tf
-class TestTFBartForConditionalGeneration(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
+class TestTFBart(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -277,7 +278,7 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         return BartTokenizer.from_pretrained("facebook/bart-large")
 
 
-# @slow
+#  @slow
 @require_tf
 @require_torch
 class FasterTFBartModelIntegrationTests(unittest.TestCase):
