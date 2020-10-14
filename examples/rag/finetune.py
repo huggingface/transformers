@@ -31,8 +31,6 @@ from transformers import (
 from transformers import logging as transformers_logging
 
 
-sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
-
 from callbacks import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
     get_early_stopping_callback,
