@@ -28,7 +28,7 @@ sentences = ["Hello World", "Hallo Welt"]
 
 model = SentenceTransformer('LaBSE')
 embeddings = model.encode(sentences)
-print(embeddings
+print(embeddings)
 ```
 
 ## Reference:
