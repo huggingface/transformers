@@ -560,7 +560,7 @@ class SquadProcessor(DataProcessor):
 
         Args:
             dataset: The tfds dataset loaded from `tensorflow_datasets.load("squad")`
-            evaluate: boolean specifying if in evaluation mode or in training mode
+            evaluate: Boolean specifying if in evaluation mode or in training mode
 
         Returns:
             List of SquadExample

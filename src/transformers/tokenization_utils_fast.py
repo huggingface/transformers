@@ -552,7 +552,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             you want to reload it using the :meth:`~transformers.PreTrainedTokenizerFast.from_pretrained` class method.
 
         Args:
-            save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
+            save_directory (:obj:`str`): The path to a directory where the tokenizer will be saved.
 
         Returns:
             A tuple of :obj:`str`: The files saved.

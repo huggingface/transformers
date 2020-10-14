@@ -274,7 +274,7 @@ class PretrainedConfig(object):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not to force to (re-)download the configuration files and override the cached versions if they
+                Whether or not to force to (re-)download the configuration files and override the cached versions if they
                 exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file

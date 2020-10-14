@@ -437,6 +437,7 @@ if is_torch_available():
     from .modeling_openai import (
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTDoubleHeadsModel,
+        OpenAIGPTForSequenceClassification,
         OpenAIGPTLMHeadModel,
         OpenAIGPTModel,
         OpenAIGPTPreTrainedModel,

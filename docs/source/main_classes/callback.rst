@@ -12,7 +12,7 @@ subclass :class:`~transformers.Trainer` and override the methods you need (see :
 
 By default a :class:`~transformers.Trainer` will use the following callbacks:
 
-- :class:`~transformers.DefaultFlowCallback` which handles the default beahvior for logging, saving and evaluation.
+- :class:`~transformers.DefaultFlowCallback` which handles the default behavior for logging, saving and evaluation.
 - :class:`~transformers.PrinterCallback` or :class:`~transformers.ProrgressCallback` to display progress and print the
   logs (the first one is used if you deactivate tqdm through the :class:`~transformers.TrainingArguments`, otherwise
   it's the second one).
