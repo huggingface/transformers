@@ -1,3 +1,8 @@
+---
+language: id
+datasets:
+- oscar
+---
 # IndoBERT (Indonesian BERT Model)
 
 ## Model description
@@ -36,4 +41,3 @@ We evaluate this model on three Indonesian NLP downstream task:
 - sentiment analysis
 - Part-of-Speech Tagger
 it was proven that this model outperforms multilingual BERT for all downstream tasks.
-
