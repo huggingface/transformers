@@ -79,7 +79,7 @@ class HerbertTokenizer(XLMTokenizer):
 
 class HerbertTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "Fast" BPE tokenizer for Allegro Herbert (backed by HuggingFace's `tokenizers` library).
+    Construct a "Fast" BPE tokenizer for HerBERT (backed by HuggingFace's `tokenizers` library).
 
     Peculiarities:
 
