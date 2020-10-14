@@ -26,7 +26,7 @@ if is_torch_available():
 
 
 @require_torch
-class TrainerIntegrationTest(unittest.TestCase):
+class TrainerUtilsTest(unittest.TestCase):
     def test_distributed_tensor_gatherer(self):
         # Simulate a result with a dataset of size 21, 4 processes and chunks of lengths 2, 3, 1
         world_size = 4
