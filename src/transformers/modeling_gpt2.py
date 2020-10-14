@@ -42,6 +42,7 @@ from .modeling_utils import (
     prune_conv1d_layer,
 )
 from .utils import logging
+from .utils.model_parallel_utils import analyze_device_map
 
 
 logger = logging.get_logger(__name__)
@@ -489,6 +490,74 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.init_weights()
 
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+    def parallelize(self, device_map):
+        '''Uses a device map to distribute attention modules of the model across several devices.
+        Args: 
+            device_map (:obj:`Dict[int, list]`):
+                A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
+                always automatically mapped to the first device (for esoteric reasons). That means that the first
+                device should have fewer attention modules mapped to it than other devices. Here is an example of
+                a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
+                
+                model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
+                device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+                              1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+                              2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+                              3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
+                model.parallelize(device_map)
+
+                For reference, the gpt2 models have the following number of attention modules:
+                    gpt2: 12
+                    gpt2-medium: 24
+                    gpt2-large: 36
+                    gpt2-xl: 48
+        '''
+        # Check validity of device_map
+        assert self.device_map or device_map, "No device_map detected. Pass a device_map dictionary to parallelize_model"
+        analyze_device_map(device_map, len(self.h))
+        
+        self.model_parallel = True
+        self.device_map = device_map
+        self.first_device = 'cpu' if 'cpu' in self.device_map.keys() else 'cuda:' + str(min(self.device_map.keys()))
+        self.last_device = 'cuda:' + str(max(self.device_map.keys()))
+        self.wte = self.wte.to(self.first_device)
+        self.wpe = self.wpe.to(self.first_device)
+        ## Load onto devices
+        for k, v in self.device_map.items():
+            for block in v:
+                cuda_device = 'cuda:' + str(k)
+                self.h[block] = self.h[block].to(cuda_device)
+        ## ln_f to last 
+        self.ln_f = self.ln_f.to(self.last_device)
+
+    def deparallelize(self):
+        """Moves the model to cpu from a model parallel state. For example, on a 4 GPU machine with gpt2-large:
+
+        model = GPT2LMHeadModel.from_pretrained('gpt2-large')
+        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
+                    1: [8, 9, 10, 11, 12, 13, 14, 15],
+                    2: [16, 17, 18, 19, 20, 21, 22, 23],
+                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
+        model.parallelize(device_map) # Splits the model across several devices
+        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+
+        """
+        self.model_parallel = False
+        self.device_map = None
+        self.first_device = 'cpu'
+        self.last_device = 'cpu'
+        self.wte = self.wte.to('cpu')
+        self.wpe = self.wpe.to('cpu')
+        for index in range(len(self.h)):
+            self.h[index] = self.h[index].to('cpu')
+            
+        self.ln_f = self.ln_f.to('cpu')
+        torch.cuda.empty_cache()
+        
     def get_input_embeddings(self):
         return self.wte
 
@@ -620,6 +689,16 @@ class GPT2Model(GPT2PreTrainedModel):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+            # Model parallel
+            if self.model_parallel:
+                torch.cuda.set_device(hidden_states.device)
+                # Ensure layer_past is on same device as hidden_states (might not be correct)                
+                if layer_past is not None:
+                    layer_past = layer_past.to(hidden_states.device)
+                # Ensure that attention_mask is always on the same device as hidden_states
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(hidden_states.device)
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
@@ -660,6 +739,12 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (outputs[2],)
 
+            # Model Parallel: If it's the last layer for that device, put things on the next device
+            if self.model_parallel:
+                for k, v in self.device_map.items():
+                    if i == v[-1] and 'cuda:' + str(k) != self.last_device:
+                        hidden_states = hidden_states.to('cuda:' + str(k + 1))
+
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(*output_shape)
@@ -692,6 +777,20 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         self.init_weights()
+
+        self.model_parallel = False
+
+    def parallelize(self, device_map):
+        self.transformer.parallelize(device_map)
+        self.lm_head = self.lm_head.to(self.transformer.first_device)
+        self.model_parallel = True
+        
+    def deparallelize(self):
+        self.transformer.deparallelize()
+        self.transformer = self.transformer.to('cpu')
+        self.lm_head = self.lm_head.to('cpu')
+        self.model_parallel = False
+        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -765,6 +864,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.transformer.first_device)
+            hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)
 
