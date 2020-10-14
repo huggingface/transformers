@@ -196,7 +196,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1.keys():
             # Logging dir can be slightly different as they default to something with the time.
-            if key != "loggin_dir":
+            if key != "logging_dir":
                 self.assertEqual(dict1[key], dict2[key])
 
     def test_reproducible_training(self):
