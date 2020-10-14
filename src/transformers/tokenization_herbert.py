@@ -35,7 +35,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class HerbertTokenizer(XLMTokenizer):
     """
-    Construct a BPE tokenizer for Allegro Herbert.
+    Construct a BPE tokenizer for HerBERT.
 
     Peculiarities:
 
