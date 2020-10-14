@@ -116,6 +116,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
+        tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -128,6 +129,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             vocab_file,
+            tokenizer_file=tokenizer_file,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

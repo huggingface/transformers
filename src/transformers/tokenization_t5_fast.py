@@ -118,6 +118,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
+        tokenizer_file=None,
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
@@ -127,6 +128,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             vocab_file,
+            tokenizer_file=tokenizer_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,

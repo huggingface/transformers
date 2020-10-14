@@ -125,6 +125,7 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
+        tokenizer_file=None,
         do_lower_case=False,
         remove_space=True,
         keep_accents=False,
@@ -140,6 +141,7 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             vocab_file=vocab_file,
+            tokenizer_file=tokenizer_file,
             do_lower_case=do_lower_case,
             remove_space=remove_space,
             keep_accents=keep_accents,

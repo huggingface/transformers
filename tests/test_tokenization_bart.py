@@ -15,6 +15,7 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = BartTokenizerFast
     test_rust_tokenizer = True
     from_pretrained_filter = filter_roberta_detectors
+    # from_pretrained_kwargs = {'add_prefix_space': True}
 
     def setUp(self):
         super().setUp()

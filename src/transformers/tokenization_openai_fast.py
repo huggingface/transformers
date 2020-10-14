@@ -64,8 +64,8 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     model_input_names = ["attention_mask"]
     slow_tokenizer_class = OpenAIGPTTokenizer
 
-    def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super().__init__(vocab_file, merges_file, unk_token=unk_token, **kwargs)
+    def __init__(self, vocab_file, merges_file, tokenizer_file=None, unk_token="<unk>", **kwargs):
+        super().__init__(vocab_file, merges_file, tokenizer_file=tokenizer_file, unk_token=unk_token, **kwargs)
 
     @property
     def do_lower_case(self):

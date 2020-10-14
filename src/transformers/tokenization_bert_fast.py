@@ -163,6 +163,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
+        tokenizer_file=None,
         do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",
@@ -175,6 +176,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             vocab_file,
+            tokenizer_file=tokenizer_file,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,
