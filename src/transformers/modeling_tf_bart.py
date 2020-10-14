@@ -25,7 +25,7 @@ from tensorflow.keras.layers import Dense, LayerNormalization
 
 from .activations_tf import ACT2FN
 from .configuration_bart import BartConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
 from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
 
 # Public API
@@ -41,13 +41,14 @@ from .modeling_tf_utils import (
 from .tokenization_utils_base import BatchEncoding
 
 
+_CONFIG_FOR_DOC = "BartConfig"
+_TOKENIZER_FOR_DOC = "BartTokenizer"
+
+
 def create_position_ids_from_input_ids(input_ids, padding_idx):
     """Replace non-padding symbols with their position numbers. Position numbers begin at
     padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
     `utils.make_positions`.
-
-    :param torch.Tensor x:
-    :return tf.Tensor:
     """
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = tf.cumsum(mask, axis=1).type_as(mask) * mask
@@ -83,22 +84,48 @@ BART_START_DOCSTRING = r"""
 
 """
 
+
 BART_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-               Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
-            Padding will be ignored by default should you provide it.
-            Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
-        attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on padding token indices in input_ids.
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+            Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, 1, tgt_seq_len, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
-            Default behavior: generate a tensor that ignores pad tokens and future tokens, as in the paper.
-            If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
-            See diagram 1 in the paper for more info on the default strategy
+        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
+        encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
+            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
+        past_key_values (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers`
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training/:obj:`True` during generation
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 LARGE_NEGATIVE = -1e8
 
@@ -183,7 +210,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = Attention(
+        self.self_attn = TFAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         assert not config.normalize_before, "MBART Not Supported"
@@ -233,7 +260,6 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         return x, attn_weights
 
 
-# @keras_serializable
 class TFBartEncoder(tf.keras.layers.Layer):
     # config_class = BartConfig
     """
@@ -258,7 +284,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.max_source_positions = config.max_position_embeddings
 
         self.embed_tokens = embed_tokens
-        self.embed_positions = LearnedPositionalEmbedding(
+        self.embed_positions = TFLearnedPositionalEmbedding(
             config.max_position_embeddings,
             embed_tokens.hidden_size,
             self.padding_idx,
@@ -349,7 +375,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = Attention(
+        self.self_attn = TFAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -360,7 +386,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = Attention(
+        self.encoder_attn = TFAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -459,7 +485,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.max_target_positions = config.max_position_embeddings
         self.embed_tokens = embed_tokens
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.embed_positions = LearnedPositionalEmbedding(
+        self.embed_positions = TFLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
@@ -596,7 +622,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class Attention(tf.keras.layers.Layer):
+class TFAttention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -787,7 +813,7 @@ class Attention(tf.keras.layers.Layer):
         return new_key_padding_mask
 
 
-class LearnedPositionalEmbedding(TFSharedEmbeddings):
+class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
     Padding ids are ignored by either offsetting based on padding_idx
@@ -813,6 +839,9 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
         return super().call(positions + self.offset)  # super object is not callable for some reason
+
+
+# Public API
 
 
 @add_start_docstrings(
@@ -858,6 +887,7 @@ class TFBartModel(TFPretrainedBartModel):
         return decoder_input_ids, decoder_padding_mask, causal_lm_mask
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         inputs,
@@ -873,6 +903,9 @@ class TFBartModel(TFPretrainedBartModel):
         training=False,
         **kwargs
     ):
+        """
+        Returns:
+        """
         assert "decoder_cached_states" not in kwargs, "Please use past_key_values to cache intermediate outputs"
         if isinstance(inputs, (tuple, list)):
             assert len(inputs) <= 10, "Too many inputs."
@@ -990,6 +1023,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         self.use_cache = config.use_cache
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         inputs,
@@ -1007,8 +1041,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         **kwargs,
     ):
         """
+        Returns:
 
-        Examples::
+        Examples:
 
             # Mask filling only works for bart-large
             from transformers import BartTokenizer, TFBartForConditionalGeneration
@@ -1018,10 +1053,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
             logits = model(input_ids)[0]
             masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            probs = logits[0, masked_index].softmax(dim=0)
-            values, predictions = probs.topk(5)
-            tokenizer.decode(predictions).split()
-            # ['good', 'great', 'all', 'really', 'very']
+            probs = tf.nn.softmax(logits[0, masked_index], dim=-1)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
