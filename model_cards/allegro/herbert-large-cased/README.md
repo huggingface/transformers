@@ -8,7 +8,7 @@ license: cc-by-sa-4.0
 ---
 # HerBERT 
 **[HerBERT](https://en.wikipedia.org/wiki/Zbigniew_Herbert)** is a BERT-based Language Model trained on Polish Corpora
-using MLM objective with dynamic masking of whole words.
+using MLM and SSO objectives with dynamic masking of whole words.
 Model training and experiments were conducted with [transformers](https://github.com/huggingface/transformers) in version 2.9.
 
 ## Tokenizer
