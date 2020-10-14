@@ -21,9 +21,17 @@ import unittest
 import datasets
 import numpy as np
 
-from transformers import AutoTokenizer, PretrainedConfig, TrainingArguments, is_torch_available
+from transformers import AutoTokenizer, EvaluationStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_optuna,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
+from transformers.utils.hp_naming import TrialShortNamer
 
 
 if is_torch_available():
@@ -129,7 +137,9 @@ if is_torch_available():
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
-    def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
+    def get_regression_trainer(
+        a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, trainer_args=None, **kwargs
+    ):
         label_names = kwargs.get("label_names", None)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
@@ -143,6 +153,7 @@ if is_torch_available():
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
         args = TrainingArguments(output_dir, **kwargs)
+        trainer_args = trainer_args or {}
         return Trainer(
             model,
             args,
@@ -151,6 +162,7 @@ if is_torch_available():
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
             optimizers=optimizers,
+            **trainer_args,
         )
 
 
@@ -617,3 +629,48 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # with enforced DataParallel
         assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+
+
+@require_torch
+@require_optuna
+class TrainerHyperParameterIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+            return {}
+
+        def model_init(trial):
+            if trial is not None:
+                a = trial.suggest_int("a", -4, 4)
+                b = trial.suggest_int("b", -4, 4)
+            else:
+                a = 0
+                b = 0
+            config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(config)
+
+        def hp_name(trial):
+            return MyTrialShortNamer.shortname(trial.params)
+
+        trainer_args = dict(model_init=model_init)
+
+        trainer = get_regression_trainer(
+            learning_rate=0.1,
+            logging_steps=1,
+            evaluation_strategy=EvaluationStrategy.EPOCH,
+            num_train_epochs=4,
+            disable_tqdm=True,
+            load_best_model_at_end=True,
+            trainer_args=trainer_args,
+            logging_dir="runs",
+            run_name="test",
+        )
+        trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=20)

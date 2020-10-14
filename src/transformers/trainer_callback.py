@@ -66,6 +66,9 @@ class TrainerState:
         is_world_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not this process is the global main process (when training in a distributed fashion on
             several machines, this is only going to be :obj:`True` for one process).
+        is_hyper_param_search (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search.
+            This will impact the way data will be logged in TensorBoard.
     """
 
     epoch: Optional[float] = None
@@ -78,6 +81,7 @@ class TrainerState:
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
+    is_hyper_param_search: bool = False
 
     def __post_init__(self):
         if self.log_history is None:
@@ -276,6 +280,7 @@ class CallbackHandler(TrainerCallback):
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
         self.eval_dataloader = None
+        self.trial_info = None
 
         if not any(isinstance(cb, DefaultFlowCallback) for cb in self.callbacks):
             logger.warn(
@@ -373,6 +378,7 @@ class CallbackHandler(TrainerCallback):
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
                 eval_dataloader=self.eval_dataloader,
+                trial_info=self.trial_info,
                 **kwargs,
             )
             # A Callback can skip the return of `control` if it doesn't change it.
