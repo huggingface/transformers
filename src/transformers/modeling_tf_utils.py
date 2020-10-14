@@ -273,9 +273,21 @@ def input_analysis(func, inputs, **kwargs):
 
     for name in parameter_names:
         if name not in list(output.keys()):
-            output[name] = kwargs.pop(name, signature[name].default)
+            # When creating a SavedModel TF calls method the method LayerCall.__call__(args, **kwargs)
+            # So to respect the proper output we have to add this exception
+            if name == "kwargs":
+                output.update(kwargs)
 
-    return list(dict(sorted(output.items())).values())
+                if "input_ids" not in list(output.keys()):
+                    output["input_ids"] = output["args"]
+                elif "input_embeds" not in list(output.keys()):
+                    output["input_embeds"] = output["args"]
+                
+                del output["args"]
+            else:
+                output[name] = kwargs.pop(name, signature[name].default)
+
+    return output
 
 
 def old_load_tf_weights(model, resolved_archive_file):
@@ -345,10 +357,6 @@ def load_tf_weights(model, resolved_archive_file):
 
         for layer in model.layers:
             name = layer.name
-
-            if "dropout" == re.split("_\d+", name)[0]:
-                name = "dropout"
-
             model_layers_name_value[name] = layer
 
         model_layers_name = set(model_layers_name_value.keys())
@@ -356,9 +364,6 @@ def load_tf_weights(model, resolved_archive_file):
 
         for layer_name in saved_h5_model_layers_name:
             name = layer_name.replace("nsp___", "").replace("mlm___", "")
-
-            if "dropout" == re.split("_\d+", name)[0]:
-                name = "dropout"
 
             renamed_saved_h5_model_layers_names.add(name)
 
