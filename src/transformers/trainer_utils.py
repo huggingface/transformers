@@ -1,14 +1,28 @@
+# coding=utf-8
+# Copyright 2020-present the HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+"""
+
 import random
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
 from .tokenization_utils_base import ExplicitEnum
-
-
-if is_torch_available():
-    import torch
 
 
 def set_seed(seed: int):
@@ -58,6 +72,12 @@ class TrainOutput(NamedTuple):
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
+
+
+class EvaluationStrategy(ExplicitEnum):
+    NO = "no"
+    STEPS = "steps"
+    EPOCH = "epoch"
 
 
 class BestRun(NamedTuple):
@@ -130,40 +150,3 @@ default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
 }
-
-
-def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> "torch.Tensor":
-    if is_torch_available():
-        try:
-            output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
-            torch.distributed.all_gather(output_tensors, tensor)
-            concat = torch.cat(output_tensors, dim=0)
-
-            # truncate the dummy elements added by SequentialDistributedSampler
-            if num_total_examples is not None:
-                concat = concat[:num_total_examples]
-            return concat
-        except AssertionError:
-            raise AssertionError("Not currently using distributed training")
-    else:
-        raise ImportError("Torch must be installed to use `distributed_concat`")
-
-
-def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
-) -> "torch.Tensor":
-    if is_torch_available():
-        try:
-            tensorized_scalar = torch.Tensor(scalars).cuda()
-            output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
-            torch.distributed.all_gather(output_tensors, tensorized_scalar)
-            concat = torch.cat(output_tensors, dim=0)
-
-            # truncate the dummy elements added by SequentialDistributedSampler
-            if num_total_examples is not None:
-                concat = concat[:num_total_examples]
-            return concat
-        except AssertionError:
-            raise AssertionError("Not currently using distributed training")
-    else:
-        raise ImportError("Torch must be installed to use `distributed_broadcast_scalars`")

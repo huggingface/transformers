@@ -88,7 +88,7 @@ def main():
         )
     )
 
-    model.reset_length(args.tgt_len, args.ext_len, args.mem_len)
+    model.reset_memory_length(args.mem_len)
     if args.clamp_len > 0:
         model.clamp_len = args.clamp_len
     if args.same_length:

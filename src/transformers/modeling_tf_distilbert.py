@@ -16,11 +16,9 @@
 """
 
 
-import math
-
-import numpy as np
 import tensorflow as tf
 
+from .activations_tf import get_tf_activation
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -66,31 +64,6 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilbert-base-uncased-finetuned-sst-2-english",
     # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
 ]
-
-
-# UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    Original Implementation of the gelu activation function in Google Bert repo when initially created.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.math.sqrt(2.0), dtype=x.dtype)))
-    return x * cdf
-
-
-def gelu_new(x):
-    """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    Args:
-        x: float Tensor to perform activation.
-    Returns:
-        `x` with the GELU activation applied.
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
 
 
 class TFEmbeddings(tf.keras.layers.Layer):
@@ -242,9 +215,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         k_length = shape_list(key)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
         # assert key.size() == value.size()
-
-        dim_per_head = self.dim // self.n_heads
-
+        dim_per_head = tf.math.divide(self.dim, self.n_heads)
+        dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
         mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
@@ -258,17 +230,16 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
-
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        q = tf.cast(q, dtype=tf.float32)
+        q = tf.multiply(q, tf.math.rsqrt(tf.cast(dim_per_head, dtype=tf.float32)))
+        k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))            # (bs, n_heads, q_length, k_length)
 
-        scores_dtype = scores.dtype
-        # calculate `scores` in `tf.float32` to avoid numeric overflow
-        scores = tf.cast(scores, dtype=tf.float32) - 1e30 * (1.0 - tf.cast(mask, dtype=tf.float32))
-
-        weights = tf.cast(tf.nn.softmax(scores, axis=-1), dtype=scores_dtype)  # (bs, n_heads, qlen, klen)
+        mask = tf.cast(mask, dtype=scores.dtype)
+        scores = scores - 1e30 * (1.0 - mask)
+        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
@@ -298,9 +269,7 @@ class TFFFN(tf.keras.layers.Layer):
         assert config.activation in ["relu", "gelu"], "activation ({}) must be in ['relu', 'gelu']".format(
             config.activation
         )
-        self.activation = (
-            tf.keras.layers.Activation(gelu) if config.activation == "gelu" else tf.keras.activations.relu
-        )
+        self.activation = get_tf_activation(config.activation)
 
     def call(self, input, training=False):
         x = self.lin1(input)
@@ -532,28 +501,33 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
 
 
 DISTILBERT_START_DOCSTRING = r"""
-    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
-    Use it as a regular TF 2.0 Keras Model and
-    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
+
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
 
     .. note::
 
         TF 2.0 models accepts two formats as inputs:
 
-            - having all inputs as keyword arguments (like PyTorch models), or
-            - having all inputs as a list, tuple or dict in the first positional arguments.
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids})`
+          :obj:`model({"input_ids": input_ids})`
 
     Parameters:
         config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
@@ -563,38 +537,44 @@ DISTILBERT_START_DOCSTRING = r"""
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.BertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.DistilBertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` and
+            :func:`transformers.PreTrainedTokenizer.encode` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, embedding_dim)`, `optional`):
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        iinputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
-            Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
-            (if set to :obj:`False`) for evaluation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -607,7 +587,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -651,14 +631,14 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_transform = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="vocab_transform"
         )
-        self.act = tf.keras.layers.Activation(gelu)
+        self.act = get_tf_activation("gelu")
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def get_output_embeddings(self):
         return self.vocab_projector.input_embeddings
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -745,7 +725,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         )
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -826,7 +806,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -918,7 +898,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -940,8 +920,8 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1013,8 +993,8 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
 
 @add_start_docstrings(
-    """DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
@@ -1028,7 +1008,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -1051,11 +1031,11 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.distilbert.return_dict

@@ -19,8 +19,6 @@ import json
 import os
 import re
 
-from tokenizers import CharBPETokenizer
-
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -75,20 +73,21 @@ def text_standardize(text):
 
 class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
-    BPE tokenizer. Peculiarities:
+    Construct a GPT Tokenizer. Based on Byte-Pair-Encoding with the following peculiarities:
 
-    - lower case all inputs
-    - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
+    - lowercases all inputs,
+    - uses :obj:`SpaCy` tokenizer and :obj:`ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
+      :obj:`BasicTokenizer` if not.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """
@@ -121,6 +120,10 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+    @property
+    def do_lower_case(self):
+        return True
 
     @property
     def vocab_size(self):
@@ -206,7 +209,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         Save the vocabulary and special tokens file to a directory.
 
         Args:
-            save_directory (:obj:`str`):
+            vocab_path (:obj:`str`):
                 The directory in which to save the vocabulary.
 
         Returns:
@@ -239,22 +242,21 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
 
 class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "Fast" BPE tokenizer for OpenAI GPT (backed by HuggingFace's `tokenizers` library).
-
-    Peculiarities:
+    Construct a "fast" GPT Tokenizer (backed by HuggingFace's `tokenizers` library). Based on Byte-Pair-Encoding with
+    the following peculiarities:
 
     - lower case all inputs
-    - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
+    - uses BERT's BasicTokenizer for pre-BPE tokenization
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """
@@ -263,10 +265,11 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = OpenAIGPTTokenizer
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        kwargs.setdefault("unk_token", unk_token)
-        super().__init__(
-            CharBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, unk_token=unk_token, lowercase=True),
-            **kwargs,
-        )
+        super().__init__(vocab_file, merges_file, unk_token=unk_token, **kwargs)
+
+    @property
+    def do_lower_case(self):
+        return True

@@ -31,12 +31,12 @@ ArXiv paper: [https://arxiv.org/abs/1911.00536](https://arxiv.org/abs/1911.00536
 Now we are ready to try out how the model works as a chatting partner!
 
 ```python
-from transformers import AutoModelWithLMHead, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-large")
-model = AutoModelWithLMHead.from_pretrained("microsoft/DialoGPT-large")
+model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-large")
 
 # Let's chat for 5 lines
 for step in range(5):

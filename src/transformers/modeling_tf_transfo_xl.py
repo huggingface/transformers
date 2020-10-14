@@ -15,8 +15,7 @@
 # limitations under the License.
 """ TF 2.0 Transformer XL model.
 """
-
-
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -107,10 +106,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         d_model,
         d_head,
         dropout,
-        dropatt=0,
-        tgt_len=None,
-        ext_len=None,
-        mem_len=None,
+        dropatt=0.0,
         pre_lnorm=False,
         r_r_bias=None,
         r_w_bias=None,
@@ -261,9 +257,6 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         d_head,
         d_inner,
         dropout,
-        tgt_len=None,
-        ext_len=None,
-        mem_len=None,
         dropatt=0.0,
         pre_lnorm=False,
         r_w_bias=None,
@@ -280,9 +273,6 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
             d_model,
             d_head,
             dropout,
-            tgt_len=tgt_len,
-            ext_len=ext_len,
-            mem_len=mem_len,
             dropatt=dropatt,
             pre_lnorm=pre_lnorm,
             r_w_bias=r_w_bias,
@@ -414,12 +404,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         self.drop = tf.keras.layers.Dropout(config.dropout)
 
         self.n_layer = config.n_layer
-
-        self.tgt_len = config.tgt_len
         self.mem_len = config.mem_len
-        self.ext_len = config.ext_len
-        self.max_klen = config.tgt_len + config.ext_len + config.mem_len
-
         self.attn_type = config.attn_type
 
         self.layers = []
@@ -432,9 +417,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                         config.d_head,
                         config.d_inner,
                         config.dropout,
-                        tgt_len=config.tgt_len,
-                        ext_len=config.ext_len,
-                        mem_len=config.mem_len,
                         dropatt=config.dropatt,
                         pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if self.untie_r else self.r_w_bias,
@@ -478,10 +460,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def backward_compatible(self):
         self.sample_softmax = -1
 
-    def reset_length(self, tgt_len, ext_len, mem_len):
-        self.tgt_len = tgt_len
+    def reset_memory_length(self, mem_len):
         self.mem_len = mem_len
-        self.ext_len = ext_len
 
     def _prune_heads(self, heads):
         raise NotImplementedError
@@ -506,12 +486,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         assert len(hids) == len(mems), "len(hids) != len(mems)"
 
         # There are `mlen + qlen` steps that can be cached into mems
-        # For the next step, the last `ext_len` of the `qlen` tokens
-        # will be used as the extended context. Hence, we only cache
-        # the tokens from `mlen + qlen - self.ext_len - self.mem_len`
-        # to `mlen + qlen - self.ext_len`.
         new_mems = []
-        end_idx = mlen + max(0, qlen - 0 - self.ext_len)
+        end_idx = mlen + max(0, qlen)
         beg_idx = max(0, end_idx - self.mem_len)
         for i in range(len(hids)):
 
@@ -689,8 +665,8 @@ class TFTransfoXLModelOutput(ModelOutput):
             Sequence of hidden-states at the output of the last layer of the model.
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
+            Can be used (see :obj:`mems` input) to speed up sequential decoding. The token ids which have their past
+            given to this model should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -722,8 +698,8 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
+            Can be used (see :obj:`mems` input) to speed up sequential decoding. The token ids which have their past
+            given to this model should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -745,24 +721,32 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
 
 TRANSFO_XL_START_DOCSTRING = r"""
 
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
+
     .. note::
 
         TF 2.0 models accepts two formats as inputs:
 
-            - having all inputs as keyword arguments (like PyTorch models), or
-            - having all inputs as a list, tuple or dict in the first positional arguments.
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.
@@ -775,30 +759,36 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.TransfoXLTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` and
+            :func:`transformers.PreTrainedTokenizer.encode` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
-            given to this model should not be passed as input ids as they have already been computed.
+            (see :obj:`mems` output below). Can be used to speed up sequential decoding. The token ids which have their
+            mems given to this model should not be passed as :obj:`input_ids` as they have already been computed.
         head_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
         return_dict (:obj:`bool`, `optional`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -867,7 +857,14 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return None
 
     def reset_length(self, tgt_len, ext_len, mem_len):
-        self.transformer.reset_length(tgt_len, ext_len, mem_len)
+        warnings.warn(
+            "The method `reset_length` is deprecated and will be removed in a future version, use `reset_memory_length` instead.",
+            FutureWarning,
+        )
+        self.transformer.reset_memory_length(mem_len)
+
+    def reset_memory_length(self, mem_len):
+        self.transformer.reset_memory_length(mem_len)
 
     def init_mems(self, bsz):
         return self.transformer.init_mems(bsz)

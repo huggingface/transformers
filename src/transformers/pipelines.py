@@ -943,6 +943,9 @@ class TextClassificationPipeline(Pipeline):
     task identifier: :obj:`"sentiment-analysis"` (for classifying sequences according to positive or negative
     sentiments).
 
+    If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run
+    a softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
+
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task.
     See the up-to-date list of available models on
     `huggingface.co/models <https://huggingface.co/models?filter=text-classification>`__.
@@ -965,7 +968,7 @@ class TextClassificationPipeline(Pipeline):
 
         Args:
             args (:obj:`str` or :obj:`List[str]`):
-                One or several textts (or one list of prompts) to classify.
+                One or several texts (or one list of prompts) to classify.
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
@@ -977,7 +980,11 @@ class TextClassificationPipeline(Pipeline):
             If ``self.return_all_scores=True``, one such dictionary is returned per label.
         """
         outputs = super().__call__(*args, **kwargs)
-        scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+
+        if self.model.config.num_labels == 1:
+            scores = 1.0 / (1.0 + np.exp(-outputs))
+        else:
+            scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         if self.return_all_scores:
             return [
                 [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
@@ -1811,7 +1818,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probalities for each span to be
+        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be
         the actual answer.
 
         In addition, it filters out some unwanted/impossible cases like answer len being greater than
@@ -1852,7 +1859,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
         """
-        When decoding from token probalities, this method maps token indexes to actual word in
+        When decoding from token probabilities, this method maps token indexes to actual word in
         the initial context.
 
         Args:
@@ -2713,18 +2720,18 @@ def pipeline(
 
     Examples::
 
-        from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
+        >>> from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 
-        # Sentiment analysis pipeline
-        pipeline('sentiment-analysis')
+        >>> # Sentiment analysis pipeline
+        >>> pipeline('sentiment-analysis')
 
-        # Question answering pipeline, specifying the checkpoint identifier
-        pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
+        >>> # Question answering pipeline, specifying the checkpoint identifier
+        >>> pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
 
-        # Named entity recognition pipeline, passing in a specific model and tokenizer
-        model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        pipeline('ner', model=model, tokenizer=tokenizer)
+        >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
+        >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:

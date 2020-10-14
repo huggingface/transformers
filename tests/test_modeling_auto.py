@@ -183,14 +183,14 @@ class AutoModelTest(unittest.TestCase):
     def test_from_pretrained_identifier(self):
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, BertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_identifier_from_model_type(self):
         model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(model, RobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_parents_and_children_in_mappings(self):
         # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
@@ -212,8 +212,9 @@ class AutoModelTest(unittest.TestCase):
             mapping = tuple(mapping.items())
             for index, (child_config, child_model) in enumerate(mapping[1:]):
                 for parent_config, parent_model in mapping[: index + 1]:
-                    with self.subTest(
-                        msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
-                    ):
-                        self.assertFalse(issubclass(child_config, parent_config))
-                        self.assertFalse(issubclass(child_model, parent_model))
+                    assert not issubclass(
+                        child_config, parent_config
+                    ), "{child_config.__name__} is child of {parent_config.__name__}"
+                    assert not issubclass(
+                        child_model, parent_model
+                    ), "{child_config.__name__} is child of {parent_config.__name__}"
