@@ -59,7 +59,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
             --model_name_or_path=bert-base-cased
             --per_device_train_batch_size=64
             --per_device_eval_batch_size=64
-            --evaluate_during_training
+            --evaluation_strategy steps
             --overwrite_cache
             """.split()
         with patch.object(sys, "argv", testargs):

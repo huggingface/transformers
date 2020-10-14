@@ -85,7 +85,7 @@
         pass-as: --output_dir={v}
         type: string
         default: /valohai/outputs
-      - name: evaluate_during_training
-        description: Run evaluation during training at each logging step.
-        type: flag
-        default: true
+      - name: evaluation_strategy
+        description: The evaluation strategy to use.
+        type: string
+        default: steps
