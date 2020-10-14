@@ -1,0 +1,3 @@
+---
+license: mit
+---

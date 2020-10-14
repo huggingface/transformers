@@ -21,6 +21,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
+from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -44,6 +45,7 @@ from .configuration_rag import RagConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
@@ -57,6 +59,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -80,6 +83,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -99,12 +103,14 @@ CONFIG_MAPPING = OrderedDict(
         ("marian", MarianConfig),
         ("mbart", MBartConfig),
         ("bart", BartConfig),
+        ("blenderbot", BlenderbotConfig),
         ("reformer", ReformerConfig),
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
         ("deberta", DebertaConfig),
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
+        ("squeezebert", SqueezeBertConfig),
         ("bert", BertConfig),
         ("openai-gpt", OpenAIGPTConfig),
         ("gpt2", GPT2Config),
@@ -133,6 +139,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("xlm-roberta", "XLM-RoBERTa"),
         ("pegasus", "Pegasus"),
+        ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
         ("mbart", "mBART"),
         ("bart", "BART"),
@@ -141,6 +148,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roberta", "RoBERTa"),
         ("flaubert", "FlauBERT"),
         ("fsmt", "FairSeq Machine-Translation"),
+        ("squeezebert", "SqueezeBERT"),
         ("bert", "BERT"),
         ("openai-gpt", "OpenAI GPT"),
         ("gpt2", "OpenAI GPT-2"),

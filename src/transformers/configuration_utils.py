@@ -114,8 +114,8 @@ class PretrainedConfig(object):
           model pretrained weights.
         - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
           used when converting from an original (TensorFlow or PyTorch) checkpoint.
-        - **id2label** (:obj:`List[str]`, `optional`) -- A map from index (for instance prediction index, or target
-          index) to label.
+        - **id2label** (:obj:`Dict[int, str]`, `optional`) -- A map from index (for instance prediction index, or
+          target index) to label.
         - **label2id** (:obj:`Dict[str, int]`, `optional`) -- A map from label to index for the model.
         - **num_labels** (:obj:`int`, `optional`) -- Number of labels to use in the last layer added to the model,
           typically for a classification task.
@@ -274,7 +274,7 @@ class PretrainedConfig(object):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not to force to (re-)download the configuration files and override the cached versions if they
+                Whether or not to force to (re-)download the configuration files and override the cached versions if they
                 exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file

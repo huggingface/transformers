@@ -535,6 +535,7 @@ class ElectraPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
     authorized_missing_keys = [r"position_ids"]
+    authorized_unexpected_keys = [r"electra\.embeddings_project\.weight", r"electra\.embeddings_project\.bias"]
 
     # Copied from transformers.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -610,7 +611,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):

@@ -19,7 +19,6 @@
 ####################################################
 
 
-import logging
 import os
 
 import torch
@@ -37,9 +36,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XXXConfig"
 _TOKENIZER_FOR_DOC = "XXXTokenizer"
@@ -243,7 +243,7 @@ XXX_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
@@ -433,7 +433,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        prediction_scores = self.lm_head(sequence_output)
 
         masked_lm_loss = None
         if labels is not None:

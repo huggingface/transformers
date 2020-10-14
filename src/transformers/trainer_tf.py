@@ -227,6 +227,7 @@ class TFTrainer:
                 adam_beta2=self.args.adam_beta2,
                 adam_epsilon=self.args.adam_epsilon,
                 weight_decay_rate=self.args.weight_decay,
+                power=self.args.poly_power,
             )
 
     def setup_wandb(self):

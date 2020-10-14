@@ -69,3 +69,4 @@ class LongformerTokenizerFast(RobertaTokenizerFast):
         "vocab_file": {m: vocab_url for m in _all_longformer_models},
         "merges_file": {m: merges_url for m in _all_longformer_models},
     }
+    slow_tokenizer_class = LongformerTokenizer
