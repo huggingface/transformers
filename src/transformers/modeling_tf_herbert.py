@@ -83,7 +83,6 @@ class TFHerbertModel(TFBertModel):
     """
 
     config_class = HerbertConfig
-    base_model_prefix = "herbert"
 
 
 @add_start_docstrings(
@@ -96,7 +95,6 @@ class TFHerbertForMaskedLM(TFBertForMaskedLM):
     """
 
     config_class = HerbertConfig
-    base_model_prefix = "herbert"
 
 
 @add_start_docstrings(
@@ -111,7 +109,6 @@ class TFHerbertForSequenceClassification(TFBertForSequenceClassification):
     """
 
     config_class = HerbertConfig
-    base_model_prefix = "herbert"
 
 
 @add_start_docstrings(
@@ -126,7 +123,6 @@ class TFHerbertForMultipleChoice(TFBertForMultipleChoice):
     """
 
     config_class = HerbertConfig
-    base_model_prefix = "herbert"
 
 
 @add_start_docstrings(
@@ -141,7 +137,6 @@ class TFHerbertForTokenClassification(TFBertForTokenClassification):
     """
 
     config_class = HerbertConfig
-    base_model_prefix = "herbert"
 
 
 @add_start_docstrings(
@@ -156,4 +151,3 @@ class TFHerbertForQuestionAnswering(TFBertForQuestionAnswering):
     """
 
     config_class = HerbertConfig
-    base_model_prefix = "herbert"

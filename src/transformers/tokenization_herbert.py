@@ -135,8 +135,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         by concatenating and adding special tokens.
         An HerBERT, like BERT sequence has the following format:
 
-        - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        - single sequence: ``<s> X </s>``
+        - pair of sequences: ``<s> A </s> B </s>``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
