@@ -4,7 +4,7 @@ HerBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The HerBERT model it's a transformer model pretrained using a masked language modeling (MLM) objective (like BERT) for Polish language.
+The HerBERT model is a transformer model pretrained using a masked language modeling (MLM) and Sentence Structural (SSO) objectives for Polish language.
 
 
 
