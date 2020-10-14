@@ -678,6 +678,15 @@ if is_tf_available():
         TFGPT2Model,
         TFGPT2PreTrainedModel,
     )
+    from .modeling_tf_herbert import (
+        HERBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFHerbertForMaskedLM,
+        TFHerbertForMultipleChoice,
+        TFHerbertForQuestionAnswering,
+        TFHerbertForSequenceClassification,
+        TFHerbertForTokenClassification,
+        TFHerbertModel,
+    )
     from .modeling_tf_longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLongformerForMaskedLM,

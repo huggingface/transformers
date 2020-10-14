@@ -29,6 +29,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    HerbertConfig,
     LongformerConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
@@ -105,6 +106,14 @@ from .modeling_tf_funnel import (
     TFFunnelModel,
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_herbert import (
+    TFHerbertModel,
+    TFHerbertForMaskedLM,
+    TFHerbertForSequenceClassification,
+    TFHerbertForQuestionAnswering,
+    TFHerbertForTokenClassification,
+    TFHerbertForMultipleChoice,
+)
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
@@ -162,6 +171,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
         (CamembertConfig, TFCamembertModel),
+        (HerbertConfig, TFHerbertModel),
         (XLMRobertaConfig, TFXLMRobertaModel),
         (LongformerConfig, TFLongformerModel),
         (RobertaConfig, TFRobertaModel),
@@ -185,6 +195,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
         (CamembertConfig, TFCamembertForMaskedLM),
+        (HerbertConfig, TFHerbertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForPreTraining),
@@ -207,6 +218,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
+        (HerbertConfig, TFHerbertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
@@ -244,6 +256,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
+        (HerbertConfig, TFHerbertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
@@ -263,6 +276,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
         (CamembertConfig, TFCamembertForSequenceClassification),
+        (HerbertConfig, TFHerbertForSequenceClassification),
         (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
         (RobertaConfig, TFRobertaForSequenceClassification),
         (BertConfig, TFBertForSequenceClassification),
@@ -280,6 +294,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (AlbertConfig, TFAlbertForQuestionAnswering),
         (CamembertConfig, TFCamembertForQuestionAnswering),
+        (HerbertConfig, TFHerbertForQuestionAnswering),
         (XLMRobertaConfig, TFXLMRobertaForQuestionAnswering),
         (LongformerConfig, TFLongformerForQuestionAnswering),
         (RobertaConfig, TFRobertaForQuestionAnswering),
@@ -298,6 +313,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (AlbertConfig, TFAlbertForTokenClassification),
         (CamembertConfig, TFCamembertForTokenClassification),
+        (HerbertConfig, TFHerbertForTokenClassification),
         (FlaubertConfig, TFFlaubertForTokenClassification),
         (XLMConfig, TFXLMForTokenClassification),
         (XLMRobertaConfig, TFXLMRobertaForTokenClassification),
@@ -313,6 +329,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         (CamembertConfig, TFCamembertForMultipleChoice),
+        (HerbertConfig, TFHerbertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),
         (XLMRobertaConfig, TFXLMRobertaForMultipleChoice),
         (RobertaConfig, TFRobertaForMultipleChoice),

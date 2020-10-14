@@ -28,7 +28,7 @@ from .modeling_bert import (
 )
 
 from .file_utils import add_start_docstrings
-from transformers.configuration_herbert import HerbertConfig
+from .configuration_herbert import HerbertConfig
 
 logger = logging.getLogger(__name__)
 
