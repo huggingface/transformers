@@ -97,7 +97,9 @@ who is the owner of reading football club	['Xiu Li Dai', 'Dai Yongge', 'Dai Xiul
 Xiu Li Dai
 ```
 
-Predictions of the model for the samples from the `evaluation_set` will be saved under the path specified by the `predictions_path` parameter. If this path already exists, the script will use saved predictions to calculate metrics. Add `--recalculate` parameter to force the script to perform inference from scratch.
+Predictions of the model for the samples from the `evaluation_set` will be saved under the path specified by the `predictions_path` parameter. 
+If this path already exists, the script will use saved predictions to calculate metrics. 
+Add `--recalculate` parameter to force the script to perform inference from scratch.
 
 An example e2e evaluation run could look as follows:
 ```bash
