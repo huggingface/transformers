@@ -179,8 +179,6 @@ def make_padding_mask(input_ids, padding_idx=1):
 
 
 # Helper Modules
-def TFDropout(x, **kwargs):  # FIXME
-    return x
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
@@ -276,6 +274,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if config.add_final_layer_norm
             else None
         )
+        self.return_dict = config.return_dict
 
     def call(
         self,
@@ -304,20 +303,18 @@ class TFBartEncoder(tf.keras.layers.Layer):
         """
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # check attention mask and invert
         if attention_mask is not None:
             assert attention_mask._rank() == 2
-
             attention_mask = tf.cast(attention_mask, dtype=tf.float32)
             attention_mask = (1.0 - attention_mask) * LARGE_NEGATIVE
-            # assert attention_mask.max() <= 0
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
-        x = TFDropout(x, p=self.dropout, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
 
         # B x T x C -> T x B x C
         x = tf.transpose(x, perm=[1, 0, 2])
@@ -415,7 +412,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             attn_mask=causal_mask,
             key_padding_mask=decoder_padding_mask,
         )
-        x = TFDropout(x, p=self.dropout, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
@@ -429,16 +426,16 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             layer_state=layer_state,  # mutates layer state
             static_kv=True,
         )
-        x = TFDropout(x, p=self.dropout, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
 
         x = self.encoder_attn_layer_norm(x)
 
         residual = x
         x = self.activation_fn(self.fc1(x))
-        x = TFDropout(x, p=self.activation_dropout, training=training)
+        x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
         x = self.fc2(x)
-        x = TFDropout(x, p=self.dropout, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         x = self.final_layer_norm(x)
         return (
@@ -456,8 +453,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
         config: BartConfig
         embed_tokens: output embedding
     """
-
-    # config_class = BartConfig # TODO(SS): Delete if not needed
 
     def __init__(self, config: BartConfig, embed_tokens, **kwargs):
         super().__init__(**kwargs)
@@ -728,7 +723,7 @@ class Attention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
-        attn_probs = TFDropout(attn_weights, training=training)
+        attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
 
         assert v is not None
         attn_output = tf.matmul(attn_probs, v)

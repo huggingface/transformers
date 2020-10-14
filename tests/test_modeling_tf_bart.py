@@ -277,9 +277,9 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         return BartTokenizer.from_pretrained("facebook/bart-large")
 
 
+# @slow
 @require_tf
 @require_torch
-@slow
 class FasterTFBartModelIntegrationTests(unittest.TestCase):
     """These tests are useful for debugging since they operate on a model with 1 encoder layer and 1 decoder layer."""
 
