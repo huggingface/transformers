@@ -80,7 +80,9 @@ class DPRReaderState(DPRState):
         print("Loading DPR reader from {}".format(self.src_file))
         saved_state = load_states_from_checkpoint(self.src_file)
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3
-        state_dict = {"encoder.bert_model.embeddings.position_ids": model.span_predictor.encoder.bert_model.embeddings.position_ids}
+        state_dict = {
+            "encoder.bert_model.embeddings.position_ids": model.span_predictor.encoder.bert_model.embeddings.position_ids
+        }
         for key, value in saved_state.model_dict.items():
             if key.startswith("encoder.") and not key.startswith("encoder.encode_proj"):
                 key = "encoder.bert_model." + key[len("encoder.") :]
