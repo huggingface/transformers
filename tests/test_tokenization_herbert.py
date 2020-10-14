@@ -108,7 +108,6 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
 
-
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("allegro/herbert-base-cased")

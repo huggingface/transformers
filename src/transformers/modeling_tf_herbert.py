@@ -32,8 +32,7 @@ from .configuration_herbert import HerbertConfig
 logger = logging.getLogger(__name__)
 
 
-HERBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-]
+HERBERT_PRETRAINED_MODEL_ARCHIVE_LIST = []
 
 
 HERBERT_START_DOCSTRING = r"""

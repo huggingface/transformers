@@ -122,9 +122,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         kwargs["sep_token"] = "</s>"
 
         super().__init__(
-            vocab_file,
-            merges_file,
-            **kwargs,
+            vocab_file, merges_file, **kwargs,
         )
 
     def build_inputs_with_special_tokens(
