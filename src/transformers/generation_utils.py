@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Callable
 
+import math
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -72,6 +73,7 @@ class GenerationMixin:
         repetition_penalty,
         batch_size,
         num_beams,
+        prefix_allowed_tokens_fn,
     ):
         # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
         if repetition_penalty != 1.0:
@@ -105,6 +107,20 @@ class GenerationMixin:
             # Modify the scores in place by setting the banned tokens logits to `-inf`
             set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
+        if prefix_allowed_tokens_fn is not None:
+            # calculate a list of banned tokens according `prefix_allowed_tokens_fn`
+            banned_tokens = prefix_allowed_tokens_fn(input_ids.view(batch_size, num_beams, -1))
+            # Modify the scores by setting the banned tokens logits to `-inf`
+            mask = torch.full_like(scores, -math.inf)
+
+            for i, beam_banned_tokens_i in enumerate([
+                beam_banned_tokens
+                for batch_banned_tokens in banned_tokens
+                for beam_banned_tokens in batch_banned_tokens
+            ]):
+                mask[i, beam_banned_tokens_i] = 0
+            scores += mask
+
         return scores
 
     @torch.no_grad()
@@ -130,6 +146,7 @@ class GenerationMixin:
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
+        prefix_allowed_tokens_fn: Optional[Callable] = None,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -201,6 +218,14 @@ class GenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
+                If provided, it has to be a function that has as arguments :obj:`inputs_id`.
+                At each step of Beam Search, this function is called with the :obj:`inputs_id` containing the 
+                previously generated tokens as a tensor of shape :obj:`(batch_size * num_beams)`:. This function has
+                to return a list of lists with the allowed BPE tokens at the next step (list of batches and list of beams). 
+                
+                This argument is useful for constrained generation conditioned on the prefix. If not provided no constrain
+                is applied.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
@@ -477,6 +502,7 @@ class GenerationMixin:
                 vocab_size=vocab_size,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 model_kwargs=model_kwargs,
             )
         else:
@@ -497,6 +523,7 @@ class GenerationMixin:
                 batch_size=effective_batch_size,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 model_kwargs=model_kwargs,
             )
 
@@ -520,6 +547,7 @@ class GenerationMixin:
         batch_size,
         attention_mask,
         use_cache,
+        prefix_allowed_tokens_fn,
         model_kwargs,
     ):
         """Generate sequences for each example without beam search (num_beams == 1).
@@ -550,6 +578,7 @@ class GenerationMixin:
                 repetition_penalty=repetition_penalty,
                 batch_size=batch_size,
                 num_beams=1,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             )
 
             # if model has past, then set the past variable to speed up decoding
@@ -625,6 +654,7 @@ class GenerationMixin:
         vocab_size,
         attention_mask,
         use_cache,
+        prefix_allowed_tokens_fn,
         model_kwargs,
     ):
         """Generate sequences for each example with beam search."""
@@ -682,6 +712,7 @@ class GenerationMixin:
                 repetition_penalty=repetition_penalty,
                 batch_size=batch_size,
                 num_beams=num_beams,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             )
 
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
