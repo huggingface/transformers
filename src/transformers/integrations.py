@@ -271,7 +271,7 @@ class WandbCallback(TrainerCallback):
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
             combined_dict = {**args.to_sanitized_dict()}
-            if hasattr(model, "config") and model.config is not None:
+            if getattr(model, "config", None) is not None:
                 combined_dict = {**model.config.to_dict(), **combined_dict}
             wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=args.run_name)
             # keep track of model topology and gradients, unsupported on TPU
