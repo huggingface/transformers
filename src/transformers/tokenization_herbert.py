@@ -28,22 +28,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allegro/herbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/allegro/herbert-base-cased/vocab.json",
-        "allegro/herbert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/allegro/herbert-large-cased/vocab.json",
-    },
-    "merges_file": {
-        "allegro/herbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/allegro/herbert-base-cased/merges.txt",
-        "allegro/herbert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/allegro/herbert-large-cased/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allegro/herbert-base-cased": 512,
-    "allegro/herbert-large-cased": 512,
-}
-
 
 class HerbertTokenizer(XLMTokenizer):
     """
@@ -61,8 +45,6 @@ class HerbertTokenizer(XLMTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, **kwargs):
 
@@ -111,8 +93,6 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = HerbertTokenizer
 
     def __init__(self, vocab_file, merges_file, **kwargs):
