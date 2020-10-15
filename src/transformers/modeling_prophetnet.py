@@ -1437,6 +1437,24 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        # TODO(PVP) - update docstring with ProhpetNet
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import T5Tokenizer, T5Model
+
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
+
         use_cache == use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1524,6 +1542,24 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        # TODO(PVP) - update docstring with ProhpetNet
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import T5Tokenizer, T5Model
+
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
