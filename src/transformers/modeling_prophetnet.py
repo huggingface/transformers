@@ -42,8 +42,14 @@ PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 PROPHETNET_START_DOCSTRING = r"""
-    Model and checkpoints are converted from ProphetNet and xProphetNet original Fairsequery_states version repo.
-    Details can be found from <https://github.com/microsoft/ProphetNet>
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    Original ProphetNet code can be found at <https://github.com/microsoft/ProphetNet> .
+    Checkpoints were converted from original Fairseq checkpoints. For more information on
+    the checkpoint conversion, please take a look at the file ``convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py``.
+
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matters related to general usage and behavior.
 
@@ -52,6 +58,7 @@ PROPHETNET_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
+
 PROPHETNET_GENERATION_EXAMPLE = r"""
     ProphetNet Summarization example::
 
@@ -1368,9 +1375,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare ProphetNet Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare ProphetNet Model outputting raw hidden-states without any specific head on top.",
     PROPHETNET_START_DOCSTRING,
-    PROPHETNET_INPUTS_DOCSTRING,
 )
 class ProphetNetModel(ProphetNetPreTrainedModel):
     def __init__(self, config):
@@ -1469,7 +1475,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The ProphetNet Model with a language modeling head. Can be used for summarization.", PROPHETNET_START_DOCSTRING
+    "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.", PROPHETNET_START_DOCSTRING
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig):
