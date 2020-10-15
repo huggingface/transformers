@@ -36,12 +36,12 @@ if TYPE_CHECKING:
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
 
 
-def filter_non_english(_, tokenizer, pretrained_name: str):
+def filter_non_english(_, pretrained_name: str):
     """ Filter all the model for non-english language """
     return not any([lang in pretrained_name for lang in NON_ENGLISH_TAGS])
 
 
-def filter_roberta_detectors(_, tokenizer, pretrained_name: str):
+def filter_roberta_detectors(_, pretrained_name: str):
     return "detector" not in pretrained_name
 
 
@@ -81,21 +81,19 @@ class TokenizerTesterMixin:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
         if self.test_rust_tokenizer:
-            self.tokenizers_list = [
+            tokenizers_list = [
                 (
-                    tokenizer,
+                    self.rust_tokenizer_class,
                     pretrained_name,
                     self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {},
                 )
-                for tokenizer in [self.tokenizer_class, self.rust_tokenizer_class]
-                for pretrained_name in self.tokenizer_class.pretrained_vocab_files_map[
+                for pretrained_name in self.rust_tokenizer_class.pretrained_vocab_files_map[
                     self.from_pretrained_vocab_key
                 ].keys()
                 if self.from_pretrained_filter is None
-                or (
-                    self.from_pretrained_filter is not None and self.from_pretrained_filter(tokenizer, pretrained_name)
-                )
+                or (self.from_pretrained_filter is not None and self.from_pretrained_filter(pretrained_name))
             ]
+            self.tokenizers_list = tokenizers_list[:1]  # Let's just test the first pretrained vocab for speed
         else:
             self.tokenizers_list = []
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
