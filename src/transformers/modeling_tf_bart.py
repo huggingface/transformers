@@ -240,7 +240,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         residual = x
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
+        x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
         assert x.shape == residual.shape, f"Self attn modified the shape of query {residual.shape} to {x.shape}"
         x = self.dropout_wt(x, training=training)
         x = residual + x
@@ -258,7 +258,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if not self.normalize_before:
             x = self.final_layer_norm(x)
 
-        return x, attn_weights
+        return x, self_attn_weights
 
 
 class TFBartEncoder(tf.keras.layers.Layer):
@@ -854,7 +854,7 @@ class TFBartModel(TFPretrainedBartModel):
         elif isinstance(inputs, (dict, BatchEncoding)):
             assert len(inputs) <= 10, "Too many inputs."
             if "inputs" in inputs:
-                warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
+                raise ValueError("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)

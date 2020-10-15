@@ -100,7 +100,6 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_resize_embeddings = False  # FIXME(@sshleifer): try to turn this on
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -109,16 +108,12 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("Passing inputs_embeds not implemented for TFBart.")
     def test_inputs_embeds(self):
-        pass
-
-    def test_keyword_and_dict_args(self):
-        "I don't want do add 200 lines (like https://github.com/huggingface/transformers/blob/master/src/transformers/modeling_tf_t5.py#L946) of signature boilerplate to support multiple input types."
+        # inputs_embeds not supported
         pass
 
     def test_compile_tf_model(self):
-        "I guess if I don't add all the boilerplate some feature I don't understand doesn't work."
+        # This passes for TFBartForConditionalGeneration, fails for TFBartModel
         pass
 
     def test_saved_model_with_hidden_states_output(self):
