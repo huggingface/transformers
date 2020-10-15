@@ -80,7 +80,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
                 self.assertGreaterEqual(value, 0.70)
 
             # Assert that the script takes less than 300 seconds to make sure it doesn't hang.
-            self.assertLess(end - start, 300)
+            self.assertLess(end - start, 500)
 
     def test_trainer_tpu(self):
         import xla_spawn
