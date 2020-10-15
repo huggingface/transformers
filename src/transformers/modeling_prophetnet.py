@@ -26,13 +26,14 @@ from torch import Tensor, nn
 
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
 from .modeling_outputs import BaseModelOutput
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "ProphenetConfig"
 _TOKENIZER_FOR_DOC = "ProphetNetTokenizer"
 
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -552,7 +553,11 @@ class SelfAttention(nn.Module):
 
         key_sequence_length = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-        assert attn_weights.size() == (batch_size * self.num_attn_heads, sequence_length, key_sequence_length), f"`attn_weights` should be of size {batch_size * self.num_attn_heads, sequence_length, key_sequence_length}, but is of size {attn_weights.shape}"
+        assert attn_weights.size() == (
+            batch_size * self.num_attn_heads,
+            sequence_length,
+            key_sequence_length,
+        ), f"`attn_weights` should be of size {batch_size * self.num_attn_heads, sequence_length, key_sequence_length}, but is of size {attn_weights.shape}"
 
         if attn_mask is not None:
             attn_weights = (
@@ -671,7 +676,11 @@ class NgramMultiheadAttention(nn.Module):
     ):
         sequence_length, batch_size, hidden_size = hidden_states.size()
 
-        assert list(hidden_states.size()) == [sequence_length, batch_size, hidden_size], f"`hidden_states` should be of shape {sequence_length, batch_size, hidden_size}, but is of shape {hidden_states.shape}"
+        assert list(hidden_states.size()) == [
+            sequence_length,
+            batch_size,
+            hidden_size,
+        ], f"`hidden_states` should be of shape {sequence_length, batch_size, hidden_size}, but is of shape {hidden_states.shape}"
 
         # key and value of previous time steps are cached
         saved_state = layer_state.get("self", None)
@@ -910,8 +919,9 @@ class NgramMultiheadAttention(nn.Module):
 
 class ProphetNetEncoderLayer(nn.Module):
     """
-        Encoder block for Prophetnet
+    Encoder block for Prophetnet
     """
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
@@ -939,8 +949,9 @@ class ProphetNetEncoderLayer(nn.Module):
 
 class ProphetNetDecoderLayer(nn.Module):
     """
-        Decoder block for Prophetnet
+    Decoder block for Prophetnet
     """
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
@@ -1309,9 +1320,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         )
 
         # buffer relative buckets
-        main_relative_buckets = main_relative_buckets[:, :sequence_length, :sequence_length].repeat(
-            batch_size, 1, 1
-        )
+        main_relative_buckets = main_relative_buckets[:, :sequence_length, :sequence_length].repeat(batch_size, 1, 1)
         predict_relative_buckets = torch.cat(
             [
                 predict_relative_buckets[:, :sequence_length, :sequence_length],
@@ -1352,7 +1361,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         predict_causal_mask = torch.cat(
             [
                 predict_causal_mask[:, :seq_length, :seq_length],
-                predict_causal_mask[:, :seq_length, self.max_target_positions : self.max_target_positions + seq_length],
+                predict_causal_mask[
+                    :, :seq_length, self.max_target_positions : self.max_target_positions + seq_length
+                ],
             ],
             dim=-1,
         )
@@ -1410,7 +1421,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="microsoft/prophetnet-large-uncased")
+    @replace_return_docstrings(output_type=ProphetNetSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1475,7 +1486,8 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.", PROPHETNET_START_DOCSTRING
+    "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
+    PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig):
@@ -1495,6 +1507,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return self.prophetnet.word_embeddings
 
     @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ProphetNetSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
