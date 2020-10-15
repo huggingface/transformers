@@ -105,14 +105,14 @@ BART_INPUTS_DOCSTRING = r"""
         encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
             of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers`
+        past_key_values (:obj:`Tuple[Dict[str: tf.Tensor]]`) of length :obj:`config.n_layers`
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training/:obj:`True` during generation
+            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -120,7 +120,7 @@ BART_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.TFModelOutput` instead of a plain tuple.
 """
 LARGE_NEGATIVE = -1e8
 
