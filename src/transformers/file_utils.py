@@ -153,7 +153,7 @@ try:
     import IPython  # noqa: F401
 
     _in_notebook = True
-except:  # noqa: E722
+except (AttributeError, ImportError, KeyError):
     _in_notebook = False
 
 
