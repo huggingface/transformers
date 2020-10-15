@@ -1,3 +1,16 @@
+## This file is made so that specific statements may be copied inside existing files. This is useful to copy
+## import statements in __init__.py, or to complete model lists in the AUTO files.
+##
+## It is to be used as such:
+## Put '# To replace in: "FILE_PATH"' in order to indicate the contents will be copied in the file at path FILE_PATH
+## Put '# Below: "STATEMENT"' in order to copy the contents below **the first occurence** of that line in the file at FILE_PATH
+## Put '# Replace with:' followed by the lines containing the content to define the content
+## End a statement with '# End.'. If starting a new statement without redefining the FILE_PATH, it will continue pasting
+## content in that file.
+##
+## Put '## COMMENT' to comment on the file.
+
+
 # To replace in: "src/transformers/__init__.py"
 # Below: "if is_torch_available():"
 # Replace with:

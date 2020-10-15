@@ -24,6 +24,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         download_parser.set_defaults(func=add_new_model_command_factory)
 
     def run(self):
+        # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
         directories = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]]
         if len(directories) > 0:
             raise ValueError(
@@ -35,14 +36,13 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         path_to_transformer_root = Path(__file__).parent.parent.parent.parent
         path_to_cookiecutter = path_to_transformer_root / "templates" / "cookiecutter"
 
+        # Execute cookiecutter
         cookiecutter(str(path_to_cookiecutter))
 
+        # Find the model name chosen by the user
         directory = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]][0]
-
         model_name = directory[22:]
         lowercase_model_name = model_name.lower()
-
-        print(directory, model_name, lowercase_model_name)
 
         shutil.move(
             f"{directory}/configuration_{lowercase_model_name}.py",
@@ -67,6 +67,16 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         shutil.move(
             f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
             f"{path_to_transformer_root}/tests/test_modeling_tf_{lowercase_model_name}.py",
+        )
+
+        shutil.move(
+            f"{directory}/{lowercase_model_name}.rst",
+            f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.rst",
+        )
+
+        shutil.move(
+            f"{directory}/tokenization_{lowercase_model_name}.py",
+            f"{path_to_transformer_root}/src/transformers/tokenization_{lowercase_model_name}.py",
         )
 
         from os import fdopen, remove
@@ -100,16 +110,16 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             with open(path_to_datafile) as datafile:
                 lines_to_copy = []
                 for line in datafile:
-                    if "# To replace in: " in line:
+                    if "# To replace in: " in line and "##" not in line:
                         file_to_replace_in = line.split('"')[1]
-                    elif "# Below: " in line:
+                    elif "# Below: " in line and "##" not in line:
                         line_to_copy_below = line.split('"')[1]
-                    elif "# End." in line:
+                    elif "# End." in line and "##" not in line:
                         replace(file_to_replace_in, line_to_copy_below, lines_to_copy)
                         lines_to_copy = []
-                    elif "# Replace with" in line:
+                    elif "# Replace with" in line and "##" not in line:
                         lines_to_copy = []
-                    else:
+                    elif "##" not in line:
                         lines_to_copy.append(line)
 
             remove(path_to_datafile)
