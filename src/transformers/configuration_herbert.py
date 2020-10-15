@@ -18,6 +18,7 @@ import logging
 
 from .configuration_bert import BertConfig
 
+
 logger = logging.getLogger(__name__)
 
 HERBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {

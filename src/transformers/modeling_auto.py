@@ -134,12 +134,12 @@ from .modeling_funnel import (
 )
 from .modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 from .modeling_herbert import (
-    HerbertModel,
     HerbertForMaskedLM,
-    HerbertForSequenceClassification,
-    HerbertForQuestionAnswering,
-    HerbertForTokenClassification,
     HerbertForMultipleChoice,
+    HerbertForQuestionAnswering,
+    HerbertForSequenceClassification,
+    HerbertForTokenClassification,
+    HerbertModel,
 )
 from .modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
 from .modeling_longformer import (

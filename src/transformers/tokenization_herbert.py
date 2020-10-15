@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, List
+from typing import List, Optional
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -122,7 +123,9 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         kwargs["sep_token"] = "</s>"
 
         super().__init__(
-            vocab_file, merges_file, **kwargs,
+            vocab_file,
+            merges_file,
+            **kwargs,
         )
 
     def build_inputs_with_special_tokens(

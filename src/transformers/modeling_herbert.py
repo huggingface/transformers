@@ -16,18 +16,17 @@
 
 import logging
 
-
+from .configuration_herbert import HerbertConfig
+from .file_utils import add_start_docstrings
 from .modeling_bert import (
-    BertModel,
     BertForMaskedLM,
-    BertForSequenceClassification,
     BertForMultipleChoice,
-    BertForTokenClassification,
     BertForQuestionAnswering,
+    BertForSequenceClassification,
+    BertForTokenClassification,
+    BertModel,
 )
 
-from .file_utils import add_start_docstrings
-from .configuration_herbert import HerbertConfig
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,8 @@ class HerbertModel(BertModel):
 
 
 @add_start_docstrings(
-    """HerBERT Model with a `language modeling` head on top. """, HERBERT_START_DOCSTRING,
+    """HerBERT Model with a `language modeling` head on top. """,
+    HERBERT_START_DOCSTRING,
 )
 class HerbertForMaskedLM(BertForMaskedLM):
     """

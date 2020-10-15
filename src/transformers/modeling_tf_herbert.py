@@ -16,18 +16,17 @@
 
 import logging
 
-
+from .configuration_herbert import HerbertConfig
+from .file_utils import add_start_docstrings
 from .modeling_tf_bert import (
-    TFBertModel,
     TFBertForMaskedLM,
-    TFBertForSequenceClassification,
     TFBertForMultipleChoice,
-    TFBertForTokenClassification,
     TFBertForQuestionAnswering,
+    TFBertForSequenceClassification,
+    TFBertForTokenClassification,
+    TFBertModel,
 )
 
-from .file_utils import add_start_docstrings
-from .configuration_herbert import HerbertConfig
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,8 @@ class TFHerbertModel(TFBertModel):
 
 
 @add_start_docstrings(
-    """HerBERT Model with a `language modeling` head on top. """, HERBERT_START_DOCSTRING,
+    """HerBERT Model with a `language modeling` head on top. """,
+    HERBERT_START_DOCSTRING,
 )
 class TFHerbertForMaskedLM(TFBertForMaskedLM):
     """

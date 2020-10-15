@@ -18,8 +18,8 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_herbert import VOCAB_FILES_NAMES, HerbertTokenizer, HerbertTokenizerFast
 from transformers.testing_utils import slow
+from transformers.tokenization_herbert import VOCAB_FILES_NAMES, HerbertTokenizer, HerbertTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

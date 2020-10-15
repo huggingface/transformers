@@ -107,12 +107,12 @@ from .modeling_tf_funnel import (
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_herbert import (
-    TFHerbertModel,
     TFHerbertForMaskedLM,
-    TFHerbertForSequenceClassification,
-    TFHerbertForQuestionAnswering,
-    TFHerbertForTokenClassification,
     TFHerbertForMultipleChoice,
+    TFHerbertForQuestionAnswering,
+    TFHerbertForSequenceClassification,
+    TFHerbertForTokenClassification,
+    TFHerbertModel,
 )
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
 from .modeling_tf_mobilebert import (
