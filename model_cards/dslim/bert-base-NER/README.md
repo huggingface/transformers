@@ -1,3 +1,8 @@
+---
+language: en
+datasets:
+- conll2003
+---
 # bert-base-NER
 
 ## Model description
