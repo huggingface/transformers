@@ -44,50 +44,45 @@ from .tokenization_utils_base import BatchEncoding
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
-
-def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
-    """
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = tf.cumsum(mask, axis=1).type_as(mask) * mask
-    return incremental_indices.long() + padding_idx
-
-
-def print_tensor(msg, t):  # DELEMETME
-    # assert t.shape
-    if t is None:
-        print(f"{msg}: {t}")
-        return
-    ndim = len(t.shape)
-    if ndim == 1:
-        slice = t[:3]
-    elif ndim == 2:
-        slice = t[:3, :3]
-    elif ndim == 3:
-        slice = t[:3, :3, :3]
-    elif ndim == 4:
-        slice = t[:3, :3, :3, :3]
-    print(f"{msg}: {slice}")
-
-
-logger = logging.getLogger(__name__)
-
-
 BART_START_DOCSTRING = r"""
 
-    Parameters:
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
+
+    .. note::
+
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
+        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
+        in the first positional argument :
+
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Args:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-
+            Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 
 BART_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.BertTokenizer`.
@@ -95,7 +90,7 @@ BART_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+        attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
 
@@ -128,6 +123,19 @@ BART_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 LARGE_NEGATIVE = -1e8
+
+
+logger = logging.getLogger(__name__)
+
+
+def create_position_ids_from_input_ids(input_ids, padding_idx):
+    """Replace non-padding symbols with their position numbers. Position numbers begin at
+    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
+    `utils.make_positions`.
+    """
+    mask = input_ids.ne(padding_idx).int()
+    incremental_indices = tf.cumsum(mask, axis=1).type_as(mask) * mask
+    return incremental_indices.long() + padding_idx
 
 
 def causal_attention_mask(nd, ns, dtype):
@@ -166,19 +174,13 @@ class TFPretrainedBartModel(TFPreTrainedModel):
         return dummy_inputs
 
     def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id  # Different than torch torch would use eos
+        # Should maybe be decoder_start_token_id. Change for torch and TF in one PR
+        position_0_id = self.config.eos_token_id
         pad_token_id = self.config.pad_token_id
-
-        assert (
-            decoder_start_token_id is not None
-        ), "self.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
-
         shifted_input_ids = tf.cast(input_ids, tf.int32)
         shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
-        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
+        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), position_0_id)
         shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
             shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
@@ -240,7 +242,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
-        assert x.shape == residual.shape
+        assert x.shape == residual.shape, f"Self attn modified the shape of query {residual.shape} to {x.shape}"
         x = self.dropout_wt(x, training=training)
         x = residual + x
         if not self.normalize_before:
@@ -523,7 +525,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
         output_hidden_states=False,
         return_dict=None,
         training=False,
-        **unused,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
@@ -531,8 +532,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         if use_cache:
             assert not training, "Training + use cache are incompatible"
-        if unused:
-            raise TypeError(f"Ignoring kwargs {unused}")
         # check attention mask and invert
         use_cache = cast_bool_to_primitive(use_cache)
         if encoder_padding_mask is not None:
@@ -711,7 +710,7 @@ class TFAttention(tf.keras.layers.Layer):
         if v is not None:
             v = self._shape(v, -1, bsz)
 
-        if saved_state is not None:
+        if saved_state:
             k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
 
         # Update cache
@@ -760,25 +759,18 @@ class TFAttention(tf.keras.layers.Layer):
 
     def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        if "prev_key" in saved_state:
-            _prev_key = saved_state["prev_key"]
-            assert _prev_key is not None
-            prev_key = tf.reshape(_prev_key, (bsz * self.num_heads, -1, self.head_dim))
-            if static_kv:
-                k = prev_key
-            else:
-                assert k is not None
-                k = tf.concat([prev_key, k], axis=1)
-        if "prev_value" in saved_state:
-            _prev_value = saved_state["prev_value"]
-            assert _prev_value is not None
-            prev_value = tf.reshape(_prev_value, (bsz * self.num_heads, -1, self.head_dim))
-            if static_kv:
-                v = prev_value
-            else:
-                assert v is not None
-                v = tf.concat([prev_value, v], axis=1)
-        assert k is not None and v is not None
+        # key states
+        if "prev_key" not in saved_state:
+            import ipdb
+
+            ipdb.set_trace()
+        prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
+        k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
+
+        # value states
+        prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
+        v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
+        # assert k is not None and v is not None
         prev_key_padding_mask = saved_state.get("prev_key_padding_mask", None)  # type: Optional[Tensor]
         key_padding_mask = self._cat_prev_key_padding_mask(
             key_padding_mask, prev_key_padding_mask, bsz, k.shape[1], static_kv
