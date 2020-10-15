@@ -653,7 +653,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
 
     config_class = BertConfig
     base_model_prefix = "bert"
-
+    authorized_unexpected_keys = [r"position_ids"]
 
 @dataclass
 class TFBertForPreTrainingOutput(ModelOutput):
