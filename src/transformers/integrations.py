@@ -10,12 +10,9 @@ try:
     import comet_ml  # noqa: F401
 
     # XXX: there should be comet_ml.ensure_configured(), like `wandb`, for now emulate it
-    try:
-        comet_ml.Experiment(project_name="ensure_configured")
-        _has_comet = True
-    except (ValueError):
-        _has_comet = False
-except (ImportError):
+    comet_ml.Experiment(project_name="ensure_configured")
+    _has_comet = True
+except (ImportError, ValueError):
     _has_comet = False
 
 try:
