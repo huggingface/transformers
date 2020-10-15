@@ -576,7 +576,7 @@ class BatchEncoding(UserDict):
         return self
 
     @torch_required
-    def to(self, device: str) -> "BatchEncoding":
+    def to(self, Union[str, torch.device]) -> "BatchEncoding":
         """
         Send all values to device by calling :obj:`v.to(device)` (PyTorch only).
 
