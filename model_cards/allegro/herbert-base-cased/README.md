@@ -1,9 +1,7 @@
 ---
 language: pl
 tags:
-- pytorch
 - herbert
-- masked-lm
 license: cc-by-sa-4.0
 ---
 
