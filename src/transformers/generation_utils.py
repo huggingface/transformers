@@ -113,11 +113,13 @@ class GenerationMixin:
             # Modify the scores by setting the banned tokens logits to `-inf`
             mask = torch.full_like(scores, -math.inf)
 
-            for i, beam_banned_tokens_i in enumerate([
-                beam_banned_tokens
-                for batch_banned_tokens in banned_tokens
-                for beam_banned_tokens in batch_banned_tokens
-            ]):
+            for i, beam_banned_tokens_i in enumerate(
+                [
+                    beam_banned_tokens
+                    for batch_banned_tokens in banned_tokens
+                    for beam_banned_tokens in batch_banned_tokens
+                ]
+            ):
                 mask[i, beam_banned_tokens_i] = 0
             scores += mask
 
@@ -220,10 +222,10 @@ class GenerationMixin:
                 speed up decoding.
             prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
                 If provided, it has to be a function that has as arguments :obj:`inputs_id`.
-                At each step of Beam Search, this function is called with the :obj:`inputs_id` containing the 
+                At each step of Beam Search, this function is called with the :obj:`inputs_id` containing the
                 previously generated tokens as a tensor of shape :obj:`(batch_size * num_beams)`:. This function has
-                to return a list of lists with the allowed BPE tokens at the next step (list of batches and list of beams). 
-                
+                to return a list of lists with the allowed BPE tokens at the next step (list of batches and list of beams).
+
                 This argument is useful for constrained generation conditioned on the prefix. If not provided no constrain
                 is applied.
             model_kwargs:
