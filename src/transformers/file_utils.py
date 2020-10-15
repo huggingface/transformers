@@ -142,6 +142,20 @@ try:
 except (AttributeError, ImportError):
     _has_sklearn = False
 
+try:
+    # Test copied from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
+    get_ipython = sys.modules["IPython"].get_ipython
+    if "IPKernelApp" not in get_ipython().config:
+        raise ImportError("console")
+    if "VSCODE_PID" in os.environ:
+        raise ImportError("vscode")
+
+    import IPython  # noqa: F401
+
+    _in_notebook = True
+except (ImportError, KeyError):
+    _in_notebook = False
+
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
@@ -201,6 +215,10 @@ def is_apex_available():
 
 def is_faiss_available():
     return _faiss_available
+
+
+def is_in_notebook():
+    return _in_notebook
 
 
 def torch_only_method(fn):
