@@ -28,6 +28,7 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutLMTokenizer
     rust_tokenizer_class = LayoutLMTokenizerFast
     test_rust_tokenizer = True
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()
