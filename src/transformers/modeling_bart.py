@@ -1090,7 +1090,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            assert -100 not in labels
+            assert labels.min() > 0, f'negative labels are not supported, got {labels.min()}'
             use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
