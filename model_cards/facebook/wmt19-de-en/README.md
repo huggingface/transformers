@@ -1,4 +1,3 @@
-
 ---
 language: 
 - de
@@ -13,6 +12,7 @@ datasets:
 - wmt19
 metrics:
 - bleu
+thumbnail: https://huggingface.co/front/thumbnails/facebook.png
 ---
 
 # FSMT
