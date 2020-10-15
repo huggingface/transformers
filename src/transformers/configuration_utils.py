@@ -145,7 +145,6 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.name_or_path = kwargs.pop("name_or_path", "")
         self.return_dict = kwargs.pop("return_dict", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
@@ -207,6 +206,9 @@ class PretrainedConfig(object):
         # TPU arguments
         self.xla_device = kwargs.pop("xla_device", None)
 
+        # Name or path to the pretrained checkpoint
+        self._name_or_path = str(kwargs.pop("name_or_path", ""))
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -214,6 +216,14 @@ class PretrainedConfig(object):
             except AttributeError as err:
                 logger.error("Can't set {} with value {} for {}".format(key, value, self))
                 raise err
+
+    @property
+    def name_or_path(self) -> str:
+        return self._name_or_path
+
+    @name_or_path.setter
+    def name_or_path(self, value):
+        self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
     def use_return_dict(self) -> bool:
