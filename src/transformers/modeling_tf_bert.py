@@ -302,7 +302,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
-        attention_scores = tf.einsum("BSNH,BTNH->BNTS", key_tensor, query_tensor)
+        attention_scores = tf.einsum("bsnh,btnh->bnts", key_tensor, query_tensor)
         dk = tf.cast(x=self.attention_head_size, dtype=attention_scores.dtype)  # scale attention_scores
         attention_scores = tf.multiply(x=attention_scores, y=tf.math.rsqrt(x=dk))
 
@@ -321,7 +321,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        attention_output = tf.einsum("BNTS,BSNH->BTNH", attention_probs, value_tensor)
+        attention_output = tf.einsum("bnts,bsnh->btnh", attention_probs, value_tensor)
         outputs = (attention_output, attention_probs)
 
         return outputs
