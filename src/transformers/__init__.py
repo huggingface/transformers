@@ -45,7 +45,6 @@ from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Flau
 from .configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
-from .configuration_herbert import HERBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HerbertConfig
 from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
@@ -394,15 +393,6 @@ if is_torch_available():
         GPT2PreTrainedModel,
         load_tf_weights_in_gpt2,
     )
-    from .modeling_herbert import (
-        HERBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        HerbertForMaskedLM,
-        HerbertForMultipleChoice,
-        HerbertForQuestionAnswering,
-        HerbertForSequenceClassification,
-        HerbertForTokenClassification,
-        HerbertModel,
-    )
     from .modeling_layoutlm import (
         LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         LayoutLMForMaskedLM,
@@ -677,15 +667,6 @@ if is_tf_available():
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
-    )
-    from .modeling_tf_herbert import (
-        HERBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFHerbertForMaskedLM,
-        TFHerbertForMultipleChoice,
-        TFHerbertForQuestionAnswering,
-        TFHerbertForSequenceClassification,
-        TFHerbertForTokenClassification,
-        TFHerbertModel,
     )
     from .modeling_tf_longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

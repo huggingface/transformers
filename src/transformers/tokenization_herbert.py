@@ -72,6 +72,7 @@ class HerbertTokenizer(XLMTokenizer):
         kwargs["mask_token"] = "<mask>"
         kwargs["sep_token"] = "</s>"
         kwargs["do_lowercase_and_remove_accent"] = False
+        kwargs["additional_special_tokens"] = []
 
         super().__init__(**kwargs)
         self.bert_pre_tokenizer = BasicTokenizer(

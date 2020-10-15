@@ -33,7 +33,6 @@ from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Flau
 from .configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
-from .configuration_herbert import HERBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HerbertConfig
 from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
@@ -85,7 +84,6 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        HERBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -100,7 +98,6 @@ CONFIG_MAPPING = OrderedDict(
         ("albert", AlbertConfig),
         ("bert-generation", BertGenerationConfig),
         ("camembert", CamembertConfig),
-        ("herbert", HerbertConfig),
         ("xlm-roberta", XLMRobertaConfig),
         ("pegasus", PegasusConfig),
         ("marian", MarianConfig),
@@ -167,7 +164,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutlm", "LayoutLM"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
-        ("herbert", "HerBERT"),
     ]
 )
 
