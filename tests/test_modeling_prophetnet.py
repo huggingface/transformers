@@ -464,6 +464,52 @@ class ProphetNetModelTester:
         )
         self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
+    def check_model_with_attn_mask(self, config, input_ids, decoder_input_ids, *args):
+        model = ProphetNetModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        outputs_no_mask = model(
+            input_ids=input_ids[:, :5], decoder_input_ids=decoder_input_ids[:, :5], return_dict=True
+        )
+        attention_mask = torch.ones_like(input_ids)
+        decoder_attention_mask = torch.ones_like(decoder_input_ids)
+
+        attention_mask[:, 5:] = 0
+
+        outputs_with_mask = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            return_dict=True,
+        )
+
+        # check encoder
+        self.parent.assertTrue(
+            torch.allclose(
+                outputs_no_mask.encoder_last_hidden_state[0, :, 0],
+                outputs_with_mask.encoder_last_hidden_state[0, :5, 0],
+                atol=1e-3,
+            )
+        )
+
+        # check decoder
+        # main stream
+        self.parent.assertTrue(
+            torch.allclose(
+                outputs_no_mask.last_hidden_state[0, :, 0], outputs_with_mask.last_hidden_state[0, :5, 0], atol=1e-3
+            )
+        )
+        # predict stream
+        self.parent.assertTrue(
+            torch.allclose(
+                outputs_no_mask.last_hidden_state_ngram[0, :5, 0],
+                outputs_with_mask.last_hidden_state_ngram[0, :5, 0],
+                atol=1e-3,
+            )
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -526,6 +572,10 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_decoder_model_generate(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_value_states(*config_and_inputs)
+
+    def test_attn_mask_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_model_with_attn_mask(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_fp16_forward(self):
@@ -591,7 +641,8 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-7.6213, -7.9008, -7.9979], [-7.6834, -7.8467, -8.2187], [-7.5326, -7.4762, -8.1914]]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4))
+        #        self.assertTrue(torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4))
+        assert torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4)
 
         # encoder outputs
         encoder_outputs = model.prophetnet.encoder(encoder_ids)[0]
@@ -600,7 +651,8 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         expected_shape_encoder = torch.Size((1, 28, 1024))
         self.assertEqual(encoder_outputs.shape, expected_shape_encoder)
-        self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
+        #        self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
+        assert torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4)
 
         # decoder outputs
         decoder_outputs = model.prophetnet.decoder(
@@ -609,7 +661,8 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 12, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
-        self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
+        #        self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
+        assert torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4)
 
     @slow
     def test_cnndm_inference(self):
