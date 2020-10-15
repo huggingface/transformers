@@ -2413,21 +2413,25 @@ class TokenizerTesterMixin:
             with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                tmpdirname2 = tempfile.mkdtemp()
+
+                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
+                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
                 # Checks it save with the same files
-                self.assertSequenceEqual(
-                    tokenizer_r.save_vocabulary(self.tmpdirname), tokenizer_p.save_vocabulary(self.tmpdirname)
-                )
+                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
 
                 # Checks everything loads correctly in the same way
-                tokenizer_rp, tokenizer_pp = tokenizer_r.from_pretrained(self.tmpdirname), tokenizer_p.from_pretrained(
-                    self.tmpdirname
-                )
+                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
+                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
 
                 # Check special tokens are set accordingly on Rust and Python
                 for key in tokenizer_pp.special_tokens_map:
                     self.assertTrue(hasattr(tokenizer_rp, key))
                     # self.assertEqual(getattr(tokenizer_rp, key), getattr(tokenizer_pp, key))
                     # self.assertEqual(getattr(tokenizer_rp, key + "_id"), getattr(tokenizer_pp, key + "_id"))
+
+                shutil.rmtree(tmpdirname2)
 
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:

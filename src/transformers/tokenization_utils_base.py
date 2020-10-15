@@ -1812,7 +1812,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
-        return file_names + vocab_files + (vocab_files, added_tokens_file)
+        return file_names + vocab_files + (added_tokens_file,)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """Save only the vocabulary of the tokenizer (vocabulary + added tokens).
