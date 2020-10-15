@@ -93,8 +93,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, tokenizer_file=None, **kwargs):
+        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {

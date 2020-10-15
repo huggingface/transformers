@@ -24,6 +24,8 @@ from .test_tokenization_bert import BertTokenizationTest
 class SqueezeBertTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = SqueezeBertTokenizer
+    rust_tokenizer_class = SqueezeBertTokenizerFast
+    test_rust_tokenizer = True
 
     def get_rust_tokenizer(self, **kwargs):
         return SqueezeBertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)

@@ -16,8 +16,10 @@
 
 
 import warnings
+import json
 from typing import Optional, Tuple
 
+from tokenizers import pre_tokenizers
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_utils_base import BatchEncoding
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -138,6 +140,13 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get('add_prefix_space', add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop('type'))
+            pre_tok_state['add_prefix_space'] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
