@@ -403,13 +403,13 @@ class TFDecoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         x,
-        encoder_hidden_states,
+        encoder_hidden_states: tf.Tensor,
         encoder_attn_mask=None,
         layer_state=None,
         causal_mask=None,
         decoder_padding_mask=None,
         training=False,
-    ) -> Tuple:
+    ) -> Tuple[tf.Tensor, tf.Tensor, Dict[str, tf.Tensor]]:
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -423,17 +423,17 @@ class TFDecoderLayer(tf.keras.layers.Layer):
 
             Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
+        assert encoder_hidden_states is not None, "Hit this"
 
         residual = x
         y = x
 
         if layer_state is None:
             layer_state = {}
-        # next line mutates layer state
+        # next line mutates layer state and we need a copy of it
         x, self_attn_weights = self.self_attn(
             query=x,
             key=y,
-            value=y,
             layer_state=layer_state,
             attn_mask=causal_mask,
             key_padding_mask=decoder_padding_mask,
@@ -442,15 +442,12 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
-        assert self.encoder_attn.cache_key != self.self_attn.cache_key
-
+        # Cross-Attention
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,  # could be None
-            value=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
-            static_kv=True,
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
@@ -598,9 +595,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = list(all_self_attns) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
-        encoder_hidden_states = tf.transpose(
-            encoder_hidden_states, perm=(1, 0, 2)
-        )  # undo initial transpose, could be avoided.
+        encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
         if not return_dict:
@@ -657,12 +652,10 @@ class TFAttention(tf.keras.layers.Layer):
 
     def call(
         self,
-        query,
-        key: Optional[Tensor],
-        value: Optional[Tensor] = None,
-        key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
-        static_kv: bool = False,
+        query: tf.Tensor,
+        key: Optional[tf.Tensor],
+        key_padding_mask: Optional[tf.Tensor] = None,
+        layer_state: Optional[Dict[str, tf.Tensor]] = None,
         attn_mask: Optional[Tensor] = None,
         training=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
@@ -677,66 +670,56 @@ class TFAttention(tf.keras.layers.Layer):
                 implement causal attention, where the mask prevents the
                 attention from looking forward in time (default: None).
         """
+        static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
         tgt_len, bsz, embed_dim = query.shape
-        assert embed_dim == self.embed_dim
-        # assert list(query.shape) == [tgt_len, bsz, embed_dim]
+        assert embed_dim == self.embed_dim, f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {query.shape}"
         # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # get the last k,v and mask for reuse
+        if layer_state is not None:  # get the last k and v for reuse
             saved_state = layer_state.get(self.cache_key, {})
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
-                    assert self.encoder_decoder_attention
                     key = value = None
         else:
+            # this branch is hit by encoder
             saved_state = None
-            layer_state = {}
 
+        # Project query key values using weights q_proj, k_proj, v_proj
         q = self.q_proj(query) * self.scaling
-        if self.encoder_decoder_attention:
-            if key is None:
-                assert value is None
-                k = v = None
-            else:
-                k = self.k_proj(key)
-                v = self.v_proj(key)
-        else:
+        if static_kv and key is None:  # cross-attention with cache
+            assert value is None
+            k = v = None
+        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
+            k = self.k_proj(key)
+            v = self.v_proj(key)
+        else:  # self-attention
             k = self.k_proj(query)
             v = self.v_proj(query)
 
+        # Reshape
         q = self._shape(q, tgt_len, bsz)
         if k is not None:
             k = self._shape(k, -1, bsz)
-        if v is not None:
             v = self._shape(v, -1, bsz)
 
-        if saved_state:
-            k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
+        if saved_state:  # read from cache
+            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
 
-        # Update cache
-        layer_state[self.cache_key] = {
-            "prev_key": tf.reshape(k, (bsz, self.num_heads, -1, self.head_dim)),
-            "prev_value": tf.reshape(v, (bsz, self.num_heads, -1, self.head_dim)),
-            "prev_key_padding_mask": key_padding_mask if not static_kv else None,
-        }
+        if layer_state is not None:  # Write to cache every decoder call
+            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
+            layer_state[self.cache_key] = dict(
+                prev_key=tf.reshape(k, cached_shape), prev_value=tf.reshape(v, cached_shape)
+            )
 
-        assert k is not None
+        # Compute multi-headed attention
         src_len = k.shape[1]
-        attn_weights = tf.matmul(q, k, transpose_b=True)
-
-        assert attn_weights.shape == (bsz * self.num_heads, tgt_len, src_len)
+        attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
             assert attn_mask.dtype == tf.float32, f"expected dtype tf.float32 got {attn_mask.dtype}"
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
-        if key_padding_mask is not None and key_padding_mask._rank() == 0:
-            key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.shape[:2] == (
-            bsz,
-            src_len,
-        )
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
             if key_padding_mask.dtype == tf.bool:
@@ -748,7 +731,6 @@ class TFAttention(tf.keras.layers.Layer):
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
 
-        assert v is not None
         attn_output = tf.matmul(attn_probs, v)
         assert attn_output.shape == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
@@ -757,52 +739,13 @@ class TFAttention(tf.keras.layers.Layer):
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
         return attn_output, attn_weights
 
-    def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
+    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        # key states
-        if "prev_key" not in saved_state:
-            import ipdb
-
-            ipdb.set_trace()
         prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
         k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
-
-        # value states
         prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
         v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
-        # assert k is not None and v is not None
-        prev_key_padding_mask = saved_state.get("prev_key_padding_mask", None)  # type: Optional[Tensor]
-        key_padding_mask = self._cat_prev_key_padding_mask(
-            key_padding_mask, prev_key_padding_mask, bsz, k.shape[1], static_kv
-        )
-        return k, v, key_padding_mask
-
-    @staticmethod
-    def _cat_prev_key_padding_mask(
-        key_padding_mask: Optional[Tensor],
-        prev_key_padding_mask: Optional[Tensor],
-        batch_size: int,
-        src_len: int,
-        static_kv: bool,
-    ) -> Optional[Tensor]:
-        # saved key padding masks have shape (bsz, seq_len)
-        if prev_key_padding_mask is not None and static_kv:
-            new_key_padding_mask = prev_key_padding_mask
-        elif prev_key_padding_mask is not None and key_padding_mask is not None:
-            new_key_padding_mask = tf.concat([prev_key_padding_mask, key_padding_mask], axis=1)
-        # During incremental decoding, as the padding token enters and
-        # leaves the frame, there will be a time when prev or current is None
-        elif prev_key_padding_mask is not None:
-            filler = tf.zeros(
-                (batch_size, src_len - prev_key_padding_mask.shape[1]), dtype=prev_key_padding_mask.dtype
-            )
-            new_key_padding_mask = tf.concat([prev_key_padding_mask, filler], axis=1)
-        elif key_padding_mask is not None:
-            filler = tf.zeros((batch_size, src_len - key_padding_mask.shape[1]), dtype=key_padding_mask.dtype)
-            new_key_padding_mask = tf.concat([filler, key_padding_mask], axis=1)
-        else:
-            new_key_padding_mask = prev_key_padding_mask
-        return new_key_padding_mask
+        return k, v
 
 
 class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
