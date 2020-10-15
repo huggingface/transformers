@@ -2,7 +2,6 @@
 language: 
 - ru
 - en
-thumbnail:
 tags:
 - translation
 - wmt19
