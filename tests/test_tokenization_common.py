@@ -25,7 +25,7 @@ from itertools import takewhile
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_tf, require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_tf, require_tokenizers, require_torch, slow
 from transformers.tokenization_utils import AddedToken
 
 
@@ -337,6 +337,7 @@ class TokenizerTesterMixin:
 
                 self.assertListEqual(subwords, subwords_loaded)
 
+    @require_tokenizers
     def test_pickle_added_tokens(self):
         tok1 = AddedToken("<s>", rstrip=True, lstrip=True, normalized=False, single_word=True)
         tok2 = pickle.loads(pickle.dumps(tok1))
@@ -498,6 +499,7 @@ class TokenizerTesterMixin:
 
                 self.assertEqual(text_2, output_text)
 
+    @require_tokenizers
     def test_encode_decode_with_spaces(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1314,6 +1316,7 @@ class TokenizerTesterMixin:
                         encoded_sequences_batch_padded_2[key],
                     )
 
+    @require_tokenizers
     def test_added_token_serializable(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

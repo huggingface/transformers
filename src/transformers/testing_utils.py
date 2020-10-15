@@ -119,7 +119,7 @@ def require_sentencepiece(test_case):
     """
     Decorator marking a test that requires SentencePiece.
 
-    These tests are skipped when TensorFlow isn't installed.
+    These tests are skipped when SentencePiece isn't installed.
 
     """
     if not _sentencepiece_available:
@@ -132,7 +132,7 @@ def require_tokenizers(test_case):
     """
     Decorator marking a test that requires tokenizers.
 
-    These tests are skipped when TensorFlow isn't installed.
+    These tests are skipped when tokenizers isn't installed.
 
     """
     if not _tokenizers_available:

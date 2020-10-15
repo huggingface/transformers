@@ -53,7 +53,7 @@ if is_tokenizers_available():
     from tokenizers import Encoding as EncodingFast
 else:
 
-    @dataclass
+    @dataclass(frozen=True, eq=True)
     class AddedToken:
         """AddedToken represents a token to be added to a Tokenizer
         An AddedToken can have special options defining the way it should behave.
@@ -64,6 +64,9 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
+
+        def __getstate__(self):
+            return self.__dict__
 
     @dataclass
     class EncodingFast:
