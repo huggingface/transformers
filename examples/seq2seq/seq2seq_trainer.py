@@ -174,7 +174,7 @@ class Seq2SeqTrainer(Trainer):
         if self.args.prediction_loss_only:
             return (loss, None, None)
 
-        logits = generated_tokens if self.args.predict_with_generate else outputs[1]
+        logits = generated_tokens if self.args.predict_with_generate else logits
         labels = self._pad_tensors_to_max_len(inputs["labels"], self.model.config.max_length)
 
         return (loss, logits, labels)
