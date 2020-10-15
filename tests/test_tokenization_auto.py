@@ -101,7 +101,10 @@ class AutoTokenizerTest(unittest.TestCase):
                         msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
                     ):
                         self.assertFalse(issubclass(child_config, parent_config))
-                        self.assertFalse(issubclass(child_model_py, parent_model_py))
+
+                        # Check for Slow tokenizer implementation if provided
+                        if child_model_py and parent_model_py:
+                            self.assertFalse(issubclass(child_model_py, parent_model_py))
 
                         # Check for Fast tokenizer implementation if provided
                         if child_model_fast and parent_model_fast:
