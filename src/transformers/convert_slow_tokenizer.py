@@ -20,7 +20,6 @@
 
 from typing import Dict, List, Tuple
 
-from sentencepiece import SentencePieceProcessor
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -36,6 +35,11 @@ class SentencePieceExtractor:
 
     def __init__(self, model: str):
         # Get SentencePiece
+        try:
+            from sentencepiece import SentencePieceProcessor
+        except ImportError:
+            raise ImportError("You need to install ")
+
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
