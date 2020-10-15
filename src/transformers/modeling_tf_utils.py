@@ -282,7 +282,7 @@ def input_analysis(func, inputs, **kwargs):
                     output["input_ids"] = output["args"]
                 elif "input_embeds" not in list(output.keys()):
                     output["input_embeds"] = output["args"]
-                
+
                 del output["args"]
             else:
                 output[name] = kwargs.pop(name, signature[name].default)

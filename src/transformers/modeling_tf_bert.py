@@ -693,8 +693,12 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             return_dict=return_dict,
             training=training,
         )
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if not return_dict and not tf.executing_eagerly():
@@ -1076,6 +1080,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, BERT_START_DOCSTRING
 )
@@ -1258,7 +1263,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         )
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output=sequence_output, training=training)
-        masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+        masked_lm_loss = (
+            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+        )
 
         if tf.executing_eagerly():
             if not return_dict:
@@ -1543,18 +1550,28 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             num_choices = shape_list(tensor=inputs["inputs_embeds"])[1]
             seq_length = shape_list(tensor=inputs["inputs_embeds"])[2]
 
-        flat_input_ids = tf.reshape(tensor=inputs["input_ids"], shape=(-1, seq_length)) if inputs["input_ids"] is not None else None
+        flat_input_ids = (
+            tf.reshape(tensor=inputs["input_ids"], shape=(-1, seq_length)) if inputs["input_ids"] is not None else None
+        )
         flat_attention_mask = (
-            tf.reshape(tensor=inputs["attention_mask"], shape=(-1, seq_length)) if inputs["attention_mask"] is not None else None
+            tf.reshape(tensor=inputs["attention_mask"], shape=(-1, seq_length))
+            if inputs["attention_mask"] is not None
+            else None
         )
         flat_token_type_ids = (
-            tf.reshape(tensor=inputs["token_type_ids"], shape=(-1, seq_length)) if inputs["token_type_ids"] is not None else None
+            tf.reshape(tensor=inputs["token_type_ids"], shape=(-1, seq_length))
+            if inputs["token_type_ids"] is not None
+            else None
         )
         flat_position_ids = (
-            tf.reshape(tensor=inputs["position_ids"], shape=(-1, seq_length)) if inputs["position_ids"] is not None else None
+            tf.reshape(tensor=inputs["position_ids"], shape=(-1, seq_length))
+            if inputs["position_ids"] is not None
+            else None
         )
         flat_inputs_embeds = (
-            tf.reshape(tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(tensor=inputs["inputs_embeds"])[3]))
+            tf.reshape(
+                tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(tensor=inputs["inputs_embeds"])[3])
+            )
             if inputs["inputs_embeds"] is not None
             else None
         )
