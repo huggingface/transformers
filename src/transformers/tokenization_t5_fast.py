@@ -140,7 +140,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         if extra_ids > 0:
             all_extra_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
             if all(tok not in self.additional_special_tokens for tok in all_extra_tokens):
-                self.additional_special_tokens = self.additional_special_tokens + ["<extra_id_{}>".format(i) for i in range(extra_ids)]
+                self.additional_special_tokens = self.additional_special_tokens + [
+                    "<extra_id_{}>".format(i) for i in range(extra_ids)
+                ]
 
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids

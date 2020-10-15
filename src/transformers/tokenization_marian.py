@@ -20,13 +20,15 @@ vocab_files_names = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "source_spm": {'Helsinki-NLP/opus-mt-en-de': "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/source.spm"},
-    "target_spm": {'Helsinki-NLP/opus-mt-en-de': "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/target.spm"},
-    "vocab": {'Helsinki-NLP/opus-mt-en-de': "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/vocab.json"},
-    "tokenizer_config_file": {'Helsinki-NLP/opus-mt-en-de': "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/tokenizer_config.json"},
+    "source_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/source.spm"},
+    "target_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/target.spm"},
+    "vocab": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/vocab.json"},
+    "tokenizer_config_file": {
+        "Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/tokenizer_config.json"
+    },
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {'Helsinki-NLP/opus-mt-en-de': 512}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
 PRETRAINED_INIT_CONFIGURATION = {}
 
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/vocab.json
