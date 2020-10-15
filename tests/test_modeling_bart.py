@@ -136,12 +136,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
-    # TODO(SS): fix the below in a separate PR
     test_pruning = False
-    test_torchscript = True
     test_head_masking = False
-    test_resize_embeddings = True  # This requires inputs_dict['input_ids']
-    test_missing_keys = False  # because BartForConditionalGeneration and BartModel now have identical state_dict
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -339,7 +336,7 @@ class BartHeadTests(unittest.TestCase):
         lm_model.eval()
 
         max_length = 5
-        new_input_ids = lm_model.generate(
+        generated_ids = lm_model.generate(
             input_ids.clone(),
             do_sample=True,
             num_return_sequences=1,
@@ -347,8 +344,7 @@ class BartHeadTests(unittest.TestCase):
             no_repeat_ngram_size=3,
             max_length=max_length,
         )
-        self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
-        # TODO(SS): uneven length batches, empty inputs
+        self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
 
     def test_shift_tokens_right(self):
         input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()

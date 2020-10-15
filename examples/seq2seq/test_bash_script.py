@@ -21,7 +21,6 @@ from utils import load_json
 
 
 MODEL_NAME = MBART_TINY
-# TODO(SS): MODEL_NAME = "sshleifer/student_mbart_en_ro_1_1"
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
@@ -99,7 +98,7 @@ def test_train_mbart_cc25_enro_script():
     assert expected_key in ckpt["state_dict"]
     assert ckpt["state_dict"]["model.model.decoder.layers.0.encoder_attn_layer_norm.weight"].dtype == torch.float32
 
-    # TODO(SS): turn on args.do_predict when PL bug fixed.
+    # TODO: turn on args.do_predict when PL bug fixed.
     if args.do_predict:
         contents = {os.path.basename(p) for p in contents}
         assert "test_generations.txt" in contents
@@ -178,7 +177,7 @@ def test_opus_mt_distill_script():
     assert expected_key in ckpt["state_dict"]
     assert ckpt["state_dict"]["model.model.decoder.layers.0.encoder_attn_layer_norm.weight"].dtype == torch.float32
 
-    # TODO(SS): turn on args.do_predict when PL bug fixed.
+    # TODO: turn on args.do_predict when PL bug fixed.
     if args.do_predict:
         contents = {os.path.basename(p) for p in contents}
         assert "test_generations.txt" in contents
