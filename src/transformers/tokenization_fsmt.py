@@ -37,8 +37,13 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "src_vocab_file": {'stas/tiny-wmt19-en-de': "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-src.json"},
+    "tgt_vocab_file": {'stas/tiny-wmt19-en-de': "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-tgt.json"},
+    "merges_file": {'stas/tiny-wmt19-en-de': "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/merges.txt"},
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {'stas/tiny-wmt19-en-de': 1024}
 PRETRAINED_INIT_CONFIGURATION = {}
 
 
