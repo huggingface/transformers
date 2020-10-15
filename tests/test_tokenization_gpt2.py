@@ -18,12 +18,14 @@ import json
 import os
 import unittest
 
+from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES, GPT2Tokenizer
 from transformers.tokenization_gpt2_fast import GPT2TokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = GPT2Tokenizer

@@ -18,13 +18,14 @@ import json
 import os
 import unittest
 
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES, AddedToken, RobertaTokenizer
 from transformers.tokenization_roberta_fast import RobertaTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = RobertaTokenizer
     rust_tokenizer_class = RobertaTokenizerFast

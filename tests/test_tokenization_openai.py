@@ -18,12 +18,14 @@ import json
 import os
 import unittest
 
+from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 from transformers.tokenization_openai_fast import OpenAIGPTTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = OpenAIGPTTokenizer

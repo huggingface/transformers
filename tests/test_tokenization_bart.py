@@ -4,12 +4,13 @@ import unittest
 
 from transformers import BartTokenizer, BartTokenizerFast, BatchEncoding
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors
 
 
+@require_tokenizers
 class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BartTokenizer
     rust_tokenizer_class = BartTokenizerFast

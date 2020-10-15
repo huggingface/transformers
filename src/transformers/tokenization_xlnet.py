@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 
+from .file_utils import SPIECE_UNDERLINE
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
 
@@ -41,8 +42,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "xlnet-base-cased": None,
     "xlnet-large-cased": None,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 # Segments (not really needed)
 SEG_ID_A = 0

@@ -17,12 +17,14 @@
 import os
 import unittest
 
+from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_funnel import VOCAB_FILES_NAMES, FunnelTokenizer
 from transformers.tokenization_funnel_fast import FunnelTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = FunnelTokenizer

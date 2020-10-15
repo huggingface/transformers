@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -32,6 +32,7 @@ from transformers.tokenization_bert_fast import BertTokenizerFast
 from .test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
+@require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertTokenizer

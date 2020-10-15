@@ -17,12 +17,14 @@
 import os
 import unittest
 
+from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_layoutlm import VOCAB_FILES_NAMES, LayoutLMTokenizer
 from transformers.tokenization_layoutlm_fast import LayoutLMTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = LayoutLMTokenizer

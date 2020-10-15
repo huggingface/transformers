@@ -1,14 +1,15 @@
 import unittest
 from pathlib import Path
 
+from transformers import PegasusTokenizer, PegasusTokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch
-from transformers.tokenization_pegasus import PegasusTokenizer
-from transformers.tokenization_pegasus_fast import PegasusTokenizerFast
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_sentencepiece
+@require_tokenizers
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = PegasusTokenizer
