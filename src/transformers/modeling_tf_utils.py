@@ -348,7 +348,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
         # Save config and origin of the pretrained weights if given in model
         self.config = config
-        self.name_or_path = kwargs.pop("name_or_path", "")
+        self.name_or_path = config.name_or_path
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -691,7 +691,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             resolved_archive_file = None
 
-        model_kwargs["name_or_path"] = pretrained_model_name_or_path
+        config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
