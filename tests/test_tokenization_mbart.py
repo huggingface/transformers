@@ -122,6 +122,8 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartEnroIntegrationTest(unittest.TestCase):
     checkpoint_name = "facebook/mbart-large-en-ro"
     src_text = [

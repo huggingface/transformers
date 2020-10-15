@@ -19,7 +19,7 @@ import unittest
 
 from transformers import BertGenerationTokenizer
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, require_sentencepiece
+from transformers.testing_utils import require_sentencepiece, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -27,6 +27,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 SPIECE_UNDERLINE = "▁"
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+
 
 @require_sentencepiece
 class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
