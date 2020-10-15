@@ -9,8 +9,10 @@ try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
+    # XXX: there should be comet_ml.ensure_configured(), like `wandb`, for now emulate it
+    comet_ml.Experiment(project_name="ensure_configured")
     _has_comet = True
-except (ImportError):
+except (ImportError, ValueError):
     _has_comet = False
 
 try:
@@ -269,7 +271,7 @@ class WandbCallback(TrainerCallback):
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
             combined_dict = {**args.to_sanitized_dict()}
-            if hasattr(model, "config"):
+            if getattr(model, "config", None) is not None:
                 combined_dict = {**model.config.to_dict(), **combined_dict}
             wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=args.run_name)
             # keep track of model topology and gradients, unsupported on TPU
