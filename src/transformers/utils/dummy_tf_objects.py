@@ -708,6 +708,63 @@ class TFGPT2PreTrainedModel:
         requires_tf(self)
 
 
+HERBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFHerbertForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFHerbertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFHerbertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFHerbertForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFHerbertForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFHerbertModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
