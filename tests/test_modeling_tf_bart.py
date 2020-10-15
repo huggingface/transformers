@@ -278,9 +278,8 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         return BartTokenizer.from_pretrained("facebook/bart-large")
 
 
-#  @slow
+@slow
 @require_tf
-@require_torch
 class FasterTFBartModelIntegrationTests(unittest.TestCase):
     """These tests are useful for debugging since they operate on a model with 1 encoder layer and 1 decoder layer."""
 
@@ -290,7 +289,7 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def xsum_1_1_model(self):
-        return TFBartForConditionalGeneration.from_pretrained("sshleifer/distilbart-xsum-1-1", from_pt=True)
+        return TFBartForConditionalGeneration.from_pretrained("sshleifer/distilbart-xsum-1-1")
 
     def test_xsum_1_1_generation(self):
         model = self.xsum_1_1_model

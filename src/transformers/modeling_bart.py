@@ -673,7 +673,7 @@ class Attention(nn.Module):
     def forward(
         self,
         query,
-        key: Optional[Tensor],
+        key: Tensor,
         key_padding_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Tensor]] = None,
         attn_mask: Optional[Tensor] = None,

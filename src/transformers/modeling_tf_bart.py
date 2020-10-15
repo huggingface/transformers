@@ -215,7 +215,6 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.self_attn = TFAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-        assert not config.normalize_before, "MBART Not Supported"
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.dropout_wt = tf.keras.layers.Dropout(config.dropout)
@@ -424,16 +423,14 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
         assert encoder_hidden_states is not None, "Hit this"
-
-        residual = x
-        y = x
-
         if layer_state is None:
             layer_state = {}
+
+        residual = x  # Make a copy of the input tensor to add later.
         # next line mutates layer state and we need a copy of it
         x, self_attn_weights = self.self_attn(
             query=x,
-            key=y,
+            key=x,
             layer_state=layer_state,
             attn_mask=causal_mask,
             key_padding_mask=decoder_padding_mask,
@@ -445,7 +442,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         # Cross-Attention
         x, _ = self.encoder_attn(
             query=x,
-            key=encoder_hidden_states,  # could be None
+            key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
@@ -653,7 +650,7 @@ class TFAttention(tf.keras.layers.Layer):
     def call(
         self,
         query: tf.Tensor,
-        key: Optional[tf.Tensor],
+        key: tf.Tensor,
         key_padding_mask: Optional[tf.Tensor] = None,
         layer_state: Optional[Dict[str, tf.Tensor]] = None,
         attn_mask: Optional[Tensor] = None,
