@@ -2,6 +2,7 @@
 # by pytest before any tests are run
 
 import sys
+import warnings
 from os.path import abspath, dirname, join
 
 
