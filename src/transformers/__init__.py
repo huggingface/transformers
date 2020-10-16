@@ -175,6 +175,7 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_herbert import HerbertTokenizer
 from .tokenization_layoutlm import LayoutLMTokenizer
 from .tokenization_longformer import LongformerTokenizer
 from .tokenization_lxmert import LxmertTokenizer
@@ -227,6 +228,7 @@ if is_tokenizers_available():
     from .tokenization_electra_fast import ElectraTokenizerFast
     from .tokenization_funnel_fast import FunnelTokenizerFast
     from .tokenization_gpt2_fast import GPT2TokenizerFast
+    from .tokenization_herbert_fast import HerbertTokenizerFast
     from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
     from .tokenization_longformer_fast import LongformerTokenizerFast
     from .tokenization_lxmert_fast import LxmertTokenizerFast
@@ -480,6 +482,7 @@ if is_torch_available():
     from .modeling_openai import (
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTDoubleHeadsModel,
+        OpenAIGPTForSequenceClassification,
         OpenAIGPTLMHeadModel,
         OpenAIGPTModel,
         OpenAIGPTPreTrainedModel,

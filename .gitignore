@@ -12,6 +12,7 @@ __pycache__/
 tests/fixtures
 logs/
 lightning_logs/
+lang_code_data/
 
 # Distribution / packaging
 .Python

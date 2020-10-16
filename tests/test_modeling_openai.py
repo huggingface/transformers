@@ -30,6 +30,7 @@ if is_torch_available():
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTConfig,
         OpenAIGPTDoubleHeadsModel,
+        OpenAIGPTForSequenceClassification,
         OpenAIGPTLMHeadModel,
         OpenAIGPTModel,
     )
@@ -61,6 +62,7 @@ class OpenAIGPTModelTester:
         self.num_labels = 3
         self.num_choices = 4
         self.scope = None
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -90,6 +92,7 @@ class OpenAIGPTModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range
+            pad_token_id=self.pad_token_id,
             return_dict=True,
         )
 
@@ -134,6 +137,18 @@ class OpenAIGPTModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_openai_gpt_for_sequence_classification(
+        self, config, input_ids, head_mask, token_type_ids, *args
+    ):
+        config.num_labels = self.num_labels
+        model = OpenAIGPTForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        # print(config.num_labels, sequence_labels.size())
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        result = model(input_ids, token_type_ids=token_type_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -158,7 +173,9 @@ class OpenAIGPTModelTester:
 class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel) if is_torch_available() else ()
+        (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel, OpenAIGPTForSequenceClassification)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (
         (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
@@ -182,6 +199,10 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_openai_gpt_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
+
+    def test_openai_gpt_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_openai_gpt_for_sequence_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

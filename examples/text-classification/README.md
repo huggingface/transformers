@@ -43,7 +43,7 @@ python run_tf_text_classification.py \
   --do_eval \
   --do_predict \
   --logging_steps 10 \
-  --evaluate_during_training \
+  --evaluation_strategy steps \
   --save_steps 10 \
   --overwrite_output_dir \
   --max_seq_length 128

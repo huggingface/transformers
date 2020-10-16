@@ -34,7 +34,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import WEIGHTS_NAME, is_datasets_available, is_torch_tpu_available
+from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
     is_comet_available,
@@ -59,6 +59,7 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
+    DistributedTensorGatherer,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
@@ -88,7 +89,12 @@ _use_native_amp = False
 _use_apex = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
+DEFAULT_PROGRESS_CALLBACK = ProgressCallback
 
+if is_in_notebook():
+    from .utils.notebook import NotebookProgressCallback
+
+    DEFAULT_PROGRESS_CALLBACK = NotebookProgressCallback
 
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
@@ -100,6 +106,11 @@ if version.parse(torch.__version__) < version.parse("1.6"):
 else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
+
+if version.parse(torch.__version__) < version.parse("1.2"):
+    _use_ddp_no_sync = False
+else:
+    _use_ddp_no_sync = True
 
 if is_datasets_available():
     import datasets
@@ -168,6 +179,9 @@ class Trainer:
         model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
+
+            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be able to choose
+            different architectures according to hyper parameters (such as layer count, sizes of inner layers, dropout probabilities etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -207,15 +221,16 @@ class Trainer:
         assert (
             model is not None or model_init is not None
         ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
+        self.model_init = model_init
         if model is None and model_init is not None:
-            model = model_init()
+            model = self.call_model_init()
         self.model = model.to(args.device) if model is not None else None
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
-        self.model_init = model_init
+
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
@@ -225,7 +240,7 @@ class Trainer:
             )
         callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
         self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
-        self.add_callback(PrinterCallback if self.args.disable_tqdm else ProgressCallback)
+        self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
         # Deprecated arguments
         if "tb_writer" in kwargs:
@@ -505,7 +520,7 @@ class Trainer:
     ):
         if self.hp_search_backend is None or trial is None:
             return
-        self.objective = self.compute_objective(metrics)
+        self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             trial.report(self.objective, epoch)
             if trial.should_prune():
@@ -527,6 +542,17 @@ class Trainer:
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
+    def call_model_init(self, trial=None):
+        model_init_argcount = len(inspect.signature(self.model_init).parameters)
+        if model_init_argcount == 0:
+            model = self.model_init()
+        elif model_init_argcount == 1:
+            model = self.model_init(trial)
+        else:
+            raise Exception("model_init should have 0 or 1 argument.")
+
+        return model
+
     def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
         Main training entry point.
@@ -545,7 +571,9 @@ class Trainer:
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
             set_seed(self.args.seed)
-            model = self.model_init()
+
+            model = self.call_model_init(trial)
+
             self.model = model.to(self.args.device)
 
             # Reinitializes optimizer and scheduler
@@ -687,7 +715,15 @@ class Trainer:
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
-                tr_loss += self.training_step(model, inputs)
+                if (
+                    ((step + 1) % self.args.gradient_accumulation_steps != 0)
+                    and self.args.local_rank != -1
+                    and _use_ddp_no_sync
+                ):
+                    with model.no_sync():
+                        tr_loss += self.training_step(model, inputs)
+                else:
+                    tr_loss += self.training_step(model, inputs)
                 self._total_flos += self.floating_point_ops(inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
@@ -882,7 +918,7 @@ class Trainer:
                 - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
-            :class:`transformers.trainer_utils.BestRun`: All the informations about the best run.
+            :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
         """
         if backend is None:
             backend = default_hp_search_backend()
@@ -1236,18 +1272,29 @@ class Trainer:
         # multi-gpu eval
         if self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
-        else:
-            model = self.model
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
 
         batch_size = dataloader.batch_size
+        num_examples = self.num_examples(dataloader)
         logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", self.num_examples(dataloader))
+        logger.info("  Num examples = %d", num_examples)
         logger.info("  Batch size = %d", batch_size)
-        eval_losses: List[float] = []
-        preds: torch.Tensor = None
-        label_ids: torch.Tensor = None
+        losses_host: torch.Tensor = None
+        preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
+        labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
+
+        world_size = 1
+        if is_torch_tpu_available():
+            world_size = xm.xrt_world_size()
+        elif self.args.local_rank != -1:
+            world_size = torch.distributed.get_world_size()
+        world_size = max(1, world_size)
+
+        eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
+        preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
+        labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
+
         model.eval()
 
         if is_torch_tpu_available():
@@ -1258,55 +1305,46 @@ class Trainer:
 
         self.callback_handler.eval_dataloader = dataloader
 
-        for inputs in dataloader:
+        for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
-            batch_size = inputs[list(inputs.keys())[0]].shape[0]
             if loss is not None:
-                eval_losses.extend([loss] * batch_size)
+                losses = loss.repeat(batch_size)
+                losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if logits is not None:
-                preds = logits if preds is None else nested_concat(preds, logits, dim=0)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, dim=0)
             if labels is not None:
-                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, dim=0)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
+
+            # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
+            if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
+                eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
+                preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+                labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+
+                # Set back to None to begin a new accumulation
+                losses_host, preds_host, labels_host = None, None, None
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
 
-        if self.args.local_rank != -1:
-            # In distributed mode, concatenate all results from all nodes:
-            if preds is not None:
-                preds = distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
-            if label_ids is not None:
-                label_ids = distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
-        elif is_torch_tpu_available():
-            # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
-            if preds is not None:
-                preds = nested_xla_mesh_reduce(preds, "eval_preds")
-            if label_ids is not None:
-                label_ids = nested_xla_mesh_reduce(label_ids, "eval_label_ids")
-            if eval_losses is not None:
-                eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
+        # Gather all remaining tensors and put them back on the CPU
+        eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
+        preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+        labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
-        # Finally, turn the aggregated tensors into numpy arrays.
-        if preds is not None:
-            preds = nested_numpify(preds)
-        if label_ids is not None:
-            label_ids = nested_numpify(label_ids)
+        eval_loss = eval_losses_gatherer.finalize()
+        preds = preds_gatherer.finalize()
+        label_ids = labels_gatherer.finalize()
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
-        if len(eval_losses) > 0:
-            if self.args.local_rank != -1:
-                metrics["eval_loss"] = (
-                    distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
-                    .mean()
-                    .item()
-                )
-            else:
-                metrics["eval_loss"] = np.mean(eval_losses)
+
+        if eval_loss is not None:
+            metrics["eval_loss"] = eval_loss.mean().item()
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
@@ -1314,6 +1352,20 @@ class Trainer:
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+
+    def _gather_and_numpify(self, tensors, name):
+        """
+        Gather value of `tensors` (tensor or list/tuple of nested tensors) and convert them to numpy before
+        concatenating them to `gathered`
+        """
+        if tensors is None:
+            return
+        if is_torch_tpu_available():
+            tensors = nested_xla_mesh_reduce(tensors, name)
+        elif self.args.local_rank != -1:
+            tensors = distributed_concat(tensors)
+
+        return nested_numpify(tensors)
 
     def prediction_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
@@ -1344,8 +1396,7 @@ class Trainer:
         with torch.no_grad():
             outputs = model(**inputs)
             if has_labels:
-                # The .mean() is to reduce in case of distributed training
-                loss = outputs[0].mean().item()
+                loss = outputs[0].mean().detach()
                 logits = outputs[1:]
             else:
                 loss = None

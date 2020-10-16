@@ -142,6 +142,20 @@ try:
 except (AttributeError, ImportError):
     _has_sklearn = False
 
+try:
+    # Test copied from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
+    get_ipython = sys.modules["IPython"].get_ipython
+    if "IPKernelApp" not in get_ipython().config:
+        raise ImportError("console")
+    if "VSCODE_PID" in os.environ:
+        raise ImportError("vscode")
+
+    import IPython  # noqa: F401
+
+    _in_notebook = True
+except (AttributeError, ImportError, KeyError):
+    _in_notebook = False
+
 
 try:
     import sentencepiece  # noqa: F401
@@ -232,6 +246,10 @@ def is_sentencepiece_available():
 
 def is_tokenizers_available():
     return _tokenizers_available
+
+
+def is_in_notebook():
+    return _in_notebook
 
 
 def torch_only_method(fn):
@@ -1151,7 +1169,7 @@ def is_tensor(x):
 class ModelOutput(OrderedDict):
     """
     Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes. Otherwise behaves like a
+    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a
     regular python dictionary.
 
     .. warning::

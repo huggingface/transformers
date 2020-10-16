@@ -1256,6 +1256,15 @@ class OpenAIGPTDoubleHeadsModel:
         requires_pytorch(self)
 
 
+class OpenAIGPTForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class OpenAIGPTLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
