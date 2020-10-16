@@ -32,7 +32,6 @@ if is_torch_available():
     import numpy as np
     import torch
 
-    from transformers.modeling_outputs import BaseModelOutput
     from transformers import (
         AutoTokenizer,
         BertGenerationDecoder,
@@ -47,6 +46,7 @@ if is_torch_available():
         RobertaForCausalLM,
         RobertaModel,
     )
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 @require_torch
