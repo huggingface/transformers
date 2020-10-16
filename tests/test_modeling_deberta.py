@@ -247,7 +247,6 @@ class DebertaModelIntegrationTest(unittest.TestCase):
         np.random.seed(0)
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
-        DebertaModel.base_model_prefix = "bert"
         model = DebertaModel.from_pretrained("microsoft/deberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -257,17 +256,3 @@ class DebertaModelIntegrationTest(unittest.TestCase):
             [[[-0.0218, -0.6641, -0.3665], [-0.3907, -0.4716, -0.6640], [0.7461, 1.2570, -0.9063]]]
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4), f"{output[:, :3, :3]}")
-
-    @slow
-    def test_inference_classification_head(self):
-        random.seed(0)
-        np.random.seed(0)
-        torch.manual_seed(0)
-        torch.cuda.manual_seed_all(0)
-        model = DebertaForSequenceClassification.from_pretrained("microsoft/deberta-base")
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 2))
-        self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[0.0884, -0.1047]])
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4), f"{output}")
