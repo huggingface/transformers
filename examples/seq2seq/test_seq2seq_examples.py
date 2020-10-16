@@ -270,12 +270,13 @@ class TestSummarizationDistiller(TestCasePlus):
 
 class TestTheRest(TestCasePlus):
     def run_eval_tester(self, model):
-        input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
+        input_file_name = Path(self.get_auto_remove_tmp_dir()) / "utest_input.source"
         output_file_name = input_file_name.parent / "utest_output.txt"
         assert not output_file_name.exists()
         articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
         _dump_articles(input_file_name, articles)
-        score_path = str(Path(tempfile.mkdtemp()) / "scores.json")
+
+        score_path = str(Path(self.get_auto_remove_tmp_dir()) / "scores.json")
         task = "translation_en_to_de" if model == T5_TINY else "summarization"
         testargs = f"""
             run_eval_search.py
@@ -308,7 +309,7 @@ class TestTheRest(TestCasePlus):
     @parameterized.expand([T5_TINY, MBART_TINY])
     @slow
     def test_run_eval_search(self, model):
-        input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
+        input_file_name = Path(self.get_auto_remove_tmp_dir()) / "utest_input.source"
         output_file_name = input_file_name.parent / "utest_output.txt"
         assert not output_file_name.exists()
 
@@ -321,7 +322,7 @@ class TestTheRest(TestCasePlus):
             ],
         }
 
-        tmp_dir = Path(tempfile.mkdtemp())
+        tmp_dir = Path(self.get_auto_remove_tmp_dir())
         score_path = str(tmp_dir / "scores.json")
         reference_path = str(tmp_dir / "val.target")
         _dump_articles(input_file_name, text["en"])
@@ -363,7 +364,7 @@ class TestTheRest(TestCasePlus):
         args_d["label_smoothing"] = 0.1 if task == "translation" else 0
 
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
-        output_dir = tempfile.mkdtemp(prefix="output_")
+        output_dir = self.get_auto_remove_tmp_dir()
         args_d.update(
             data_dir=tmp_dir,
             model_name_or_path=model,
@@ -429,7 +430,7 @@ class TestTheRest(TestCasePlus):
 
         # test models whose config includes the extra_model_args
         model = BART_TINY
-        output_dir = tempfile.mkdtemp(prefix="output_1_")
+        output_dir = self.get_auto_remove_tmp_dir()
         args_d1 = args_d.copy()
         args_d1.update(
             model_name_or_path=model,
@@ -445,7 +446,7 @@ class TestTheRest(TestCasePlus):
 
         # test models whose config doesn't include the extra_model_args
         model = T5_TINY
-        output_dir = tempfile.mkdtemp(prefix="output_2_")
+        output_dir = self.get_auto_remove_tmp_dir()
         args_d2 = args_d.copy()
         args_d2.update(
             model_name_or_path=model,
@@ -465,7 +466,7 @@ class TestTheRest(TestCasePlus):
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
 
         model = BART_TINY
-        output_dir = tempfile.mkdtemp(prefix="output_1_")
+        output_dir = self.get_auto_remove_tmp_dir()
 
         args_d.update(
             data_dir=tmp_dir,
