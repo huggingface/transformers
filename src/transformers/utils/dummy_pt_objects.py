@@ -1308,6 +1308,21 @@ class PegasusForConditionalGeneration:
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ProphetNetDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class ProphetNetForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1737,6 +1752,21 @@ class XLMWithLMHeadModel:
 
 
 XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class XLMProphetNetDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class XLMProphetNetForConditionalGeneration:
