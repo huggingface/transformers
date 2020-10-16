@@ -27,7 +27,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
-class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLMProphetNetTokenizer
     test_rust_tokenizer = False

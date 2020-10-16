@@ -116,6 +116,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         sep_token="[SEP]",
         unk_token="[UNK]",
         pad_token="[PAD]",
+        cls_token="[CLS]",
         mask_token="[MASK]",
         **kwargs
     ):
@@ -215,7 +216,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        XLM-RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
+        XLMProphetNet does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -293,7 +294,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A ProphetNet sequence has the following format:
+        A XLMProphetNet sequence has the following format:
 
         - single sequence: ``X [SEP]``
         - pair of sequences: ``A [SEP] B [SEP]``

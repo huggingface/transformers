@@ -451,6 +451,9 @@ if is_torch_available():
     from .modeling_pegasus import PegasusForConditionalGeneration
     from .modeling_prophetnet import (
         PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ProphetNetDecoder,
+        ProphetNetEncoder,
+        ProphetNetForCausalLM,
         ProphetNetForConditionalGeneration,
         ProphetNetModel,
         ProphetNetPreTrainedModel,
@@ -517,6 +520,9 @@ if is_torch_available():
     )
     from .modeling_xlm_prophetnet import (
         XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLMProphetNetDecoder,
+        XLMProphetNetEncoder,
+        XLMProphetNetForCausalLM,
         XLMProphetNetForConditionalGeneration,
         XLMProphetNetModel,
     )

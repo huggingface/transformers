@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert RoBERTa checkpoint."""
+"""Convert ProphetNet checkpoint."""
 
 
 import argparse
@@ -24,6 +24,7 @@ from transformers.modeling_prophetnet import ProphetNetForConditionalGeneration
 from transformers.modeling_xlm_prophetnet import XLMProphetNetForConditionalGeneration
 
 # transformers_old should correspond to branch `save_old_prophetnet_model_structure` here
+# original prophetnet_checkpoints are saved under `patrickvonplaten/..._old` respectively
 from transformers_old.modeling_prophetnet import (
     ProphetNetForConditionalGeneration as ProphetNetForConditionalGenerationOld,
 )

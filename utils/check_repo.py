@@ -33,6 +33,7 @@ IGNORE_NON_TESTED = [
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetEncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoder",  # Building part of bigger (tested) model.
+    "ProphetNetForCausalLM",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
@@ -57,8 +58,6 @@ IGNORE_NON_DOCUMENTED = [
     "DPREncoder",  # Building part of bigger (documented) model.
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
     "T5Stack",  # Building part of bigger (tested) model.
-    "ProphetNetEncoder",  # Building part of bigger (tested) model.
-    "ProphetNetDecoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (documented) model (should it be a TFPreTrainedModel ?)
 ]
 

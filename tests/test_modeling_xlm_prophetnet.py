@@ -29,9 +29,7 @@ if is_torch_available():
 class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "patrickvonplaten/xprophetnet-large-wiki100-cased"
-        )
+        model = XLMProphetNetForConditionalGeneration.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
         model.to(torch_device)
 
         # encoder-decoder outputs
@@ -72,7 +70,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_ntg_hidden_states(self):
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
+            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
         )
         model.to(torch_device)
 
@@ -96,14 +94,12 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xprophetnet_ntg_inference(self):
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
+            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
         )
         model.to(torch_device)
         model.config.max_length = 512
 
-        tokenizer = XLMProphetNetTokenizer.from_pretrained(
-            "patrickvonplaten/xprophetnet-large-wiki100-cased-xglue-ntg"
-        )
+        tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased-xglue-ntg")
 
         EN_SENTENCE = "Microsoft Corporation intends to officially end free support for the Windows 7 operating system after January 14, 2020, according to the official portal of the organization. From that day, users of this system will not be able to receive security updates, which could make their computers vulnerable to cyber attacks."
         RU_SENTENCE = "орпорация Microsoft намерена официально прекратить бесплатную поддержку операционной системы Windows 7 после 14 января 2020 года, сообщается на официальном портале организации . С указанного дня пользователи этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми к кибератакам."

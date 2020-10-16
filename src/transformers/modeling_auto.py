@@ -157,7 +157,7 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
-from .modeling_prophetnet import ProphetNetForConditionalGeneration, ProphetNetModel
+from .modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
     RagSequenceForGeneration,
@@ -197,7 +197,11 @@ from .modeling_xlm import (
     XLMModel,
     XLMWithLMHeadModel,
 )
-from .modeling_xlm_prophetnet import XLMProphetNetForConditionalGeneration, XLMProphetNetModel
+from .modeling_xlm_prophetnet import (
+    XLMProphetNetForCausalLM,
+    XLMProphetNetForConditionalGeneration,
+    XLMProphetNetModel,
+)
 from .modeling_xlm_roberta import (
     XLMRobertaForCausalLM,
     XLMRobertaForMaskedLM,
@@ -331,6 +335,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (BertGenerationConfig, BertGenerationDecoder),
+        (ProphetNetConfig, XLMProphetNetForCausalLM),
+        (ProphetNetConfig, ProphetNetForCausalLM),
     ]
 )
 

@@ -54,7 +54,7 @@ class ProphetNetConfig(PretrainedConfig):
         num_encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimensionality of the ``intermediate`` (often named feed-forward) layer in decoder.
         num_decoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of decoder layers.
         num_decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
@@ -68,6 +68,8 @@ class ProphetNetConfig(PretrainedConfig):
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether cross-attention layers should be added to the model.
         is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether this is an encoder/decoder model.
         pad_token_id (:obj:`int`, `optional`, defaults to 1)
@@ -112,6 +114,7 @@ class ProphetNetConfig(PretrainedConfig):
         max_position_embeddings=512,
         init_std=0.02,
         is_encoder_decoder=True,
+        add_cross_attention=True,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -128,6 +131,7 @@ class ProphetNetConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            add_cross_attention=add_cross_attention,
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )

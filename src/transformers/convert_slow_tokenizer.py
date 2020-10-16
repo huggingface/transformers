@@ -465,13 +465,11 @@ class MBartConverter(SpmConverter):
 class XLMRobertaConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
-            ("<s>", 0.0),
-            ("<pad>", 0.0),
-            ("</s>", 0.0),
-            ("<unk>", 0.0),
+            ("[SEP]", 0.0),
+            ("[PAD]", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        vocab += [("<mask>", 0.0)]
+        vocab += [("[MASK]", 0.0)]
         return vocab
 
     def unk_id(self, proto):
@@ -589,6 +587,7 @@ CONVERTERS = {
     "ReformerTokenizer": ReformerConverter,
     "RobertaTokenizer": RobertaConverter,
     "T5Tokenizer": T5Converter,
+    "XLMProphetNetTokenizer": XLMRobertaConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
 }

@@ -22,13 +22,19 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ProphetNetConfig, ProphetNetForConditionalGeneration, ProphetNetModel, ProphetNetTokenizer
+    from transformers import (
+        ProphetNetConfig,
+        ProphetNetForCausalLM,
+        ProphetNetForConditionalGeneration,
+        ProphetNetModel,
+        ProphetNetTokenizer,
+    )
 
 
 class ProphetNetModelTester:
@@ -145,6 +151,28 @@ class ProphetNetModelTester:
             lm_labels,
         )
 
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        ) = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.encoder_seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+
+        return (
+            config,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            lm_labels,
+        )
+
     def check_prepare_lm_labels_via_shift_left(
         self,
         config,
@@ -210,9 +238,9 @@ class ProphetNetModelTester:
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
-        self.parent.assertEqual(len(decoder_past), config.num_layers)
+        self.parent.assertEqual(len(decoder_past), config.num_decoder_layers)
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
+        self.parent.assertEqual(len(decoder_past[0]), 2)  # cross-attention + uni-directional self-attention
 
     def create_and_check_with_lm_head(
         self,
@@ -228,6 +256,25 @@ class ProphetNetModelTester:
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            labels=lm_labels,
+        )
+        self.parent.assertEqual(len(outputs), 5)
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
+    def create_and_check_causal_lm_decoder(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetForCausalLM(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
             labels=lm_labels,
         )
         self.parent.assertEqual(len(outputs), 4)
@@ -549,6 +596,18 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_lm_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
+
+    def test_only_decoder_causal_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_causal_lm_decoder(*config_and_inputs)
+
     def test_fast_integration(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_fast_integration(*config_and_inputs)
@@ -586,7 +645,7 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased")
+        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased")
         model.to(torch_device)
 
         # encoder-decoder outputs
@@ -666,11 +725,11 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_cnndm_inference(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
+        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
         model.config.max_length = 512
         model.to(torch_device)
 
-        tokenizer = ProphetNetTokenizer.from_pretrained("patrickvonplaten/prophetnet-large-uncased-cnndm")
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
 
         ARTICLE_TO_SUMMARIZE = "USTC was founded in Beijing by the Chinese Academy of Sciences (CAS) in September 1958. The Director of CAS, Mr. Guo Moruo was appointed the first president of USTC. USTC's founding mission was to develop a high-level science and technology workforce, as deemed critical for development of China's economy, defense, and science and technology education. The establishment was hailed as \"A Major Event in the History of Chinese Education and Science.\" CAS has supported USTC by combining most of its institutes with the departments of the university. USTC is listed in the top 16 national key universities, becoming the youngest national key university.".lower()
         input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=511, return_tensors="pt").input_ids
