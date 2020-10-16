@@ -1178,7 +1178,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone-decoder', return_dict=True)
+            >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone', return_dict=True)
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
@@ -1307,7 +1307,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetDecoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone-decoder', return_dict=True)
+            >>> model = ProphetNetDecoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone', add_cross_attention=False, return_dict=True)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1933,7 +1933,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone-decoder', return_dict=True)
+            >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-decoder-clm-large-uncased', return_dict=True)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

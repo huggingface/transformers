@@ -453,6 +453,7 @@ class EncoderDecoderMixin:
                 self.assertLessEqual(max_diff, 1e-5)
 
 
+@require_torch
 class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
@@ -521,6 +522,7 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         self.assertEqual(summary, EXPECTED_SUMMARY)
 
 
+@require_torch
 class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return EncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -582,6 +584,7 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
         self.assertEqual(summary, EXPECTED_SUMMARY)
 
 
+@require_torch
 class RoBertaEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = RobertaModel(config)
@@ -634,6 +637,7 @@ class RoBertaEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         return EncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
 
 
+@require_torch
 class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = BertModel(config)
@@ -693,6 +697,7 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         pass
 
 
+@require_torch
 class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = BertModel(config)

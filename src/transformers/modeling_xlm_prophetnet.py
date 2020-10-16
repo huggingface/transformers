@@ -46,7 +46,7 @@ class XLMProphetNetEncoder(ProphetNetEncoder):
         >>> import torch
 
         >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-        >>> model = XLMProphetNetEncoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone-encoder', return_dict=True)
+        >>> model = XLMProphetNetEncoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone', return_dict=True)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -68,7 +68,7 @@ class XLMProphetNetDecoder(ProphetNetDecoder):
         >>> import torch
 
         >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-        >>> model = XLMProphetNetDecoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone-decoder', return_dict=True)
+        >>> model = XLMProphetNetDecoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone', add_cross_attention=False, return_dict=True)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -136,7 +136,7 @@ class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
         >>> import torch
 
         >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-        >>> model = XLMProphetNetForCausalLM.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone-decoder', return_dict=True)
+        >>> model = XLMProphetNetForCausalLM.from_pretrained('patrickvonplaten/xprophetnet-decoder-clm-large-uncased', return_dict=True)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
