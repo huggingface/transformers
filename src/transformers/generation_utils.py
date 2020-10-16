@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Optional, Tuple, Callable
-
 import math
+from typing import Callable, Iterable, List, Optional, Tuple
+
 import torch
 from torch import Tensor
 from torch.nn import functional as F
