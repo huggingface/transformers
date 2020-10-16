@@ -369,8 +369,7 @@ def test_run_eval_search(model):
 
 
 @pytest.mark.parametrize(
-    "model",
-    [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY]  # , FSMT_TINY] TODO(sam, thom, staas): add back this test
+    "model", [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY]  # , FSMT_TINY] TODO(sam, thom, staas): add back this test
 )
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
