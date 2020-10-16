@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF BART model, ported from the fairseq repo."""
-import logging
+
 import math
 import random
 import warnings
@@ -39,6 +39,7 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils_base import BatchEncoding
+from .utils import logging
 
 
 _CONFIG_FOR_DOC = "BartConfig"
@@ -99,8 +100,9 @@ BART_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the input_ids right, following the paper.
+        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -121,6 +123,9 @@ BART_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.TFModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 LARGE_NEGATIVE = -1e8
 
@@ -206,6 +211,11 @@ def make_padding_mask(input_ids, padding_idx=1):
 
 
 # Helper Modules
+
+PAST_KV_DEPRECATION_WARNING = (
+    "The `past_key_value_states` argument is deprecated and will be removed in a future "
+    "version, use `past_key_values` instead."
+)
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
@@ -1003,6 +1013,8 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         elif isinstance(inputs, (dict, BatchEncoding)):
             if "inputs" in inputs:
                 warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
+            if "past_key_value_states" in inputs:
+                raise ValueError(PAST_KV_DEPRECATION_WARNING)
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
@@ -1015,21 +1027,11 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 13, "Too many inputs."
 
-            if "past_key_value_states" in inputs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_value_states")
         else:
             input_ids = inputs
+        if "past_key_value_states" in kwargs:
+            raise ValueError(PAST_KV_DEPRECATION_WARNING)
 
-            if "past_key_value_states" in kwargs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_value_states")
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
