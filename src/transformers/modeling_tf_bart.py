@@ -125,7 +125,7 @@ BART_INPUTS_DOCSTRING = r"""
 LARGE_NEGATIVE = -1e8
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
