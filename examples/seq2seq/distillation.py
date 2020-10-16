@@ -42,8 +42,8 @@ class BartSummarizationDistiller(SummarizationModule):
         use_task_specific_params(teacher, hparams.task)  # We copy good generation parameters to student by default
         
         e_layer_ids, d_layer_ids = None, None
-        if hparams.student_base_model is not None:
-            student = AutoModelForSeq2SeqLM.from_pretrained(hparams.student_base_model).eval()
+        if hparams.student is not None:
+            student = AutoModelForSeq2SeqLM.from_pretrained(hparams.student).eval()
             use_task_specific_params(student, hparams.task)
         else:
             student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
@@ -90,7 +90,7 @@ class BartSummarizationDistiller(SummarizationModule):
         self.e_matches = None
         self.d_matches = None
 
-        if hparams.student_base_model is None or hparams.teacher == hparams.student_base_model:
+        if hparams.student is None or hparams.teacher == hparams.student:
             # Intermediate supervision: Decide which layers to supervise
             if hparams.supervise_forward:
                 self.e_matches = get_layers_to_supervise(n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers)
@@ -149,16 +149,13 @@ class BartSummarizationDistiller(SummarizationModule):
     def _step(self, batch):
         # assert is_frozen(self.teacher) copied_decoder_layers
         pad_token_id = self.tokenizer.pad_token_id
-        print(f'pad_token_id: {pad_token_id}, tokenizer: {type(self.tokenizer)}')
         input_ids, src_mask, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
         if isinstance(self.teacher, T5ForConditionalGeneration):
-            #print('Teacher model: T5ForConditionalGeneration')
             teacher_decoder_input_ids = self.teacher._shift_right(labels)
         else:
             teacher_decoder_input_ids = shift_tokens_right(labels, pad_token_id)
 
         if isinstance(self.model, T5ForConditionalGeneration):
-            #print('Student model: T5ForConditionalGeneration')
             student_decoder_input_ids = self.model._shift_right(labels)
         else:
             student_decoder_input_ids = shift_tokens_right(labels, pad_token_id)
@@ -188,8 +185,7 @@ class BartSummarizationDistiller(SummarizationModule):
         def zero_tensor():
             return torch.tensor(0.0).type_as(student_lm_loss)
 
-        teacher_enc_outputs =(enc_outputs,)
-
+        teacher_enc_outputs = enc_outputs
         hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor()
         if self.different_encoder:  # compute encoder hidden state loss
             with torch.no_grad():
@@ -210,16 +206,13 @@ class BartSummarizationDistiller(SummarizationModule):
             outputs = self.teacher(
                 input_ids,
                 attention_mask=teacher_mask,
-                encoder_outputs=teacher_enc_outputs,
+                encoder_outputs=(teacher_enc_outputs, ),
                 decoder_input_ids=teacher_decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
                 return_dict=True,
             )
-            #print(f'outputs len: {len(outputs)}')
             tlogits, tdec_hidden = outputs.logits, outputs.decoder_hidden_states 
-            #print(tlogits)
-            #print(tdec_hidden)
         dec_mask = teacher_decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
@@ -258,15 +251,14 @@ class BartSummarizationDistiller(SummarizationModule):
         if matches:
             return calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden)
         else:
-            print('No matches, returning 0 for hidden loss')
-            return 0.0
+            return torch.tensor(0.0)
 
 def add_distill_args(parser):
     parser.add_argument("--teacher", type=str)
     parser.add_argument("--alpha_ce", default=0.8, type=float)
     parser.add_argument("--alpha_mlm", default=0.2, type=float)
     parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
-    parser.add_argument("--student_base_model", type=str, required=False)
+    parser.add_argument("--student", type=str, required=False)
     parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
     parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
     parser.add_argument("--no_teacher", action="store_true", default=False)
@@ -319,13 +311,6 @@ def distill_main(args):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     model = create_module(args)
-    
-    #if args.student_base_model:
-    #    print('Calling forward on teacher and student')
-    #    teacher = ft_main(args, model=model.teacher)
-    #    student = ft_main(args, model=model.model)
-    #    print('Called forward on teacher and student')
-    #else:
     return ft_main(args, model=model)
 
 
