@@ -975,7 +975,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         """
         Returns:
 
-        Examples:
+        Examples::
 
             # Mask filling only works for bart-large
             from transformers import BartTokenizer, TFBartForConditionalGeneration
