@@ -645,7 +645,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
 
 @require_torch
-# @slow
+@slow
 class FastIntegrationTests(unittest.TestCase):
     """These tests are useful for debugging since they operate on a model with 1 encoder layer and 1 decoder layer."""
 
