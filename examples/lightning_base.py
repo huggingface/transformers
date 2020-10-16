@@ -337,7 +337,7 @@ def add_generic_args(parser, root_dir) -> None:
 def generic_train(
     model: BaseTransformer,
     args: argparse.Namespace,
-    early_stopping_callback=False,
+    early_stopping_callback=None,
     logger=True,  # can pass WandbLogger() here
     extra_callbacks=[],
     checkpoint_callback=None,
@@ -356,7 +356,6 @@ def generic_train(
             filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
         )
     if early_stopping_callback:
-        early_stopping_callback = pl.callbacks.EarlyStopping(monitor="val_loss")
         extra_callbacks.append(early_stopping_callback)
     if logging_callback is None:
         logging_callback = LoggingCallback()
