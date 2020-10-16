@@ -18,12 +18,14 @@ import json
 import os
 import unittest
 
-from transformers.testing_utils import slow
-from transformers.tokenization_herbert import VOCAB_FILES_NAMES, HerbertTokenizer, HerbertTokenizerFast
+from transformers import HerbertTokenizer, HerbertTokenizerFast
+from transformers.testing_utils import require_tokenizers, slow
+from transformers.tokenization_herbert import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = HerbertTokenizer

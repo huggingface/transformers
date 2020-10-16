@@ -13,9 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from .tokenization_herbert import HerbertTokenizer
+from .tokenization_herbert import (
+    PRETRAINED_INIT_CONFIGURATION,
+    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
+    PRETRAINED_VOCAB_FILES_MAP,
+    HerbertTokenizer,
+)
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
@@ -48,9 +53,12 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = HerbertTokenizer
 
-    def __init__(self, vocab_file, merges_file, **kwargs):
+    def __init__(self, vocab_file, merges_file, tokenizer_file=None, **kwargs):
 
         kwargs["cls_token"] = "<s>"
         kwargs["unk_token"] = "<unk>"
@@ -61,6 +69,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         super().__init__(
             vocab_file,
             merges_file,
+            tokenizer_file=tokenizer_file,
             **kwargs,
         )
 
@@ -150,3 +159,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
