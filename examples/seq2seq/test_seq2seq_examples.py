@@ -52,7 +52,7 @@ CHEAP_ARGS = {
     "student_decoder_layers": 1,
     "val_check_interval": 1.0,
     "output_dir": "",
-    "fp16": False,  # TODO(SS): set this to CUDA_AVAILABLE if ci installs apex or start using native amp
+    "fp16": False,  # TODO: set this to CUDA_AVAILABLE if ci installs apex or start using native amp
     "no_teacher": False,
     "fp16_opt_level": "O1",
     "gpus": 1 if CUDA_AVAILABLE else 0,
