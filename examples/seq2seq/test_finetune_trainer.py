@@ -25,7 +25,6 @@ def test_finetune_trainer():
 
 @slow
 def test_finetune_trainer_slow():
-    # TODO(SS): This will fail on devices with more than 1 GPU.
     # There is a missing call to __init__process_group somewhere
     output_dir = run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=3)
 
