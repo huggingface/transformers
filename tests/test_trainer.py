@@ -8,7 +8,7 @@ import numpy as np
 
 from transformers import AutoTokenizer, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import get_tests_dir, require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow, require_sentencepiece, require_tokenizers
 
 
 if is_torch_available():
@@ -136,6 +136,8 @@ if is_torch_available():
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class TrainerIntegrationTest(unittest.TestCase):
     def setUp(self):
         args = TrainingArguments(".")

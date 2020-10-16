@@ -20,7 +20,7 @@ import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, require_sentencepiece, require_tokenizers
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -443,6 +443,8 @@ TOLERANCE = 1e-4
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class BartModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
