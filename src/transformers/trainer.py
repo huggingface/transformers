@@ -221,9 +221,8 @@ class Trainer:
             model = self.call_model_init()
 
         # Model parallel
-        self.model_parallel = args.model_parallel
         self.model = model if model else None
-        if not self.model_parallel and self.model is not None:
+        if not self.args.model_parallel and self.model is not None:
             self.model = self.model.to(args.device)
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
@@ -576,7 +575,7 @@ class Trainer:
             model = self.call_model_init(trial)
 
             # Model parallel
-            if not self.model_parallel:
+            if not self.args.model_parallel:
                 self.model = model.to(self.args.device)
 
             # Reinitializes optimizer and scheduler
@@ -621,7 +620,7 @@ class Trainer:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1 and not self.model_parallel:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
@@ -787,7 +786,7 @@ class Trainer:
             )
             if isinstance(model, PreTrainedModel):
                 self.model = model.from_pretrained(self.state.best_model_checkpoint)
-                if not self.model_parallel:
+                if not self.args.model_parallel:
                     self.model = model.to(self.args.device)
                 
             else:
@@ -1275,7 +1274,7 @@ class Trainer:
 
         model = self.model
         # multi-gpu eval without model parallel
-        if self.args.n_gpu > 1 and not self.model_parallel:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             model = torch.nn.DataParallel(model)
         else:
             model = self.model
