@@ -186,8 +186,7 @@ def invert_mask(attention_mask: tf.Tensor):
     """Turns 1->0, 0->1, False->True, True-> False"""
     tf.debugging.assert_rank(attention_mask, 2)
     attention_mask = tf.cast(attention_mask, tf.bool)
-    ret = tf.math.logical_not(attention_mask)
-    assert ret.dtype == tf.bool
+    ret = tf.math.logical_not(attention_mask)  # dtype is tf.bool
     return ret
 
 
@@ -371,7 +370,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         # check attention mask and invert
         if attention_mask is not None:
-            assert attention_mask._rank() == 2
+            assert (
+                attention_mask._rank() == 2
+            ), f"expected attention_mask._rank() to be a 2D tensor got {attention_mask._rank()}"
             attention_mask = tf.cast(attention_mask, dtype=tf.float32)
             attention_mask = (1.0 - attention_mask) * LARGE_NEGATIVE
         inputs_embeds = self.embed_tokens(input_ids)
@@ -461,7 +462,6 @@ class TFDecoderLayer(tf.keras.layers.Layer):
 
             Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
-        assert encoder_hidden_states is not None, "Hit this"
         if layer_state is None:
             layer_state = {}
 
@@ -586,7 +586,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
-        assert len(encoder_hidden_states.shape) == 3
+        assert len(encoder_hidden_states.shape) == 3, "encoder_hidden_states must be a 3D tensor"
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
 
         # decoder layers
@@ -715,7 +715,7 @@ class TFAttention(tf.keras.layers.Layer):
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
-                    key = value = None
+                    key = None
         else:
             # this branch is hit by encoder
             saved_state = None
@@ -723,7 +723,6 @@ class TFAttention(tf.keras.layers.Layer):
         # Project query key values using weights q_proj, k_proj, v_proj
         q = self.q_proj(query) * self.scaling
         if static_kv and key is None:  # cross-attention with cache
-            assert value is None
             k = v = None
         elif static_kv and key is not None:  # cross-attention no prev_key found in cache
             k = self.k_proj(key)
@@ -767,8 +766,7 @@ class TFAttention(tf.keras.layers.Layer):
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
 
-        attn_output = tf.matmul(attn_probs, v)
-        assert attn_output.shape == (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
         attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
         attn_output = self.out_proj(attn_output)
@@ -796,7 +794,7 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = offset
-        assert padding_idx is not None
+        assert padding_idx is not None, "padding_idx cannot be None"
         num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
@@ -934,7 +932,6 @@ class TFBartModel(TFPretrainedBartModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
             )
-        assert len(encoder_outputs.last_hidden_state.shape) == 3
         decoder_outputs = self.decoder(
             decoder_input_ids,
             encoder_outputs.last_hidden_state,
@@ -949,9 +946,6 @@ class TFBartModel(TFPretrainedBartModel):
         )
         if not return_dict:
             # Attention and hidden_states will be [] or None if they aren't needed
-            assert isinstance(
-                decoder_outputs[0], tf.Tensor
-            ), f"got type {type(decoder_outputs[0])} for first decoder output"
             return tuple(x for x in decoder_outputs + encoder_outputs.to_tuple() if x is not None)
         else:
             return TFSeq2SeqModelOutput(
