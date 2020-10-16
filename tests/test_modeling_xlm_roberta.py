@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import slow, require_tokenizers, require_sentencepiece
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 
 if is_torch_available():
