@@ -1164,7 +1164,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             if not return_dict:
                 output = (prediction_scores,) + outputs[2:]
 
-                return ((prediction_scores,) + output) if lm_loss is not None else output
+                return ((lm_loss,) + output) if lm_loss is not None else output
 
         return TFCausalLMOutput(
             loss=lm_loss,
