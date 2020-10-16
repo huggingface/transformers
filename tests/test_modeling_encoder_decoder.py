@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
@@ -33,6 +32,7 @@ if is_torch_available():
     import numpy as np
     import torch
 
+    from transformers.modeling_outputs import BaseModelOutput
     from transformers import (
         AutoTokenizer,
         BertGenerationDecoder,
