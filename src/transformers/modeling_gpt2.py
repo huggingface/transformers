@@ -42,7 +42,7 @@ from .modeling_utils import (
     prune_conv1d_layer,
 )
 from .utils import logging
-from .utils.model_parallel_utils import analyze_device_map
+from .utils.model_parallel_utils import assert_device_map, get_device_map
 
 
 logger = logging.get_logger(__name__)
@@ -473,11 +473,54 @@ GPT2_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+PARALLELIZE_DOCSTRING = r"""
+    Uses a device map to distribute attention modules of the model across several devices. If no device map is given, it 
+    will evenly distribute blocks across all devices.
+    Args: 
+        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
+            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
+            always automatically mapped to the first device (for esoteric reasons). That means that the first
+            device should have fewer attention modules mapped to it than other devices. 
+
+            For reference, the gpt2 models have the following number of attention modules:
+            
+                - gpt2: 12
+                - gpt2-medium: 24
+                - gpt2-large: 36
+                - gpt2-xl: 48
+
+    Example::
+        Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
+            
+            model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
+            device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+                          1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+                          2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+                          3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
+            model.parallelize(device_map)
+
+"""
+
+DEPARALLELIZE_DOCSTRING = r"""
+    Moves the model to cpu from a model parallel state. 
+
+    Example::
+        On a 4 GPU machine with gpt2-large:
+
+        model = GPT2LMHeadModel.from_pretrained('gpt2-large')
+        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
+                    1: [8, 9, 10, 11, 12, 13, 14, 15],
+                    2: [16, 17, 18, 19, 20, 21, 22, 23],
+                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
+        model.parallelize(device_map) # Splits the model across several devices
+        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+"""
 
 @add_start_docstrings(
     "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT2_START_DOCSTRING,
 )
+
 class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -494,31 +537,11 @@ class GPT2Model(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
-    def parallelize(self, device_map):
-        '''Uses a device map to distribute attention modules of the model across several devices.
-        Args: 
-            device_map (:obj:`Dict[int, list]`):
-                A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
-                always automatically mapped to the first device (for esoteric reasons). That means that the first
-                device should have fewer attention modules mapped to it than other devices. Here is an example of
-                a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
-                
-                model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
-                device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-                              1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-                              2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-                              3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
-                model.parallelize(device_map)
-
-                For reference, the gpt2 models have the following number of attention modules:
-                    gpt2: 12
-                    gpt2-medium: 24
-                    gpt2-large: 36
-                    gpt2-xl: 48
-        '''
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map = None):
         # Check validity of device_map
-        assert self.device_map or device_map, "No device_map detected. Pass a device_map dictionary to parallelize_model"
-        analyze_device_map(device_map, len(self.h))
+        self.device_map = get_device_map(len(self.h), torch.cuda.device_count()) if device_map is None else device_map
+        assert_device_map(device_map, len(self.h))
         
         self.model_parallel = True
         self.device_map = device_map
@@ -534,18 +557,8 @@ class GPT2Model(GPT2PreTrainedModel):
         ## ln_f to last 
         self.ln_f = self.ln_f.to(self.last_device)
 
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        """Moves the model to cpu from a model parallel state. For example, on a 4 GPU machine with gpt2-large:
-
-        model = GPT2LMHeadModel.from_pretrained('gpt2-large')
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
-                    1: [8, 9, 10, 11, 12, 13, 14, 15],
-                    2: [16, 17, 18, 19, 20, 21, 22, 23],
-                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-
-        """
         self.model_parallel = False
         self.device_map = None
         self.first_device = 'cpu'
@@ -780,11 +793,16 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
         self.model_parallel = False
 
-    def parallelize(self, device_map):
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map = None):
+        self.device_map = get_device_map(len(self.transformer.h), torch.cuda.device_count()) if device_map is None else device_map
+        assert_device_map(device_map, len(self.transformer.h))
+        
         self.transformer.parallelize(device_map)
         self.lm_head = self.lm_head.to(self.transformer.first_device)
         self.model_parallel = True
-        
+    
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.transformer.deparallelize()
         self.transformer = self.transformer.to('cpu')
