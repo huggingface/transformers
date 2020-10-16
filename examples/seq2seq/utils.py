@@ -619,3 +619,23 @@ def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
+
+
+def check_output_dir(args):
+    """
+    Checks whether to bail if output_dir already exists
+    needs to have the following attributes of `args`:
+      - output_dir
+      - do_train
+      - overwrite_output_dir
+    """
+    if (
+        os.path.exists(args.output_dir)
+        and os.listdir(args.output_dir)
+        and args.do_train
+        and not args.overwrite_output_dir
+    ):
+        raise ValueError(
+            f"Output directory ({args.output_dir}) already exists and is not empty. "
+            "Use --overwrite_output_dir to overcome."
+        )
