@@ -571,7 +571,10 @@ class TFModelTesterMixin:
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(out_len + (1 if self.is_encoder_decoder else 0), len(outputs))
+            if model.base_model_prefix in ["bert"]:
+                self.assertEqual(out_len + (1 if self.is_encoder_decoder else 0), len(outputs))
+            else:
+                self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
 
             attentions = [
@@ -589,7 +592,10 @@ class TFModelTesterMixin:
         def check_hidden_states_output(config, inputs_dict, model_class):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = [t.numpy() for t in outputs.hidden_states]
+            if model.base_model_prefix in ["bert"]:
+                hidden_states = [t.numpy() for t in outputs.hidden_states]
+            else:
+                hidden_states = [t.numpy() for t in outputs[-1]]
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
