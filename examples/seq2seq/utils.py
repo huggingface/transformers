@@ -457,8 +457,7 @@ def load_json(path):
 
 
 def get_git_info():
-    try: 
-        # XXX: workaround for https://github.com/gitpython-developers/GitPython/issues/633
+    try:
         repo = git.Repo(search_parent_directories=True)
         repo_infos = {
             "repo_id": str(repo),
