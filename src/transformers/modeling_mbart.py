@@ -27,5 +27,5 @@ class MBartForConditionalGeneration(BartForConditionalGeneration):
         >>> translation = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
         >>> assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"
     """
-
+    model_type = "mbart"
     config_class = MBartConfig

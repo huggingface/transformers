@@ -32,25 +32,22 @@ from .test_tokenization_bert import BertTokenizationTest
 class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRContextEncoderTokenizer
-
-    def get_rust_tokenizer(self, **kwargs):
-        return DPRContextEncoderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    rust_tokenizer_class = DPRContextEncoderTokenizerFast
+    test_rust_tokenizer = True
 
 
 class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRQuestionEncoderTokenizer
-
-    def get_rust_tokenizer(self, **kwargs):
-        return DPRQuestionEncoderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
+    test_rust_tokenizer = True
 
 
 class DPRReaderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRReaderTokenizer
-
-    def get_rust_tokenizer(self, **kwargs):
-        return DPRReaderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    rust_tokenizer_class = DPRReaderTokenizerFast
+    test_rust_tokenizer = True
 
     @slow
     def test_decode_best_spans(self):

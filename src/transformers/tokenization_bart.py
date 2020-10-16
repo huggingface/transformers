@@ -163,6 +163,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
         "vocab_file": {m: vocab_url for m in _all_bart_models},
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
+    slow_tokenizer_class = BartTokenizer
 
     def prepare_seq2seq_batch(
         self,

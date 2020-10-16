@@ -142,6 +142,20 @@ try:
 except (AttributeError, ImportError):
     _has_sklearn = False
 
+try:
+    # Test copied from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
+    get_ipython = sys.modules["IPython"].get_ipython
+    if "IPKernelApp" not in get_ipython().config:
+        raise ImportError("console")
+    if "VSCODE_PID" in os.environ:
+        raise ImportError("vscode")
+
+    import IPython  # noqa: F401
+
+    _in_notebook = True
+except (AttributeError, ImportError, KeyError):
+    _in_notebook = False
+
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
@@ -201,6 +215,23 @@ def is_apex_available():
 
 def is_faiss_available():
     return _faiss_available
+
+
+def is_in_notebook():
+    return _in_notebook
+
+
+def torch_only_method(fn):
+    def wrapper(*args, **kwargs):
+        if not _torch_available:
+            raise ImportError(
+                "You need to install pytorch to use this method or class, "
+                "or activate it with environment variables USE_TORCH=1 and USE_TF=0."
+            )
+        else:
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def is_sklearn_available():
@@ -1080,7 +1111,7 @@ def is_tensor(x):
 class ModelOutput(OrderedDict):
     """
     Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes. Otherwise behaves like a
+    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a
     regular python dictionary.
 
     .. warning::

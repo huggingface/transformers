@@ -15,6 +15,7 @@
 
 
 import os
+import pickle
 import unittest
 
 from transformers.testing_utils import custom_tokenizers
@@ -33,6 +34,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()
@@ -86,6 +88,26 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("こんにちは、世界。\nこんばんは、世界。")
         self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
+
+    def test_pickle_mecab_tokenizer(self):
+        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="mecab")
+        self.assertIsNotNone(tokenizer)
+
+        text = "こんにちは、世界。\nこんばんは、世界。"
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
+
+        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
+        with open(filename, "wb") as handle:
+            pickle.dump(tokenizer, handle)
+
+        with open(filename, "rb") as handle:
+            tokenizer_new = pickle.load(handle)
+
+        tokens_loaded = tokenizer_new.tokenize(text)
+
+        self.assertListEqual(tokens, tokens_loaded)
 
     def test_mecab_tokenizer_ipadic(self):
         tokenizer = MecabTokenizer(mecab_dic="ipadic")

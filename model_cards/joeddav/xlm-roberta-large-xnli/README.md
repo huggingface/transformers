@@ -9,6 +9,7 @@ datasets:
 - xnli
 widget:
 - text: "За кого вы голосуете в 2020 году? <sep> This text is about politique."
+license: mit
 ---
 
 # xlm-roberta-large-xnli

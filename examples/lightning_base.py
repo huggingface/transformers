@@ -163,14 +163,16 @@ class BaseTransformer(pl.LightningModule):
         """The number of total training steps that will be run. Used for lr scheduler purposes."""
         num_devices = max(1, self.hparams.gpus)  # TODO: consider num_tpu_cores
         effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
-        dataset_size = len(self.train_dataloader().dataset)
-        return (dataset_size / effective_batch_size) * self.hparams.max_epochs
+        return (self.dataset_size / effective_batch_size) * self.hparams.max_epochs
 
     def setup(self, mode):
-        if mode == "fit":
+        if mode == "test":
+            self.dataset_size = len(self.test_dataloader().dataset)
+        else:
             self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
+            self.dataset_size = len(self.train_dataloader().dataset)
 
-    def get_dataloader(self, type_path, batch_size, shuffle=False):
+    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False):
         raise NotImplementedError("You must implement this for your task")
 
     def train_dataloader(self):

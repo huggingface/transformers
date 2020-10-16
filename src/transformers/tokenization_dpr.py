@@ -98,6 +98,7 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
+    slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
@@ -132,6 +133,7 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
+    slow_tokenizer_class = DPRQuestionEncoderTokenizer
 
 
 DPRSpanPrediction = collections.namedtuple(
@@ -417,3 +419,4 @@ class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["attention_mask"]
+    slow_tokenizer_class = DPRReaderTokenizer

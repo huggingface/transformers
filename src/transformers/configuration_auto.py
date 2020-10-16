@@ -21,6 +21,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
+from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -58,6 +59,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -101,6 +103,7 @@ CONFIG_MAPPING = OrderedDict(
         ("marian", MarianConfig),
         ("mbart", MBartConfig),
         ("bart", BartConfig),
+        ("blenderbot", BlenderbotConfig),
         ("reformer", ReformerConfig),
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
@@ -136,6 +139,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("xlm-roberta", "XLM-RoBERTa"),
         ("pegasus", "Pegasus"),
+        ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
         ("mbart", "mBART"),
         ("bart", "BART"),

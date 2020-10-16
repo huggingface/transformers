@@ -59,7 +59,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
             --model_name_or_path=bert-base-cased
             --per_device_train_batch_size=64
             --per_device_eval_batch_size=64
-            --evaluate_during_training
+            --evaluation_strategy steps
             --overwrite_cache
             """.split()
         with patch.object(sys, "argv", testargs):
@@ -80,4 +80,15 @@ class TorchXLAExamplesTests(unittest.TestCase):
                 self.assertGreaterEqual(value, 0.70)
 
             # Assert that the script takes less than 300 seconds to make sure it doesn't hang.
-            self.assertLess(end - start, 300)
+            self.assertLess(end - start, 500)
+
+    def test_trainer_tpu(self):
+        import xla_spawn
+
+        testargs = """
+            transformers/tests/test_trainer_tpu.py
+            --num_cores=8
+            transformers/tests/test_trainer_tpu.py
+            """.split()
+        with patch.object(sys, "argv", testargs):
+            xla_spawn.main()

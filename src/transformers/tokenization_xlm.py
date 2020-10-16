@@ -648,6 +648,10 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+    @property
+    def do_lower_case(self):
+        return self.do_lowercase_and_remove_accent
+
     def moses_punct_norm(self, text, lang):
         if lang not in self.cache_moses_punct_normalizer:
             punct_normalizer = sm.MosesPunctNormalizer(lang=lang)

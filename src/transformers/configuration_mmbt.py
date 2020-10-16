@@ -31,7 +31,7 @@ class MMBTConfig(object):
             Config of the underlying Transformer models. Its values are copied over to use a single config.
         num_labels (:obj:`int`, `optional`):
             Size of final Linear layer for classification.
-        modal_hidden_size (:obj:`int`, `optional`, defautls to 2048):
+        modal_hidden_size (:obj:`int`, `optional`, defaults to 2048):
             Embedding dimension of the non-text modality encoder.
     """
 

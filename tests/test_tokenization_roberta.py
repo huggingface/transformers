@@ -26,6 +26,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = RobertaTokenizer
+    rust_tokenizer_class = RobertaTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()

@@ -4,7 +4,8 @@ import tempfile
 from unittest.mock import patch
 
 from transformers.testing_utils import slow
-from transformers.trainer_utils import TrainerState, set_seed
+from transformers.trainer_callback import TrainerState
+from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import main
 from .test_seq2seq_examples import MBART_TINY
