@@ -2,7 +2,7 @@ import unittest
 
 from transformers import PegasusTokenizer, PegasusTokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import get_tests_dir, require_torch, require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
