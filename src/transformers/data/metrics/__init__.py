@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 from ...file_utils import is_sklearn_available, requires_sklearn
 
 
@@ -24,8 +25,14 @@ if is_sklearn_available():
 
 
 def simple_accuracy(preds, labels):
-    requires_sklearn(simple_accuracy)
-    return (preds == labels).mean()
+    """ This can work with both numpy arrays and torch tensors. """
+    # requires_sklearn(simple_accuracy)
+    if isinstance(preds, torch.Tensor):
+        # torch need conversion before computing average, see issue #7810
+        return (preds == labels).to(float).mean()
+    else:
+        # numpy mean over boolean is fine
+        return (preds == labels).mean()
 
 
 def acc_and_f1(preds, labels):
