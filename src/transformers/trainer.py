@@ -520,7 +520,7 @@ class Trainer:
     ):
         if self.hp_search_backend is None or trial is None:
             return
-        self.objective = self.compute_objective(metrics)
+        self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             trial.report(self.objective, epoch)
             if trial.should_prune():

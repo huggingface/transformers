@@ -781,7 +781,7 @@ class TextGenerationPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
     objective, which includes the uni-directional models in the library (e.g. gpt2).
     See the list of available community models on
-    `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -1180,7 +1180,7 @@ class FillMaskPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
     which includes the bi-directional models in the library.
     See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=lm-head>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=masked-lm>`__.
 
     .. note::
 
