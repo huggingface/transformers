@@ -154,11 +154,8 @@ class PegasusTokenizer(ReformerTokenizer):
             return model_inputs
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
-        # TODO(@sshleifer): maybe tgt_texts = [self.pad_token + t for t in tgt_texts]  # add decoder_start_token_id
         labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         model_inputs["labels"] = labels
-        # for k, v in decoder_inputs.items():
-        #    model_inputs[f"decoder_{k}"] = v
         return model_inputs
 
 
@@ -168,10 +165,6 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = PegasusTokenizer
-
-    # def num_special_tokens_to_add(self, pair=False):
-    #     """Just EOS"""
-    #     return 1
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
@@ -236,9 +229,6 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
             return model_inputs
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
-        # TODO(@sshleifer): maybe tgt_texts = [self.pad_token + t for t in tgt_texts]  # add decoder_start_token_id
         labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         model_inputs["labels"] = labels
-        # for k, v in decoder_inputs.items():
-        #    model_inputs[f"decoder_{k}"] = v
         return model_inputs
