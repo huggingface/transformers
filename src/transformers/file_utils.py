@@ -28,8 +28,6 @@ from tqdm.auto import tqdm
 import requests
 from filelock import FileLock
 
-from transformers.generation_tf_utils import shape_list
-
 from . import __version__
 from .utils import logging
 
@@ -1268,6 +1266,7 @@ class ModelOutput(OrderedDict):
                 first_field_iterator = True
             except TypeError:
                 first_field_iterator = False
+
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:

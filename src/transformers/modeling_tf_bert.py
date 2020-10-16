@@ -476,8 +476,6 @@ class TFBertEncoder(tf.keras.layers.Layer):
             dtype=tf.float32, size=0, dynamic_size=True, element_shape=hidden_states.shape
         )
         all_attentions = None
-        attentions_shape = None
-
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -510,9 +508,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
         if tf.executing_eagerly():
             if not return_dict:
-                return tuple(
-                    v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None
-                )
+                return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
