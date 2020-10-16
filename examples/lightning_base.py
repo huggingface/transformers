@@ -356,9 +356,7 @@ def generic_train(
             filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
         )
     if early_stopping_callback:
-        early_stopping_callback = pl.callbacks.EarlyStopping(
-            monitor="val_loss"
-        )
+        early_stopping_callback = pl.callbacks.EarlyStopping(monitor="val_loss")
         extra_callbacks.append(early_stopping_callback)
     if logging_callback is None:
         logging_callback = LoggingCallback()
