@@ -853,8 +853,6 @@ class Trainer:
 
         You can also subclass and override this method to inject custom behavior.
 
-        You can also subclass and override this method to inject custom behavior.
-
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`.
