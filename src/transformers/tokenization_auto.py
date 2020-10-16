@@ -321,7 +321,7 @@ class AutoTokenizer:
 
         if type(config) in TOKENIZER_MAPPING.keys():
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
-            if tokenizer_class_fast and use_fast:
+            if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
                 return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

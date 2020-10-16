@@ -198,7 +198,7 @@ jobs:
                       - v0.3-build_doc-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[tf,torch,docs]
+            - run: pip install .[tf,torch,sentencepiece,docs]
             - save_cache:
                   key: v0.3-build_doc-{{ checksum "setup.py" }}
                   paths:
@@ -219,7 +219,7 @@ jobs:
                   keys:
                       - v0.3-deploy_doc-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
-            - run: pip install .[tf,torch,docs]
+            - run: pip install .[tf,torch,sentencepiece,docs]
             - save_cache:
                   key: v0.3-deploy_doc-{{ checksum "setup.py" }}
                   paths:
