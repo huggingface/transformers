@@ -189,6 +189,7 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
             no_teacher=True,
             freeze_encoder=True,
             gpus=2,
+            skip_output_dir_check=True,
             sortish_sampler=True,
         )
         self._test_distiller_cli_fork(updates, check_contents=False)
@@ -225,7 +226,7 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         cli_args = [x for x in (convert(k, v) for k, v in args_d.items()) if len(x)]
         cmd = [sys.executable, "./examples/seq2seq/distillation.py"] + cli_args
 
-        print("Running: ", " ".join(cmd))
+        print("\nRunning: ", " ".join(cmd))
 
         path = Path(__file__).resolve()
         examples_path = path.parents[1]
