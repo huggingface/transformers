@@ -14,9 +14,8 @@
 # limitations under the License.
 
 
+from transformers import DistilBertTokenizer, DistilBertTokenizerFast
 from transformers.testing_utils import require_tokenizers, slow
-from transformers.tokenization_distilbert import DistilBertTokenizer
-from transformers.tokenization_distilbert_fast import DistilBertTokenizerFast
 
 from .test_tokenization_bert import BertTokenizationTest
 

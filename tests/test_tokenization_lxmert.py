@@ -17,10 +17,9 @@
 import os
 import unittest
 
+from transformers import LxmertTokenizer, LxmertTokenizerFast
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.tokenization_lxmert import LxmertTokenizer
-from transformers.tokenization_lxmert_fast import LxmertTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 

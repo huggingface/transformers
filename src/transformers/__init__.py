@@ -164,7 +164,12 @@ from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokeniz
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_deberta import DebertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
-from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
+from .tokenization_dpr import (
+    DPRContextEncoderTokenizer,
+    DPRQuestionEncoderTokenizer,
+    DPRReaderOutput,
+    DPRReaderTokenizer,
+)
 from .tokenization_electra import ElectraTokenizer
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
@@ -183,6 +188,7 @@ from .tokenization_squeezebert import SqueezeBertTokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
+    AddedToken,
     BatchEncoding,
     CharSpan,
     PreTrainedTokenizerBase,

@@ -18,9 +18,9 @@ import json
 import os
 import unittest
 
+from transformers import GPT2Tokenizer, GPT2TokenizerFast
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES, GPT2Tokenizer
-from transformers.tokenization_gpt2_fast import GPT2TokenizerFast
+from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
