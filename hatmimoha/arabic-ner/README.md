@@ -71,6 +71,36 @@ The pre-trained model can recognize the following entities:
 
 -  الأزمات المشابهة مثل “ ***انفلونزا الطيور*** ” و ” ***انفلونزا الخنازير*** 
 
+## Example
+
+[Find here a complete example to use this model](https://github.com/hatmimoha/arabic-ner)
+
+Here is the map from index to label:
+
+```
+id2label = {
+    "0": "B-PERSON",
+    "1": "I-PERSON",
+    "2": "B-ORGANIZATION",
+    "3": "I-ORGANIZATION",
+    "4": "B-LOCATION",
+    "5": "I-LOCATION",
+    "6": "B-DATE",
+    "7": "I-DATE"",
+    "8": "B-COMPETITION",
+    "9": "I-COMPETITION",
+    "10": "B-PRICE",
+    "11": "I-PRICE",
+    "12": "O",
+    "13": "B-PRODUCT",
+    "14": "I-PRODUCT",
+    "15": "B-EVENT",
+    "16": "I-EVENT",
+    "17": "B-DISEASE",
+    "18": "I-DISEASE",
+}
+
+```
 
 ## Training Corpus
 
