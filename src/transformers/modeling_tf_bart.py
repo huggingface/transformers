@@ -1012,13 +1012,15 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
             # Mask filling only works for bart-large
             from transformers import BartTokenizer, TFBartForConditionalGeneration
-            tokenizer = BartTokenizer.from_pretrained('bart-large')
+            import tensorflow as tf
+            mname = 'facebook/bart-large'
+            tokenizer = BartTokenizer.from_pretrained(mname)
             TXT = "My friends are <mask> but they eat too many carbs."
-            model = TFBartForConditionalGeneration.from_pretrained('bart-large')
-            input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids)[0]
-            masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            probs = tf.nn.softmax(logits[0, masked_index], dim=-1)
+            model = TFBartForConditionalGeneration.from_pretrained(mname)
+            batch = tokenizer([TXT], return_tensors='tf')
+            logits = model(inputs=batch.input_ids, return_dict=True).logits
+            probs = tf.nn.softmax(logits[0])
+            # probs[5] is associated with the mask token
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]

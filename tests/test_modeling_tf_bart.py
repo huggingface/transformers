@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
 from transformers import is_tf_available
@@ -27,7 +28,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import BartConfig, TFBartForConditionalGeneration, TFBartModel
+    from transformers import BartConfig, TFBartForConditionalGeneration
+    from transformers.modeling_tf_bart import TFBartModel
     from transformers.tokenization_bart import BartTokenizer
 
 
@@ -113,8 +115,35 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         pass
 
     def test_compile_tf_model(self):
-        # This passes for TFBartForConditionalGeneration, fails for TFBartModel
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+
+        model_class = TFBartForConditionalGeneration
+        input_ids = {
+            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
+            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+        }
+
+        # Prepare our model
+        model = model_class(config)
+        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+        # Let's load it from the disk to be sure we can use pretrained weights
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname)
+
+        outputs_dict = model(input_ids)
+        hidden_states = outputs_dict[0]
+
+        # Add a dense layer on top to test integration with other keras modules
+        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+
+        # Compile extended model
+        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
+        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
     def test_saved_model_with_hidden_states_output(self):
         # Should be uncommented during patrick TF refactor
