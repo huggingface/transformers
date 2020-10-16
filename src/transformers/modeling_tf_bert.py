@@ -476,6 +476,8 @@ class TFBertEncoder(tf.keras.layers.Layer):
             dtype=tf.float32, size=0, dynamic_size=True, element_shape=hidden_states.shape
         )
         all_attentions = None
+        attentions_shape = None
+
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -494,6 +496,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
                 all_attentions = tf.TensorArray(
                     dtype=tf.float32, size=0, dynamic_size=True, element_shape=layer_outputs[1].shape
                 )
+                attentions_shape = layer_outputs[1].shape
 
             if output_attentions:
                 all_attentions = all_attentions.write(index=i, value=layer_outputs[1])
@@ -502,25 +505,18 @@ class TFBertEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states.write(index=all_hidden_states.size(), value=hidden_states)
 
+        all_attentions = all_attentions.stack()
+        all_hidden_states = all_hidden_states.stack()
+
         if tf.executing_eagerly():
             if not return_dict:
-                output = tuple(
-                    v for v in [hidden_states, all_hidden_states.stack(), all_attentions.stack()] if v is not None
+                return tuple(
+                    v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None
                 )
 
-                all_hidden_states.close()
-                all_attentions.close()
-
-                return output
-
-        output = TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states.stack(), attentions=all_attentions.stack()
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
-
-        all_hidden_states.close()
-        all_attentions.close()
-
-        return output
 
 
 class TFBertPooler(tf.keras.layers.Layer):
@@ -764,7 +760,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             return_dict=return_dict,
             training=inputs["training"],
         )
-
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
