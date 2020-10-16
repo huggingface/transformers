@@ -1945,11 +1945,6 @@ class SummarizationPipeline(Pipeline):
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
         assert len(documents) > 0, "Please provide a document to summarize"
 
-        if self.framework == "tf" and "BartForConditionalGeneration" in self.model.__class__.__name__:
-            raise NotImplementedError(
-                "Tensorflow is not yet supported for Bart. Please consider using T5, e.g. `t5-base`"
-            )
-
         prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
 
         if isinstance(documents[0], list):
