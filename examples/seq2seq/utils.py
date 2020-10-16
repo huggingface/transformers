@@ -466,7 +466,7 @@ def get_git_info():
             "hostname": str(socket.gethostname()),
         }
         return repo_infos
-    except (TypeError):
+    except TypeError:
         return {
             "repo_id": None,
             "repo_sha": None,
