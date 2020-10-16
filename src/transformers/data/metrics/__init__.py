@@ -26,7 +26,7 @@ if is_sklearn_available():
 
 def simple_accuracy(preds, labels):
     """ This can work with both numpy arrays and torch tensors. """
-    # requires_sklearn(simple_accuracy)
+    requires_sklearn(simple_accuracy)
     if isinstance(preds, torch.Tensor):
         # torch need conversion before computing average, see issue #7810
         return (preds == labels).to(float).mean()
