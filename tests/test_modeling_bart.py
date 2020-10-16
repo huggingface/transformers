@@ -570,7 +570,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
-            num_beams=2
+            num_beams=2,
         )
         assert hypotheses_batch[:, 1].eq(0).all().item()
 

@@ -28,8 +28,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import BartConfig, TFBartForConditionalGeneration
-    from transformers.modeling_tf_bart import TFBartModel
+    from transformers import BartConfig, TFBartForConditionalGeneration, TFBartModel
     from transformers.tokenization_bart import BartTokenizer
 
 
@@ -209,12 +208,6 @@ class TFBartHeadTests(unittest.TestCase):
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-    @unittest.skip("I dont know how to do .half in TF yet")
-    def test_generate_fp16(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        model = TFBartForConditionalGeneration(config).eval()
-        model.generate(input_ids, do_sample=False, early_stopping=True)
-
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
@@ -240,8 +233,8 @@ TOLERANCE = 1e-4
 
 @require_tf
 @require_torch
+@slow
 class TFBartModelIntegrationTest(unittest.TestCase):
-    @slow
     def test_inference_no_head(self):
         model = TFBartModel.from_pretrained("facebook/bart-large", from_pt=True)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -255,7 +248,6 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @slow
     def test_cnn_summarization_same_as_fairseq_hard(self):
         hf = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", from_pt=True)
         tok = self.tok
