@@ -894,8 +894,9 @@ class TFBartModel(TFPretrainedBartModel):
             )
         else:
             decoder_padding_mask, causal_mask = None, None
-        assert decoder_input_ids is not None
-        assert isinstance(encoder_outputs, TFBaseModelOutput) or encoder_outputs is None, f"{type(encoder_outputs)}"
+        assert (
+            isinstance(encoder_outputs, TFBaseModelOutput) or encoder_outputs is None
+        ), f"got unexpected encoder outputs type {type(encoder_outputs)}"
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -904,7 +905,6 @@ class TFBartModel(TFPretrainedBartModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
             )
-        assert isinstance(encoder_outputs, TFBaseModelOutput)
         assert len(encoder_outputs.last_hidden_state.shape) == 3
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -1093,7 +1093,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             assert (
                 decoder_cached_states
             ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
-        assert isinstance(encoder_outputs, TFBaseModelOutput)
+        assert isinstance(
+            encoder_outputs, TFBaseModelOutput
+        ), "encoder_outputs should be a TFBaseModelOutput, Instead got "
         return {
             "inputs": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
