@@ -494,7 +494,6 @@ class TFBertEncoder(tf.keras.layers.Layer):
                 all_attentions = tf.TensorArray(
                     dtype=tf.float32, size=0, dynamic_size=True, element_shape=layer_outputs[1].shape
                 )
-                attentions_shape = layer_outputs[1].shape
 
             if output_attentions:
                 all_attentions = all_attentions.write(index=i, value=layer_outputs[1])

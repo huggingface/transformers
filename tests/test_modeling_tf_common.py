@@ -502,7 +502,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            print(model_class.__name__)
             model = model_class(config)
             inputs = self._prepare_for_class(inputs_dict, model_class)
 
@@ -572,7 +571,7 @@ class TFModelTesterMixin:
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+            self.assertEqual(out_len + (1 if self.is_encoder_decoder else 0), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
 
             attentions = [
@@ -590,7 +589,7 @@ class TFModelTesterMixin:
         def check_hidden_states_output(config, inputs_dict, model_class):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = [t.numpy() for t in outputs[-1]]
+            hidden_states = [t.numpy() for t in outputs.hidden_states]
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
@@ -717,7 +716,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            print(model_class.__name__)
             model = model_class(config)
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))

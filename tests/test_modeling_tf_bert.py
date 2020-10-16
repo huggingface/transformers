@@ -129,7 +129,7 @@ class TFBertModelTester:
     ):
         model = TFBertModel(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        sequence_output, pooled_output = model(inputs)
+        _ = model(inputs)
 
         inputs = [input_ids, input_mask]
         result = model(inputs)
