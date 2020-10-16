@@ -112,6 +112,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
+    _ = metrics.pop("total_flos", None)
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 
