@@ -269,6 +269,7 @@ def distill_main(args):
     check_output_dir(args)
 
     model = create_module(args)
+    args.overwrite_output_dir=True
     return ft_main(args, model=model)
 
 
