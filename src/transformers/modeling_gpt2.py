@@ -516,11 +516,11 @@ DEPARALLELIZE_DOCSTRING = r"""
         model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
 """
 
+
 @add_start_docstrings(
     "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT2_START_DOCSTRING,
 )
-
 class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -538,39 +538,38 @@ class GPT2Model(GPT2PreTrainedModel):
         self.device_map = None
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map = None):
+    def parallelize(self, device_map=None):
         # Check validity of device_map
         self.device_map = get_device_map(len(self.h), torch.cuda.device_count()) if device_map is None else device_map
-        assert_device_map(device_map, len(self.h))
-        
+        assert_device_map(self.device_map, len(self.h))
+
         self.model_parallel = True
-        self.device_map = device_map
-        self.first_device = 'cpu' if 'cpu' in self.device_map.keys() else 'cuda:' + str(min(self.device_map.keys()))
-        self.last_device = 'cuda:' + str(max(self.device_map.keys()))
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.last_device = "cuda:" + str(max(self.device_map.keys()))
         self.wte = self.wte.to(self.first_device)
         self.wpe = self.wpe.to(self.first_device)
         ## Load onto devices
         for k, v in self.device_map.items():
             for block in v:
-                cuda_device = 'cuda:' + str(k)
+                cuda_device = "cuda:" + str(k)
                 self.h[block] = self.h[block].to(cuda_device)
-        ## ln_f to last 
+        ## ln_f to last
         self.ln_f = self.ln_f.to(self.last_device)
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.model_parallel = False
         self.device_map = None
-        self.first_device = 'cpu'
-        self.last_device = 'cpu'
-        self.wte = self.wte.to('cpu')
-        self.wpe = self.wpe.to('cpu')
+        self.first_device = "cpu"
+        self.last_device = "cpu"
+        self.wte = self.wte.to("cpu")
+        self.wpe = self.wpe.to("cpu")
         for index in range(len(self.h)):
-            self.h[index] = self.h[index].to('cpu')
-            
-        self.ln_f = self.ln_f.to('cpu')
+            self.h[index] = self.h[index].to("cpu")
+
+        self.ln_f = self.ln_f.to("cpu")
         torch.cuda.empty_cache()
-        
+
     def get_input_embeddings(self):
         return self.wte
 
@@ -705,7 +704,7 @@ class GPT2Model(GPT2PreTrainedModel):
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
-                # Ensure layer_past is on same device as hidden_states (might not be correct)                
+                # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if layer_past is not None:
                     layer_past = layer_past.to(hidden_states.device)
                 # Ensure that attention_mask is always on the same device as hidden_states
@@ -755,8 +754,8 @@ class GPT2Model(GPT2PreTrainedModel):
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
                 for k, v in self.device_map.items():
-                    if i == v[-1] and 'cuda:' + str(k) != self.last_device:
-                        hidden_states = hidden_states.to('cuda:' + str(k + 1))
+                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
+                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -794,19 +793,21 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         self.model_parallel = False
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map = None):
-        self.device_map = get_device_map(len(self.transformer.h), torch.cuda.device_count()) if device_map is None else device_map
-        assert_device_map(device_map, len(self.transformer.h))
-        
+    def parallelize(self, device_map=None):
+        self.device_map = (
+            get_device_map(len(self.transformer.h), torch.cuda.device_count()) if device_map is None else device_map
+        )
+        assert_device_map(self.device_map, len(self.transformer.h))
+
         self.transformer.parallelize(device_map)
         self.lm_head = self.lm_head.to(self.transformer.first_device)
         self.model_parallel = True
-    
+
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.transformer.deparallelize()
-        self.transformer = self.transformer.to('cpu')
-        self.lm_head = self.lm_head.to('cpu')
+        self.transformer = self.transformer.to("cpu")
+        self.lm_head = self.lm_head.to("cpu")
         self.model_parallel = False
         torch.cuda.empty_cache()
 
