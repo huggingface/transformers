@@ -2,13 +2,12 @@
 language: ca
 ---
 
-## Quickstart
+## Introduction
 
-**Release 2010-11-10 **
 
-Download the models here:
+Download the model here:
 
-* Cased Finnish BERT Base: [julibert-2020-11-10.zip](https://www.softcatala.org/pub/softcatala/julibert/julibert-2020-11-10.zip)
+* Catalan Roberta model: [julibert-2020-11-10.zip](https://www.softcatala.org/pub/softcatala/julibert/julibert-2020-11-10.zip)
 
 ## What's this?
 
