@@ -1821,7 +1821,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return file_names + vocab_files + (added_tokens_file,)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        """Save only the vocabulary of the tokenizer (vocabulary + added tokens).
+        """
+        Save only the vocabulary of the tokenizer (vocabulary + added tokens).
 
         This method won't save the configuration and special token mappings of the tokenizer.
         Use :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBast._save_pretrained` to save
