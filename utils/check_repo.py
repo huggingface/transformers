@@ -31,9 +31,6 @@ IGNORE_NON_TESTED = [
     "BertLMHeadModel",  # Needs to be setup as decoder.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
-    "ProphetNetEncoder",  # Building part of bigger (tested) model.
-    "ProphetNetDecoder",  # Building part of bigger (tested) model.
-    "ProphetNetForCausalLM",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
