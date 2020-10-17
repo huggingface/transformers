@@ -44,7 +44,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"stas/tiny-wmt19-en-de": 1024}
-PRETRAINED_INIT_CONFIGURATION = {}
+PRETRAINED_INIT_CONFIGURATION = {
+    "stas/tiny-wmt19-en-de": {
+        "langs": ["en", "de"],
+        "model_max_length": 1024,
+        "special_tokens_map_file": None,
+        "full_tokenizer_file": None,
+    }
+}
 
 
 def get_pairs(word):

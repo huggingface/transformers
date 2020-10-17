@@ -368,9 +368,7 @@ def test_run_eval_search(model):
         os.remove(Path(output_file_name))
 
 
-@pytest.mark.parametrize(
-    "model", [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY]  # , FSMT_TINY] TODO(sam, thom, staas): add back this test
-)
+@pytest.mark.parametrize("model", [T5_TINY, BART_TINY, MBART_TINY, MARIAN_TINY, FSMT_TINY])
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
     task = "translation" if model in [MBART_TINY, MARIAN_TINY, FSMT_TINY] else "summarization"
