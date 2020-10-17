@@ -291,7 +291,8 @@ class LoggingCallback(pl.Callback):
 
 
 def add_generic_args(parser, root_dir) -> None:
-    #  TODO(SS): allow all pl args? parser = pl.Trainer.add_argparse_args(parser)
+    #  To allow all pl args uncomment the following line
+    #  parser = pl.Trainer.add_argparse_args(parser)
     parser.add_argument(
         "--output_dir",
         default=None,
