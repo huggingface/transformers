@@ -22,7 +22,7 @@ import unittest
 from typing import List, Tuple
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
 
 
 if is_torch_available():

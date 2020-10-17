@@ -17,7 +17,7 @@ import random
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
