@@ -266,7 +266,7 @@ class AutoConfig:
                       our S3, e.g., ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing a configuration file saved using the
                       :meth:`~transformers.PretrainedConfig.save_pretrained` method, or the
-                      :meth:`~transformers.PretrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
+                      :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
                     - A path or url to a saved configuration JSON `file`, e.g.,
                       ``./my_model_directory/configuration.json``.
             cache_dir (:obj:`str`, `optional`):

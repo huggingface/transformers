@@ -569,7 +569,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens}
-        using the specific :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast._save_pretrained`
+        using the specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
         """
         if legacy_format:
             added_tokens_file = os.path.join(

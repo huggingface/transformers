@@ -43,6 +43,9 @@ class PretrainedConfig(object):
           recreate the correct object in :class:`~transformers.AutoConfig`.
 
     Args:
+        name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
+            Store the string that was passed to :func:`~transformers.PreTrainedModel.from_pretrained` or :func:`~transformers.TFPreTrainedModel.from_pretrained`
+            as ``pretrained_model_name_or_path`` if the configuration was created with such a method.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the model should return all hidden-states.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):

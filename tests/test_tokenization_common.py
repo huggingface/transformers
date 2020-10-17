@@ -518,7 +518,7 @@ class TokenizerTesterMixin:
                 self.assertIn(decoded, [output, output.lower()])
 
     def test_pretrained_model_lists(self):
-        # We should have at least one default ceckpoint for each tokenizer
+        # We should have at least one default checkpoint for each tokenizer
         # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
         self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)

@@ -26,6 +26,8 @@ from tokenizers.models import BPE, Unigram, WordPiece
 # from transformers.tokenization_openai import OpenAIGPTTokenizer
 from transformers.utils import sentencepiece_model_pb2 as model
 
+from .file_utils import requires_sentencepiece
+
 
 class SentencePieceExtractor:
     """
@@ -34,11 +36,8 @@ class SentencePieceExtractor:
     """
 
     def __init__(self, model: str):
-        # Get SentencePiece
-        try:
-            from sentencepiece import SentencePieceProcessor
-        except ImportError:
-            raise ImportError("You need to install ")
+        requires_sentencepiece(self)
+        from sentencepiece import SentencePieceProcessor
 
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
@@ -576,7 +575,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
     "BertTokenizer": BertConverter,
-    # "BertGenerationTokenizer": BertGenerationConverter,
     "CamembertTokenizer": CamembertConverter,
     "DistilBertTokenizer": BertConverter,
     "DPRReaderTokenizer": BertConverter,
@@ -608,10 +606,12 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
 
     Args:
         transformer_tokenizer (:class:`~transformers.tokenization_utils_base.PreTrainedTokenizer`):
-            Instance of a slow tokenizer to convert in the backend tokenizer for :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`.
+            Instance of a slow tokenizer to convert in the backend tokenizer for
+            :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`.
 
     Return:
-        A instance of :class:`~tokenizers.Tokenizer` to be used as the backend tokenizer of a :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`
+        A instance of :class:`~tokenizers.Tokenizer` to be used as the backend tokenizer of a
+        :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__

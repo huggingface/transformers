@@ -39,7 +39,7 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
     else:
         tokenizer_names = {tokenizer_name: getattr(transformers, tokenizer_name + "Fast")}
 
-    print(f"Loading tokenizer classes: {tokenizer_names}")
+    logger.info(f"Loading tokenizer classes: {tokenizer_names}")
 
     for tokenizer_name in tokenizer_names:
         tokenizer_class = TOKENIZER_CLASSES[tokenizer_name]
@@ -50,16 +50,18 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
         else:
             checkpoint_names = [checkpoint_name]
 
-        print(f"For tokenizer {tokenizer_class.__class__.__name__} loading checkpoints: {checkpoint_names}")
+        logger.info(f"For tokenizer {tokenizer_class.__class__.__name__} loading checkpoints: {checkpoint_names}")
 
         for checkpoint in checkpoint_names:
-            print(f"Loading {tokenizer_class.__class__.__name__} {checkpoint}")
+            logger.info(f"Loading {tokenizer_class.__class__.__name__} {checkpoint}")
 
             # Load tokenizer
             tokenizer = tokenizer_class.from_pretrained(checkpoint, force_download=force_download)
 
             # Save fast tokenizer
-            print("Save fast tokenizer to {} with prefix {} add_prefix {}".format(dump_path, checkpoint, add_prefix))
+            logger.info(
+                "Save fast tokenizer to {} with prefix {} add_prefix {}".format(dump_path, checkpoint, add_prefix)
+            )
 
             # For organization names we create sub-directories
             if "/" in checkpoint:
@@ -72,7 +74,9 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
                 checkpoint_prefix_name = None
                 dump_path_full = dump_path
 
-            print("=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix))
+            logger.info(
+                "=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix)
+            )
 
             file_path = list(tokenizer.pretrained_vocab_files_map.values())[0][checkpoint]
             next_char = file_path.split(checkpoint)[-1][0]
@@ -80,17 +84,19 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
                 dump_path_full = os.path.join(dump_path_full, checkpoint_prefix_name)
                 checkpoint_prefix_name = None
 
-            print("=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix))
+            logger.info(
+                "=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix)
+            )
 
             file_names = tokenizer.save_pretrained(
                 dump_path_full, legacy_format=False, filename_prefix=checkpoint_prefix_name
             )
-            print("=> File names {}".format(file_names))
+            logger.info("=> File names {}".format(file_names))
 
             for file_name in file_names:
                 if not file_name.endswith("tokenizer.json"):
                     os.remove(file_name)
-                    print("=> removing {}".format(file_name))
+                    logger.info("=> removing {}".format(file_name))
 
 
 if __name__ == "__main__":

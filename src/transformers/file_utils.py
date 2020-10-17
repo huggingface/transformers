@@ -188,7 +188,8 @@ TF_WEIGHTS_NAME = "model.ckpt"
 CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
-SPIECE_UNDERLINE = "▁"
+SENTENCEPIECE_UNDERLINE = "▁"
+SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
 
 MULTIPLE_CHOICE_DUMMY_INPUTS = [
     [[0, 1, 0, 1], [1, 0, 0, 1]]

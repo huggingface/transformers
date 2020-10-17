@@ -4,15 +4,7 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from ..file_utils import is_tokenizers_available
-from ..tokenization_utils import PreTrainedTokenizer
-from ..tokenization_utils_base import BatchEncoding, PaddingStrategy
-
-
-if is_tokenizers_available():
-    from ..tokenization_utils_fast import PreTrainedTokenizerFast
-else:
-    PreTrainedTokenizerFast = PreTrainedTokenizer
+from ..tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTrainedTokenizerBase
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -100,7 +92,7 @@ class DataCollatorWithPadding:
             >= 7.5 (Volta).
     """
 
-    tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+    tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -130,7 +122,7 @@ class DataCollatorForLanguageModeling:
     - preprocesses batches for masked language modeling
     """
 
-    tokenizer: PreTrainedTokenizer
+    tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
     mlm_probability: float = 0.15
 
@@ -280,7 +272,7 @@ class DataCollatorForPermutationLanguageModeling:
     - preprocesses batches for permutation language modeling with procedures specific to XLNet
     """
 
-    tokenizer: PreTrainedTokenizer
+    tokenizer: PreTrainedTokenizerBase
     plm_probability: float = 1 / 6
     max_span_length: int = 5  # maximum length of a span of masked tokens
 
@@ -412,7 +404,7 @@ class DataCollatorForNextSentencePrediction:
     - preprocesses batches for masked language modeling
     """
 
-    tokenizer: PreTrainedTokenizer
+    tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
     block_size: int = 512
     short_seq_probability: float = 0.1
