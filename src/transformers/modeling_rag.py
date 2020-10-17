@@ -740,10 +740,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
             >>> # 3. Forward to generator
             >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
-
-            >>> # or directly generate
-            >>> generated = model.generate(input_ids=input_dict["input_ids"])
-            >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         """
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
         reduce_loss = reduce_loss if reduce_loss is not None else self.config.reduce_loss
@@ -1125,7 +1121,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
 
             >>> # or directly generate
-            >>> generated = model.generate(input_ids=input_dict["input_ids"])
+            >>> generated = model.generate(input_ids=input_dict["input_ids"], context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
             >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         """
         do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize
