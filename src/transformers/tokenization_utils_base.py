@@ -1825,7 +1825,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Save only the vocabulary of the tokenizer (vocabulary + added tokens).
 
         This method won't save the configuration and special token mappings of the tokenizer.
-        Use :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBast._save_pretrained` to save
+        Use :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained` to save
         the whole state of the tokenizer.
 
         Args:
