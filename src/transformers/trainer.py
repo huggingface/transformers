@@ -788,7 +788,7 @@ class Trainer:
                 self.model = model.from_pretrained(self.state.best_model_checkpoint)
                 if not self.args.model_parallel:
                     self.model = model.to(self.args.device)
-                
+
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
