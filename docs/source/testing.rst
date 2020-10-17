@@ -409,7 +409,7 @@ Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet othe
 * ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
 * ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
 
-For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed.
+For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
 
 .. code-block:: python
 
@@ -423,7 +423,7 @@ If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
     @require_tf
     def test_tf_thing_with_tensorflow():
 
-These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch.
+These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is how to set it up:
 
 .. code-block:: python
 
