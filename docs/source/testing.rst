@@ -403,11 +403,11 @@ This is handy when you want to run different tasks on different GPUs.
 
 Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 
-* `require_torch` - this test will run only under torch
-* `require_torch_gpu` - as `require_torch` plus requires at least 1 GPU
-* `require_torch_multigpu` - as `require_torch` plus requires at least 2 GPUs
-* `require_torch_non_multigpu` - as `require_torch` plus requires 0 or 1 GPUs
-* `require_torch_tpu` - as `require_torch` plus requires at least 1 TPU
+* ``require_torch`` - this test will run only under torch
+* ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
+* ``require_torch_multigpu`` - as ``require_torch`` plus requires at least 2 GPUs
+* ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
 
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed.
 
@@ -416,7 +416,7 @@ For example, here is a test that must be run only when there are 2 or more GPUs 
     @require_torch_multigpu
     def test_example_bar():
 
-If a test requires `tensorflow` use the ``require_tf`` decorator. For example:
+If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
 
 .. code-block:: python
 
