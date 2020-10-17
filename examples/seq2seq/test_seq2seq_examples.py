@@ -19,7 +19,7 @@ from run_eval import generate_summaries_or_translations, run_generate
 from run_eval_search import run_search
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.hf_api import HfApi
-from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
+from transformers.testing_utils import CaptureStderr, CaptureStdout, require_torch_multigpu, require_torch_gpu, slow
 from utils import ROUGE_KEYS, label_smoothed_nll_loss, lmap, load_json
 
 
@@ -125,9 +125,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         return cls
 
     @slow
-    @require_torch_and_cuda
+    @require_torch_gpu
     def test_hub_configs(self):
-        """I put require_torch_and_cuda cause I only want this to run with self-scheduled."""
+        """I put require_torch_gpu cause I only want this to run with self-scheduled."""
 
         model_list = HfApi().model_list()
         org = "sshleifer"
@@ -143,7 +143,7 @@ class TestSummarizationDistiller(unittest.TestCase):
                 failures.append(m)
         assert not failures, f"The following models could not be loaded through AutoConfig: {failures}"
 
-    @require_multigpu
+    @require_torch_multigpu
     @unittest.skip("Broken at the moment")
     def test_multigpu(self):
         updates = dict(
