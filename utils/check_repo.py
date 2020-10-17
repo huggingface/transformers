@@ -245,7 +245,7 @@ def _get_model_name(module):
     # Secial case for transfo_xl
     if splits[-1] == "xl":
         return "_".join(splits[-2:])
-    # Secial case for xlm_prophetnet
+    # Special case for xlm_prophetnet
     if splits[-1] == "prophetnet" and splits[-2] == "xlm":
         return "_".join(splits[-2:])
     # Secial case for xlm_roberta
