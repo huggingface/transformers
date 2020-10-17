@@ -4,7 +4,6 @@ ProphetNet is a new pre-trained language model for sequence-to-sequence learning
 ProphetNet is able to predict more future tokens with a n-stream decoder. The original implementation is Fairseq version at [github repo](https://github.com/microsoft/ProphetNet).   
 
 ### Usage
-A quick usage is like: 
 ```
 from transformers import ProphetNetTokenizer, ProphetNetForConditionalGeneration, ProphetNetConfig
 
@@ -16,7 +15,7 @@ inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=100, return_tensors='pt')
 
 # Generate Summary
 summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=512, early_stopping=True)
-print([tokenizer.decode(g) for g in summary_ids])
+tokenizer.batch_decode(summary_ids.tolist())
 ```
 Here, [X_SEP] is used as a special token to seperate sentences.
 ### Citation
