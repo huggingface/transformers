@@ -22,12 +22,12 @@ How transformers are tested
 
    * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__: runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards, notebooks, etc.)
      
-   * `self-hosted runner <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs slow tests on ``tests`` and ``examples``:
+   * `self-hosted runner <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs normal and slow tests on GPU in ``tests`` and ``examples``:
 
    .. code-block:: bash
 
-    RUN_SLOW=1 USE_CUDA=1 pytest tests/
-    RUN_SLOW=1 USE_CUDA=1 pytest examples/
+    RUN_SLOW=1 pytest tests/
+    RUN_SLOW=1 pytest examples/
 
    The results can be observed `here <https://github.com/huggingface/transformers/actions>`__.
 
@@ -393,7 +393,7 @@ On a GPU-enabled setup, to test in CPU-only mode add ``CUDA_VISIBLE_DEVICES=""``
                 
     CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
 
-or if you have multiple gpus, you can tell which one to use in this test session, e.g. to use only the second gpu if you have gpus ``0`` and ``1``, you can run:
+or if you have multiple gpus, you can specify which one is to be used by ``pytest``. For example, to use only the second gpu if you have gpus ``0`` and ``1``, you can run:
 
 .. code-block:: bash
                 
