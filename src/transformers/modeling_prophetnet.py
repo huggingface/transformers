@@ -624,7 +624,6 @@ class ProphetNetSelfAttention(nn.Module):
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
-        output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
 
         sequence_length, batch_size, hidden_size = hidden_states.size()
@@ -706,11 +705,7 @@ class ProphetNetSelfAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        if output_attentions:
-            attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
-        else:
-            attn_weights = None
-
+        attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
         attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
         return attn_output, attn_weights
 
@@ -779,7 +774,6 @@ class ProphetNetNgramProphetNetSelfAttention(nn.Module):
         self,
         hidden_states,
         layer_state=None,
-        need_weights=True,
         attention_mask=None,
         extended_predict_attention_mask=None,
         main_relative_position_buckets=None,
@@ -1044,12 +1038,11 @@ class ProphetNetEncoderLayer(nn.Module):
         self.feed_forward = ProhpetNetFeedForward(config, config.encoder_ffn_dim)
         self.feed_forward_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
-    def forward(self, hidden_states, attention_mask, output_attentions=False):
+    def forward(self, hidden_states, attention_mask):
         # 1st residual block
         attention_output, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
         )
         hidden_states = self.self_attn_layer_norm(attention_output + hidden_states)
 
@@ -1086,7 +1079,6 @@ class ProphetNetDecoderLayer(nn.Module):
         encoder_attn_mask=None,
         layer_state=None,
         attention_mask=None,
-        output_attentions=False,
         extended_predict_attention_mask=None,
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
@@ -1098,7 +1090,6 @@ class ProphetNetDecoderLayer(nn.Module):
         ngram_attention_output, self_attn_weights, self_attn_weights_ngram = self.self_attn(
             hidden_states=hidden_states,
             layer_state=layer_state,
-            need_weights=False,
             attention_mask=attention_mask,
             extended_predict_attention_mask=extended_predict_attention_mask,
             main_relative_position_buckets=main_relative_position_buckets,
@@ -1136,6 +1127,11 @@ class ProphetNetDecoderLayer(nn.Module):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
+    r"""
+    word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
+        The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with pre-defined
+        word embeddings instead of randomely initialized word embeddings.
+    """
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
         super().__init__(config)
 
@@ -1220,7 +1216,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states.transpose(0, 1),)
             hidden_states, attn_probs = encoder_layer(
-                hidden_states, attention_mask=extended_attention_mask, output_attentions=output_attentions
+                hidden_states, attention_mask=extended_attention_mask
             )
             if output_attentions:
                 all_attentions = all_attentions + (attn_probs,)
@@ -1241,6 +1237,11 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
+    r"""
+    word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
+        The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with pre-defined
+        word embeddings instead of randomely initialized word embeddings.
+    """
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
         super().__init__(config)
 
@@ -1424,7 +1425,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 encoder_attn_mask=extended_encoder_attention_mask,
                 layer_state=layer_state,
                 attention_mask=extended_attention_mask,
-                output_attentions=output_attentions,
                 extended_predict_attention_mask=extended_predict_attention_mask,
                 main_relative_position_buckets=main_relative_position_buckets,
                 predict_relative_position_buckets=predict_relative_position_buckets,
@@ -1955,7 +1955,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-decoder-clm-large-uncased', return_dict=True)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> outputs = model(**inputs, return_dict=True)
 
             >>> logits = outputs.logits
 
@@ -1967,7 +1967,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-uncased-large", "patrickvonplaten/prophetnet-decoder-clm-large-uncased")
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(input_ids=inputs["input_ids"], labels=inputs["input_ids"])
+            >>> outputs = model(input_ids=inputs["input_ids"], labels=inputs["input_ids"], return_dict=True)
 
             >>> loss = outputs.loss
         """

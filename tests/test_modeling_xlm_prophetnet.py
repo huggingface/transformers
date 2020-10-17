@@ -70,7 +70,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_ntg_hidden_states(self):
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
+            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg"
         )
         model.to(torch_device)
 
@@ -94,7 +94,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xprophetnet_ntg_inference(self):
         model = XLMProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg", use_cdn=False
+            "microsoft/xprophetnet-large-wiki100-cased-xglue-ntg"
         )
         model.to(torch_device)
         model.config.max_length = 512

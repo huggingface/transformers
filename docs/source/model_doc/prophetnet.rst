@@ -33,6 +33,21 @@ ProphetNetTokenizer
     :members:
 
 
+ProphetNet specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_prophetnet.ProphetNetSeq2SeqLMOutput
+    :members:
+
+.. autoclass:: transformers.modeling_prophetnet.ProphetNetSeq2SeqModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_prophetnet.ProphetNetDecoderModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_prophetnet.ProphetNetDecoderLMOutput
+    :members:
+
 ProphetNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
