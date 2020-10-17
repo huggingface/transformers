@@ -240,7 +240,6 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         if result.returncode > 0:
             pytest.fail(f"failed with returncode {result.returncode}")
 
-        # XXX: need to complete the test
         contents = os.listdir(output_dir)
         contents = {os.path.basename(p) for p in contents}
         ckpt_files = [p for p in contents if p.endswith("ckpt")]
@@ -249,7 +248,7 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         self.assertIn("test_generations.txt", contents)
         self.assertIn("test_results.txt", contents)
 
-        # XXX: get the following from the module, (we don't have access to `model` here)
+        # get the following from the module, (we don't have access to `model` here)
         metrics_save_path = os.path.join(output_dir, "metrics.json")
         val_metric = "rouge2"
 
@@ -261,6 +260,5 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         self.assertGreaterEqual(1.0, last_step_stats["val_avg_gen_time"])
         self.assertIsInstance(last_step_stats[f"val_avg_{val_metric}"], float)
         self.assertEqual(len(metrics["test"]), 1)
-        # XXX: fixme, getting 3 != 5
-        # desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1)
-        # self.assertEqual(len(metrics["val"]), desired_n_evals)
+        desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) / 2 + 1)
+        self.assertEqual(len(metrics["val"]), desired_n_evals)
