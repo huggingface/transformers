@@ -132,7 +132,7 @@ def require_tokenizers(test_case):
     """
     Decorator marking a test that requires 🤗 Tokenizers.
 
-    These tests are skipped when tokenizers isn't installed.
+    These tests are skipped when 🤗 Tokenizers isn't installed.
 
     """
     if not _tokenizers_available:
