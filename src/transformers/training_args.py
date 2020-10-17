@@ -189,8 +189,11 @@ class TrainingArguments:
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     model_parallel: bool = field(
-        default =False, 
-        metadata={"help": "If there are more than one devices, whether to use model parallelism to distribute the model's modules across devices."})
+        default=False,
+        metadata={
+            "help": "If there are more than one devices, whether to use model parallelism to distribute the model's modules across devices."
+        },
+    )
     evaluate_during_training: bool = field(
         default=None,
         metadata={"help": "Run evaluation during training at each logging step."},
@@ -362,7 +365,7 @@ class TrainingArguments:
         if not self.model_parallel:
             train_batch_size = per_device_batch_size * max(1, self.n_gpu)
         else:
-            train_batch_size = per_device_batch_size 
+            train_batch_size = per_device_batch_size
         return train_batch_size
 
     @property
@@ -379,7 +382,7 @@ class TrainingArguments:
         if not self.model_parallel:
             eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
         else:
-            eval_batch_size = per_device_batch_size 
+            eval_batch_size = per_device_batch_size
         return eval_batch_size
 
     @cached_property
