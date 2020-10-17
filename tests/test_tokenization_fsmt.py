@@ -89,7 +89,7 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_online_tokenizer_config(self):
         """ this just tests that the online tokenizer files get correctly fetched and
-            loaded via its config_tokenizer.json and it's not slow so it's run by normal CI
+            loaded via its tokenizer_config.json and it's not slow so it's run by normal CI
         """
         FSMTTokenizer.from_pretrained(FSMT_TINY)
 
