@@ -24,7 +24,9 @@ from transformers.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
+
 FSMT_TINY = "stas/tiny-wmt19-en-de"
+
 
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = FSMTTokenizer
@@ -88,8 +90,8 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return FSMTTokenizer.from_pretrained("facebook/wmt19-en-ru")
 
     def test_online_tokenizer_config(self):
-        """ this just tests that the online tokenizer files get correctly fetched and
-            loaded via its tokenizer_config.json and it's not slow so it's run by normal CI
+        """this just tests that the online tokenizer files get correctly fetched and
+        loaded via its tokenizer_config.json and it's not slow so it's run by normal CI
         """
         FSMTTokenizer.from_pretrained(FSMT_TINY)
 
