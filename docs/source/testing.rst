@@ -414,14 +414,14 @@ For example, here is a test that must be run only when there are 2 or more GPUs 
 .. code-block:: python
 
     @require_torch_multigpu
-    def test_example_bar():
+    def test_example_with_multigpu():
 
 If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
 
 .. code-block:: python
 
     @require_tf
-    def test_tf_foo():
+    def test_tf_thing_with_tensorflow():
 
 These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch.
 
@@ -429,7 +429,7 @@ These decorators can be stacked. For example, if a test is slow and requires at 
 
     @require_torch_gpu
     @slow
-    def test_example_foo():
+    def test_example_slow_on_gpu():
 
 Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed last for them to work correctly. Here is an example of the correct usage:
 
