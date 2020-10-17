@@ -4,7 +4,6 @@ ProphetNet is a new pre-trained language model for sequence-to-sequence learning
 ProphetNet is able to predict more future tokens with a n-stream decoder. The original implementation is Fairseq version at [github repo](https://github.com/microsoft/ProphetNet).   
 
 ### Usage
-A quick usage is like: 
 ```
 from transformers import ProphetNetTokenizer, ProphetNetForConditionalGeneration, ProphetNetConfig
 
