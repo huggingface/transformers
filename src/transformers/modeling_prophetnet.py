@@ -624,7 +624,6 @@ class ProphetNetSelfAttention(nn.Module):
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
-        attn_mask: Optional[Tensor] = None,
         output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
 
@@ -677,12 +676,6 @@ class ProphetNetSelfAttention(nn.Module):
             sequence_length,
             key_sequence_length,
         ), f"`attn_weights` should be of size {batch_size * self.num_attn_heads, sequence_length, key_sequence_length}, but is of size {attn_weights.shape}"
-
-        if attn_mask is not None:
-            attn_weights = (
-                attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length) + attn_mask
-            )
-            attn_weights = attn_weights.view(batch_size * self.num_attn_heads, sequence_length, key_sequence_length)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
@@ -1197,20 +1190,21 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # prepare attention mask
-        if attention_mask is not None:
-            extended_attention_mask = (
-                1.0 - attention_mask[:, None, :].repeat(self.config.num_attention_heads, 1, 1)
-            ) * -10000.0
-        else:
-            extended_attention_mask = None
-
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Either input_ids or inputs_embeds has to be passed.")
         elif input_ids is not None and inputs_embeds is not None:
             raise ValueError("Make sure to only pass input_ids or inputs_embeds.")
         elif input_ids is not None and inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        # prepare attention mask
+        if attention_mask is not None:
+            extended_attention_mask = (
+                1.0 - attention_mask[:, None, :].repeat(self.config.num_attention_heads, 1, 1)
+            ) * -10000.0
+            extended_attention_mask = extended_attention_mask.to(inputs_embeds.dtype)
+        else:
+            extended_attention_mask = None
 
         position_embeddings, position_ids = self.position_embeddings(inputs_embeds.shape[:2], inputs_embeds.device)
 
@@ -1388,6 +1382,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_encoder_attention_mask = (
                 1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_attention_heads, 1, 1)
             ) * -10000.0
+            extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
         else:
             extended_encoder_attention_mask = None
 
@@ -1519,7 +1514,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_attention_mask = extended_causal_mask + extended_attention_mask
         else:
             extended_attention_mask = extended_causal_mask
-        return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1)
+        return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1).to(hidden_states.dtype)
 
     def prepare_predict_attention_mask(self, hidden_states, attention_mask):
         seq_length, batch_size = hidden_states.shape[:2]
@@ -1552,7 +1547,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_predict_attention_mask = extended_predict_causal_mask + extended_attention_mask
         else:
             extended_predict_attention_mask = extended_predict_causal_mask
-        return extended_predict_attention_mask.repeat(1, self.config.num_decoder_attention_heads, 1, 1)
+        return extended_predict_attention_mask.repeat(1, self.config.num_decoder_attention_heads, 1, 1).to(
+            hidden_states.dtype
+        )
 
 
 @add_start_docstrings(
