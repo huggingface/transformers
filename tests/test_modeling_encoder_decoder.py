@@ -25,7 +25,7 @@ from .test_modeling_bert import BertModelTester
 from .test_modeling_bert_generation import BertGenerationEncoderTester
 from .test_modeling_common import ids_tensor
 from .test_modeling_gpt2 import GPT2ModelTester
-from .test_modeling_prophetnet import ProphetNetModelTester
+from .test_modeling_prophetnet import ProphetNetStandaloneDecoderModelTester
 from .test_modeling_roberta import RobertaModelTester
 
 
@@ -706,7 +706,9 @@ class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
     def prepare_config_and_inputs(self):
         model_tester_encoder = BertModelTester(self, batch_size=13)
-        model_tester_decoder = ProphetNetModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
+        model_tester_decoder = ProphetNetStandaloneDecoderModelTester(
+            self, batch_size=13, hidden_size=32, max_position_embeddings=512
+        )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
         (

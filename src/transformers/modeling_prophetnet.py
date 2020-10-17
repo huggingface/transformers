@@ -502,12 +502,12 @@ class ProphetNetDecoderLMOutput(ModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
+def ProphetNetLayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
     if torch.cuda.is_available():
         try:
-            from apex.normalization import FusedLayerNorm
+            from apex.normalization import FusedProphetNetLayerNorm
 
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+            return FusedProphetNetLayerNorm(normalized_shape, eps, elementwise_affine)
         except ImportError:
             pass
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
@@ -549,7 +549,7 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class LearnedPositionalEmbedding(nn.Embedding):
+class ProhpetNetPositionalEmbeddings(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     Padding ids are ignored by either offsetting based on padding_idx
@@ -589,7 +589,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         return super().forward(position_ids)
 
 
-class SelfAttention(nn.Module):
+class ProphetNetSelfAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -722,7 +722,7 @@ class SelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class FeedForwardBlock(nn.Module):
+class ProhpetNetFeedForward(nn.Module):
     """
     This is the residual two feed-forward layer block based on the original
     Transformer implementation.
@@ -746,7 +746,7 @@ class FeedForwardBlock(nn.Module):
         return hidden_states
 
 
-class NgramMultiheadAttention(nn.Module):
+class ProphetNetNgramProphetNetSelfAttention(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1044,12 +1044,12 @@ class ProphetNetEncoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
-        self.self_attn = SelfAttention(config, config.num_encoder_attention_heads)
-        self.self_attn_layer_norm = LayerNorm(config.hidden_size)
+        self.self_attn = ProphetNetSelfAttention(config, config.num_encoder_attention_heads)
+        self.self_attn_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
         # 2nd residual block
-        self.feed_forward = FeedForwardBlock(config, config.encoder_ffn_dim)
-        self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
+        self.feed_forward = ProhpetNetFeedForward(config, config.encoder_ffn_dim)
+        self.feed_forward_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
     def forward(self, hidden_states, attention_mask, output_attentions=False):
         # 1st residual block
@@ -1074,17 +1074,17 @@ class ProphetNetDecoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
-        self.self_attn = NgramMultiheadAttention(config)
-        self.self_attn_layer_norm = LayerNorm(config.hidden_size)
+        self.self_attn = ProphetNetNgramProphetNetSelfAttention(config)
+        self.self_attn_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
         # 2nd residual block
         if config.add_cross_attention:
-            self.cross_attn = SelfAttention(config, config.num_decoder_attention_heads)
-            self.cross_attn_layer_norm = LayerNorm(config.hidden_size)
+            self.cross_attn = ProphetNetSelfAttention(config, config.num_decoder_attention_heads)
+            self.cross_attn_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
         # 3rd residual block
-        self.feed_forward = FeedForwardBlock(config, config.decoder_ffn_dim)
-        self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
+        self.feed_forward = ProhpetNetFeedForward(config, config.decoder_ffn_dim)
+        self.feed_forward_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -1151,12 +1151,18 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if word_embeddings is not None
             else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
-        self.position_embeddings = LearnedPositionalEmbedding(config)
-        self.embeddings_layer_norm = LayerNorm(config.hidden_size)
+        self.position_embeddings = ProhpetNetPositionalEmbeddings(config)
+        self.embeddings_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.word_embeddings = value
 
     @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1255,13 +1261,19 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if word_embeddings is not None
             else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
-        self.position_embeddings = LearnedPositionalEmbedding(config)
+        self.position_embeddings = ProhpetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
-        self.embeddings_layer_norm = LayerNorm(config.hidden_size)
+        self.embeddings_layer_norm = ProphetNetLayerNorm(config.hidden_size)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.word_embeddings = value
 
     @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1395,14 +1407,14 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         all_main_stream_attns = () if output_attentions else None
         all_ngram_stream_attns = () if output_attentions else None
-        all_cross_attns = () if output_attentions else None
+        all_cross_attns = () if output_attentions and self.config.add_cross_attention else None
         present_key_values = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
-                all_main_stream_hidden_states += (hidden_states[:sequence_length],)
+                all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
                 if self.config.ngram > 0:
-                    all_ngram_stream_hidden_states += (hidden_states[sequence_length:],)
+                    all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
             (
@@ -1429,7 +1441,14 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if output_attentions:
                 all_main_stream_attns += (layer_self_attn,)
                 all_ngram_stream_attns += (layer_self_predict_attn_output,)
-                all_cross_attns += (layer_cross_attn,)
+
+                if self.config.add_cross_attention:
+                    all_cross_attns += (layer_cross_attn,)
+
+        if output_hidden_states:
+            all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
+            if self.config.ngram > 0:
+                all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
 
         # split last_hidden_state for return
         last_hidden_state = hidden_states[:sequence_length].transpose(0, 1)
@@ -1878,6 +1897,9 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.decoder.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.decoder.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.lm_head

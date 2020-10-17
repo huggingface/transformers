@@ -215,7 +215,7 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
-            attentions = outputs[-1]
+            attentions = outputs["attentions"] if "attentions" in outputs.keys() else outputs[-1]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -276,7 +276,7 @@ class ModelTesterMixin:
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs[-1]
+            self_attentions = outputs["attentions"] if "attentions" in outputs else outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(
@@ -589,8 +589,8 @@ class ModelTesterMixin:
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs[-1]
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
+            hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
