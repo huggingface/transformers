@@ -65,3 +65,22 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert "labels" in batch  # because tgt_texts was specified
         assert batch.labels.shape == (2, 5)
         assert len(batch) == 3  # input_ids, attention_mask, labels. Other things make by BartModel
+
+    def test_multiline_inputs(self):
+        tokenizer = self.pegasus_large_tokenizer
+        # tokenizer = self.get_tokenizer()
+
+        s1 = "This is test."
+        s2 = "Testing!"
+        inputs = [f"{s1} {s2}", f"{s1}\n{s2}", f"{s1}\r\n{s2}", f"{s1}\n\n{s2}"]
+        e1 = ["▁This", "▁is", "▁test", "."]
+        e2 = ["▁Testing", "!"]
+        # when a sentence starts with \n - it seems the tokenizer returns a
+        # different encoding for the first word, w/o the leading ▁ for the first word
+        e2_n = ["Testing", "!"]
+        expected = [e1 + e2, e1 + ["<n>"] + e2_n, e1 + ["<n>"] + e2_n, e1 + ["<n>", "<n>"] + e2_n]
+
+        for i, t in enumerate(inputs):
+            o = tokenizer._tokenize(t)
+            # print(f"{i}\ninp: [{t}]\ngot: {o}\nexp: {expected[i]}\n")
+            self.assertListEqual(o, expected[i], msg=f"\ninput was {i}: [{t}]")

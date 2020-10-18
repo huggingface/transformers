@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 from typing import Dict, List, Optional
 
 from .file_utils import add_start_docstrings
@@ -56,6 +57,10 @@ class PegasusTokenizer(ReformerTokenizer):
         # entries 2-104 are only used for pretraining and called unk_2, ...unk_104
         self.encoder.update({i: f"unk_{i}" for i in range(2, self.offset + 2)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
+
+    def _tokenize(self, text, sample=False):
+        text = re.sub(r"\r?\n", "<n>", text)
+        return super()._tokenize(text, sample)
 
     def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) to an id using the vocab. """
