@@ -335,7 +335,7 @@ class RagTestMixin:
                 question_hidden_states.cpu().detach().to(torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
-                n_docs=n_docs
+                n_docs=n_docs,
             )
 
             context_input_ids, context_attention_mask, retrieved_doc_embeds = (
@@ -360,7 +360,7 @@ class RagTestMixin:
                 doc_scores=doc_scores,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
-                n_docs=n_docs
+                n_docs=n_docs,
             )
 
             # logits

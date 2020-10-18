@@ -523,7 +523,7 @@ class RagModel(RagPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         output_retrieved=None,
-        n_docs=None
+        n_docs=None,
     ):
         r"""
         Returns:
@@ -604,10 +604,6 @@ class RagModel(RagPreTrainedModel):
             doc_scores is not None
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
-        assert (
-            context_input_ids
-        )
-
         # Decoder input without context documents
         if decoder_input_ids is not None:
             decoder_input_ids = decoder_input_ids.repeat_interleave(n_docs, dim=0)
@@ -624,7 +620,7 @@ class RagModel(RagPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             return_dict=True,
-            n_docs=n_docs
+            n_docs=n_docs,
         )
 
         if not has_to_retrieve:
@@ -774,7 +770,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_retrieved=output_retrieved,
-            n_docs=n_docs
+            n_docs=n_docs,
         )
 
         loss = None
@@ -786,7 +782,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 reduce_loss=reduce_loss,
                 epsilon=self.config.label_smoothing,
                 exclude_bos_score=exclude_bos_score,
-                n_docs=n_docs
+                n_docs=n_docs,
             )
 
         return RetrievAugLMMarginOutput(
@@ -901,9 +897,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         for index in range(len(input_ids)):
             # first, generate beams from documents:
-            generator_input_ids = context_input_ids[
-                index * n_docs : (index + 1) * n_docs
-            ]  # (n_docs, max_len)
+            generator_input_ids = context_input_ids[index * n_docs : (index + 1) * n_docs]  # (n_docs, max_len)
 
             output_sequences = self.generator.generate(
                 generator_input_ids,
@@ -923,7 +917,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         return self._cat_and_pad(hypos, pad_token_id=self.config.generator.pad_token_id)
 
-    def get_nll(self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False, n_docs=None):
+    def get_nll(
+        self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False, n_docs=None
+    ):
         # shift tokens left
         target = torch.cat(
             [target[:, 1:], target.new(target.shape[0], 1).fill_(self.config.generator.pad_token_id)], 1
@@ -1035,7 +1031,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             "past_key_values": past,
             "use_cache": use_cache,
             "do_marginalize": True,
-            "n_docs": n_docs
+            "n_docs": n_docs,
         }
 
     @property
@@ -1172,7 +1168,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_retrieved=output_retrieved,
-            n_docs=n_docs
+            n_docs=n_docs,
         )
 
         loss = None
@@ -1185,7 +1181,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 labels,
                 reduce_loss=reduce_loss,
                 epsilon=self.config.label_smoothing,
-                n_docs=n_docs
+                n_docs=n_docs,
             )
 
         if do_marginalize:
@@ -1376,10 +1372,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
         def extend_enc_output(tensor, num_beams=None):
-            assert (
-                    n_docs == tensor.shape[0:]
-            ), "Retriever returned less documents than n_docs"
-
             # split into `batch_size`, `num_beams`, `num_docs`
             tensor = tensor[None, None, :].reshape((batch_size, 1, n_docs) + tensor.shape[1:])
             # repeat same last hidden states over `num_beams` dimension
