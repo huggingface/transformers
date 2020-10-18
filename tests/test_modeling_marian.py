@@ -19,7 +19,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -53,6 +53,8 @@ class ModelManagementTests(unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MarianIntegrationTest(unittest.TestCase):
     src = "en"
     tgt = "de"
@@ -110,6 +112,8 @@ class MarianIntegrationTest(unittest.TestCase):
         return generated_words
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_forward(self):
@@ -154,6 +158,8 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         self.assertIsInstance(config, MarianConfig)
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_EN_FR(MarianIntegrationTest):
     src = "en"
     tgt = "fr"
@@ -171,6 +177,8 @@ class TestMarian_EN_FR(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_FR_EN(MarianIntegrationTest):
     src = "fr"
     tgt = "en"
@@ -188,6 +196,8 @@ class TestMarian_FR_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_RU_FR(MarianIntegrationTest):
     src = "ru"
     tgt = "fr"
@@ -199,6 +209,8 @@ class TestMarian_RU_FR(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_MT_EN(MarianIntegrationTest):
     src = "mt"
     tgt = "en"
@@ -210,6 +222,8 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_en_zh(MarianIntegrationTest):
     src = "en"
     tgt = "zh"
@@ -221,6 +235,8 @@ class TestMarian_en_zh(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_en_ROMANCE(MarianIntegrationTest):
     """Multilingual on target side."""
 

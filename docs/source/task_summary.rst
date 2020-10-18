@@ -758,8 +758,8 @@ Here is an example of using the pipelines to do summarization. It leverages a Ba
     ... If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
     ... """
 
-Because the summarization pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments
-of ``PretrainedModel.generate()`` directly in the pipeline for ``max_length`` and ``min_length`` as shown below.
+Because the summarization pipeline depends on the ``PreTrainedModel.generate()`` method, we can override the default arguments
+of ``PreTrainedModel.generate()`` directly in the pipeline for ``max_length`` and ``min_length`` as shown below.
 This outputs the following summary:
 
 .. code-block::
@@ -772,7 +772,7 @@ Here is an example of doing summarization using a model and a tokenizer. The pro
 1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
 2. Define the article that should be summarized.
 3. Add the T5 specific prefix "summarize: ".
-4. Use the ``PretrainedModel.generate()`` method to generate the summary.
+4. Use the ``PreTrainedModel.generate()`` method to generate the summary.
 
 In this example we use Google`s T5 model. Even though it was pre-trained only on a multi-task mixed dataset (including CNN / Daily Mail), it yields very good results.
 
@@ -819,15 +819,15 @@ translation results.
     >>> print(translator("Hugging Face is a technology company based in New York and Paris", max_length=40))
     [{'translation_text': 'Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.'}]
 
-Because the translation pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments
-of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
+Because the translation pipeline depends on the ``PreTrainedModel.generate()`` method, we can override the default arguments
+of ``PreTrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
 
 Here is an example of doing translation using a model and a tokenizer. The process is the following:
 
 1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
 2. Define the article that should be summarizaed.
 3. Add the T5 specific prefix "translate English to German: "
-4. Use the ``PretrainedModel.generate()`` method to perform the translation.
+4. Use the ``PreTrainedModel.generate()`` method to perform the translation.
 
 .. code-block::
 

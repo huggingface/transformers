@@ -432,8 +432,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     self.__class__.__name__, self.__class__.__name__
                 )
             )
-        # Save config in model
+        # Save config and origin of the pretrained weights if given in model
         self.config = config
+        self.name_or_path = config.name_or_path
 
     @property
     def base_model(self) -> nn.Module:
@@ -932,6 +933,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
         else:
             resolved_archive_file = None
+
+        config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)

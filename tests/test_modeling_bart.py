@@ -20,7 +20,7 @@ import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -207,6 +207,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @require_sentencepiece
+    @require_tokenizers
     def test_tiny_model(self):
         model_name = "sshleifer/bart-tiny-random"
         tiny = AutoModel.from_pretrained(model_name)  # same vocab size
@@ -439,6 +441,8 @@ TOLERANCE = 1e-4
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class BartModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):

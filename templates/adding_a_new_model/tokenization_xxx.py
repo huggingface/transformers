@@ -18,7 +18,7 @@
 import collections
 import logging
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .tokenization_utils import PreTrainedTokenizer
 
@@ -275,22 +275,14 @@ class XxxTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, vocab_path):
-        """
-        Save the vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            vocab_path (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
-        if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["vocab_file"])
+        if os.path.isdir(save_directory):
+            vocab_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            )
         else:
-            vocab_file = vocab_path
+            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:

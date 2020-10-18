@@ -20,7 +20,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -29,9 +29,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import T5Config, T5ForConditionalGeneration, T5Model
+    from transformers import T5Config, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.tokenization_t5 import T5Tokenizer
 
 
 class T5ModelTester:
@@ -546,6 +545,8 @@ def use_task_specific_params(model, task):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class T5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):

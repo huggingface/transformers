@@ -20,7 +20,7 @@ import logging
 import os
 import re
 import unicodedata
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import sacremoses as sm
 
@@ -37,9 +37,21 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
-PRETRAINED_INIT_CONFIGURATION = {}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "src_vocab_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-src.json"},
+    "tgt_vocab_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-tgt.json"},
+    "merges_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/merges.txt"},
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"stas/tiny-wmt19-en-de": 1024}
+PRETRAINED_INIT_CONFIGURATION = {
+    "stas/tiny-wmt19-en-de": {
+        "langs": ["en", "de"],
+        "model_max_length": 1024,
+        "special_tokens_map_file": None,
+        "full_tokenizer_file": None,
+    }
+}
 
 
 def get_pairs(word):
@@ -494,24 +506,20 @@ class FSMTTokenizer(PreTrainedTokenizer):
         model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         return model_inputs
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the vocabulary and special tokens file to a directory.
-
-        Args:
-            vocab_path (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
 
-        src_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["src_vocab_file"])
-        tgt_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["tgt_vocab_file"])
-        merges_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
+        src_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["src_vocab_file"]
+        )
+        tgt_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tgt_vocab_file"]
+        )
+        merges_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+        )
 
         with open(src_vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

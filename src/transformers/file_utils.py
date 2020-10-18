@@ -157,6 +157,24 @@ except (AttributeError, ImportError, KeyError):
     _in_notebook = False
 
 
+try:
+    import sentencepiece  # noqa: F401
+
+    _sentencepiece_available = True
+
+except ImportError:
+    _sentencepiece_available = False
+
+
+try:
+    import tokenizers  # noqa: F401
+
+    _tokenizers_available = True
+
+except ImportError:
+    _tokenizers_available = False
+
+
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 
@@ -170,6 +188,8 @@ TF_WEIGHTS_NAME = "model.ckpt"
 CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
+SENTENCEPIECE_UNDERLINE = "▁"
+SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
 
 MULTIPLE_CHOICE_DUMMY_INPUTS = [
     [[0, 1, 0, 1], [1, 0, 0, 1]]
@@ -217,6 +237,18 @@ def is_faiss_available():
     return _faiss_available
 
 
+def is_sklearn_available():
+    return _has_sklearn
+
+
+def is_sentencepiece_available():
+    return _sentencepiece_available
+
+
+def is_tokenizers_available():
+    return _tokenizers_available
+
+
 def is_in_notebook():
     return _in_notebook
 
@@ -234,10 +266,6 @@ def torch_only_method(fn):
     return wrapper
 
 
-def is_sklearn_available():
-    return _has_sklearn
-
-
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
 ```
@@ -252,6 +280,25 @@ then restarting your kernel.
 Note that if you have a local folder named `datasets` or a local python file named `datasets.py` in your current
 working directory, python may try to import this instead of the 🤗 Datasets library. You should rename this folder or
 that python file if that's the case.
+"""
+
+
+TOKENIZERS_IMPORT_ERROR = """
+{0} requires the 🤗 Tokenizers library but it was not found in your enviromnent. You can install it with:
+```
+pip install tokenizers
+```
+In a notebook or a colab, you can install it by executing a cell with
+```
+!pip install tokenizers
+```
+"""
+
+
+SENTENCEPIECE_IMPORT_ERROR = """
+{0} requires the SentencePiece library but it was not found in your enviromnent. Checkout the instructions on the
+installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
+that match your enviromnent.
 """
 
 
@@ -314,6 +361,18 @@ def requires_tf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_tf_available():
         raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
+
+
+def requires_tokenizers(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_tokenizers_available():
+        raise ImportError(TOKENIZERS_IMPORT_ERROR.format(name))
+
+
+def requires_sentencepiece(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_sentencepiece_available():
+        raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):

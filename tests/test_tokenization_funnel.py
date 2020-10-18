@@ -17,14 +17,18 @@
 import os
 import unittest
 
-from transformers.tokenization_funnel import VOCAB_FILES_NAMES, FunnelTokenizer, FunnelTokenizerFast
+from transformers import FunnelTokenizer, FunnelTokenizerFast
+from transformers.testing_utils import require_tokenizers
+from transformers.tokenization_funnel import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = FunnelTokenizer
+    rust_tokenizer_class = FunnelTokenizerFast
     test_rust_tokenizer = True
     space_between_special_tokens = True
 
