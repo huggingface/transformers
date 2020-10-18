@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Tokenization class for model DeBERTa."""
 
-import logging
 import os
 import pathlib
 import random
@@ -27,6 +26,7 @@ import tqdm
 import requests
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
 try:
@@ -35,7 +35,7 @@ except ImportError:
     raise ImportError("Please install regex with: pip install regex")
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "bpe_encoder.bin"}
 

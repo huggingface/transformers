@@ -14,15 +14,15 @@
 # limitations under the License.
 
 import collections
-import logging
 import os
 from typing import List, Optional
 
 from .tokenization_bert import BasicTokenizer, WordpieceTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 

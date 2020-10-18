@@ -15,12 +15,11 @@
 """ XLM-ProphetNet model configuration """
 
 
-import logging
-
 from .configuration_prophetnet import ProphetNetConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/xprophetnet-large-wiki100-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/xprophetnet-large-wiki100-cased/config.json",
