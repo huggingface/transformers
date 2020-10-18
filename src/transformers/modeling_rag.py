@@ -19,7 +19,6 @@ from typing import List, Optional, Tuple
 
 import torch
 
-from . import T5PreTrainedModel
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
@@ -612,29 +611,16 @@ class RagModel(RagPreTrainedModel):
         if decoder_attention_mask is not None:
             decoder_attention_mask = decoder_attention_mask.repeat_interleave(n_docs, dim=0)
 
-        if isinstance(self.generator, T5PreTrainedModel):
-            gen_outputs = self.generator(
-                input_ids=context_input_ids,
-                attention_mask=context_attention_mask,
-                encoder_outputs=encoder_outputs,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                return_dict=True,
-            )
-        else:
-            gen_outputs = self.generator(
-                input_ids=context_input_ids,
-                attention_mask=context_attention_mask,
-                encoder_outputs=encoder_outputs,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                return_dict=True,
-                n_docs=n_docs,
-            )
+        gen_outputs = self.generator(
+            input_ids=context_input_ids,
+            attention_mask=context_attention_mask,
+            encoder_outputs=encoder_outputs,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            return_dict=True,
+        )
 
         if not has_to_retrieve:
             question_encoder_last_hidden_state = None
