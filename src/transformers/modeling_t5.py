@@ -36,6 +36,7 @@ from .file_utils import (
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from .utils import logging
+from .utils.model_parallel_utils import assert_device_map, get_device_map
 
 
 logger = logging.get_logger(__name__)
@@ -926,6 +927,28 @@ class T5Model(T5PreTrainedModel):
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+    def parallelize(self, device_map=None):
+        # Check validity of device_map
+        self.device_map = get_device_map(len(self.h), torch.cuda.device_count()) if device_map is None else device_map
+        assert_device_map(self.device_map, len(self.h))
+
+        self.model_parallel = True
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.last_device = "cuda:" + str(max(self.device_map.keys()))
+        self.wte = self.wte.to(self.first_device)
+        self.wpe = self.wpe.to(self.first_device)
+        ## Load onto devices
+        for k, v in self.device_map.items():
+            for block in v:
+                cuda_device = "cuda:" + str(k)
+                self.h[block] = self.h[block].to(cuda_device)
+        ## ln_f to last
+        self.ln_f = self.ln_f.to(self.last_device)
 
     def get_input_embeddings(self):
         return self.shared
