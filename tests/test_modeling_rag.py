@@ -83,7 +83,7 @@ def require_retrieval(test_case):
 
     """
     if not (is_torch_available() and is_datasets_available() and is_faiss_available()):
-        test_case = unittest.skip("test requires PyTorch")(test_case)
+        test_case = unittest.skip("test requires PyTorch, datasets and faiss")(test_case)
     return test_case
 
 
@@ -315,6 +315,67 @@ class RagTestMixin:
             # doc scores
             self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
 
+    def check_model_with_n_docs(
+        self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, n_docs, **kwargs
+    ):
+        self.assertIsNotNone(config.question_encoder)
+        self.assertIsNotNone(config.generator)
+
+        retriever = self.get_retriever(config)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            self.assertTrue(model.config.is_encoder_decoder)
+
+            question_hidden_states = model.question_encoder(input_ids, attention_mask=attention_mask)[0]
+
+            out = retriever(
+                input_ids,
+                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                prefix=config.generator.prefix,
+                return_tensors="pt",
+                n_docs=n_docs
+            )
+
+            context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+                out["context_input_ids"],
+                out["context_attention_mask"],
+                out["retrieved_doc_embeds"],
+            )
+
+            # cast
+            retrieved_doc_embeds = retrieved_doc_embeds.to(question_hidden_states)
+            context_input_ids = context_input_ids.to(input_ids)
+            context_attention_mask = context_attention_mask.to(input_ids)
+
+            # compute doc_scores
+            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
+                1
+            )
+
+            outputs = model(
+                context_input_ids=context_input_ids,
+                context_attention_mask=context_attention_mask,
+                doc_scores=doc_scores,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                n_docs=n_docs
+            )
+
+            # logits
+            self.assertEqual(
+                outputs.logits.shape,
+                (n_docs * decoder_input_ids.shape[0], decoder_input_ids.shape[1], config.generator.vocab_size),
+            )
+            # generator encoder last hidden states
+            self.assertEqual(
+                outputs.generator_enc_last_hidden_state.shape,
+                (n_docs * decoder_input_ids.shape[0], self.max_combined_length, config.generator.hidden_size),
+            )
+            # doc scores
+            self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], n_docs))
+
     def check_model_with_encoder_outputs(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
     ):
@@ -372,6 +433,11 @@ class RagTestMixin:
     def test_model_generate(self):
         inputs_dict = self.config_and_inputs
         self.check_model_generate(**inputs_dict)
+
+    def test_model_with_n_docs(self):
+        inputs_dict = self.config_and_inputs
+        inputs_dict["n_docs"] = 1
+        self.check_model_with_n_docs(**inputs_dict)
 
 
 @require_torch
