@@ -47,7 +47,7 @@ class ModelTester:
 
 @require_torch
 class SelectiveCommonTest(unittest.TestCase):
-    all_model_classes = (MBartForConditionalGeneration,)
+    all_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
 
     test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
 
