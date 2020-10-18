@@ -43,7 +43,7 @@ class ProphetNetConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the ProphetNET model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.ProphetNetModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
