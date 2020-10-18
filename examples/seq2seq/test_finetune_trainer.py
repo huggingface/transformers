@@ -13,7 +13,6 @@ from .test_seq2seq_examples import MBART_TINY
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
-BERT2BERT_TINY = "patrickvonplaten/bert2bert-tiny"
 
 
 def test_finetune_trainer():
@@ -46,7 +45,7 @@ def test_finetune_trainer_slow():
     assert "test_results.json" in contents
 
 
-def run_trainer(eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, no_pad_token_id: bool = False):
+def run_trainer(eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     output_dir = tempfile.mkdtemp(prefix="test_output")
     argv = [
@@ -101,8 +100,6 @@ def run_trainer(eval_steps: int, max_len: str, model_name: str, num_train_epochs
         "--src_lang",
         "en_XX",
     ]
-    if no_pad_token_id:
-        argv.append("--no-ignore_pad_token_for_loss")
     testargs = ["finetune_trainer.py"] + argv
     with patch.object(sys, "argv", testargs):
         main()
