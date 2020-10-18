@@ -46,14 +46,13 @@ class ModelTester:
 
 
 @require_torch
-class SomeCommonTest(unittest.TestCase):
+class SelectiveCommonTest(unittest.TestCase):
     all_model_classes = (MBartForConditionalGeneration,)
+
+    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
 
     def setUp(self):
         self.model_tester = ModelTester(self)
-
-    def test_save_load_keys_to_never_save(self):
-        ModelTesterMixin.test_save_load_keys_to_never_save(self)
 
 
 @require_torch
