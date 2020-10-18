@@ -284,9 +284,11 @@ class Trainer:
                 ),
                 FutureWarning,
             )
-        # Some warning for the user related to the usage of datasets that do not implement __len__
+
         if args.max_steps > 0:
-            logger.warning("max_steps is given, it will override any value given in num_train_epochs")
+            logger.info("max_steps is given, it will override any value given in num_train_epochs")
+
+        # Enforce rules on using datasets with no __len__
         if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
@@ -404,9 +406,7 @@ class Trainer:
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
-        if not isinstance(eval_dataset, collections.abc.Sized):
-            raise ValueError("eval_dataset must implement __len__")
-        elif is_torch_tpu_available():
+        if is_torch_tpu_available():
             return SequentialDistributedSampler(eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
         elif self.args.local_rank != -1:
             return SequentialDistributedSampler(eval_dataset)
@@ -417,19 +417,18 @@ class Trainer:
         """
         Returns the evaluation :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`self.eval_dataset` does not implement :obj:`__len__`, a sequential
-        sampler (adapted to distributed training if necessary) otherwise.
-
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
                 If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
-                accepted by the ``model.forward()`` method are automatically removed.
+                accepted by the ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif eval_dataset is not None and is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+        elif eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
+        elif is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
@@ -447,17 +446,16 @@ class Trainer:
         """
         Returns the test :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`test_dataset` does not implement :obj:`__len__`, a sequential
-        sampler (adapted to distributed training if necessary) otherwise.
-
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
             test_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
                 The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-                ``model.forward()`` method are automatically removed.
+                ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
-        if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
+        if not isinstance(test_dataset, collections.abc.Sized):
+            raise ValueError("test_dataset must implement __len__")
+        elif is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             self._remove_unused_columns(test_dataset, description="test")
         test_sampler = self._get_eval_sampler(test_dataset)
 
@@ -595,32 +593,28 @@ class Trainer:
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
-        if self.args.max_steps > 0:
-            # If we have a dataset that does not support __len__, we train until reaching max_steps, and ignore
-            # the num_train_epochs.
-            # The dataset has to support max_steps iteration
 
-            max_steps = self.args.max_steps
-            if train_dataset_is_sized:
-                num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
-                num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+        # Setting up training control variables:
+        # number of training epochs: num_train_epochs
+        # number of training steps per epoch: num_update_steps_per_epoch
+        # total number of training steps to execute: max_steps
+        if train_dataset_is_sized:
+            num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
+            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+            if self.args.max_steps > 0:
+                max_steps = self.args.max_steps
                 num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
                     self.args.max_steps % num_update_steps_per_epoch > 0
                 )
             else:
-                num_train_epochs = 1
-                num_update_steps_per_epoch = max_steps
+                max_steps = math.ceil(self.args.num_train_epochs * num_update_steps_per_epoch)
+                num_train_epochs = math.ceil(self.args.num_train_epochs)
         else:
-            # When max_steps is not given and an iterable dataset with no __len__ is given, a ValueError is raised
-            # at Trainer's creation, so here, train_dataset_is_sized should be True
-            assert train_dataset_is_sized
-            num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
-            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-            max_steps = math.ceil(self.args.num_train_epochs * num_update_steps_per_epoch)
-            num_train_epochs = math.ceil(self.args.num_train_epochs)
+            # see __init__. max_steps is set when the dataset has no __len__
+            max_steps = self.args.max_steps
+            num_train_epochs = 1
+            num_update_steps_per_epoch = max_steps
 
-        # User received a warning about using a dataset without __len__ and only specifying num_train_epochs
-        # In this case, max_steps will be None, this will create an exception in the learning rate scheduler
         self.create_optimizer_and_scheduler(num_training_steps=max_steps)
         self.state = TrainerState()
 
@@ -1237,18 +1231,21 @@ class Trainer:
 
         The calling script will be responsible for providing a method to compute metrics, as they are
         task-dependent (pass it to the init :obj:`compute_metrics` argument).
-        :obj:`eval_dataset` must implement method :obj:`__len__`.
 
         You can also subclass and override this method to inject custom behavior.
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
-                columns not accepted by the ``model.forward()`` method are automatically removed.
+                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement
+                the :obj:`__len__` method.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
+        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
+
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
@@ -1267,7 +1264,6 @@ class Trainer:
 
         Depending on the dataset and your use case, your test dataset may contain labels.
         In that case, this method will also return metrics, like in :obj:`evaluate()`.
-        :obj:`test_dataset` must implement method :obj:`__len__`
 
         Args:
             test_dataset (:obj:`Dataset`):
@@ -1283,6 +1279,9 @@ class Trainer:
             metrics (:obj:`Dict[str, float]`, `optional`):
                 The potential dictionary of metrics (if the dataset contained labels).
         """
+        if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
+            raise ValueError("test_dataset must implement __len__")
+
         test_dataloader = self.get_test_dataloader(test_dataset)
 
         return self.prediction_loop(test_dataloader, description="Prediction")
