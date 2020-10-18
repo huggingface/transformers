@@ -77,9 +77,15 @@ class MarianIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
-        cls.tokenizer: MarianTokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls
+
+    @cached_property
+    def tokenizer(self) -> MarianTokenizer:
+        return AutoTokenizer.from_pretrained(self.model_name)
+
+    @property
+    def eos_token_id(self) -> int:
+        return self.tokenizer.eos_token_id
 
     @cached_property
     def model(self):
