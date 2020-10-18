@@ -474,16 +474,16 @@ GPT2_INPUTS_DOCSTRING = r"""
 """
 
 PARALLELIZE_DOCSTRING = r"""
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given, it 
+    Uses a device map to distribute attention modules of the model across several devices. If no device map is given, it
     will evenly distribute blocks across all devices.
-    Args: 
+    Args:
         device_map (:obj:`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
             always automatically mapped to the first device (for esoteric reasons). That means that the first
-            device should have fewer attention modules mapped to it than other devices. 
+            device should have fewer attention modules mapped to it than other devices.
 
             For reference, the gpt2 models have the following number of attention modules:
-            
+
                 - gpt2: 12
                 - gpt2-medium: 24
                 - gpt2-large: 36
@@ -491,7 +491,7 @@ PARALLELIZE_DOCSTRING = r"""
 
     Example::
         Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
-            
+
             model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
             device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
                           1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
@@ -502,7 +502,7 @@ PARALLELIZE_DOCSTRING = r"""
 """
 
 DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state. 
+    Moves the model to cpu from a model parallel state.
 
     Example::
         On a 4 GPU machine with gpt2-large:
@@ -548,12 +548,12 @@ class GPT2Model(GPT2PreTrainedModel):
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
         self.wte = self.wte.to(self.first_device)
         self.wpe = self.wpe.to(self.first_device)
-        ## Load onto devices
+        # Load onto devices
         for k, v in self.device_map.items():
             for block in v:
                 cuda_device = "cuda:" + str(k)
                 self.h[block] = self.h[block].to(cuda_device)
-        ## ln_f to last
+        # ln_f to last
         self.ln_f = self.ln_f.to(self.last_device)
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)

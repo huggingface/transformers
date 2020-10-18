@@ -36,7 +36,6 @@ from .file_utils import (
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from .utils import logging
-from .utils.model_parallel_utils import assert_device_map, get_device_map
 
 
 logger = logging.get_logger(__name__)
@@ -245,7 +244,6 @@ class T5Attention(nn.Module):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-
         Translate relative position to a bucket number for relative attention.
         The relative position is defined as memory_position - query_position, i.e.
         the distance in tokens from the attending position to the attended-to
@@ -806,20 +804,16 @@ class T5Stack(T5PreTrainedModel):
 
 
 T5_START_DOCSTRING = r"""
-
     The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
     <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
     Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
     It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
-
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
-
     This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
-
     Parameters:
         config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
@@ -832,27 +826,22 @@ T5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary.
             T5 is a model with relative position embeddings so you should be able to pad the inputs on both the right
             and the left.
-
             Indices can be obtained using :class:`~transformers.T5Tokenizer`.
             See :meth:`transformers.PreTrainedTokenizer.encode` and
             :meth:`transformers.PreTrainedTokenizer.__call__` for detail.
-
             To know more on how to prepare :obj:`input_ids` for pretraining take a look a
             `T5 Training <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
             :obj:`decoder_input_ids` generation.
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
-
             To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at
             `T5 Training <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
             unset, :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
@@ -865,17 +854,14 @@ T5_INPUTS_DOCSTRING = r"""
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -887,14 +873,11 @@ T5_INPUTS_DOCSTRING = r"""
             (see :obj:`past_key_values`).
             This is useful if you want more control over how to convert :obj:`decoder_input_ids` indices into
             associated vectors than the model's internal embedding lookup matrix.
-
             If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
             unset, :obj:`decoder_inputs_embeds` takes the value of :obj:`inputs_embeds`.
-
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
-
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -927,28 +910,6 @@ class T5Model(T5PreTrainedModel):
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = get_device_map(len(self.h), torch.cuda.device_count()) if device_map is None else device_map
-        assert_device_map(self.device_map, len(self.h))
-
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        self.wpe = self.wpe.to(self.first_device)
-        ## Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        ## ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
 
     def get_input_embeddings(self):
         return self.shared
@@ -993,18 +954,13 @@ class T5Model(T5PreTrainedModel):
     ):
         r"""
         Returns:
-
         Example::
-
             >>> from transformers import T5Tokenizer, T5Model
-
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5Model.from_pretrained('t5-small')
-
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
-
             >>> last_hidden_states = outputs.last_hidden_state
         """
         if "decoder_past_key_value_states" in kwargs:
@@ -1143,22 +1099,16 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             computed for labels in ``[0, ..., config.vocab_size]``
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
-
         Returns:
-
         Examples::
-
             >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
-
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
-
             >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
             labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
             >>> outputs = model(input_ids=input_ids, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
-
             >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model.generate(input_ids)
         """
