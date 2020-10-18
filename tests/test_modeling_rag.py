@@ -23,13 +23,12 @@ from unittest.mock import patch
 
 import numpy as np
 
+from transformers import BartTokenizer, T5Tokenizer
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.tokenization_bart import BartTokenizer
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from transformers.tokenization_t5 import T5Tokenizer
 
 from .test_modeling_bart import ModelTester as BartModelTester
 from .test_modeling_dpr import DPRModelTester
@@ -89,6 +88,7 @@ def require_retrieval(test_case):
 
 @require_torch
 @require_retrieval
+@require_sentencepiece
 class RagTestMixin:
 
     all_model_classes = (
@@ -438,6 +438,8 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 
 @require_torch
 @require_retrieval
+@require_sentencepiece
+@require_tokenizers
 class RagModelIntegrationTests(unittest.TestCase):
     @cached_property
     def sequence_model(self):

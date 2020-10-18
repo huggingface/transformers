@@ -17,6 +17,7 @@
 """
 
 import copy
+import json
 import os
 import warnings
 from collections import defaultdict
@@ -79,16 +80,32 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     slow_tokenizer_class: PreTrainedTokenizer = None
 
     def __init__(self, *args, **kwargs):
-        # We instantiate fast tokenizers based on a slow tokenizer for now
-        # In the future we'll also use a direct way based on saving/instantiating
-        # tokenizer's Tokenizer directly from it's serialization JSON
-        if "__slow_tokenizer" in kwargs and kwargs["__slow_tokenizer"]:
-            slow_tokenizer = kwargs.pop("__slow_tokenizer")
-        else:
-            slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
-        self._tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
+        fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
 
-        kwargs = copy.deepcopy(slow_tokenizer.init_kwargs)
+        if fast_tokenizer_file is not None:
+            # We have a serialization from tokenizers which let us directly build the backend
+            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
+        elif slow_tokenizer is not None:
+            # We need to convert a slow tokenizer to build the backend
+            fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif self.slow_tokenizer_class is not None:
+            # We need to create and convert a slow tokenizer to build the backend
+            slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
+            fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        else:
+            raise ValueError(
+                "Couldn't instantiate the backend tokenizer from one of: "
+                "(1) a `tokenizers` library serialization file, "
+                "(2) a slow tokenizer instance to convert or "
+                "(3) an equivalent slow tokenizer class to instantiate and convert. "
+                "You need to have sentencepiece installed to convert a slow tokenizer to a fast one."
+            )
+
+        self._tokenizer = fast_tokenizer
+
+        if slow_tokenizer is not None:
+            kwargs = copy.deepcopy(slow_tokenizer.init_kwargs)
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
@@ -542,25 +559,35 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         else:
             return text
 
-    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
+    def _save_pretrained(
+        self,
+        save_directory: str,
+        file_names: Tuple[str],
+        legacy_format: bool = True,
+        filename_prefix: Optional[str] = None,
+    ) -> Tuple[str]:
+        """Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
+
+        Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens}
+        using the specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
         """
-        Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
-        and special token mappings.
+        if legacy_format:
+            added_tokens_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
+            )
+            added_vocab = self.get_added_vocab()
+            if added_vocab:
+                with open(added_tokens_file, "w", encoding="utf-8") as f:
+                    out_str = json.dumps(added_vocab, ensure_ascii=False)
+                    f.write(out_str)
 
-        .. warning::
-            Please use :meth:`~transformers.PreTrainedTokenizerFast.save_pretrained` to save the full tokenizer state if
-            you want to reload it using the :meth:`~transformers.PreTrainedTokenizerFast.from_pretrained` class method.
-
-        Args:
-            save_directory (:obj:`str`): The path to a directory where the tokenizer will be saved.
-
-        Returns:
-            A tuple of :obj:`str`: The files saved.
-        """
-        if os.path.isdir(save_directory):
-            files = self._tokenizer.model.save(save_directory)
+            vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
+            file_names = file_names + vocab_files + (added_tokens_file,)
         else:
-            folder, file = os.path.split(os.path.abspath(save_directory))
-            files = self._tokenizer.save_model(folder, name=file)
+            tokenizer_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
+            )
+            self.backend_tokenizer.save(tokenizer_file)
+            file_names = file_names + (tokenizer_file,)
 
-        return tuple(files)
+        return file_names

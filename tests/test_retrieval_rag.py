@@ -14,7 +14,13 @@ from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
 from transformers.retrieval_rag import RagRetriever
-from transformers.testing_utils import require_datasets, require_faiss, require_torch
+from transformers.testing_utils import (
+    require_datasets,
+    require_faiss,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+)
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
@@ -189,6 +195,8 @@ class RagRetrieverTest(TestCase):
         self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
     @require_torch
+    @require_tokenizers
+    @require_sentencepiece
     def test_hf_index_retriever_call(self):
         import torch
 
