@@ -222,71 +222,59 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Languaged modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, config.vocab_size)`):
-            Prediction scores of the main stream language modeling head (scores for
-            each vocabulary token before SoftMax).
-        logits_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length,
-        config.vocab_size)`):
+            Prediction scores of the main stream language modeling head
+            (scores for each vocabulary token before SoftMax).
+        logits_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the predict stream language modeling head (scores for
             each vocabulary token before SoftMax).
-        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned
-            when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks)
             of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned
-            when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings
             + one for the output of each layer)
             of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`.
 
             Hidden-states of main stream of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or
-            when ``config.output_hidden_states=True``):
+        decoder_ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
             Hidden-states of the predict stream of the decoder at the
             output of each layer plus the initial embedding outputs.
-        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        decoder_ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        decoder_ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the predict stream of the decoder, after the attention softmax,
             used to compute the weighted average in the self-attention heads.
-        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, encoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the cross-attention layer of the decoder,
             after the attention softmax, used to compute the weighted average in the
-        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,
-            encoder_sequence_length, hidden_size)`, `optional`):
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the
             encoder of the model.
-        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`.
 
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, encoder_sequence_length, encoder_sequence_length)`.
-
             Attentions weights of the encoder, after the attention softmax, used
             to compute the weighted average in the
             self-attention heads.
@@ -318,63 +306,53 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
             If :obj:`past_key_values` is used only the last hidden-state of
             the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
-        last_hidden_state_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,
-            ngram * decoder_sequence_length, config.vocab_size)`):
+        last_hidden_state_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,ngram * decoder_sequence_length, config.vocab_size)`):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
-        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`,
-            returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks)
             of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`.
 
             Hidden-states of main stream of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        decoder_ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
             Hidden-states of the predict stream of the decoder at the
             output of each layer plus the initial embedding outputs.
-        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        decoder_ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        decoder_ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the predict stream of the decoder,
             after the attention softmax, used to compute the weighted average in the
-        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, encoder_sequence_length,
             decoder_sequence_length)`.
 
             Attentions weights of the cross-attention layer of the decoder,
             after the attention softmax, used to compute the weighted average in the
-        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,
-            encoder_sequence_length, hidden_size)`, `optional`):
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`.
 
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, encoder_sequence_length, encoder_sequence_length)`.
 
@@ -406,47 +384,40 @@ class ProphetNetDecoderModelOutput(ModelOutput):
 
             If :obj:`past_key_values` is used only the last hidden-state
             of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
-        last_hidden_state_ngram (:obj:`torch.FloatTensor` of
-            shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
+        last_hidden_state_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
-        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`,
-            returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
             :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`.
 
             Hidden-states of main stream of the decoder at the output
             of each layer plus the initial embedding outputs.
-        ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
             Hidden-states of the predict stream of the decoder at the
             output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax,
             used to compute the weighted average in the
             self-attention heads.
-        ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the predict stream of the decoder,
             after the attention softmax, used to compute the weighted average in the
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`,
-            returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_attn_heads, encoder_sequence_length, decoder_sequence_length)`.
 
