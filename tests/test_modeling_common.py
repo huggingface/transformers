@@ -22,6 +22,7 @@ import unittest
 from typing import List, Tuple
 
 from transformers import is_torch_available
+from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 
@@ -127,6 +128,39 @@ class ModelTesterMixin:
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
+
+    def test_save_load_missing_keys(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
+
+    def test_save_load_keys_to_never_save(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            print(model_class)
+            keys_to_never_save = getattr(model, "keys_to_never_save", None)
+            if keys_to_never_save is None:
+                continue
+
+            # check the keys are in the original state_dict
+            for k in keys_to_never_save:
+                self.assertIn(k, model.state_dict())
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
+                state_dict_saved = torch.load(output_model_file)
+                for k in keys_to_never_save:
+                    self.assertNotIn(k, state_dict_saved)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
