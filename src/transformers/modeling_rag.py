@@ -1074,7 +1074,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         return reordered_past
 
-    def marginalize(self, seq_logits, doc_scores, n_docs):
+    def marginalize(self, seq_logits, doc_scores, n_docs=None):
 
         n_docs = n_docs if n_docs is not None else self.config.n_docs
 
