@@ -145,7 +145,6 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            print(model_class)
             keys_to_never_save = getattr(model, "keys_to_never_save", None)
             if keys_to_never_save is None:
                 continue
