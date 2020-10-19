@@ -47,6 +47,24 @@ if is_torch_available():
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
+class RegressionDataset:
+    def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
+        np.random.seed(seed)
+        self.label_names = ["labels"] if label_names is None else label_names
+        self.length = length
+        self.x = np.random.normal(size=(length,)).astype(np.float32)
+        self.ys = [a * self.x + b + np.random.normal(scale=0.1, size=(length,)) for _ in self.label_names]
+        self.ys = [y.astype(np.float32) for y in self.ys]
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, i):
+        result = {name: y[i] for name, y in zip(self.label_names, self.ys)}
+        result["input_x"] = self.x[i]
+        return result
+
+
 class AlmostAccuracy:
     def __init__(self, thresh=0.25):
         self.thresh = thresh
@@ -66,23 +84,6 @@ class RegressionModelConfig(PretrainedConfig):
 
 
 if is_torch_available():
-
-    class RegressionDataset:
-        def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
-            np.random.seed(seed)
-            self.label_names = ["labels"] if label_names is None else label_names
-            self.length = length
-            self.x = np.random.normal(size=(length,)).astype(np.float32)
-            self.ys = [a * self.x + b + np.random.normal(scale=0.1, size=(length,)) for _ in self.label_names]
-            self.ys = [y.astype(np.float32) for y in self.ys]
-
-        def __len__(self):
-            return self.length
-
-        def __getitem__(self, i):
-            result = {name: y[i] for name, y in zip(self.label_names, self.ys)}
-            result["input_x"] = self.x[i]
-            return result
 
     class SampleIterableDataset(IterableDataset):
         """
