@@ -16,7 +16,6 @@
 
 
 import json
-import logging
 import os
 import re
 import unicodedata
@@ -27,9 +26,10 @@ import sacremoses as sm
 from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "src_vocab_file": "vocab-src.json",

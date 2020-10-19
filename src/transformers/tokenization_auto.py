@@ -43,6 +43,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    ProphetNetConfig,
     RagConfig,
     ReformerConfig,
     RetriBertConfig,
@@ -51,6 +52,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -77,6 +79,7 @@ from .tokenization_lxmert import LxmertTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_phobert import PhobertTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 from .tokenization_rag import RagTokenizer
 from .tokenization_retribert import RetriBertTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -95,6 +98,7 @@ if is_sentencepiece_available():
     from .tokenization_pegasus import PegasusTokenizer
     from .tokenization_reformer import ReformerTokenizer
     from .tokenization_t5 import T5Tokenizer
+    from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
     from .tokenization_xlm_roberta import XLMRobertaTokenizer
     from .tokenization_xlnet import XLNetTokenizer
 else:
@@ -199,6 +203,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
         (DebertaConfig, (DebertaTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
+        (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
+        (ProphetNetConfig, (ProphetNetTokenizer, None)),
     ]
 )
 

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2020 The Microsoft Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,15 +11,12 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License
-""" Tokenization classes for XLM-RoBERTa model."""
+# limitations under the License.
 
-
+import collections
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
-
-import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
@@ -29,30 +26,35 @@ logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-base-sentencepiece.bpe.model",
-        "xlm-roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-dutch": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-dutch-sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-spanish": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-spanish-sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll03-english": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-english-sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll03-german": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-german-sentencepiece.bpe.model",
+        "microsoft/xprophetnet-large-wiki100-cased": "https://cdn.huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer",
     }
 }
 
+PRETRAINED_INIT_CONFIGURATION = {
+    "microsoft/xprophetnet-large-wiki100-cased": {"do_lower_case": False},
+}
+
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlm-roberta-base": 512,
-    "xlm-roberta-large": 512,
-    "xlm-roberta-large-finetuned-conll02-dutch": 512,
-    "xlm-roberta-large-finetuned-conll02-spanish": 512,
-    "xlm-roberta-large-finetuned-conll03-english": 512,
-    "xlm-roberta-large-finetuned-conll03-german": 512,
+    "microsoft/xprophetnet-large-wiki100-cased": 512,
 }
 
 
-class XLMRobertaTokenizer(PreTrainedTokenizer):
+def load_vocab(vocab_file):
+    """Loads a vocabulary file into a dictionary."""
+    vocab = collections.OrderedDict()
+    with open(vocab_file, "r", encoding="utf-8") as reader:
+        tokens = reader.readlines()
+    for index, token in enumerate(tokens):
+        token = token.rstrip("\n")
+        vocab[token] = index
+    return vocab
+
+
+class XLMProphetNetTokenizer(PreTrainedTokenizer):
     """
     Adapted from :class:`~transfomers.RobertaTokenizer` and class:`~transfomers.XLNetTokenizer`. Based on
     `SentencePiece <https://github.com/google/sentencepiece>`__.
@@ -109,13 +111,13 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        bos_token="<s>",
-        eos_token="</s>",
-        sep_token="</s>",
-        cls_token="<s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        mask_token="<mask>",
+        bos_token="[SEP]",
+        eos_token="[SEP]",
+        sep_token="[SEP]",
+        unk_token="[UNK]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
         **kwargs
     ):
         super().__init__(
@@ -123,11 +125,19 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             sep_token=sep_token,
-            cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
             **kwargs,
         )
+
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning(
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
+            raise
 
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(vocab_file))
@@ -139,14 +149,18 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
         # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
 
-        # Mimic fairseq token-to-id alignment for the first 4 token
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+        # put special tokens and [unused] tokens into the vocab
+        self.fairseq_tokens_to_ids = {"[PAD]": 0, "[CLS]": 1, "[SEP]": 2, "[UNK]": 3, "[MASK]": 4}
 
-        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
+        for i in range(10):
+            tok = "[unused{}]".format(i)
+            self.fairseq_tokens_to_ids[tok] = 5 + i
 
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
+        # The first "real" token "," has position 15 in the embedding vocab and position 3 in the spm vocab
+        self.fairseq_offset = 12
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        for k in self.fairseq_tokens_to_ids.keys():
+            self.unique_no_split_tokens.append(k)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -155,35 +169,16 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning(
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
+            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        An XLM-RoBERTa sequence has the following format:
-
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-        """
-
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -213,15 +208,15 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+            return ([0] * len(token_ids_0)) + [1]
+        return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        XLM-RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
+        XLMProphetNet does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -235,15 +230,14 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         """
 
         sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
 
         if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+            return len(token_ids_0 + sep) * [0]
+        return len(token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
+        return len(self.sp_model) + self.fairseq_offset
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -285,3 +279,29 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A XLMProphetNet sequence has the following format:
+
+        - single sequence: ``X [SEP]``
+        - pair of sequences: ``A [SEP] B [SEP]``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+
+        if token_ids_1 is None:
+            return token_ids_0 + [self.sep_token_id]
+        sep = [self.sep_token_id]
+        return token_ids_0 + sep + token_ids_1 + sep
