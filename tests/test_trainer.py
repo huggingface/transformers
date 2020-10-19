@@ -31,11 +31,14 @@ if is_torch_available():
     from torch.utils.data import IterableDataset
 
     from transformers import (
+        AutoModelForMaskedLM,
         AutoModelForSequenceClassification,
+        DataCollatorForLanguageModeling,
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
         PreTrainedModel,
+        TextDataset,
         Trainer,
         TrainerState,
     )
@@ -83,15 +86,16 @@ class RegressionModelConfig(PretrainedConfig):
 if is_torch_available():
 
     class SampleIterableDataset(IterableDataset):
-        def __init__(self, file_path):
-            self.file_path = file_path
+        """
+        Criteria is not whether it is IterableDataset or not, criteria is whether __len__ is implemented
+        """
 
-        def parse_file(self):
-            f = open(self.file_path, "r")
-            return f.readlines()
+        def __init__(self, file_path, tokenizer):
+            self.ds = TextDataset(file_path=file_path, tokenizer=tokenizer, block_size=64)
 
         def __iter__(self):
-            return iter(self.parse_file())
+            for i in range(len(self.ds)):
+                yield self.ds[i]
 
     class RegressionModel(torch.nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
@@ -540,13 +544,51 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertEqual(len(dataset), 31)
 
     def test_trainer_iterable_dataset(self):
+        # Simulate Language Modeling with an IterableDataset, with no __len__ method
+        # Pick-up a tiny model, so it works on CPU
+        # See Issue #5990: https://github.com/huggingface/transformers/issues/5990
         MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-        train_dataset = SampleIterableDataset(PATH_SAMPLE_TEXT)
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
+        model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        train_dataset = SampleIterableDataset(file_path=PATH_SAMPLE_TEXT, tokenizer=tokenizer)
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
+        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+        trainer.train()
+
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
+        self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
+
+        # Exception if giving iterable dataset and no max_steps
+        with self.assertRaises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+            _ = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+
+        # Exception if eval_dataset is iterable in __init__
+        with self.assertRaises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
+            _ = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=train_dataset,
+                data_collator=data_collator,
+            )
+
+        # Exception if predicting with iterable dataset
+        with self.assertRaises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
+            trainer.predict(train_dataset)
+
+        # Exception if evaluating with iterable dataset
+        with self.assertRaises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
+            trainer.evaluate(train_dataset)
 
     def test_num_train_epochs_in_training(self):
         # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.
