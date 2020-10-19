@@ -201,6 +201,17 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
         )[0]
         _assert_tensors_equal(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
 
+    def test_save_load_missing_keys(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
+
     @unittest.skip("can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):
         pass

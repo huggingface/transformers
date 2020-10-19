@@ -130,17 +130,6 @@ class ModelTesterMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    def test_save_load_missing_keys(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
-
     def test_save_load_keys_to_never_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
