@@ -18,8 +18,8 @@ from abc import ABC, abstractmethod
 from pickle import UnpicklingError
 from typing import Dict
 
-import jax
 import flax.linen as nn
+import jax
 import jax.numpy as jnp
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
