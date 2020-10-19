@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import unittest
-
+import tempfile
 import timeout_decorator  # noqa
 
 from parameterized import parameterized
