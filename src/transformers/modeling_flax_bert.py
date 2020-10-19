@@ -195,14 +195,13 @@ class FlaxBertLayerCollection(nn.Module):
         assert self.num_layers > 0, "num_layers should be >= 1, got ({})".format(self.num_layers)
 
         # Initialize input / output
-        input_i = output_i = inputs
+        input_i = inputs
 
         # Forward over all encoders
         for i in range(self.num_layers):
             layer = FlaxBertLayer(self.num_heads, self.head_size, self.intermediate_size, name="{}".format(i))
-            output_i = layer(input_i, attention_mask)
-            input_i = output_i
-        return output_i
+            input_i = layer(input_i, attention_mask)
+        return input_i
 
 
 class FlaxBertEncoder(nn.Module):
