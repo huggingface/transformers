@@ -20,10 +20,9 @@ import jax
 import jax.numpy as jnp
 
 from flax.linen import compact
-from transformers.modeling_flax_utils import FlaxPreTrainedModel
+from transformers.modeling_flax_utils import FlaxPreTrainedModel, gelu
 
 from transformers import BertConfig, RobertaConfig, add_start_docstrings
-from transformers.modeling_flax_bert import FlaxBertModel
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
@@ -335,8 +334,8 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
     """
 
     model_class = FlaxRobertaModule
-    config_class = BertConfig
-    base_model_prefix = "bert"
+    config_class = RobertaConfig
+    base_model_prefix = "roberta"
 
     @staticmethod
     def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:

@@ -18,12 +18,39 @@ from abc import ABC, abstractmethod
 from pickle import UnpicklingError
 from typing import Dict
 
-from flax.linen import Module
+import jax
+import flax.linen as nn
+import jax.numpy as jnp
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 from transformers import PretrainedConfig, logger
 from transformers.file_utils import WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+
+
+@jax.jit
+def gelu(x):
+    r"""Gaussian error linear unit activation function.
+
+    Computes the element-wise function:
+
+    .. math::
+      \mathrm{gelu}(x) = \frac{x}{2} \left(1 + \mathrm{tanh} \left(
+        \sqrt{\frac{2}{\pi}} \left(x + 0.044715 x^3 \right) \right) \right)
+
+    We explicitly use the approximation rather than the exact formulation for
+    speed. For more information, see `Gaussian Error Linear Units (GELUs)
+    <https://arxiv.org/abs/1606.08415>`_, section 2.
+    """
+    return x * 0.5 * (1.0 + jax.lax.erf(x / jnp.sqrt(2.0)))
+
+
+ACT2FN = {
+    "gelu": nn.gelu,
+    "relu": nn.relu,
+    "swish": nn.swish,
+    "gelu_new": gelu,
+}
 
 
 class FlaxPreTrainedModel(ABC):
@@ -32,7 +59,7 @@ class FlaxPreTrainedModel(ABC):
     base_model_prefix = ""
     model_class = None
 
-    def __init__(self, config: PretrainedConfig, module: Module, params: Dict, seed: int = 0):
+    def __init__(self, config: PretrainedConfig, module: nn.Module, params: Dict, seed: int = 0):
         if config is None:
             raise ValueError("config cannot be None")
 
