@@ -15,6 +15,7 @@ from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
+from transformers.retrieval_rag import CustomHFIndex
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
@@ -114,7 +115,7 @@ class RagRetrieverTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def get_dummy_pytorch_distributed_retriever(self, init_retrieval, port=12345) -> RagPyTorchDistributedRetriever:
+    def get_dummy_dataset(self):
         dataset = Dataset.from_dict(
             {
                 "id": ["0", "1"],
@@ -124,6 +125,12 @@ class RagRetrieverTest(TestCase):
             }
         )
         dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
+        return dataset
+
+    def get_dummy_pytorch_distributed_retriever(
+        self, init_retrieval: bool, port=12345
+    ) -> RagPyTorchDistributedRetriever:
+        dataset = self.get_dummy_dataset()
         config = RagConfig(
             retrieval_vector_size=self.retrieval_vector_size,
             question_encoder=DPRConfig().to_dict(),
@@ -140,9 +147,70 @@ class RagRetrieverTest(TestCase):
                 retriever.init_retrieval(port)
         return retriever
 
+    def get_dummy_custom_hf_index_retriever(self, init_retrieval: bool, from_disk: bool, port=12345):
+        dataset = self.get_dummy_dataset()
+        config = RagConfig(
+            retrieval_vector_size=self.retrieval_vector_size,
+            question_encoder=DPRConfig().to_dict(),
+            generator=BartConfig().to_dict(),
+            index_name="custom",
+        )
+        if from_disk:
+            config.passages_path = os.path.join(self.tmpdirname, "dataset")
+            config.index_path = os.path.join(self.tmpdirname, "index.faiss")
+            dataset.get_index("embeddings").save(os.path.join(self.tmpdirname, "index.faiss"))
+            dataset.drop_index("embeddings")
+            dataset.save_to_disk(os.path.join(self.tmpdirname, "dataset"))
+            del dataset
+            retriever = RagPyTorchDistributedRetriever(
+                config,
+                question_encoder_tokenizer=self.get_dpr_tokenizer(),
+                generator_tokenizer=self.get_bart_tokenizer(),
+            )
+        else:
+            retriever = RagPyTorchDistributedRetriever(
+                config,
+                question_encoder_tokenizer=self.get_dpr_tokenizer(),
+                generator_tokenizer=self.get_bart_tokenizer(),
+                index=CustomHFIndex(config.retrieval_vector_size, dataset),
+            )
+        if init_retrieval:
+            retriever.init_retrieval(port)
+        return retriever
+
     def test_pytorch_distributed_retriever_retrieve(self):
         n_docs = 1
         retriever = self.get_dummy_pytorch_distributed_retriever(init_retrieval=True)
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+        self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
+        self.assertEqual(len(doc_dicts), 2)
+        self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
+        self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
+        self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+        self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
+        self.assertListEqual(doc_ids.tolist(), [[1], [0]])
+
+    def test_custom_hf_index_retriever_retrieve(self):
+        n_docs = 1
+        retriever = self.get_dummy_custom_hf_index_retriever(init_retrieval=True, from_disk=False)
+        hidden_states = np.array(
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
+        )
+        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+        self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
+        self.assertEqual(len(doc_dicts), 2)
+        self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
+        self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
+        self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+        self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
+        self.assertListEqual(doc_ids.tolist(), [[1], [0]])
+
+    def test_custom_pytorch_distributed_retriever_retrieve_from_disk(self):
+        n_docs = 1
+        retriever = self.get_dummy_custom_hf_index_retriever(init_retrieval=True, from_disk=True)
         hidden_states = np.array(
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
