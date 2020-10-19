@@ -855,7 +855,7 @@ class ModelTesterMixin:
 
             if config.bos_token_id is None:
                 # if bos token id is not defined, model needs input_ids
-                with self.assertRaises(AssertionError):
+                with self.assertRaises(ValueError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True))
@@ -863,7 +863,7 @@ class ModelTesterMixin:
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_ids, do_sample=False, num_beams=1, num_return_sequences=2)
@@ -904,7 +904,7 @@ class ModelTesterMixin:
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating more sequences than having beams leads is not possible
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 

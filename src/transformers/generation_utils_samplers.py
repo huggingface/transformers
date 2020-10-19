@@ -25,7 +25,9 @@ class Sampler(ABC):
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """Torch method for warping a distribution, defaults to `warp`'s implementation."""
-        raise NotImplementedError("This is an abstract class")
+        raise NotImplementedError(
+            f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
+        )
 
 
 class MinLengthSampler(Sampler):
@@ -48,7 +50,7 @@ class TemperatureSampler(Sampler):
     def __init__(self, temperature: float):
         self.temperature = temperature
 
-    def warp(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         return scores / self.temperature
 
 
@@ -223,6 +225,8 @@ class NoBadWordsSampler(Sampler):
         # [ 0  0  0 ]
         # [ 1  0  0 ]
 
-        banned_mask = torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+        banned_mask = (
+            torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+        )
         scores.masked_fill_(banned_mask, -float("inf"))
         return scores
