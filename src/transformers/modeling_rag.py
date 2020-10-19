@@ -604,6 +604,10 @@ class RagModel(RagPreTrainedModel):
             doc_scores is not None
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
+        assert (
+            context_input_ids.shape[0] % n_docs
+        ) == 0, "Make sure `context_input_ids` is always have a size of `n_docs` times the number of input questions."
+
         # Decoder input without context documents
         if decoder_input_ids is not None:
             decoder_input_ids = decoder_input_ids.repeat_interleave(n_docs, dim=0)
@@ -1355,6 +1359,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
             doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
                 1
             )
+
+        assert (
+            context_input_ids.shape[0] % n_docs
+        ) == 0, "Make sure `context_input_ids` is always have a size of `n_docs` times the number of input questions."
 
         # batch_size
         batch_size = context_input_ids.shape[0] // n_docs
