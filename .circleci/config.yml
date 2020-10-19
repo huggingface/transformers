@@ -153,14 +153,14 @@ jobs:
                 keys:
                     - v0.3-flax-{{ checksum "setup.py" }}
                     - v0.3-{{ checksum "setup.py" }}
-                    - run: pip install --upgrade pip
-                    - run: pip install git+https://github.com/huggingface/datasets
-                    - run: sudo pip install .[flax,sklearn,torch,testing]
-                    - save_cache:
-                        key: v0.3-flax-{{ checksum "setup.py" }}
-                        paths:
-                            - '~/.cache/pip'
-              - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+                - run: pip install --upgrade pip
+                - run: pip install git+https://github.com/huggingface/datasets
+                - run: sudo pip install .[flax,sklearn,torch,testing]
+                - save_cache:
+                    key: v0.3-flax-{{ checksum "setup.py" }}
+                    paths:
+                        - '~/.cache/pip'
+                - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
