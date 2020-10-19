@@ -67,7 +67,7 @@ class RegressionModelConfig(PretrainedConfig):
 
 if is_torch_available():
 
-    class RegressionDataset():
+    class RegressionDataset:
         def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
             np.random.seed(seed)
             self.label_names = ["labels"] if label_names is None else label_names
