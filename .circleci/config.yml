@@ -84,7 +84,7 @@ jobs:
                 key: v0.3-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ --cov  | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ --cov --durations=0 | tee output.txt
             - run: codecov
             - store_artifacts:
                   path: ~/transformers/output.txt
