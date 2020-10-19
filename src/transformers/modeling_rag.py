@@ -857,7 +857,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (:obj:`int`, `optional`, defaults to `config.n_docs`)
-                Number of documents are retrieved or to be retrieved from the retriever.
+                Number of documents to retrieve and/or number of documents for which to generate an answer.
             kwargs:
                 Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate`.
 
@@ -1298,8 +1298,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 function, where we set ``num_return_sequences`` to :obj:`num_beams`.
             decoder_start_token_id (:obj:`int`, `optional`):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
-            n_docs (:obj:`int`, `optional` defaults to self.config.n_docs)
-                Number of documents to retrieved
+            n_docs (:obj:`int`, `optional`, defaults to `config.n_docs`)
+                Number of documents to retrieve and/or number of documents for which to generate an answer.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
