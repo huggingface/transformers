@@ -103,6 +103,7 @@ from .file_utils import (
     is_apex_available,
     is_datasets_available,
     is_faiss_available,
+    is_flax_available,
     is_psutil_available,
     is_py3nvml_available,
     is_sentencepiece_available,
@@ -816,6 +817,10 @@ else:
     # They will raise an import error if the user tries to instantiate / use them.
     from .utils.dummy_tf_objects import *
 
+
+if is_flax_available():
+    from .modeling_flax_bert import FlaxBertModel
+    from .modeling_flax_roberta import FlaxRobertaModel
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(
