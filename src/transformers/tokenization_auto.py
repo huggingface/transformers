@@ -86,8 +86,8 @@ from .tokenization_roberta import RobertaTokenizer
 from .tokenization_squeezebert import SqueezeBertTokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlm import XLMTokenizer
-
 from .utils import logging
+
 
 if is_sentencepiece_available():
     from .tokenization_albert import AlbertTokenizer
