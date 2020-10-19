@@ -104,10 +104,6 @@ class FlaxRobertaModel(FlaxBertModel):
         if config.pad_token_id is None:
             config.pad_token_id = 1
 
-    @property
-    def config(self) -> RobertaConfig:
-        return self._config
-
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
         if position_ids is None:
             position_ids = np.arange(
