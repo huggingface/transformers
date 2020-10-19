@@ -767,7 +767,8 @@ Here is the gold standard:
 
 1. if the test runs longer than 5 seconds on CI (including model download if any) - it should be marked as slow
 2. For common tests to be marked slow, the slowest iteration of that common test must be > 15s.
-
+3. If an exception is made and a slow test isn't marked as such a note should be placed explaining why
+   
 It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if you test it locally it'd be cached and thus not measured. Hence check the execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
 
 Once a test is marked as ``@slow``, to run such tests set ``RUN_SLOW=1`` env var, e.g.:
