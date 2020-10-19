@@ -43,6 +43,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    ProphetNetConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -50,6 +51,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -155,6 +157,7 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
     RagSequenceForGeneration,
@@ -193,6 +196,11 @@ from .modeling_xlm import (
     XLMForTokenClassification,
     XLMModel,
     XLMWithLMHeadModel,
+)
+from .modeling_xlm_prophetnet import (
+    XLMProphetNetForCausalLM,
+    XLMProphetNetForConditionalGeneration,
+    XLMProphetNetModel,
 )
 from .modeling_xlm_roberta import (
     XLMRobertaForCausalLM,
@@ -247,6 +255,8 @@ MODEL_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationEncoder),
         (DebertaConfig, DebertaModel),
         (DPRConfig, DPRQuestionEncoder),
+        (XLMProphetNetConfig, XLMProphetNetModel),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
@@ -325,6 +335,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (BertGenerationConfig, BertGenerationDecoder),
+        (ProphetNetConfig, XLMProphetNetForCausalLM),
+        (ProphetNetConfig, ProphetNetForCausalLM),
     ]
 )
 
@@ -359,6 +371,8 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (BartConfig, BartForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
+        (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),
+        (ProphetNetConfig, ProphetNetForConditionalGeneration),
     ]
 )
 
