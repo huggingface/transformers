@@ -108,10 +108,9 @@ class ModelArguments:
     )
 
 
-def preprocess_function(examples, tokenizer=None, sequence1_key="sentence", sequence2_key=None):
-    if sentence2_key is None:
-        return tokenizer(examples[sentence1_key], truncation=True)
-    return tokenizer(examples[sentence1_key], examples[sentence2_key], truncation=True)
+def preprocess_function(examples, tokenizer=None, sequence1_key="sentence", sequence2_key=None, max_length=None):
+    args = (examples[sentence1_key],) if sequence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+    return tokenizer(*args, padding="max_length", max_length=max_length, truncation=True)
 
 
 def main():
@@ -139,17 +138,13 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        training_args.local_rank,
-        training_args.device,
-        training_args.n_gpu,
-        bool(training_args.local_rank != -1),
-        training_args.fp16,
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info on main process only:
     if is_main_process():
         logger.set_verbosity_info()
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -182,42 +177,34 @@ def main():
     )
 
     # Get datasets
-    dataset = load_dataset("glue", data_args.task_name)
-    train_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, cache_dir=model_args.cache_dir) if training_args.do_train else None
-    )
-    eval_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, mode="dev", cache_dir=model_args.cache_dir)
-        if training_args.do_eval
-        else None
-    )
-    test_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
-        if training_args.do_predict
-        else None
-    )
+    datasets = load_dataset("glue", data_args.task_name)
+    sequence1_key, sequence2_key = task_to_keys[task]
+    encode_kwargs = {"tokenizer": tokenizer, "sequence1_key": sequence1_key, "sequence2_key": sequence2_key, "max_length": data_args.max_seq_length}
+    datasets = datasets.map(preprocess_function, batched=True, fn_kwargs=encode_kwargs)
+
+    train_dataset = dataset["train"]
+    eval_dataset = dataset["validation_matched" if data_args.task == "mnli" else "validation"]
+    test_dataset = dataset["test_matched" if data_args.task == "mnli" else "test"]
 
     # Get the metric function
     metric = load_metric("glue", data_args.task_name)
 
-    def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
-        def compute_metrics_fn(p: EvalPrediction):
-            preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
-            if output_mode == "classification":
-                preds = np.argmax(preds, axis=1)
-            else:  # regression
-                preds = np.squeeze(preds)
-            return glue_compute_metrics(task_name, preds, p.label_ids)
-
-        return compute_metrics_fn
+    def compute_metrics(p: EvalPrediction):
+        preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+        if output_mode == "classification":
+            preds = np.argmax(preds, axis=1)
+        else:  # regression
+            preds = np.squeeze(preds)
+        return metric.compute(predictions=preds, references=p.label_ids)
 
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        compute_metrics=build_compute_metrics_fn(data_args.task_name),
+        eval_dataset=eval_dataset if training_args.do_eval else None,
+        compute_metrics=compute_metrics,
+        tokenizer=tokenizer,
     )
 
     # Training
@@ -225,11 +212,7 @@ def main():
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        trainer.save_model()
-        # For convenience, we also re-save the tokenizer to the same directory,
-        # so that you can share your model easily on huggingface.co/models =)
-        if trainer.is_world_master():
-            tokenizer.save_pretrained(training_args.output_dir)
+        trainer.save_model() #Saves the tokenizer too for easy upload
 
     # Evaluation
     eval_results = {}
@@ -237,26 +220,24 @@ def main():
         logger.info("*** Evaluate ***")
 
         # Loop to handle MNLI double evaluation (matched, mis-matched)
+        tasks = [data_args.task]
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
-            mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            eval_datasets.append(
-                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="dev", cache_dir=model_args.cache_dir)
-            )
+            tasks.append("mnli-mm")
+            eval_datasets.append(datasets["validation_mismatched"])
 
-        for eval_dataset in eval_datasets:
-            trainer.compute_metrics = build_compute_metrics_fn(eval_dataset.args.task_name)
+        for eval_dataset, task in zip(eval_datasets, tasks):
             eval_result = trainer.evaluate(eval_dataset=eval_dataset)
 
             output_eval_file = os.path.join(
-                training_args.output_dir, f"eval_results_{eval_dataset.args.task_name}.txt"
+                training_args.output_dir, f"eval_results_{task}.txt"
             )
-            if trainer.is_world_master():
+            if trainer.is_world_process_zero():
                 with open(output_eval_file, "w") as writer:
-                    logger.info("***** Eval results {} *****".format(eval_dataset.args.task_name))
+                    logger.info("***** Eval results {} *****".format(task))
                     for key, value in eval_result.items():
-                        logger.info("  %s = %s", key, value)
-                        writer.write("%s = %s\n" % (key, value))
+                        logger.info(f"  {key} = {value}")
+                        writer.write(f"{key} = {value}\n")
 
             eval_results.update(eval_result)
 
