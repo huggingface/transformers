@@ -812,7 +812,6 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self.evaluate()
             self._report_to_hp_search(trial, epoch, metrics)
-            self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -1222,6 +1221,7 @@ class Trainer:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
+        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:

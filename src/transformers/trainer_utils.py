@@ -153,7 +153,7 @@ default_hp_space = {
 }
 
 
-def is_main_process(self, local_rank):
+def is_main_process(local_rank):
     """
     Whether or not the current process if the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
     `local_rank`.
@@ -165,7 +165,7 @@ def is_main_process(self, local_rank):
     return local_rank in [-1, 0]
 
 
-def total_processes_number(self, local_rank):
+def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """

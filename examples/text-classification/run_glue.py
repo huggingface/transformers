@@ -15,12 +15,10 @@
 # limitations under the License.
 """ Finetuning the library models for sequence classification on GLUE."""
 
-
-import dataclasses
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional
+from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
@@ -30,11 +28,9 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     EvalPrediction,
-    GlueDataset,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    glue_compute_metrics,
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
@@ -108,8 +104,8 @@ class ModelArguments:
     )
 
 
-def preprocess_function(examples, tokenizer=None, sequence1_key="sentence", sequence2_key=None, max_length=None):
-    args = (examples[sentence1_key],) if sequence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+def preprocess_function(examples, tokenizer=None, sentence1_key="sentence", sentence2_key=None, max_length=None):
+    args = (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
     return tokenizer(*args, padding="max_length", max_length=max_length, truncation=True)
 
 
@@ -142,15 +138,15 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info on main process only:
-    if is_main_process():
-        logger.set_verbosity_info()
+    if is_main_process(training_args.local_rank):
+        logging.set_verbosity_info()
     logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    num_labels = 3 if data_args.task == "mnli" else 1 if data_args.task == "stsb" else 2
-    output_mode = "regression" if data_args.task == "stsb" else "classification"
+    num_labels = 3 if data_args.task_name == "mnli" else 1 if data_args.task_name == "stsb" else 2
+    is_regression = data_args.task_name == "stsb"
 
     # Load pretrained model and tokenizer
     #
@@ -178,23 +174,25 @@ def main():
 
     # Get datasets
     datasets = load_dataset("glue", data_args.task_name)
-    sequence1_key, sequence2_key = task_to_keys[task]
-    encode_kwargs = {"tokenizer": tokenizer, "sequence1_key": sequence1_key, "sequence2_key": sequence2_key, "max_length": data_args.max_seq_length}
+    sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
+    encode_kwargs = {
+        "tokenizer": tokenizer,
+        "sentence1_key": sentence1_key,
+        "sentence2_key": sentence2_key,
+        "max_length": data_args.max_seq_length,
+    }
     datasets = datasets.map(preprocess_function, batched=True, fn_kwargs=encode_kwargs)
 
-    train_dataset = dataset["train"]
-    eval_dataset = dataset["validation_matched" if data_args.task == "mnli" else "validation"]
-    test_dataset = dataset["test_matched" if data_args.task == "mnli" else "test"]
+    train_dataset = datasets["train"]
+    eval_dataset = datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
+    test_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
 
     # Get the metric function
     metric = load_metric("glue", data_args.task_name)
 
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
-        if output_mode == "classification":
-            preds = np.argmax(preds, axis=1)
-        else:  # regression
-            preds = np.squeeze(preds)
+        preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
         return metric.compute(predictions=preds, references=p.label_ids)
 
     # Initialize our Trainer
@@ -212,7 +210,7 @@ def main():
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        trainer.save_model() #Saves the tokenizer too for easy upload
+        trainer.save_model()  # Saves the tokenizer too for easy upload
 
     # Evaluation
     eval_results = {}
@@ -220,7 +218,7 @@ def main():
         logger.info("*** Evaluate ***")
 
         # Loop to handle MNLI double evaluation (matched, mis-matched)
-        tasks = [data_args.task]
+        tasks = [data_args.task_name]
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
             tasks.append("mnli-mm")
@@ -229,9 +227,7 @@ def main():
         for eval_dataset, task in zip(eval_datasets, tasks):
             eval_result = trainer.evaluate(eval_dataset=eval_dataset)
 
-            output_eval_file = os.path.join(
-                training_args.output_dir, f"eval_results_{task}.txt"
-            )
+            output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{task}.txt")
             if trainer.is_world_process_zero():
                 with open(output_eval_file, "w") as writer:
                     logger.info("***** Eval results {} *****".format(task))
@@ -242,32 +238,33 @@ def main():
             eval_results.update(eval_result)
 
     if training_args.do_predict:
-        logging.info("*** Test ***")
+        logger.info("*** Test ***")
+
+        # Loop to handle MNLI double evaluation (matched, mis-matched)
+        tasks = [data_args.task_name]
         test_datasets = [test_dataset]
         if data_args.task_name == "mnli":
-            mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            test_datasets.append(
-                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
-            )
+            tasks.append("mnli-mm")
+            test_datasets.append(datasets["test_mismatched"])
 
-        for test_dataset in test_datasets:
+        for test_dataset, task in zip(test_datasets, tasks):
+            label_names = test_dataset.features["label"].names
+            # Removing the `label` columns because it contains -1 and Trainer won't like that.
+            test_dataset.remove_columns_("label")
             predictions = trainer.predict(test_dataset=test_dataset).predictions
-            if output_mode == "classification":
-                predictions = np.argmax(predictions, axis=1)
+            predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
 
-            output_test_file = os.path.join(
-                training_args.output_dir, f"test_results_{test_dataset.args.task_name}.txt"
-            )
-            if trainer.is_world_master():
+            output_test_file = os.path.join(training_args.output_dir, f"test_results_{task}.txt")
+            if trainer.is_world_process_zero():
                 with open(output_test_file, "w") as writer:
-                    logger.info("***** Test results {} *****".format(test_dataset.args.task_name))
+                    logger.info(f"***** Test results {task} *****")
                     writer.write("index\tprediction\n")
                     for index, item in enumerate(predictions):
-                        if output_mode == "regression":
-                            writer.write("%d\t%3.3f\n" % (index, item))
+                        if is_regression:
+                            writer.write(f"{index}\t{item:3.3f}\n")
                         else:
-                            item = test_dataset.get_labels()[item]
-                            writer.write("%d\t%s\n" % (index, item))
+                            item = label_names[item]
+                            writer.write(f"{index}\t{item}\n")
     return eval_results
 
 
