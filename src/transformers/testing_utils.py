@@ -187,8 +187,10 @@ def require_torch_tpu(test_case):
 
 
 if _torch_available:
-    # Set the USE_CUDA environment variable to select a GPU.
-    torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"
+    # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
+    import torch
+
+    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 else:
     torch_device = None
 
@@ -485,9 +487,9 @@ class TestCasePlus(unittest.TestCase):
 def mockenv(**kwargs):
     """this is a convenience wrapper, that allows this:
 
-    @mockenv(USE_CUDA=True, USE_TF=False)
+    @mockenv(RUN_SLOW=True, USE_TF=False)
     def test_something():
-        use_cuda = os.getenv("USE_CUDA", False)
+        run_slow = os.getenv("RUN_SLOW", False)
         use_tf = os.getenv("USE_TF", False)
     """
     return unittest.mock.patch.dict(os.environ, kwargs)

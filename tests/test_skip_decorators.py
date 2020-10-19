@@ -23,10 +23,10 @@
 # the following 4 should be run. But since we have different CI jobs running
 # different configs, all combinations should get covered
 #
-# USE_CUDA=1 RUN_SLOW=1 pytest -rA tests/test_skip_decorators.py
-# USE_CUDA=0 RUN_SLOW=1 pytest -rA tests/test_skip_decorators.py
-# USE_CUDA=0 RUN_SLOW=0 pytest -rA tests/test_skip_decorators.py
-# USE_CUDA=1 RUN_SLOW=0 pytest -rA tests/test_skip_decorators.py
+# RUN_SLOW=1 pytest -rA tests/test_skip_decorators.py
+# RUN_SLOW=1 CUDA_VISIBLE_DEVICES="" pytest -rA tests/test_skip_decorators.py
+# RUN_SLOW=0 pytest -rA tests/test_skip_decorators.py
+# RUN_SLOW=0 CUDA_VISIBLE_DEVICES="" pytest -rA tests/test_skip_decorators.py
 
 import os
 import unittest
