@@ -20,8 +20,7 @@ import argparse
 import torch
 
 from transformers import AlbertConfig, AlbertForPreTraining, load_tf_weights_in_albert
-
-from .utils import logging
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()

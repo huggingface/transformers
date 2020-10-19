@@ -57,22 +57,38 @@ class BenchmarkArguments:
         metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"},
     )
 
-    no_inference: bool = field(default=False, metadata={"help": "Don't benchmark inference of model"})
-    no_cuda: bool = field(default=False, metadata={"help": "Whether to run on available cuda devices"})
-    no_tpu: bool = field(default=False, metadata={"help": "Whether to run on available tpu devices"})
+    inference: bool = field(
+        default=True,
+        metadata={"help": "Whether to benchmark inference of model. Inference can be disabled via --no-inference."},
+    )
+    cuda: bool = field(
+        default=True,
+        metadata={"help": "Whether to run on available cuda devices. Cuda can be disabled via --no-cuda."},
+    )
+    tpu: bool = field(
+        default=True, metadata={"help": "Whether to run on available tpu devices. TPU can be disabled via --no-tpu."}
+    )
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
     training: bool = field(default=False, metadata={"help": "Benchmark training of model"})
     verbose: bool = field(default=False, metadata={"help": "Verbose memory tracing"})
-    no_speed: bool = field(default=False, metadata={"help": "Don't perform speed measurements"})
-    no_memory: bool = field(default=False, metadata={"help": "Don't perform memory measurements"})
+    speed: bool = field(
+        default=True,
+        metadata={"help": "Whether to perform speed measurements. Speed measurements can be disabled via --no-speed."},
+    )
+    memory: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to perform memory measurements. Memory measurements can be disabled via --no-memory"
+        },
+    )
     trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
-    no_env_print: bool = field(default=False, metadata={"help": "Don't print environment information"})
-    no_multi_process: bool = field(
-        default=False,
+    env_print: bool = field(default=False, metadata={"help": "Whether to print environment information"})
+    multi_process: bool = field(
+        default=True,
         metadata={
-            "help": "Don't use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be used for debugging / testing and on TPU."
+            "help": "Whether to use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be disabled for debugging / testing and on TPU."
         },
     )
     inference_time_csv_file: str = field(
@@ -122,7 +138,7 @@ class BenchmarkArguments:
 
     @property
     def do_multi_processing(self):
-        if self.no_multi_process:
+        if not self.multi_process:
             return False
         elif self.is_tpu:
             logger.info("Multiprocessing is currently not possible on TPU.")

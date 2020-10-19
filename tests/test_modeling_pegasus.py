@@ -3,7 +3,7 @@ import unittest
 from transformers import AutoConfig, AutoTokenizer, is_torch_available
 from transformers.configuration_pegasus import task_specific_params
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils.logging import ERROR, set_verbosity
 
 from .test_modeling_bart import PGE_ARTICLE
@@ -19,6 +19,8 @@ set_verbosity(ERROR)
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "google/pegasus-xsum"
     src_text = [PGE_ARTICLE, XSUM_ENTRY_LONGER]
@@ -47,9 +49,11 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         # Demonstrate fp16 issue, Contributions welcome!
         self.model.half()
         translated_tokens_fp16 = self.model.generate(**inputs, max_length=10)
-        decoded = self.tokenizer.batch_decode(translated_tokens_fp16, skip_special_tokens=True)
-        bad_fp16_result = ["unk_7unk_7unk_7unk_7unk_7unk_7unk_7", "unk_7unk_7unk_7unk_7unk_7unk_7unk_7"]
-        self.assertListEqual(decoded, bad_fp16_result)
+        decoded_fp16 = self.tokenizer.batch_decode(translated_tokens_fp16, skip_special_tokens=True)
+        assert decoded_fp16 == [
+            "California's largest electricity provider has begun",
+            "N-Dubz have revealed they were",
+        ]
 
 
 class PegasusConfigTests(unittest.TestCase):

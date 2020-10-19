@@ -23,8 +23,7 @@ import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES
-
-from .utils import logging
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()

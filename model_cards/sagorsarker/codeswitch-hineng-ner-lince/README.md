@@ -3,7 +3,7 @@ language:
 - hi
 - en
 datasets:
-- LinCE
+- lince
 license: "MIT"
 tags:
 - codeswitching

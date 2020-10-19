@@ -13,5 +13,5 @@ python distillation.py \
   --train_batch_size=$BS --eval_batch_size=$BS \
   --tokenizer_name $m --model_name_or_path $m \
   --warmup_steps 500 --sortish_sampler --logger_name wandb \
-  --gpus 1 --fp16_opt_level=O1 --task translation \
+  --gpus 1 --fp16_opt_level=O1 --task translation --num_sanity_val_steps=0 \
   "$@"

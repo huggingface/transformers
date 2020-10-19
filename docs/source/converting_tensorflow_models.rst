@@ -1,5 +1,5 @@
 Converting Tensorflow Checkpoints
-================================================
+=======================================================================================================================
 
 A command-line interface is provided to convert original Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM checkpoints in models than be loaded using the ``from_pretrained`` methods of the library.
 
@@ -10,7 +10,7 @@ A command-line interface is provided to convert original Bert/GPT/GPT-2/Transfor
     The documentation below reflects the **transformers-cli convert** command format.
 
 BERT
-^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google <https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the `convert_bert_original_tf_checkpoint_to_pytorch.py <https://github.com/huggingface/transformers/blob/master/src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`_ script.
 
@@ -34,7 +34,7 @@ Here is an example of the conversion process for a pre-trained ``BERT-Base Uncas
 You can download Google's pre-trained models for the conversion `here <https://github.com/google-research/bert#pre-trained-models>`__.
 
 ALBERT
-^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Convert TensorFlow model checkpoints of ALBERT to PyTorch using the `convert_albert_original_tf_checkpoint_to_pytorch.py <https://github.com/huggingface/transformers/blob/master/src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`_ script.
 
@@ -54,7 +54,7 @@ Here is an example of the conversion process for the pre-trained ``ALBERT Base``
 You can download Google's pre-trained models for the conversion `here <https://github.com/google-research/albert#pre-trained-models>`__.
 
 OpenAI GPT
-^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained OpenAI GPT model, assuming that your NumPy checkpoint save as the same format than OpenAI pretrained model (see `here <https://github.com/openai/finetune-transformer-lm>`__\ )
 
@@ -70,7 +70,7 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT model,
 
 
 OpenAI GPT-2
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained OpenAI GPT-2 model (see `here <https://github.com/openai/gpt-2>`__\ )
 
@@ -85,7 +85,7 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT-2 mode
      [--finetuning_task_name OPENAI_GPT2_FINETUNED_TASK]
 
 Transformer-XL
-^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained Transformer-XL model (see `here <https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models>`__\ )
 
@@ -101,7 +101,7 @@ Here is an example of the conversion process for a pre-trained Transformer-XL mo
 
 
 XLNet
-^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained XLNet model:
 
@@ -118,7 +118,7 @@ Here is an example of the conversion process for a pre-trained XLNet model:
 
 
 XLM
-^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained XLM model:
 

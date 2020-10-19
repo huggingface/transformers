@@ -2,9 +2,9 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
-from .test_modeling_bart import TOLERANCE, _assert_tensors_equal, _long_tensor
+from .test_modeling_bart import TOLERANCE, _long_tensor, assert_tensors_close
 
 
 if is_torch_available():
@@ -24,6 +24,8 @@ RO_CODE = 250020
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
     maxDiff = 1000  # longer string compare tracebacks
     checkpoint_name = None
@@ -43,6 +45,8 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-en-ro"
     src_text = [
@@ -79,15 +83,24 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
         expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
         result_slice = logits[0, 0, :3]
-        _assert_tensors_equal(expected_slice, result_slice, atol=TOLERANCE)
+        assert_tensors_close(expected_slice, result_slice, atol=TOLERANCE)
+
+    @slow
+    def test_enro_generate_one(self):
+        batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(
+            ["UN Chief Says There Is No Military Solution in Syria"]
+        ).to(torch_device)
+        translated_tokens = self.model.generate(**batch)
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        self.assertEqual(self.tgt_text[0], decoded[0])
+        # self.assertEqual(self.tgt_text[1], decoded[1])
 
     @slow
     def test_enro_generate(self):
         batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(self.src_text).to(torch_device)
         translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
-        self.assertEqual(self.tgt_text[0], decoded[0])
-        self.assertEqual(self.tgt_text[1], decoded[1])
+        assert self.tgt_text == decoded
 
     def test_mbart_enro_config(self):
         mbart_models = ["facebook/mbart-large-en-ro"]
@@ -125,6 +138,8 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-cc25"
     src_text = [

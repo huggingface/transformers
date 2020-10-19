@@ -19,7 +19,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_tf, require_tokenizers, require_torch, slow
 from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 
@@ -68,6 +68,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(TensorType("pt"), TensorType.PYTORCH)
         self.assertEqual(TensorType("np"), TensorType.NUMPY)
 
+    @require_tokenizers
     def test_batch_encoding_pickle(self):
         import numpy as np
 
@@ -92,6 +93,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             )
 
     @require_tf
+    @require_tokenizers
     def test_batch_encoding_pickle_tf(self):
         import tensorflow as tf
 
@@ -112,6 +114,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             )
 
     @require_torch
+    @require_tokenizers
     def test_batch_encoding_pickle_pt(self):
         import torch
 
@@ -128,6 +131,7 @@ class TokenizerUtilsTest(unittest.TestCase):
                 tokenizer_r("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
             )
 
+    @require_tokenizers
     def test_batch_encoding_is_fast(self):
         tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")

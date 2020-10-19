@@ -1,8 +1,8 @@
 Glossary
-^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 General terms
--------------
+-----------------------------------------------------------------------------------------------------------------------
 
 - autoencoding models: see MLM
 - autoregressive models: see CLM
@@ -27,7 +27,7 @@ General terms
   or a punctuation symbol.
 
 Model inputs
-------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Every model is different yet bears similarities with the others. Therefore most models use the same inputs, which are
 detailed here alongside usage examples.
@@ -35,7 +35,7 @@ detailed here alongside usage examples.
 .. _input-ids:
 
 Input IDs
-~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The input ids are often the only required parameters to be passed to the model as input. *They are token indices,
 numerical representations of tokens building the sequences that will be used as input by the model*.
@@ -43,7 +43,7 @@ numerical representations of tokens building the sequences that will be used as 
 Each tokenizer works differently but the underlying mechanism remains the same. Here's an example using the BERT
 tokenizer, which is a `WordPiece <https://arxiv.org/pdf/1609.08144.pdf>`__ tokenizer:
 
-::
+.. code-block::
 
     >>> from transformers import BertTokenizer
     >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
@@ -52,7 +52,7 @@ tokenizer, which is a `WordPiece <https://arxiv.org/pdf/1609.08144.pdf>`__ token
 
 The tokenizer takes care of splitting the sequence into tokens available in the tokenizer vocabulary.
 
-::
+.. code-block::
 
     >>> tokenized_sequence = tokenizer.tokenize(sequence)
 
@@ -60,7 +60,7 @@ The tokens are either words or subwords. Here for instance, "VRAM" wasn't in the
 in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a double-hash prefix is
 added for "RA" and "M":
 
-::
+.. code-block::
 
     >>> print(tokenized_sequence)
     ['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
@@ -69,14 +69,14 @@ These tokens can then be converted into IDs which are understandable by the mode
 the sentence to the tokenizer, which leverages the Rust implementation of
 `huggingface/tokenizers <https://github.com/huggingface/tokenizers>`__ for peak performance.
 
-::
+.. code-block::
 
     >>> inputs = tokenizer(sequence)
 
 The tokenizer returns a dictionary with all the arguments necessary for its corresponding model to work properly. The
 token indices are under the key "input_ids":
 
-::
+.. code-block::
 
     >>> encoded_sequence = inputs["input_ids"]
     >>> print(encoded_sequence)
@@ -87,13 +87,13 @@ IDs the model sometimes uses.
 
 If we decode the previous sequence of ids,
 
-::
+.. code-block::
 
     >>> decoded_sequence = tokenizer.decode(encoded_sequence)
 
 we will see
 
-::
+.. code-block::
 
     >>> print(decoded_sequence)
     [CLS] A Titan RTX has 24GB of VRAM [SEP]
@@ -103,14 +103,14 @@ because this is the way a :class:`~transformers.BertModel` is going to expect it
 .. _attention-mask:
 
 Attention mask
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The attention mask is an optional argument used when batching sequences together. This argument indicates to the
 model which tokens should be attended to, and which should not.
 
 For example, consider these two sequences:
 
-::
+.. code-block::
 
     >>> from transformers import BertTokenizer
     >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
@@ -123,7 +123,7 @@ For example, consider these two sequences:
 
 The encoded versions have different lengths:
 
-::
+.. code-block::
 
     >>> len(encoded_sequence_a), len(encoded_sequence_b)
     (8, 19)
@@ -134,13 +134,13 @@ of the second one, or the second one needs to be truncated down to the length of
 In the first case, the list of IDs will be extended by the padding indices. We can pass a list to the tokenizer and ask
 it to pad like this:
 
-::
+.. code-block::
 
     >>> padded_sequences = tokenizer([sequence_a, sequence_b], padding=True)
 
 We can see that 0s have been added on the right of the first sentence to make it the same length as the second one:
 
-::
+.. code-block::
 
     >>> padded_sequences["input_ids"]
     [[101, 1188, 1110, 170, 1603, 4954, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]]
@@ -150,7 +150,7 @@ the position of the padded indices so that the model does not attend to them. Fo
 :class:`~transformers.BertTokenizer`, :obj:`1` indicates a value that should be attended to, while :obj:`0` indicates
 a padded value. This attention mask is in the dictionary returned by the tokenizer under the key "attention_mask":
 
-::
+.. code-block::
 
     >>> padded_sequences["attention_mask"]
     [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
@@ -158,20 +158,20 @@ a padded value. This attention mask is in the dictionary returned by the tokeniz
 .. _token-type-ids:
 
 Token Type IDs
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Some models' purpose is to do sequence classification or question answering. These require two different sequences to
 be joined in a single "input_ids" entry, which usually is performed with the help of special tokens, such as the classifier (``[CLS]``) and separator (``[SEP]``)
 tokens. For example, the BERT model builds its two sequence input as such:
 
-::
+.. code-block::
 
    >>> # [CLS] SEQUENCE_A [SEP] SEQUENCE_B [SEP]
 
 We can use our tokenizer to automatically generate such a sentence by passing the two sequences to ``tokenizer`` as two arguments (and
 not a list, like before) like this:
 
-::
+.. code-block::
 
     >>> from transformers import BertTokenizer
     >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
@@ -183,7 +183,7 @@ not a list, like before) like this:
 
 which will return:
 
-::
+.. code-block::
 
     >>> print(decoded)
     [CLS] HuggingFace is based in NYC [SEP] Where is HuggingFace based? [SEP]
@@ -194,7 +194,7 @@ mask identifying the two types of sequence in the model.
 
 The tokenizer returns this mask as the "token_type_ids" entry:
 
-::
+.. code-block::
 
     >>> encoded_dict['token_type_ids']
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
@@ -207,7 +207,7 @@ Some models, like :class:`~transformers.XLNetModel` use an additional token repr
 .. _position-ids:
 
 Position IDs
-~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Contrary to RNNs that have the position of each token embedded within them,
 transformers are unaware of the position of each token. Therefore, the position IDs (``position_ids``) are used by the model to identify each token's position in the list of tokens.
@@ -221,7 +221,7 @@ use other types of positional embeddings, such as sinusoidal position embeddings
 .. _feed-forward-chunking:
 
 Feed Forward Chunking
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In each residual attention block in transformers the self-attention layer is usually followed by 2 feed forward layers.
 The intermediate embedding size of the feed forward layers is often bigger than the hidden size of the model (e.g.,

@@ -15,10 +15,10 @@
 """ Tokenization classes for python tokenizers.
     For fast tokenizers (provided by HuggingFace's tokenizers library) see tokenization_utils_fast.py
 """
-
 import itertools
 import re
 import unicodedata
+import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .file_utils import add_end_docstrings
@@ -43,6 +43,11 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+# Slow tokenizers are saved in a vocabulary plus three separated files
+SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
+ADDED_TOKENS_FILE = "added_tokens.json"
+TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
 def _is_whitespace(char):
@@ -181,7 +186,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
             print('We have added', num_added_toks, 'tokens')
-            # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+            # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
             model.resize_token_embeddings(len(tokenizer))
         """
         new_tokens = [str(tok) for tok in new_tokens]
@@ -189,7 +194,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         tokens_to_add = []
         for token in new_tokens:
             assert isinstance(token, str)
-            if not special_tokens and self.init_kwargs.get("do_lower_case", False):
+            if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
             if (
                 token != self.unk_token
@@ -238,6 +243,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Converts a string in a sequence of tokens, using the tokenizer.
 
+        Note that, unlike Fast tokenizers (instances of PreTrainedTokenizerFast), this method
+        won't replace the unknown tokens with the `unk_token` yet (this is done in the `encode()` method)
+
         Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
         Takes care of added tokens.
 
@@ -250,6 +258,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             :obj:`List[str]`: The list of tokens.
         """
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            kwargs["is_split_into_words"] = kwargs.pop("is_pretokenized")
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
             (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
@@ -261,7 +275,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
         # TODO: should this be in the base class?
-        if self.init_kwargs.get("do_lower_case", False):
+        if hasattr(self, "do_lower_case") and self.do_lower_case:
             # convert non-special tokens to lowercase
             escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
@@ -402,7 +416,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -419,17 +433,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                if is_pretokenized:
-                    tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
+                if is_split_into_words:
+                    tokens = list(
+                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
+                    )
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
-                if is_pretokenized:
+                if is_split_into_words:
                     raise ValueError(
-                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_pretokenized=True`."
+                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_split_into_words=True`."
                     )
                 else:
                     raise ValueError(
@@ -444,6 +460,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
+
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
 
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
@@ -482,7 +505,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -499,8 +522,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                if is_pretokenized:
-                    tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
+                if is_split_into_words:
+                    tokens = list(
+                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
+                    )
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)
@@ -518,11 +543,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "transformers.PreTrainedTokenizerFast."
             )
 
+        if "is_pretokenized" in kwargs:
+            warnings.warn(
+                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
+                FutureWarning,
+            )
+            is_split_into_words = kwargs.pop("is_pretokenized")
+
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if not isinstance(ids_or_pair_ids, (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
-            elif is_pretokenized and not isinstance(ids_or_pair_ids[0], (list, tuple)):
+            elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
                 ids, pair_ids = ids_or_pair_ids
@@ -616,7 +648,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return batch_outputs
 
     def prepare_for_tokenization(
-        self, text: str, is_pretokenized: bool = False, **kwargs
+        self, text: str, is_split_into_words: bool = False, **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -627,7 +659,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             test (:obj:`str`):
                 The text to prepare.
-            is_pretokenized (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the text has been pretokenized.
             kwargs:
                 Keyword arguments to use for the tokenization.
@@ -650,7 +682,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formated with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -715,7 +747,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return " ".join(tokens)
 
     def decode(
-        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        spaces_between_special_tokens: bool = True,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary
@@ -730,6 +766,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to clean up the tokenization spaces.
+            spaces_between_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to add spaces around special tokens.
+                The behavior of Fast tokenizers is to have this to :obj:`False`.
+                This is setup to :obj:`True` in slow tokenizers for backward compatibility.
 
         Returns:
             :obj:`str`: The decoded sentence.
@@ -753,7 +793,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-        text = " ".join(sub_texts)
+
+        if spaces_between_special_tokens:
+            text = " ".join(sub_texts)
+        else:
+            text = "".join(sub_texts)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
@@ -761,19 +805,79 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         else:
             return text
 
-    def save_vocabulary(self, save_directory) -> Tuple[str]:
-        """
-        Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
-        and special token mappings.
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = "None",
+        truncation=True,
+        **kwargs,
+    ) -> BatchEncoding:
+        r"""
 
-        .. warning::
-            Please use :meth:`~transformers.PreTrainedTokenizer.save_pretrained` to save the full tokenizer state if
-            you want to reload it using the :meth:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
+        Prepare a batch that can be passed directly to an instance of :class:`~transformers.AutoModelForSeq2SeqLM`.
 
         Args:
-            save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
+            src_texts: (:obj:`List[str]`):
+                List of documents to summarize or source language texts.
+            tgt_texts: (:obj:`List[str]`, `optional`):
+                List of summaries or target language texts.
+            max_length (:obj:`int`, `optional`):
+                Controls the maximum length for encoder inputs (documents to summarize or source language texts).
+                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
+                length is required by one of the truncation/padding parameters. If the model has no specific maximum
+                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+            max_target_length (:obj:`int`, `optional`):
+                Controls the maximum length of decoder inputs (target language texts or summaries).
+                If left unset or set to :obj:`None`, this will use the max_length value.
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+                Activates and controls padding. Accepts the following values:
+
+                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                  single sequence if provided).
+                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                  different lengths).
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`True`):
+                Activates and controls truncation. Accepts the following values:
+
+                * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
+                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
+                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
+                  if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
+                  sequence lengths greater than the model maximum admissible input size).
+            **kwargs:
+                Additional keyword arguments passed along to :obj:`self.__call__`.
 
         Returns:
-            A tuple of :obj:`str`: The files saved.
+            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to the encoder.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
+            - **labels** -- List of token ids for tgt_texts
+
+            The full set of keys ``[input_ids, attention_mask, labels]``,
+            will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
         """
-        raise NotImplementedError
+        raise NotImplementedError(
+            "If your model requires more than input_ids for a typical forward pass, you should implement this method. "
+            "Returned keys should be [input_ids, attention_mask, labels]. See MarianTokenizer or T5Tokenizer for a "
+            "reference implementation."
+        )

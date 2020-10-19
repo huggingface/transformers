@@ -584,9 +584,9 @@ class Benchmark(ABC):
         else:
             self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
 
-        if not self.args.no_memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
+        if self.args.memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
             logger.warning(
-                "Memory consumption will not be measured accurately if `args.no_multi_process` is set to `True.` The flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
+                "Memory consumption will not be measured accurately if `args.multi_process` is set to `False.` The flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
             )
 
         self._print_fn = None
@@ -669,24 +669,24 @@ class Benchmark(ABC):
 
             for batch_size in self.args.batch_sizes:
                 for sequence_length in self.args.sequence_lengths:
-                    if not self.args.no_inference:
-                        if not self.args.no_memory:
+                    if self.args.inference:
+                        if self.args.memory:
                             memory, inference_summary = self.inference_memory(model_name, batch_size, sequence_length)
                             inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
-                        if not self.args.no_speed:
+                        if self.args.speed:
                             time = self.inference_speed(model_name, batch_size, sequence_length)
                             inference_result_time[model_name]["result"][batch_size][sequence_length] = time
 
                     if self.args.training:
-                        if not self.args.no_memory:
+                        if self.args.memory:
                             memory, train_summary = self.train_memory(model_name, batch_size, sequence_length)
                             train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
-                        if not self.args.no_speed:
+                        if self.args.speed:
                             time = self.train_speed(model_name, batch_size, sequence_length)
                             train_result_time[model_name]["result"][batch_size][sequence_length] = time
 
-        if not self.args.no_inference:
-            if not self.args.no_speed:
+        if self.args.inference:
+            if self.args.speed:
                 self.print_fn("\n" + 20 * "=" + ("INFERENCE - SPEED - RESULT").center(40) + 20 * "=")
                 self.print_results(inference_result_time, type_label="Time in s")
                 self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
@@ -695,7 +695,7 @@ class Benchmark(ABC):
                         "TPU was used for inference. Note that the time after compilation stabilized (after ~10 inferences model.forward(..) calls) was measured."
                     )
 
-            if not self.args.no_memory:
+            if self.args.memory:
                 self.print_fn("\n" + 20 * "=" + ("INFERENCE - MEMORY - RESULT").center(40) + 20 * "=")
                 self.print_results(inference_result_memory, type_label="Memory in MB")
                 self.save_to_csv(inference_result_memory, self.args.inference_memory_csv_file)
@@ -705,7 +705,7 @@ class Benchmark(ABC):
                 self.print_memory_trace_statistics(inference_summary)
 
         if self.args.training:
-            if not self.args.no_speed:
+            if self.args.speed:
                 self.print_fn("\n" + 20 * "=" + ("TRAIN - SPEED - RESULTS").center(40) + 20 * "=")
                 self.print_results(train_result_time, "Time in s")
                 self.save_to_csv(train_result_time, self.args.train_time_csv_file)
@@ -714,7 +714,7 @@ class Benchmark(ABC):
                         "TPU was used for training. Note that the time after compilation stabilized (after ~10 train loss=model.forward(...) + loss.backward() calls) was measured."
                     )
 
-            if not self.args.no_memory:
+            if self.args.memory:
                 self.print_fn("\n" + 20 * "=" + ("TRAIN - MEMORY - RESULTS").center(40) + 20 * "=")
                 self.print_results(train_result_memory, type_label="Memory in MB")
                 self.save_to_csv(train_result_memory, self.args.train_memory_csv_file)
@@ -723,7 +723,7 @@ class Benchmark(ABC):
                 self.print_fn("\n" + 20 * "=" + ("TRAIN - MEMOMRY - LINE BY LINE - SUMMARY").center(40) + 20 * "=")
                 self.print_memory_trace_statistics(train_summary)
 
-        if not self.args.no_env_print:
+        if self.args.env_print:
             self.print_fn("\n" + 20 * "=" + ("ENVIRONMENT INFORMATION").center(40) + 20 * "=")
             self.print_fn(
                 "\n".join(["- {}: {}".format(prop, val) for prop, val in self.environment_info.items()]) + "\n"

@@ -1,5 +1,23 @@
+# coding=utf-8
+# Copyright 2020-present the HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+"""
+
 import random
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -38,12 +56,12 @@ class EvalPrediction(NamedTuple):
         label_ids (:obj:`np.ndarray`): Targets to be matched.
     """
 
-    predictions: np.ndarray
+    predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: np.ndarray
 
 
 class PredictionOutput(NamedTuple):
-    predictions: np.ndarray
+    predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: Optional[np.ndarray]
     metrics: Optional[Dict[str, float]]
 
@@ -54,6 +72,12 @@ class TrainOutput(NamedTuple):
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
+
+
+class EvaluationStrategy(ExplicitEnum):
+    NO = "no"
+    STEPS = "steps"
+    EPOCH = "epoch"
 
 
 class BestRun(NamedTuple):
@@ -88,6 +112,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
+    _ = metrics.pop("total_flos", None)
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 

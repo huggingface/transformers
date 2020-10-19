@@ -1,5 +1,5 @@
 Tokenizer summary
------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 In this page, we will have a closer look at tokenization. As we saw in
 :doc:`the preprocessing tutorial <preprocessing>`, tokenizing a text is splitting it into words or subwords, which then
@@ -13,13 +13,13 @@ algorithms the pretrained model used. For instance, if we look at :class:`~trans
 using :ref:`WordPiece <wordpiece>`.
 
 Introduction to tokenization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Splitting a text in smaller chunks is a task that's harder than it looks, and there are multiple ways of doing it. For
 instance, let's look at the sentence "Don't you love 🤗 Transformers? We sure do." A first simple way of tokenizing
 this text is just to split it by spaces, which would give:
 
-::
+.. code-block::
 
     ["Don't", "you", "love", "🤗", "Transformers?", "We", "sure", "do."]
 
@@ -27,7 +27,7 @@ This is a nice first step, but if we look at the tokens "Transformers?" or "do."
 will be different than the tokens "Transformers" and "do" for our model, so we should probably take the punctuation
 into account. This would give:
 
-::
+.. code-block::
 
     ["Don", "'", "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
@@ -40,7 +40,7 @@ perform properly if you don't use the exact same rules as the persons who pretra
 `spaCy <https://spacy.io/>`__ and `Moses <http://www.statmt.org/moses/?n=Development.GetStarted>`__ are two popular
 rule-based tokenizers. On the text above, they'd output something like:
 
-::
+.. code-block::
 
     ["Do", "n't", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
@@ -61,7 +61,7 @@ as meaningful as when using a word tokenization, leading to a loss of performanc
 all transformers models use a hybrid between word-level and character-level tokenization called subword tokenization.
 
 Subword tokenization
-^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Subword tokenization algorithms rely on the principle that most common words should be left as is, but rare words
 should be decomposed in meaningful subword units. For instance "annoyingly" might be considered a rare word and
@@ -103,7 +103,7 @@ training which is usually done on the corpus the corresponding model will be tra
 .. _byte-pair-encoding:
 
 Byte-Pair Encoding
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Byte-Pair Encoding was introduced in `this paper <https://arxiv.org/abs/1508.07909>`__. It relies on a pretokenizer
 splitting the training data into words, which can be a simple space tokenization
@@ -118,13 +118,13 @@ vocabulary until it has learned a vocabulary of the desired size (this is a hype
 Let's say that after the pre-tokenization we have the following words (the number indicating the frequency of each
 word):
 
-::
+.. code-block::
 
     ('hug', 10), ('pug', 5), ('pun', 12), ('bun', 4), ('hugs', 5)
 
 Then the base vocabulary is ['b', 'g', 'h', 'n', 'p', 's', 'u'] and all our words are first split by character:
 
-::
+.. code-block::
 
     ('h' 'u' 'g', 10), ('p' 'u' 'g', 5), ('p' 'u' 'n', 12), ('b' 'u' 'n', 4), ('h' 'u' 'g' 's', 5)
 
@@ -133,7 +133,7 @@ times in the 10 occurrences of 'hug', 5 times in the 5 occurrences of 'hugs'). T
 `10 + 5 + 5 = 20` times in total. So the first merge rule the tokenizer learns is to group all 'u' and 'g' together
 then it adds 'ug' to the vocabulary. Our corpus then becomes
 
-::
+.. code-block::
 
     ('h' 'ug', 10), ('p' 'ug', 5), ('p' 'u' 'n', 12), ('b' 'u' 'n', 4), ('h' 'ug' 's', 5)
 
@@ -144,7 +144,7 @@ to the vocabulary.
 At this stage, the vocabulary is ``['b', 'g', 'h', 'n', 'p', 's', 'u', 'ug', 'un', 'hug']`` and our corpus is
 represented as
 
-::
+.. code-block::
 
     ('hug', 10), ('p' 'ug', 5), ('p' 'un', 12), ('b' 'un', 4), ('hug' 's', 5)
 
@@ -158,7 +158,7 @@ to choose. For instance :doc:`GPT <model_doc/gpt>` has a vocabulary size of 40,4
 and chose to stop the training of the tokenizer at 40,000 merges.
 
 Byte-level BPE
-^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To deal with the fact the base vocabulary needs to get all base characters, which can be quite big if one allows for
 all unicode characters, the
@@ -171,7 +171,7 @@ token. For instance, the :doc:`GPT-2 model <model_doc/gpt>` has a vocabulary siz
 .. _wordpiece:
 
 WordPiece
-=========
+=======================================================================================================================
 
 WordPiece is the subword tokenization algorithm used for :doc:`BERT <model_doc/bert>` (as well as
 :doc:`DistilBERT <model_doc/distilbert>` and :doc:`Electra <model_doc/electra>`) and was outlined in
@@ -188,7 +188,7 @@ sure it's `worth it`.
 .. _unigram:
 
 Unigram
-=======
+=======================================================================================================================
 
 Unigram is a subword tokenization algorithm introduced in `this paper <https://arxiv.org/pdf/1804.10959.pdf>`__.
 Instead of starting with a group of base symbols and learning merges with some rule, like BPE or WordPiece, it starts
@@ -207,7 +207,7 @@ Contrary to BPE and WordPiece that work out rules in a certain order that you ca
 tokenizing new text, Unigram will have several ways of tokenizing a new text. For instance, if it ends up with the
 vocabulary
 
-::
+.. code-block::
 
     ['b', 'g', 'h', 'n', 'p', 's', 'u', 'ug', 'un', 'hug']
 
@@ -227,7 +227,7 @@ tokenizations of :math:`x_{i}` (with the current vocabulary), then the loss is d
 .. _sentencepiece:
 
 SentencePiece
-=============
+=======================================================================================================================
 
 All the methods we have been looking at so far required some form of pretokenization, which has a central problem: not
 all languages use spaces to separate words. This is a problem :doc:`XLM <model_doc/xlm>` solves by using specific

@@ -26,8 +26,7 @@ from packaging import version
 
 from transformers.modeling_bert import BertIntermediate, BertLayer, BertOutput, BertSelfAttention, BertSelfOutput
 from transformers.modeling_roberta import RobertaConfig, RobertaForMaskedLM, RobertaForSequenceClassification
-
-from .utils import logging
+from transformers.utils import logging
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):

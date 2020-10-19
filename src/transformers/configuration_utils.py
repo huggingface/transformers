@@ -43,6 +43,9 @@ class PretrainedConfig(object):
           recreate the correct object in :class:`~transformers.AutoConfig`.
 
     Args:
+        name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
+            Store the string that was passed to :func:`~transformers.PreTrainedModel.from_pretrained` or :func:`~transformers.TFPreTrainedModel.from_pretrained`
+            as ``pretrained_model_name_or_path`` if the configuration was created with such a method.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the model should return all hidden-states.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -114,8 +117,8 @@ class PretrainedConfig(object):
           model pretrained weights.
         - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
           used when converting from an original (TensorFlow or PyTorch) checkpoint.
-        - **id2label** (:obj:`List[str]`, `optional`) -- A map from index (for instance prediction index, or target
-          index) to label.
+        - **id2label** (:obj:`Dict[int, str]`, `optional`) -- A map from index (for instance prediction index, or
+          target index) to label.
         - **label2id** (:obj:`Dict[str, int]`, `optional`) -- A map from label to index for the model.
         - **num_labels** (:obj:`int`, `optional`) -- Number of labels to use in the last layer added to the model,
           typically for a classification task.
@@ -130,6 +133,7 @@ class PretrainedConfig(object):
         - **eos_token_id** (:obj:`int`, `optional`)) -- The id of the `end-of-stream` token.
         - **decoder_start_token_id** (:obj:`int`, `optional`)) -- If an encoder-decoder model starts decoding with
           a different token than `bos`, the id of that token.
+        - **sep_token_id** (:obj:`int`, `optional`)) -- The id of the `separation` token.
 
     PyTorch specific parameters
         - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
@@ -190,10 +194,13 @@ class PretrainedConfig(object):
             self.num_labels = kwargs.pop("num_labels", 2)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
+        self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.sep_token_id = kwargs.pop("sep_token_id", None)
+
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # task specific arguments
@@ -202,6 +209,9 @@ class PretrainedConfig(object):
         # TPU arguments
         self.xla_device = kwargs.pop("xla_device", None)
 
+        # Name or path to the pretrained checkpoint
+        self._name_or_path = str(kwargs.pop("name_or_path", ""))
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -209,6 +219,14 @@ class PretrainedConfig(object):
             except AttributeError as err:
                 logger.error("Can't set {} with value {} for {}".format(key, value, self))
                 raise err
+
+    @property
+    def name_or_path(self) -> str:
+        return self._name_or_path
+
+    @name_or_path.setter
+    def name_or_path(self, value):
+        self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
     def use_return_dict(self) -> bool:
@@ -270,7 +288,7 @@ class PretrainedConfig(object):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not to force to (re-)download the configuration files and override the cached versions if they
+                Whether or not to force to (re-)download the configuration files and override the cached versions if they
                 exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
@@ -336,7 +354,9 @@ class PretrainedConfig(object):
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False)
+            config_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+            )
 
         try:
             # Load from URL or cache if already cached

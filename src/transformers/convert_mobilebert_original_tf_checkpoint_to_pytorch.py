@@ -3,8 +3,7 @@ import argparse
 import torch
 
 from transformers import MobileBertConfig, MobileBertForPreTraining, load_tf_weights_in_mobilebert
-
-from .utils import logging
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()

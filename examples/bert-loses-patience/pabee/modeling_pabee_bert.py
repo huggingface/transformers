@@ -266,7 +266,7 @@ class BertForSequenceClassificationWithPabee(BertPreTrainedModel):
         labels=None,
     ):
         r"""
-            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
                 Labels for computing the sequence classification/regression loss.
                 Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
                 If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),

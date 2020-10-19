@@ -29,8 +29,7 @@ from transformers import (
     XLNetLMHeadModel,
     load_tf_weights_in_xlnet,
 )
-
-from .utils import logging
+from transformers.utils import logging
 
 
 GLUE_TASKS_NUM_LABELS = {

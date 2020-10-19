@@ -1,12 +1,12 @@
 Benchmarks
-==========
+=======================================================================================================================
 
 Let's take a look at how 🤗 Transformer models can be benchmarked, best practices, and already available benchmarks.
 
 A notebook explaining in more detail how to benchmark 🤗 Transformer models can be found `here <https://github.com/huggingface/transformers/blob/master/notebooks/05-benchmark.ipynb>`__.
 
 How to benchmark 🤗 Transformer models
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The classes :class:`~transformers.PyTorchBenchmark` and :class:`~transformers.TensorFlowBenchmark` allow to flexibly benchmark 🤗 Transformer models.
 The benchmark classes allow us to measure the `peak memory usage` and `required time` for both 
@@ -300,7 +300,7 @@ deciding for which configuration the model should be trained.
 
 
 Benchmark best practices
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This section lists a couple of best practices one should be aware of when benchmarking a model.
 
@@ -311,7 +311,7 @@ This section lists a couple of best practices one should be aware of when benchm
 
 
 Sharing your benchmark
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Previously all available core models (10 at the time) have been benchmarked for `inference time`, across many different settings: using PyTorch, with
 and without TorchScript, using TensorFlow, with and without XLA. All of those tests were done across CPUs (except for

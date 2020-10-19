@@ -19,11 +19,11 @@ Data can be obtained from the [GermEval 2014](https://sites.google.com/site/germ
 Here are the commands for downloading and pre-processing train, dev and test datasets. The original data format has four (tab-separated) columns, in a pre-processing step only the two relevant columns (token and outer span NER annotation) are extracted:
 
 ```bash
-curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-train.tsv?attredirects=0&d=1' \
+curl -L 'https://drive.google.com/uc?export=download&id=1Jjhbal535VVz2ap4v4r_rN1UEHTdLK5P' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > train.txt.tmp
-curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-dev.tsv?attredirects=0&d=1' \
+curl -L 'https://drive.google.com/uc?export=download&id=1ZfRcQThdtAR5PPRjIDtrVP7BtXSCUBbm' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > dev.txt.tmp
-curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-test.tsv?attredirects=0&d=1' \
+curl -L 'https://drive.google.com/uc?export=download&id=1u9mb7kNJHWQCWyweMDRMuTFoOHOfeBTH' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > test.txt.tmp
 ```
 

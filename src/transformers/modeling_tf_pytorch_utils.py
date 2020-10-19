@@ -148,7 +148,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     tf_loaded_numel = 0
     weight_value_tuples = []
     all_pytorch_weights = set(list(pt_state_dict.keys()))
-    unexpected_keys = []
+    missing_keys = []
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
@@ -158,8 +158,12 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         # Find associated numpy array in pytorch model state dict
         if name not in pt_state_dict:
             if allow_missing_keys:
-                unexpected_keys.append(name)
+                missing_keys.append(name)
                 continue
+            elif tf_model.authorized_missing_keys is not None:
+                # authorized missing keys don't have to be loaded
+                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                    continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
 
@@ -172,6 +176,13 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             array = numpy.squeeze(array)
         elif len(symbolic_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
+
+        if list(symbolic_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, symbolic_weight.shape)
+            except AssertionError as e:
+                e.args += (symbolic_weight.shape, array.shape)
+                raise e
 
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
@@ -192,28 +203,32 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
 
-    missing_keys = list(all_pytorch_weights)
+    unexpected_keys = list(all_pytorch_weights)
+
+    if tf_model.authorized_missing_keys is not None:
+        for pat in tf_model.authorized_missing_keys:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the PyTorch model were not used when "
             f"initializing the TF 2.0 model {tf_model.__class__.__name__}: {unexpected_keys}\n"
-            f"- This IS expected if you are initializing {tf_model.__class__.__name__} from a TF 2.0 model trained on another task "
-            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPretraining model).\n"
-            f"- This IS NOT expected if you are initializing {tf_model.__class__.__name__} from a TF 2.0 model that you expect "
-            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
+            f"- This IS expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model trained on another task "
+            f"or with another architecture (e.g. initializing a TFBertForSequenceClassification model from a BertForPretraining model).\n"
+            f"- This IS NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect "
+            f"to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a BertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
         logger.warning(
-            f"Some weights or buffers of the PyTorch model {tf_model.__class__.__name__} were not initialized from the TF 2.0 model "
+            f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the PyTorch model "
             f"and are newly initialized: {missing_keys}\n"
             f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
         )
     else:
         logger.warning(
-            f"All the weights of {tf_model.__class__.__name__} were initialized from the TF 2.0 model.\n"
+            f"All the weights of {tf_model.__class__.__name__} were initialized from the PyTorch model.\n"
             f"If your task is similar to the task the model of the ckeckpoint was trained on, "
             f"you can already use {tf_model.__class__.__name__} for predictions without further training."
         )
@@ -243,6 +258,8 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     import transformers
 
+    from .modeling_tf_utils import load_tf_weights
+
     logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
 
     # Instantiate and load the associated TF 2.0 model
@@ -256,7 +273,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
 
-    tf_model.load_weights(tf_checkpoint_path, by_name=True)
+    load_tf_weights(tf_model, tf_checkpoint_path)
 
     return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
 
@@ -323,6 +340,13 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             array = numpy.squeeze(array)
         elif len(pt_weight.shape) > len(array.shape):
             array = numpy.expand_dims(array, axis=0)
+
+        if list(pt_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, pt_weight.shape)
+            except AssertionError as e:
+                e.args += (pt_weight.shape, array.shape)
+                raise e
 
         try:
             assert list(pt_weight.shape) == list(array.shape)

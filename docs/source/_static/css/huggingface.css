@@ -125,6 +125,12 @@ a.copybtn {
     background-color: #6670FF;
 }
 
+/* The section headers in the toc tree */
+.wy-menu-vertical p.caption{
+    background-color: #4d59ff;
+    line-height: 40px;
+}
+
 /* The selected items in the toc tree */
 .wy-menu-vertical li.current{
     background-color: #A6B0FF;
