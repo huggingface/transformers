@@ -606,7 +606,7 @@ class RagModel(RagPreTrainedModel):
 
         assert (
             doc_scores.shape[1] % n_docs
-        ) == 0, "Make sure `doc_scores.shape[1]` is always have a size of `n_docs` times the number of input questions."
+        ) == 0, "Make sure `doc_scores.shape[1]` is always have a size of `n_docs`."
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
