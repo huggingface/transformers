@@ -157,3 +157,6 @@ debug.env
 
 #ctags
 tags
+
+# pre-commit
+.pre-commit*
