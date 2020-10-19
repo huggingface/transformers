@@ -341,6 +341,8 @@ class RagRetriever:
             It is used to decode the question and then use the generator_tokenizer.
         generator_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
+        index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
+            If specified, use this index instead of the one built using the configuration
 
     Examples::
 
@@ -409,7 +411,7 @@ class RagRetriever:
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
         requires_datasets(cls)
         requires_faiss(cls)
-        config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
+        config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
