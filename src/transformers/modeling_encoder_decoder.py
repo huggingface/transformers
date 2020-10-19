@@ -434,8 +434,6 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-        return decoder_outputs + encoder_outputs
-
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, encoder_outputs, **kwargs):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
