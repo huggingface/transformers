@@ -81,7 +81,7 @@ This is another example of pipeline used for that can extract question answers f
 
 On top of the answer, the pretrained model used here returned its confidence score, along with the start position and its end position in the tokenized sentence. You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/transformers/task_summary.html).
 
-To download and use any of the pretrained models on your given task, you just need to use those three lines of codes (PyTorch verison):
+To download and use any of the pretrained models on your given task, you just need to use those three lines of codes (PyTorch version):
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 

@@ -17,27 +17,29 @@
 import os
 import unittest
 
-from transformers.testing_utils import slow
+from transformers import BertTokenizerFast
+from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     BertTokenizer,
-    BertTokenizerFast,
     WordpieceTokenizer,
     _is_control,
     _is_punctuation,
     _is_whitespace,
 )
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
+@require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertTokenizer
     rust_tokenizer_class = BertTokenizerFast
     test_rust_tokenizer = True
     space_between_special_tokens = True
+    from_pretrained_filter = filter_non_english
 
     def setUp(self):
         super().setUp()
@@ -245,3 +247,55 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         assert encoded_sentence == [101] + text + [102]
         assert encoded_pair == [101] + text + [102] + text_2 + [102]
+
+    def test_offsets_with_special_characters(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
+                tokens = tokenizer_r.encode_plus(
+                    sentence,
+                    return_attention_mask=False,
+                    return_token_type_ids=False,
+                    return_offsets_mapping=True,
+                    add_special_tokens=True,
+                )
+
+                do_lower_case = tokenizer_r.do_lower_case if hasattr(tokenizer_r, "do_lower_case") else False
+                expected_results = (
+                    [
+                        ((0, 0), tokenizer_r.cls_token),
+                        ((0, 1), "A"),
+                        ((1, 2), ","),
+                        ((3, 5), "na"),
+                        ((5, 6), "##ï"),
+                        ((6, 8), "##ve"),
+                        ((9, 15), tokenizer_r.mask_token),
+                        ((16, 21), "Allen"),
+                        ((21, 23), "##NL"),
+                        ((23, 24), "##P"),
+                        ((25, 33), "sentence"),
+                        ((33, 34), "."),
+                        ((0, 0), tokenizer_r.sep_token),
+                    ]
+                    if not do_lower_case
+                    else [
+                        ((0, 0), tokenizer_r.cls_token),
+                        ((0, 1), "a"),
+                        ((1, 2), ","),
+                        ((3, 8), "naive"),
+                        ((9, 15), tokenizer_r.mask_token),
+                        ((16, 21), "allen"),
+                        ((21, 23), "##nl"),
+                        ((23, 24), "##p"),
+                        ((25, 33), "sentence"),
+                        ((33, 34), "."),
+                        ((0, 0), tokenizer_r.sep_token),
+                    ]
+                )
+
+                self.assertEqual(
+                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
+                )
+                self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])

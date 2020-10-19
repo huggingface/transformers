@@ -9,10 +9,7 @@ from torch.utils.data.dataset import Dataset
 
 from filelock import FileLock
 
-from ...tokenization_bart import BartTokenizer, BartTokenizerFast
-from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_xlm_roberta import XLMRobertaTokenizer
+from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import logging
 from ..processors.glue import glue_convert_examples_to_features, glue_output_modes, glue_processors
 from ..processors.utils import InputFeatures
@@ -69,7 +66,7 @@ class GlueDataset(Dataset):
     def __init__(
         self,
         args: GlueDataTrainingArguments,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         limit_length: Optional[int] = None,
         mode: Union[str, Split] = Split.train,
         cache_dir: Optional[str] = None,
@@ -93,12 +90,12 @@ class GlueDataset(Dataset):
             ),
         )
         label_list = self.processor.get_labels()
-        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__ in (
-            RobertaTokenizer,
-            RobertaTokenizerFast,
-            XLMRobertaTokenizer,
-            BartTokenizer,
-            BartTokenizerFast,
+        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (
+            "RobertaTokenizer",
+            "RobertaTokenizerFast",
+            "XLMRobertaTokenizer",
+            "BartTokenizer",
+            "BartTokenizerFast",
         ):
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]

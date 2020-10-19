@@ -3,7 +3,7 @@ import unittest
 from transformers import AutoConfig, AutoTokenizer, is_torch_available
 from transformers.configuration_pegasus import task_specific_params
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils.logging import ERROR, set_verbosity
 
 from .test_modeling_bart import PGE_ARTICLE
@@ -19,6 +19,8 @@ set_verbosity(ERROR)
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "google/pegasus-xsum"
     src_text = [PGE_ARTICLE, XSUM_ENTRY_LONGER]

@@ -16,11 +16,9 @@
 
 import unittest
 
-from transformers import BatchEncoding
+from transformers import SPIECE_UNDERLINE, BatchEncoding, T5Tokenizer, T5TokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import _torch_available, get_tests_dir
-from transformers.tokenization_t5 import T5Tokenizer, T5TokenizerFast
-from transformers.tokenization_xlnet import SPIECE_UNDERLINE
+from transformers.testing_utils import _torch_available, get_tests_dir, require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -30,6 +28,8 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 FRAMEWORK = "pt" if _torch_available else "tf"
 
 
+@require_sentencepiece
+@require_tokenizers
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = T5Tokenizer

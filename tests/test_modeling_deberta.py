@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -236,6 +236,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class DebertaModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="Model not available yet")
     def test_inference_masked_lm(self):

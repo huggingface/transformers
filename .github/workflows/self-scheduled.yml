@@ -57,21 +57,19 @@ jobs:
         TF_FORCE_GPU_ALLOW_GROWTH: "true"
         OMP_NUM_THREADS: 1
         RUN_SLOW: yes
-        USE_CUDA: yes
       run: |
         source .env/bin/activate
-        python -m pytest -n 1 --dist=loadfile -s ./tests/
+        python -m pytest -n 1 --dist=loadfile -s ./tests/ --durations=0
 
     - name: Run examples tests on GPU
       env:
         TF_FORCE_GPU_ALLOW_GROWTH: "true"
         OMP_NUM_THREADS: 1
         RUN_SLOW: yes
-        USE_CUDA: yes
       run: |
         source .env/bin/activate
         pip install -r examples/requirements.txt
-        python -m pytest -n 1 --dist=loadfile -s examples
+        python -m pytest -n 1 --dist=loadfile -s examples --durations=0
 
   run_all_tests_torch_and_tf_multiple_gpu:
     runs-on: [self-hosted, multi-gpu]
@@ -120,18 +118,16 @@ jobs:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
-          USE_CUDA: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s ./tests/
+          python -m pytest -n 1 --dist=loadfile -s ./tests/ --durations=0
 
       - name: Run examples tests on GPU
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
-          USE_CUDA: yes
         run: |
           source .env/bin/activate
           pip install -r examples/requirements.txt
-          python -m pytest -n 1 --dist=loadfile -s examples
+          python -m pytest -n 1 --dist=loadfile -s examples --durations=0

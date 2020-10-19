@@ -2,7 +2,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_modeling_bart import TOLERANCE, _long_tensor, assert_tensors_close
 
@@ -24,6 +24,8 @@ RO_CODE = 250020
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
     maxDiff = 1000  # longer string compare tracebacks
     checkpoint_name = None
@@ -43,6 +45,8 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-en-ro"
     src_text = [
@@ -134,6 +138,8 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-cc25"
     src_text = [
