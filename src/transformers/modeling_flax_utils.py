@@ -24,8 +24,13 @@ import jax.numpy as jnp
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
-from transformers import PretrainedConfig, logger
-from transformers.file_utils import WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+
+from .configuration_utils import PretrainedConfig
+from .file_utils import WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+from .utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @jax.jit

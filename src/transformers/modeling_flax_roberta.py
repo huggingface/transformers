@@ -20,9 +20,11 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen import compact
-from transformers import BertConfig, RobertaConfig, add_start_docstrings
-from transformers.modeling_flax_utils import FlaxPreTrainedModel, gelu
-from transformers.utils import logging
+
+from .configuration_roberta import RobertaConfig
+from .file_utils import add_start_docstrings
+from .modeling_flax_utils import FlaxPreTrainedModel, gelu
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -341,7 +343,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
     base_model_prefix = "roberta"
 
     @staticmethod
-    def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
+    def convert_from_pytorch(pt_state: Dict, config: RobertaConfig) -> Dict:
         jax_state = dict(pt_state)
 
         # Need to change some parameters name to match Flax names so that we don't have to fork any layer
@@ -409,7 +411,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
 
         return jax_state
 
-    def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
+    def __init__(self, config: RobertaConfig, state: dict, seed: int = 0, **kwargs):
         model = FlaxRobertaModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,

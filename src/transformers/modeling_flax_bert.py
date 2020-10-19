@@ -21,9 +21,11 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen import compact
-from transformers import BertConfig, add_start_docstrings
-from transformers.modeling_flax_utils import FlaxPreTrainedModel, gelu
-from transformers.utils import logging
+
+from .configuration_bert import BertConfig
+from .file_utils import add_start_docstrings
+from .modeling_flax_utils import FlaxPreTrainedModel, gelu
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
