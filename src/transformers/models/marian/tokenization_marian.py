@@ -139,6 +139,9 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         self._setup_normalizer()
 
+        self.unk_token_id_cache = self.encoder[self.unk_token]
+        self.unk_token_cache = self.unk_token
+
     def _setup_normalizer(self):
         try:
             from sacremoses import MosesPunctNormalizer
@@ -153,7 +156,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
-        return self.encoder.get(token, self.encoder[self.unk_token])
+        return self.encoder.get(token, self.unk_token_id_cache)
 
     def remove_language_code(self, text: str):
         """Remove language codes like <<fr>> before sentencepiece"""
@@ -168,7 +171,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the encoder."""
-        return self.decoder.get(index, self.unk_token)
+        return self.decoder.get(index, self.unk_token_cache)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Uses target language sentencepiece model"""
@@ -247,6 +250,12 @@ class MarianTokenizer(PreTrainedTokenizer):
             return self._special_token_mask(token_ids_0) + [1]
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
+
+    def add_tokens(self, new_tokens, special_tokens=False) -> int:
+        added_number = super().add_tokens(new_tokens, special_tokens)
+        self.unk_token_id_cache = self.encoder[self.unk_token]
+        self.unk_token_cache = self.unk_token
+        return added_number
 
 
 def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:

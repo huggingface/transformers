@@ -189,6 +189,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+        self.unk_token_id_cache = self.encoder.get(self.unk_token)
+
     @property
     def vocab_size(self):
         return len(self.encoder)
@@ -250,7 +252,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        return self.encoder.get(token, self.unk_token_id_cache)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
@@ -296,3 +298,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         if is_split_into_words or add_prefix_space:
             text = " " + text
         return (text, kwargs)
+
+    def add_tokens(self, new_tokens, special_tokens=False) -> int:
+        added_number = super().add_tokens(new_tokens, special_tokens)
+        self.unk_token_id_cache = self.encoder.get(self.unk_token)
+        return added_number

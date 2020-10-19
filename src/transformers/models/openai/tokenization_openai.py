@@ -120,6 +120,9 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+        self.unk_token_id_cache = self.encoder.get(self.unk_token)
+        self.unk_token_cache = self.unk_token
+
     @property
     def do_lower_case(self):
         return True
@@ -192,11 +195,11 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        return self.encoder.get(token, self.unk_token_id_cache)
 
     def _convert_id_to_token(self, index):
         """Converts an id in a token (BPE) using the vocab."""
-        return self.decoder.get(index, self.unk_token)
+        return self.decoder.get(index, self.unk_token_cache)
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
@@ -231,3 +234,9 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    def add_tokens(self, new_tokens, special_tokens=False) -> int:
+        added_number = super().add_tokens(new_tokens, special_tokens)
+        self.unk_token_id_cache = self.encoder.get(self.unk_token)
+        self.unk_token_cache = self.unk_token
+        return added_number

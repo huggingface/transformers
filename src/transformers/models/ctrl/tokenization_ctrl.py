@@ -150,6 +150,9 @@ class CTRLTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+        self.unk_token_id_cache = self.encoder.get(self.unk_token)
+        self.unk_token_cache = self.unk_token
+
     @property
     def vocab_size(self):
         return len(self.encoder)
@@ -213,11 +216,11 @@ class CTRLTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        return self.encoder.get(token, self.unk_token_id_cache)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.unk_token)
+        return self.decoder.get(index, self.unk_token_cache)
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
@@ -252,6 +255,12 @@ class CTRLTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    def add_tokens(self, new_tokens, special_tokens=False) -> int:
+        added_number = super().add_tokens(new_tokens, special_tokens)
+        self.unk_token_id_cache = self.encoder.get(self.unk_token)
+        self.unk_token_cache = self.unk_token
+        return added_number
 
     # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))
