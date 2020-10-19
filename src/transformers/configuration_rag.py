@@ -41,7 +41,7 @@ RAG_CONFIG_DOC = r"""
             Retrieval batch size, defined as the number of queries issues concurrently to the faiss index excapsulated
             :class:`~transformers.RagRetriever`.
         dataset (:obj:`str`, `optional`, defaults to :obj:`"wiki_dpr"`):
-            A dataset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and
+            A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and
             ids using :obj:`datasets.list_datasets()`).
         dataset_split (:obj:`str`, `optional`, defaults to :obj:`"train"`)
             Which split of the :obj:`dataset` to load.
