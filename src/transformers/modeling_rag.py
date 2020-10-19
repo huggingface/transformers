@@ -605,8 +605,8 @@ class RagModel(RagPreTrainedModel):
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
         assert (
-            doc_scores.shape[0] % n_docs
-        ) == 0, "Make sure `doc_scores` is always have a size of `n_docs` times the number of input questions."
+            doc_scores.shape[1] % n_docs
+        ) == 0, "Make sure `doc_scores.shape[1]` is always have a size of `n_docs` times the number of input questions."
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
