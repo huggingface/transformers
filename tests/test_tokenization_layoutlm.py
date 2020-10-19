@@ -17,14 +17,20 @@
 import os
 import unittest
 
-from transformers.tokenization_layoutlm import VOCAB_FILES_NAMES, LayoutLMTokenizer
+from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast
+from transformers.testing_utils import require_tokenizers
+from transformers.tokenization_layoutlm import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = LayoutLMTokenizer
+    rust_tokenizer_class = LayoutLMTokenizerFast
+    test_rust_tokenizer = True
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()

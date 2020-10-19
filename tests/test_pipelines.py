@@ -3,7 +3,7 @@ from typing import Iterable, List, Optional
 
 from transformers import pipeline
 from transformers.pipelines import SUPPORTED_TASKS, Conversation, DefaultArgumentHandler, Pipeline
-from transformers.testing_utils import require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import require_tf, require_tokenizers, require_torch, slow, torch_device
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
@@ -342,6 +342,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_torch
+    @require_tokenizers
     def test_torch_summarization(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
@@ -377,6 +378,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_torch
+    @require_tokenizers
     def test_torch_translation(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
@@ -399,6 +401,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs)
 
     @require_torch
+    @require_tokenizers
     def test_torch_text2text(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["generated_text"]

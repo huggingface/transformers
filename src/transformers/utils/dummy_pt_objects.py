@@ -1305,6 +1305,51 @@ class PegasusForConditionalGeneration:
         requires_pytorch(self)
 
 
+PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ProphetNetDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class RagModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1706,6 +1751,42 @@ class XLMWithLMHeadModel:
         requires_pytorch(self)
 
 
+XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class XLMProphetNetDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1879,15 +1960,6 @@ def get_linear_schedule_with_warmup(*args, **kwargs):
 
 def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
     requires_pytorch(get_polynomial_decay_schedule_with_warmup)
-
-
-class MarianTokenizer:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
 
 
 class Trainer:

@@ -14,15 +14,18 @@
 # limitations under the License.
 
 
-from transformers.testing_utils import slow
-from transformers.tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
+from transformers import SqueezeBertTokenizer, SqueezeBertTokenizerFast
+from transformers.testing_utils import require_tokenizers, slow
 
 from .test_tokenization_bert import BertTokenizationTest
 
 
+@require_tokenizers
 class SqueezeBertTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = SqueezeBertTokenizer
+    rust_tokenizer_class = SqueezeBertTokenizerFast
+    test_rust_tokenizer = True
 
     def get_rust_tokenizer(self, **kwargs):
         return SqueezeBertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)

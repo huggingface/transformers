@@ -10,7 +10,16 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 
-from .file_utils import _datasets_available, _faiss_available, _tf_available, _torch_available, _torch_tpu_available
+from .file_utils import (
+    _datasets_available,
+    _faiss_available,
+    _flax_available,
+    _sentencepiece_available,
+    _tf_available,
+    _tokenizers_available,
+    _torch_available,
+    _torch_tpu_available,
+)
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -107,6 +116,44 @@ def require_tf(test_case):
         return test_case
 
 
+def require_flax(test_case):
+    """
+    Decorator marking a test that requires JAX & Flax
+
+    These tests are skipped when one / both are not installed
+
+    """
+    if not _flax_available:
+        test_case = unittest.skip("test requires JAX & Flax")(test_case)
+    return test_case
+
+
+def require_sentencepiece(test_case):
+    """
+    Decorator marking a test that requires SentencePiece.
+
+    These tests are skipped when SentencePiece isn't installed.
+
+    """
+    if not _sentencepiece_available:
+        return unittest.skip("test requires SentencePiece")(test_case)
+    else:
+        return test_case
+
+
+def require_tokenizers(test_case):
+    """
+    Decorator marking a test that requires 🤗 Tokenizers.
+
+    These tests are skipped when 🤗 Tokenizers isn't installed.
+
+    """
+    if not _tokenizers_available:
+        return unittest.skip("test requires tokenizers")(test_case)
+    else:
+        return test_case
+
+
 def require_multigpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
@@ -153,8 +200,10 @@ def require_torch_tpu(test_case):
 
 
 if _torch_available:
-    # Set the USE_CUDA environment variable to select a GPU.
-    torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"
+    # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
+    import torch
+
+    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 else:
     torch_device = None
 
@@ -451,9 +500,9 @@ class TestCasePlus(unittest.TestCase):
 def mockenv(**kwargs):
     """this is a convenience wrapper, that allows this:
 
-    @mockenv(USE_CUDA=True, USE_TF=False)
+    @mockenv(RUN_SLOW=True, USE_TF=False)
     def test_something():
-        use_cuda = os.getenv("USE_CUDA", False)
+        run_slow = os.getenv("RUN_SLOW", False)
         use_tf = os.getenv("USE_TF", False)
     """
     return unittest.mock.patch.dict(os.environ, kwargs)
