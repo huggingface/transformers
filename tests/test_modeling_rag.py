@@ -315,7 +315,7 @@ class RagTestMixin:
             # doc scores
             self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
 
-    def test_model_with_custom_n_docs(
+    def check_model_custom_n_docs(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, n_docs, **kwargs
     ):
         self.assertIsNotNone(config.question_encoder)
@@ -376,7 +376,7 @@ class RagTestMixin:
             # doc scores
             self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], n_docs))
 
-    def test_model_with_mismatch_n_docs_value(
+    def check_model_with_mismatch_n_docs_value(
         self,
         config,
         input_ids,
@@ -495,13 +495,13 @@ class RagTestMixin:
     def test_model_with_custom_n_docs(self):
         inputs_dict = self.config_and_inputs
         inputs_dict["n_docs"] = 1
-        self.check_model_with_n_docs(**inputs_dict)
+        self.check_model_custom_n_docs(**inputs_dict)
 
     def test_model_with_mismatch_n_docs_value(self):
         inputs_dict = self.config_and_inputs
         inputs_dict["retriever_n_docs"] = 3
         inputs_dict["generator_n_docs"] = 2
-        self.check_model_with_n_docs(**inputs_dict)
+        self.check_model_with_mismatch_n_docs_value(**inputs_dict)
 
 
 @require_torch
