@@ -20,23 +20,22 @@ if is_torch_available():
 @require_torch
 class FlaxBertModelTest(unittest.TestCase):
     def test_from_pytorch(self):
-        torch.set_grad_enabled(False)
+        with torch.no_grad():
+            with self.subTest("bert-base-cased"):
+                tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+                fx_model = FlaxBertModel.from_pretrained("bert-base-cased")
+                pt_model = BertModel.from_pretrained("bert-base-cased")
 
-        with self.subTest("bert-base-cased"):
-            tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
-            fx_model = FlaxBertModel.from_pretrained("bert-base-cased")
-            pt_model = BertModel.from_pretrained("bert-base-cased")
+                # Check for simple input
+                pt_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.PYTORCH)
+                fx_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.JAX)
+                pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**fx_inputs)
 
-            # Check for simple input
-            pt_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.PYTORCH)
-            fx_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.JAX)
-            pt_outputs = pt_model(**pt_inputs)
-            fx_outputs = fx_model(**fx_inputs)
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
-            self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-
-            for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-4)
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-4)
 
     def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
         diff = (a - b).sum()
