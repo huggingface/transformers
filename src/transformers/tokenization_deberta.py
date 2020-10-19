@@ -14,12 +14,12 @@
 # limitations under the License.
 """ Tokenization class for model DeBERTa."""
 
-import logging
 import os
 import pathlib
 import random
 import unicodedata
 from functools import lru_cache
+from typing import Optional, Tuple
 from zipfile import ZipFile
 
 import tqdm
@@ -27,6 +27,7 @@ import tqdm
 import requests
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
 try:
@@ -35,7 +36,7 @@ except ImportError:
     raise ImportError("Please install regex with: pip install regex")
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "bpe_encoder.bin"}
 
@@ -466,10 +467,15 @@ class GPT2Tokenizer(object):
             self.count.append(n)
             return idx
 
-    def save_pretrained(self, path: str):
+    def save_pretrained(self, path: str, filename_prefix: str = None):
         import torch
 
-        torch.save(self.gpt2_encoder, path)
+        filename = VOCAB_FILES_NAMES[list(VOCAB_FILES_NAMES.keys())[0]]
+        if filename_prefix is not None:
+            filename = filename_prefix + "-" + filename
+        full_path = os.path.join(path, filename)
+        torch.save(self.gpt2_encoder, full_path)
+        return (full_path,)
 
 
 class DebertaTokenizer(PreTrainedTokenizer):
@@ -653,11 +659,5 @@ class DebertaTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    def save_vocabulary(self, vocab_path):
-        """Save the tokenizer vocabulary to a directory or file."""
-        if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["vocab_file"])
-        else:
-            vocab_file = vocab_path
-        self.gpt2_tokenizer.save_pretrained(vocab_file)
-        return (vocab_file,)
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        return self.gpt2_tokenizer.save_pretrained(save_directory, filename_prefix=filename_prefix)

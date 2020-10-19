@@ -20,9 +20,12 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers.testing_utils import _torch_available
-from transformers.tokenization_marian import MarianTokenizer, save_json, vocab_files_names
-from transformers.tokenization_utils import BatchEncoding
+from transformers import BatchEncoding, MarianTokenizer
+from transformers.testing_utils import _sentencepiece_available, _torch_available, require_sentencepiece
+
+
+if _sentencepiece_available:
+    from transformers.tokenization_marian import save_json, vocab_files_names
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -35,6 +38,7 @@ ORG_NAME = "Helsinki-NLP/"
 FRAMEWORK = "pt" if _torch_available else "tf"
 
 
+@require_sentencepiece
 class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = MarianTokenizer
