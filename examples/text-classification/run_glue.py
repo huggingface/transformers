@@ -17,28 +17,71 @@
 
 
 import dataclasses
-import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
 import numpy as np
+from datasets import load_dataset, load_metric
 
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, EvalPrediction, GlueDataset
-from transformers import GlueDataTrainingArguments as DataTrainingArguments
 from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    EvalPrediction,
+    GlueDataset,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
     glue_compute_metrics,
-    glue_output_modes,
-    glue_tasks_num_labels,
     set_seed,
 )
+from transformers.trainer_utils import is_main_process
+from transformers.utils import logging
 
 
-logger = logging.getLogger(__name__)
+task_to_keys = {
+    "cola": ("sentence", None),
+    "mnli": ("premise", "hypothesis"),
+    "mrpc": ("sentence1", "sentence2"),
+    "qnli": ("question", "sentence"),
+    "qqp": ("question1", "question2"),
+    "rte": ("sentence1", "sentence2"),
+    "sst2": ("sentence", None),
+    "stsb": ("sentence1", "sentence2"),
+    "wnli": ("sentence1", "sentence2"),
+}
+
+logger = logging.get_logger(__name__)
+
+
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    """
+
+    task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())})
+    max_seq_length: int = field(
+        default=128,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+
+    def __post_init__(self):
+        self.task_name = self.task_name.lower()
+        if self.task_name not in task_to_keys.keys():
+            raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
 
 
 @dataclass
@@ -59,6 +102,16 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
+    use_fast_tokenizer: bool = field(
+        default=True,
+        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
+
+
+def preprocess_function(examples, tokenizer=None, sequence1_key="sentence", sequence2_key=None):
+    if sentence2_key is None:
+        return tokenizer(examples[sentence1_key], truncation=True)
+    return tokenizer(examples[sentence1_key], examples[sentence2_key], truncation=True)
 
 
 def main():
@@ -67,7 +120,6 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
-
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -85,12 +137,7 @@ def main():
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
 
-    # Setup logging
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
-    )
+    # Log on each process the small summary:
     logger.warning(
         "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
         training_args.local_rank,
@@ -99,16 +146,16 @@ def main():
         bool(training_args.local_rank != -1),
         training_args.fp16,
     )
+    # Set the verbosity to info on main process only:
+    if is_main_process():
+        logger.set_verbosity_info()
     logger.info("Training/evaluation parameters %s", training_args)
 
-    # Set seed
+    # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    try:
-        num_labels = glue_tasks_num_labels[data_args.task_name]
-        output_mode = glue_output_modes[data_args.task_name]
-    except KeyError:
-        raise ValueError("Task not found: %s" % (data_args.task_name))
+    num_labels = 3 if data_args.task == "mnli" else 1 if data_args.task == "stsb" else 2
+    output_mode = "regression" if data_args.task == "stsb" else "classification"
 
     # Load pretrained model and tokenizer
     #
@@ -125,6 +172,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
+        use_fast=model_args.use_fast_tokenizer,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -134,6 +182,7 @@ def main():
     )
 
     # Get datasets
+    dataset = load_dataset("glue", data_args.task_name)
     train_dataset = (
         GlueDataset(data_args, tokenizer=tokenizer, cache_dir=model_args.cache_dir) if training_args.do_train else None
     )
@@ -147,6 +196,9 @@ def main():
         if training_args.do_predict
         else None
     )
+
+    # Get the metric function
+    metric = load_metric("glue", data_args.task_name)
 
     def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
         def compute_metrics_fn(p: EvalPrediction):
