@@ -753,7 +753,7 @@ Custom markers
 
 * Slow tests
 
-Tests that are too slow (e.g. once downloading huge model files) are marked with:
+The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for an hour for the test suite to complete on CI. Therefore any slow tests should be marked as in the example below:
 
 .. code-block:: python
 
@@ -761,13 +761,22 @@ Tests that are too slow (e.g. once downloading huge model files) are marked with
     @slow
     def test_integration_foo():
 
-To run such tests set ``RUN_SLOW=1`` env var, e.g.:
+As explained at the beginning of this document, slow tests run on a scheduled basis, rather than in PRs. So it's possible that some problem will be missed during PR submission, but it'll get caught during the next scheduled CI job.
+
+Here is the gold standard:
+
+1. if the test runs longer than 5 seconds on CI (including model download if any) - it should be marked as slow
+2. For common tests to be marked slow, the slowest iteration of that common test must be > 15s.
+
+It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if you test it locally it'd be cached and thus not measured. Hence check the execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
+
+Once a test is marked as ``@slow``, to run such tests set ``RUN_SLOW=1`` env var, e.g.:
 
 .. code-block:: bash
 
     RUN_SLOW=1 pytest tests
     
-Some decorators like ``@parametrized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
+Some decorators like ``@parameterized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 

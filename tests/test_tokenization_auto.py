@@ -39,7 +39,7 @@ from transformers.tokenization_auto import TOKENIZER_MAPPING
 
 
 class AutoTokenizerTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in (x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
