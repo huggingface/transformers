@@ -230,19 +230,19 @@ its predictions and the expected value (the label).
 These labels are different according to the model head, for example:
 
 - For sequence classification models (e.g., :class:`~transformers.BertForSequenceClassification`), the model expects
-  a tensor of dimension `(batch_size)` with each value of the batch corresponding to the expected label of the entire
-  sequence.
+  a tensor of dimension :obj:`(batch_size)` with each value of the batch corresponding to the expected label of the
+  entire sequence.
 - For token classification models (e.g., :class:`~transformers.BertForTokenClassification`), the model expects
-  a tensor of dimension `(batch_size, seq_length)` with each value corresponding to the expected label of each
+  a tensor of dimension :obj:`(batch_size, seq_length)` with each value corresponding to the expected label of each
   individual token.
 - For masked language modeling (e.g., :class:`~transformers.BertForMaskedLM`), the model expects
-  a tensor of dimension `(batch_size, seq_length)` with each value corresponding to the expected label of each
+  a tensor of dimension :obj:`(batch_size, seq_length)` with each value corresponding to the expected label of each
   individual token: the labels being the token ID for the masked token, and values to be ignored for the rest (usually
-  -100).
+  :obj:`-100`).
 
 See the documentation of each model for more information on each specific model's labels.
 
-The base models (e.g., :class`~transformers.BertModel`) do not accept labels, as these are the base transformer models,
+The base models (e.g., :class:`~transformers.BertModel`) do not accept labels, as these are the base transformer models,
 simply outputting features.
 
 .. _decoder-input-ids:
