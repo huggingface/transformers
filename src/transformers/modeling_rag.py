@@ -458,7 +458,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
         output_retrieved(:obj:`bool`, `optional`):
             Whether or not to return the :obj:`retrieved_doc_embeds`, :obj:`retrieved_doc_ids`,
             :obj:`context_input_ids` and :obj:`context_attention_mask`. See returned tensors for more detail.
-        n_docs (:obj:`int`, `optional`, defaults to `config.n_docs`)
+        n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
             Number of documents to retrieve and/or number of documents for which to generate an answer.
 """
 
@@ -606,7 +606,7 @@ class RagModel(RagPreTrainedModel):
 
         assert (
             doc_scores.shape[1] % n_docs
-        ) == 0, "Make sure `doc_scores.shape[1]` is always have a size of `n_docs`."
+        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -860,7 +860,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 function, where we set ``num_return_sequences`` to :obj:`num_beams`.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
-            n_docs (:obj:`int`, `optional`, defaults to `config.n_docs`)
+            n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             kwargs:
                 Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate`.
@@ -1302,7 +1302,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 function, where we set ``num_return_sequences`` to :obj:`num_beams`.
             decoder_start_token_id (:obj:`int`, `optional`):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
-            n_docs (:obj:`int`, `optional`, defaults to `config.n_docs`)
+            n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
 
         Return:
@@ -1362,7 +1362,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         assert (
             context_input_ids.shape[0] % n_docs
-        ) == 0, "Make sure `context_input_ids` is always have a size of `n_docs` times the number of input questions."
+        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
 
         # batch_size
         batch_size = context_input_ids.shape[0] // n_docs
