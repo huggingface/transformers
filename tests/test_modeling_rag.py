@@ -189,7 +189,11 @@ class RagTestMixin:
                 "id": ["0", "1", "3"],
                 "text": ["foo", "bar", "qux"],
                 "title": ["Foo", "Bar", "Qux"],
-                "embeddings": [np.ones(self.retrieval_vector_size), 3 * np.ones(self.retrieval_vector_size)],
+                "embeddings": [
+                    np.ones(self.retrieval_vector_size),
+                    2 * np.ones(self.retrieval_vector_size),
+                    3 * np.ones(self.retrieval_vector_size),
+                ],
             }
         )
         dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
