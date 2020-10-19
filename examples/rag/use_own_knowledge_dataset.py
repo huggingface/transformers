@@ -51,7 +51,6 @@ def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRCon
 
 
 def main(
-    tmp_dir: str,
     rag_example_args: "RagExampleArguments",
     processing_args: "ProcessingArguments",
     index_hnsw_args: "IndexHnswArguments",
@@ -89,7 +88,7 @@ def main(
     )
 
     # And finally save your dataset
-    passages_path = os.path.join(tmp_dir, "my_knowledge_dataset")
+    passages_path = os.path.join(rag_example_args.output_dir, "my_knowledge_dataset")
     dataset.save_to_disk(passages_path)
     # from datasets import load_from_disk
     # dataset = load_from_disk(passages_path)  # to reload the dataset
@@ -103,7 +102,7 @@ def main(
     dataset.add_faiss_index("embeddings", custom_index=index)
 
     # And save the index
-    index_path = os.path.join(tmp_dir, "my_knowledge_dataset_hnsw_index.faiss")
+    index_path = os.path.join(rag_example_args.output_dir, "my_knowledge_dataset_hnsw_index.faiss")
     dataset.get_index("embeddings").save(index_path)
     # dataset.load_faiss_index("embeddings", index_path)  # to reload the index
 
@@ -153,6 +152,10 @@ class RagExampleArguments:
             "help": "The DPR context encoder model to use. Either 'facebook/dpr-ctx_encoder-single-nq-base' or 'facebook/dpr-ctx_encoder-multiset-base'"
         },
     )
+    output_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to a directory where the dataset passages and the index will be saved"},
+    )
 
 
 @dataclass
@@ -192,4 +195,5 @@ if __name__ == "__main__":
     parser = HfArgumentParser((RagExampleArguments, ProcessingArguments, IndexHnswArguments))
     rag_example_args, processing_args, index_hnsw_args = parser.parse_args_into_dataclasses()
     with TemporaryDirectory() as tmp_dir:
-        main(tmp_dir, rag_example_args, processing_args, index_hnsw_args)
+        rag_example_args.output_dir = rag_example_args.output_dir or tmp_dir
+        main(rag_example_args, processing_args, index_hnsw_args)
