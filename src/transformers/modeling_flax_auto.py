@@ -80,10 +80,9 @@ class FlaxAutoModel(object):
             if isinstance(config, config_class):
                 return model_class(config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of FlaxAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} "
+            f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
         )
 
     @classmethod
@@ -161,8 +160,7 @@ class FlaxAutoModel(object):
             if isinstance(config, config_class):
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of FlaxAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} "
+            f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}"
         )

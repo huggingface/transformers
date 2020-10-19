@@ -97,23 +97,20 @@ class FlaxPreTrainedModel(ABC):
                 )
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(archive_file)
+                    msg = f"Couldn't reach server at '{archive_file}' to download pretrained weights."
                 else:
                     msg = (
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url to model weight files but "
-                        "couldn't find any such file at this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                        )
+                        f"Model name '{pretrained_model_name_or_path}' "
+                        f"was not found in model name list ({', '.join(cls.pretrained_model_archive_map.keys())}). "
+                        f"We assumed '{archive_file}' was a path or url to model weight files but "
+                        "couldn't find any such file at this path or url."
                     )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
-                logger.info("loading weights file {}".format(archive_file))
+                logger.info(f"loading weights file {archive_file}")
             else:
-                logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
+                logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
 
@@ -133,8 +130,8 @@ class FlaxPreTrainedModel(ABC):
                     state = unflatten_dict({tuple(k.split(".")[1:]): v for k, v in state.items()})
                 except UnpicklingError:
                     raise EnvironmentError(
-                        "Unable to convert model {} to Flax deserializable object. "
-                        "Supported format are PyTorch archive or Flax msgpack".format(archive_file)
+                        f"Unable to convert model {archive_file} to Flax deserializable object. "
+                        "Supported format are PyTorch archive or Flax msgpack"
                     )
 
         return cls(config, state, *model_args, **model_kwargs)
@@ -145,6 +142,6 @@ class FlaxPreTrainedModel(ABC):
         if not os.path.exists(folder_abs):
             os.mkdir(folder_abs)
 
-        with open(os.path.join(folder_abs, "{}.flax".format(self._config.model_type)), "wb") as f:
+        with open(os.path.join(folder_abs, f"{self._config.model_type}.flax", "wb")) as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
