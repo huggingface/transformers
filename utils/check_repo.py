@@ -85,6 +85,7 @@ def get_model_modules():
         "modeling_encoder_decoder",
         "modeling_marian",
         "modeling_mmbt",
+        "modeling_flax_utils",
         "modeling_outputs",
         "modeling_retribert",
         "modeling_utils",
