@@ -160,7 +160,7 @@ jobs:
                   key: v0.3-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
