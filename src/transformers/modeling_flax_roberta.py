@@ -329,8 +329,10 @@ class FlaxRobertaModule(nn.Module):
 )
 class FlaxRobertaModel(FlaxPreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    The model can behave as an encoder (with only self-attention) as well
+    as a decoder, in which case a layer of cross-attention is added between
+    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
+    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
     model_class = FlaxRobertaModule

@@ -21,7 +21,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen import compact
-from transformers import BertConfig
+from transformers import BertConfig, add_start_docstrings
 from transformers.modeling_flax_utils import FlaxPreTrainedModel, gelu
 from transformers.utils import logging
 
@@ -30,6 +30,75 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
+
+
+BERT_START_DOCSTRING = r"""
+
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+BERT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`.
+            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``:
+
+            - 0 corresponds to a `sentence A` token,
+            - 1 corresponds to a `sentence B` token.
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`_
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            vectors than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+"""
 
 
 class FlaxBertLayerNorm(nn.Module):
@@ -244,116 +313,124 @@ class FlaxBertModule(nn.Module):
         return encoder, pooled
 
 
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    BERT_START_DOCSTRING,
+)
 class FlaxBertModel(FlaxPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
-    """
+     """
+     The model can behave as an encoder (with only self-attention) as well
+     as a decoder, in which case a layer of cross-attention is added between
+     the self-attention layers, following the architecture described in `Attention is all you need
+     <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+     Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+     """
 
-    model_class = FlaxBertModule
-    config_class = BertConfig
-    base_model_prefix = "bert"
+     model_class = FlaxBertModule
+     config_class = BertConfig
+     base_model_prefix = "bert"
 
-    @staticmethod
-    def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
-        jax_state = dict(pt_state)
+     @staticmethod
+     def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
+         jax_state = dict(pt_state)
 
-        # Need to change some parameters name to match Flax names so that we don't have to fork any layer
-        for key, tensor in pt_state.items():
-            # Key parts
-            key_parts = set(key.split("."))
+         # Need to change some parameters name to match Flax names so that we don't have to fork any layer
+         for key, tensor in pt_state.items():
+             # Key parts
+             key_parts = set(key.split("."))
 
-            # Every dense layer has "kernel" parameters instead of "weight"
-            if "dense.weight" in key:
-                del jax_state[key]
-                key = key.replace("weight", "kernel")
-                jax_state[key] = tensor
+             # Every dense layer has "kernel" parameters instead of "weight"
+             if "dense.weight" in key:
+                 del jax_state[key]
+                 key = key.replace("weight", "kernel")
+                 jax_state[key] = tensor
 
-            # SelfAttention needs also to replace "weight" by "kernel"
-            if {"query", "key", "value"} & key_parts:
+             # SelfAttention needs also to replace "weight" by "kernel"
+             if {"query", "key", "value"} & key_parts:
 
-                # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
-                if "bias" in key:
-                    jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
-                elif "weight":
-                    del jax_state[key]
-                    key = key.replace("weight", "kernel")
-                    tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
-                    jax_state[key] = tensor
+                 # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
+                 if "bias" in key:
+                     jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
+                 elif "weight":
+                     del jax_state[key]
+                     key = key.replace("weight", "kernel")
+                     tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
+                     jax_state[key] = tensor
 
-            # SelfAttention output is not a separate layer, remove one nesting
-            if "attention.output.dense" in key:
-                del jax_state[key]
-                key = key.replace("attention.output.dense", "attention.self.out")
-                jax_state[key] = tensor
+             # SelfAttention output is not a separate layer, remove one nesting
+             if "attention.output.dense" in key:
+                 del jax_state[key]
+                 key = key.replace("attention.output.dense", "attention.self.out")
+                 jax_state[key] = tensor
 
-            # SelfAttention output is not a separate layer, remove nesting on layer norm
-            if "attention.output.LayerNorm" in key:
-                del jax_state[key]
-                key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
-                jax_state[key] = tensor
+             # SelfAttention output is not a separate layer, remove nesting on layer norm
+             if "attention.output.LayerNorm" in key:
+                 del jax_state[key]
+                 key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
+                 jax_state[key] = tensor
 
-            # There are some transposed parameters w.r.t their PyTorch counterpart
-            if "intermediate.dense.kernel" in key or "output.dense.kernel" in key:
-                jax_state[key] = tensor.T
+             # There are some transposed parameters w.r.t their PyTorch counterpart
+             if "intermediate.dense.kernel" in key or "output.dense.kernel" in key:
+                 jax_state[key] = tensor.T
 
-            # Self Attention output projection needs to be transposed
-            if "out.kernel" in key:
-                jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(
-                    1, 2, 0
-                )
+             # Self Attention output projection needs to be transposed
+             if "out.kernel" in key:
+                 jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(
+                     1, 2, 0
+                 )
 
-            # Pooler needs to transpose its kernel
-            if "pooler.dense.kernel" in key:
-                jax_state[key] = tensor.T
+             # Pooler needs to transpose its kernel
+             if "pooler.dense.kernel" in key:
+                 jax_state[key] = tensor.T
 
-            # Handle LayerNorm conversion
-            if "LayerNorm" in key:
-                del jax_state[key]
+             # Handle LayerNorm conversion
+             if "LayerNorm" in key:
+                 del jax_state[key]
 
-                # Replace LayerNorm by layer_norm
-                new_key = key.replace("LayerNorm", "layer_norm")
+                 # Replace LayerNorm by layer_norm
+                 new_key = key.replace("LayerNorm", "layer_norm")
 
-                if "weight" in key:
-                    new_key = new_key.replace("weight", "gamma")
-                elif "bias" in key:
-                    new_key = new_key.replace("bias", "beta")
+                 if "weight" in key:
+                     new_key = new_key.replace("weight", "gamma")
+                 elif "bias" in key:
+                     new_key = new_key.replace("bias", "beta")
 
-                jax_state[new_key] = tensor
+                 jax_state[new_key] = tensor
 
-        return jax_state
+         return jax_state
 
-    def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
-        model = FlaxBertModule(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            type_vocab_size=config.type_vocab_size,
-            max_length=config.max_position_embeddings,
-            num_encoder_layers=config.num_hidden_layers,
-            num_heads=config.num_attention_heads,
-            head_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-        )
+     def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
+         model = FlaxBertModule(
+             vocab_size=config.vocab_size,
+             hidden_size=config.hidden_size,
+             type_vocab_size=config.type_vocab_size,
+             max_length=config.max_position_embeddings,
+             num_encoder_layers=config.num_hidden_layers,
+             num_heads=config.num_attention_heads,
+             head_size=config.hidden_size,
+             intermediate_size=config.intermediate_size,
+         )
 
-        super().__init__(config, model, state, seed)
+         super().__init__(config, model, state, seed)
 
-    @property
-    def module(self) -> nn.Module:
-        return self._module
+     @property
+     def module(self) -> nn.Module:
+         return self._module
 
-    def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
+     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
+         if token_type_ids is None:
+             token_type_ids = jnp.ones_like(input_ids)
 
-        if position_ids is None:
-            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
+         if position_ids is None:
+             position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
 
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+         if attention_mask is None:
+             attention_mask = jnp.ones_like(input_ids)
 
-        return self.model.apply(
-            {"params": self.params},
-            jnp.array(input_ids, dtype="i4"),
-            jnp.array(token_type_ids, dtype="i4"),
-            jnp.array(position_ids, dtype="i4"),
-            jnp.array(attention_mask, dtype="i4"),
-        )
+         return self.model.apply(
+             {"params": self.params},
+             jnp.array(input_ids, dtype="i4"),
+             jnp.array(token_type_ids, dtype="i4"),
+             jnp.array(position_ids, dtype="i4"),
+             jnp.array(attention_mask, dtype="i4"),
+         )
