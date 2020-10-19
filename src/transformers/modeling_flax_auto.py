@@ -15,16 +15,15 @@
 """ Auto Model class. """
 
 
-import logging
 from collections import OrderedDict
 
 from .configuration_auto import AutoConfig, BertConfig, RobertaConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_flax_bert import FlaxBertModel
 from .modeling_flax_roberta import FlaxRobertaModel
+from .utils import logging
 
-
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(

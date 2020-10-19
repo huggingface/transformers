@@ -8,6 +8,7 @@ import jax.numpy as jnp
 from flax.linen import compact
 from transformers import BertConfig
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
+from transformers.utils import logging
 
 
 @jax.jit
@@ -34,8 +35,13 @@ ACT2FN = {
     "gelu_new": gelu,
 }
 
+logger = logging.get_logger(__name__)
 
-class BertLayerNorm(nn.Module):
+_CONFIG_FOR_DOC = "BertConfig"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
+
+
+class FlaxBertLayerNorm(nn.Module):
     """Layer normalization (https://arxiv.org/abs/1607.06450).
     Operates on the last axis of the input data.
     """
@@ -80,7 +86,7 @@ class BertLayerNorm(nn.Module):
         return y
 
 
-class BertEmbedding(nn.Module):
+class FlaxBertEmbedding(nn.Module):
     """
     Specify a new class for doing the embedding stuff
     as Flax's one use 'embedding' for the parameter name
@@ -97,7 +103,9 @@ class BertEmbedding(nn.Module):
         return jnp.take(embedding, inputs, axis=0)
 
 
-class BertEmbeddings(nn.Module):
+class FlaxBertEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
     vocab_size: int
     hidden_size: int
     type_vocab_size: int
@@ -107,13 +115,13 @@ class BertEmbeddings(nn.Module):
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
 
         # Embed
-        w_emb = BertEmbedding(self.vocab_size, self.hidden_size, name="word_embeddings")(
+        w_emb = FlaxBertEmbedding(self.vocab_size, self.hidden_size, name="word_embeddings")(
             jnp.atleast_2d(input_ids.astype("i4"))
         )
-        p_emb = BertEmbedding(self.max_length, self.hidden_size, name="position_embeddings")(
+        p_emb = FlaxBertEmbedding(self.max_length, self.hidden_size, name="position_embeddings")(
             jnp.atleast_2d(position_ids.astype("i4"))
         )
-        t_emb = BertEmbedding(self.type_vocab_size, self.hidden_size, name="token_type_embeddings")(
+        t_emb = FlaxBertEmbedding(self.type_vocab_size, self.hidden_size, name="token_type_embeddings")(
             jnp.atleast_2d(token_type_ids.astype("i4"))
         )
 
@@ -121,12 +129,12 @@ class BertEmbeddings(nn.Module):
         summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
 
         # Layer Norm
-        layer_norm = BertLayerNorm(name="layer_norm")(summed_emb)
+        layer_norm = FlaxBertLayerNorm(name="layer_norm")(summed_emb)
 
         return layer_norm
 
 
-class BertAttention(nn.Module):
+class FlaxBertAttention(nn.Module):
     num_heads: int
     head_size: int
 
@@ -136,11 +144,11 @@ class BertAttention(nn.Module):
             hidden_state, attention_mask
         )
 
-        layer_norm = BertLayerNorm(name="layer_norm")(self_att + hidden_state)
+        layer_norm = FlaxBertLayerNorm(name="layer_norm")(self_att + hidden_state)
         return layer_norm
 
 
-class BertIntermediate(nn.Module):
+class FlaxBertIntermediate(nn.Module):
     output_size: int
 
     @compact
@@ -150,29 +158,29 @@ class BertIntermediate(nn.Module):
         return gelu(dense)
 
 
-class BertOutput(nn.Module):
+class FlaxBertOutput(nn.Module):
     @compact
     def __call__(self, intermediate_output, attention_output):
         h = nn.Dense(attention_output.shape[-1], name="dense")(intermediate_output)
-        h = BertLayerNorm(name="layer_norm")(h + attention_output)
+        h = FlaxBertLayerNorm(name="layer_norm")(h + attention_output)
         return h
 
 
-class BertLayer(nn.Module):
+class FlaxBertLayer(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
 
     @compact
     def __call__(self, hidden_state, attention_mask):
-        attention = BertAttention(self.num_heads, self.head_size, name="attention")(hidden_state, attention_mask)
-        intermediate = BertIntermediate(self.intermediate_size, name="intermediate")(attention)
-        output = BertOutput(name="output")(intermediate, attention)
+        attention = FlaxBertAttention(self.num_heads, self.head_size, name="attention")(hidden_state, attention_mask)
+        intermediate = FlaxBertIntermediate(self.intermediate_size, name="intermediate")(attention)
+        output = FlaxBertOutput(name="output")(intermediate, attention)
 
         return output
 
 
-class BertLayerCollection(nn.Module):
+class FlaxBertLayerCollection(nn.Module):
     """
     Stores N BertLayer(s)
     """
@@ -191,13 +199,13 @@ class BertLayerCollection(nn.Module):
 
         # Forward over all encoders
         for i in range(self.num_layers):
-            layer = BertLayer(self.num_heads, self.head_size, self.intermediate_size, name="{}".format(i))
+            layer = FlaxBertLayer(self.num_heads, self.head_size, self.intermediate_size, name="{}".format(i))
             output_i = layer(input_i, attention_mask)
             input_i = output_i
         return output_i
 
 
-class BertEncoder(nn.Module):
+class FlaxBertEncoder(nn.Module):
     num_layers: int
     num_heads: int
     head_size: int
@@ -205,13 +213,13 @@ class BertEncoder(nn.Module):
 
     @compact
     def __call__(self, hidden_state, attention_mask):
-        layer = BertLayerCollection(
+        layer = FlaxBertLayerCollection(
             self.num_layers, self.num_heads, self.head_size, self.intermediate_size, name="layer"
         )(hidden_state, attention_mask)
         return layer
 
 
-class BertPooler(nn.Module):
+class FlaxBertPooler(nn.Module):
     @compact
     def __call__(self, hidden_state):
         first_token = hidden_state[:, 0]
@@ -219,7 +227,7 @@ class BertPooler(nn.Module):
         return jax.lax.tanh(out)
 
 
-class BertModule(nn.Module):
+class FlaxBertModule(nn.Module):
     vocab_size: int
     hidden_size: int
     type_vocab_size: int
@@ -233,25 +241,25 @@ class BertModule(nn.Module):
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
 
         # Embedding
-        embeddings = BertEmbeddings(
+        embeddings = FlaxBertEmbeddings(
             self.vocab_size, self.hidden_size, self.type_vocab_size, self.max_length, name="embeddings"
         )(input_ids, token_type_ids, position_ids, attention_mask)
 
         # N stacked encoding layers
-        encoder = BertEncoder(
+        encoder = FlaxBertEncoder(
             self.num_encoder_layers, self.num_heads, self.head_size, self.intermediate_size, name="encoder"
         )(embeddings, attention_mask)
 
-        pooled = BertPooler(name="pooler")(encoder)
+        pooled = FlaxBertPooler(name="pooler")(encoder)
         return encoder, pooled
 
 
 class FlaxBertModel(FlaxPreTrainedModel):
-    """
-    BERT implementation using JAX/Flax as backend
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
-    model_class = BertModule
+    model_class = FlaxBertModule
     config_class = BertConfig
     base_model_prefix = "bert"
 
@@ -325,7 +333,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
         return jax_state
 
     def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
-        model = BertModule(
+        model = FlaxBertModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
             type_vocab_size=config.type_vocab_size,
@@ -339,12 +347,8 @@ class FlaxBertModel(FlaxPreTrainedModel):
         super().__init__(config, model, state, seed)
 
     @property
-    def module(self) -> BertModule:
+    def module(self) -> nn.Module:
         return self._module
-
-    @property
-    def config(self) -> BertConfig:
-        return self._config
 
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
         if token_type_ids is None:

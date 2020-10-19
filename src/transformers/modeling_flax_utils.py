@@ -36,6 +36,10 @@ class FlaxPreTrainedModel(ABC):
         self.params = params
         self.model = module
 
+    @property
+    def config(self) -> PretrainedConfig:
+        return self._config
+
     @staticmethod
     @abstractmethod
     def convert_from_pytorch(pt_state: Dict, config: PretrainedConfig) -> Dict:
