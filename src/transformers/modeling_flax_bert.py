@@ -22,7 +22,7 @@ import jax
 import jax.numpy as jnp
 from flax.linen import compact
 from transformers import BertConfig
-from transformers.modeling_flax_utils import FlaxPreTrainedModel
+from transformers.modeling_flax_utils import FlaxPreTrainedModel, gelu
 from transformers.utils import logging
 
 
