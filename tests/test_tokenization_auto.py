@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     DUMMY_UNKWOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     require_tokenizers,
+    slow,
 )
 from transformers.tokenization_auto import TOKENIZER_MAPPING
 
