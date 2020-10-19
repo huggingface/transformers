@@ -459,7 +459,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Whether or not to return the :obj:`retrieved_doc_embeds`, :obj:`retrieved_doc_ids`,
             :obj:`context_input_ids` and :obj:`context_attention_mask`. See returned tensors for more detail.
         n_docs (:obj:`int`, `optional`, defaults to `config.n_docs`)
-            Number of documents are retrieved or to be retrieved from the retriever.
+            Number of documents to retrieve and/or number of documents for which to generate an answer.
 """
 
 
