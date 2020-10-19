@@ -28,7 +28,7 @@ from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 if is_torch_available():
     import torch
-    from torch.utils.data import Dataset, IterableDataset
+    from torch.utils.data import IterableDataset
 
     from transformers import (
         AutoModelForMaskedLM,
@@ -67,7 +67,7 @@ class RegressionModelConfig(PretrainedConfig):
 
 if is_torch_available():
 
-    class RegressionDataset(Dataset):
+    class RegressionDataset():
         def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
             np.random.seed(seed)
             self.label_names = ["labels"] if label_names is None else label_names
