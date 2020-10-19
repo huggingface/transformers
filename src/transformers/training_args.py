@@ -191,16 +191,13 @@ class TrainingArguments:
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
-        default=False,
-        metadata={"help": "Run evaluation during training at each logging step."},
+        default=False, metadata={"help": "Run evaluation during training at each logging step."},
     )
     evaluation_strategy: EvaluationStrategy = field(
-        default="no",
-        metadata={"help": "Run evaluation during training at each logging step."},
+        default="no", metadata={"help": "Run evaluation during training at each logging step."},
     )
     prediction_loss_only: bool = field(
-        default=False,
-        metadata={"help": "When performing evaluation and predictions, only returns the loss."},
+        default=False, metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(
@@ -350,7 +347,7 @@ class TrainingArguments:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
         if self.run_name is None:
             self.run_name = self.output_dir
-        
+
         if self.device.type != "cuda" and self.fp16:
             raise ValueError("AMP (`--fp16`) can only be used on CUDA devices.")
 
