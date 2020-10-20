@@ -612,6 +612,43 @@ The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ check
 
 .. _multimodal-models:
 
+ProphetNet
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=prophetnet">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-prophetnet-blueviolet">
+   </a>
+   <a href="model_doc/prophetnet.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-prophetnet-blueviolet">
+   </a>
+
+`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
+
+ProphetNet introduces a novel *sequence-to-sequence* pre-training objective, called *future n-gram prediction*. In future n-gram prediction, the model predicts the next n tokens simultaneously based on previous context tokens at each time step instead instead of just the single next token. The future n-gram prediction explicitly encourages the model to plan for the future tokens and prevent overfitting on strong local correlations.
+The model architecture is based on the original Transformer, but replaces the "standard" self-attention mechanism in the decoder by a a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
+
+The library provides a pre-trained version of this model for conditional generation and a fine-tuned version for summarization.
+
+XLM-ProphetNet
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=xprophetnet">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xprophetnet-blueviolet">
+   </a>
+   <a href="model_doc/xlmprophetnet.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xprophetnet-blueviolet">
+   </a>
+
+`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
+
+XLM-ProphetNet's model architecture and pre-training objective is same as ProphetNet, but XLM-ProphetNet was pre-trained on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
+
+The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned versions for headline generation and question generation, respectively.
+
 Multimodal models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
