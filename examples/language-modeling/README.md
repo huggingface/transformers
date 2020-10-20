@@ -45,6 +45,8 @@ slightly slower (over-fitting takes more epochs).
 
 We use the `--mlm` flag so that the script may change its loss function.
 
+If use whole-word masking, use both `--mlm` and `--wwm` flag(for English Model).
+
 ```bash
 export TRAIN_FILE=/path/to/dataset/wiki.train.raw
 export TEST_FILE=/path/to/dataset/wiki.test.raw
@@ -57,7 +59,43 @@ python run_language_modeling.py \
     --train_data_file=$TRAIN_FILE \
     --do_eval \
     --eval_data_file=$TEST_FILE \
-    --mlm
+    --mlm \
+    --wwm
+```
+
+For Chinese Model, we need to generate ref files, case it's char level.
+
+```bash
+export TRAIN_FILE=/path/to/dataset/wiki.train.raw
+export LTP_RESOURCE=/path/to/ltp/tokenizer
+export BERT_RESOURCE=/path/to/bert/tokenizer
+export SAVE_PATH=/path/to/data/ref.txt
+
+python chinese_ref.py \
+    --file_name=$TRAIN_FILE \
+    --ltp=$LTP_RESOURCE
+    --bert=$BERT_RESOURCE \
+    --save_path=$SAVE_PATH 
+```
+Then: 
+
+
+```bash
+export TRAIN_FILE=/path/to/dataset/wiki.train.raw
+export TEST_FILE=/path/to/dataset/wiki.test.raw
+export REF_FILE=/path/to/ref.txt
+
+python run_language_modeling.py \
+    --output_dir=output \
+    --model_type=roberta \
+    --model_name_or_path=roberta-base \
+    --do_train \
+    --train_data_file=$TRAIN_FILE \
+    --chinese_ref_file=$REF_FILE \
+    --do_eval \
+    --eval_data_file=$TEST_FILE \
+    --mlm \
+    --wwm
 ```
 
 ### XLNet and permutation language modeling

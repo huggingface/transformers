@@ -36,6 +36,7 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
+    DataCollatorForWholeWordMask,
     DataCollatorForPermutationLanguageModeling,
     HfArgumentParser,
     LineByLineTextDataset,
@@ -113,7 +114,9 @@ class DataTrainingArguments:
     mlm: bool = field(
         default=False, metadata={"help": "Train with masked-language modeling loss instead of language modeling."}
     )
-    wwm: bool = field(default=False, metadata={"help": "Use Whole Word Mask."})
+    wwm: bool = field(
+        default=False, metadata={"help": "Use Whole Word Mask."}
+    )
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
@@ -149,6 +152,10 @@ def get_dataset(
     def _dataset(file_path):
         if args.line_by_line:
             if args.chinese_ref_file:
+                if not args.wwm or args.mlm:
+                    raise ValueError(
+                        "Need set wwm and mlm to true for Chinese Whole Word Mask"
+                    )
                 return LineByLineWithRefDataset(
                     tokenizer=tokenizer,
                     file_path=file_path,
@@ -187,7 +194,6 @@ def main():
             "Cannot do evaluation without an evaluation data file. Either supply a file to --eval_data_file "
             "or remove the --do_eval argument."
         )
-
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -281,9 +287,14 @@ def main():
             tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_span_length=data_args.max_span_length,
         )
     else:
-        data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer, mlm=data_args.mlm, wwm=data_args.wwm, mlm_probability=data_args.mlm_probability
-        )
+        if data_args.mlm and data_args.wwm:
+            data_collator = DataCollatorForWholeWordMask(
+                tokenizer=tokenizer, mlm_probability=data_args.mlm_probability
+            )
+        else:
+            data_collator = DataCollatorForLanguageModeling(
+                tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
+            )
 
     # Initialize our Trainer
     trainer = Trainer(
