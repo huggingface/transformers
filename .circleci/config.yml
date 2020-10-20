@@ -264,7 +264,7 @@ jobs:
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install isort
-            - run: pip install .[tf,torch,quality]
+            - run: pip install .[tf,torch,flax,quality]
             - save_cache:
                   key: v0.3-code_quality-{{ checksum "setup.py" }}
                   paths:
