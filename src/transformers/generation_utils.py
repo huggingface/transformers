@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple
 
 import torch
 from torch.nn import functional as F
 
+from .generation_utils_beam_search import BeamScorer, BeamSearchBase
 from .generation_utils_samplers import (
     MinLengthSampler,
     NoBadWordsSampler,
@@ -67,6 +68,10 @@ class GenerationMixin:
         the generate method.
         """
         return logits
+
+    @staticmethod
+    def _reorder_cache(past: Tuple, beam_idx: torch.Tensor) -> Tuple[torch.Tensor]:
+        return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
     def get_dist_warpper(self, top_k=None, top_p=None, temperature=None, num_beams=None):
         top_k = top_k if top_k is not None else self.config.top_k
@@ -147,6 +152,7 @@ class GenerationMixin:
 
         # set init values
         num_beams = num_beams if num_beams is not None else self.config.num_beams
+        max_length = max_length if max_length is not None else self.config.max_length
         do_sample = do_sample if do_sample is not None else self.config.do_sample
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
@@ -208,20 +214,44 @@ class GenerationMixin:
             input_ids = input_ids.repeat_interleave(num_return_sequences, dim=0)
 
             # sample
-            return self.sample(input_ids, pre_processor=pre_processor, dist_warper=dist_warper, **model_kwargs)
+            return self.sample(
+                input_ids,
+                pre_processor=pre_processor,
+                dist_warper=dist_warper,
+                max_length=max_length,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                **model_kwargs,
+            )
 
         elif is_beam_gen_mode:
-            raise NotImplementedError()
+            batch_size = input_ids.shape[0]
+
+            length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+            early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
+
+            beam_scorer = BeamSearchBase(
+                batch_size,
+                max_length,
+                num_beams,
+                length_penalty=length_penalty,
+                do_early_stopping=early_stopping,
+                num_return_sequences=num_return_sequences,
+            )
+
+            return self.beam_search(
+                input_ids,
+                beam_scorer,
+                pre_processor=pre_processor,
+                max_length=max_length,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                **model_kwargs,
+            )
 
         elif is_beam_sample_gen_mode:
-            raise NotImplementedError()
-
-    #            beam_scorer = generation_beam_search.BeamScorer(num_beams)  # refactor all important beam search functions out into BeamScorer class
-    #            if do_sample is False:
-    #                return self.beam_search(input_ids, pre_processor, beam_scorer, model_kwargs)
-    #            else:
-    #                dist_warper = self.get_dist_warpper(top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams)
-    #                return self.beam_sample(input_ids, pre_processor, dist_warper, beam_scorer, model_kwargs)
+            # DELETE ME LATER WHEN IMPLEMENTED
+            return torch.tensor([8 * [0]])
 
     @torch.no_grad()
     def greedy_search(
@@ -327,6 +357,7 @@ class GenerationMixin:
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            cur_len = cur_len + 1
 
             # update sequence length
             if eos_token_id is not None:
@@ -334,15 +365,12 @@ class GenerationMixin:
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
-            # update model kwargs
-            model_kwargs = self.update_model_kwargs(outputs, model_kwargs)
-
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
             if unfinished_sequences.max() == 0:
                 break
 
-            # increase cur_len
-            cur_len = cur_len + 1
+            # update model kwargs
+            model_kwargs = self.update_model_kwargs(outputs, model_kwargs)
 
         return input_ids
 
@@ -380,44 +408,73 @@ class GenerationMixin:
         return model_kwargs
 
     @torch.no_grad()
-    def beam_search(self, input_ids, pre_processor, beam_scorer, post_processor, kwargs):
-        raise NotImplementedError()
+    def beam_search(
+        self,
+        input_ids: torch.LongTensor,
+        beam_scorer: BeamScorer,
+        pre_processor: Optional[ProcessorList] = None,
+        max_length: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        **model_kwargs
+    ):
 
-    #        next_beam_scores, unfinished_sequences, sequence_lengths = init(...)
+        # init values
+        pre_processor = pre_processor if pre_processor is not None else ProcessorList()
+        max_length = max_length if max_length is not None else self.config.max_length
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
-    # add necessary encoder decoder code
-    # ...
+        batch_size, cur_len = input_ids.shape
+        num_beams = beam_scorer.num_beams
 
-    #        while cur_len < max_length:
-    #            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-    #
-    #            outputs = self(**model_inputs, return_dict=True)
-    #            next_token_logits = outputs.logits[:, -1, :]
-    #            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-    #            scores = pre_processor(input_ids, next_token_logits)
-    #
-    # special for beam_decode
-    #            scores = scores + next_beam_scores
-    #            next_scores, next_tokens = torch.topk(scores)
-    #
-    # this function will factor out all of the beam search code that is currently in `_no_beam_search_...`
-    #            beam_scorer.update(next_scores, next_tokens)
-    #
-    #            next_beam_scores = beam_scorer.get_next_scores()
-    #            next_beam_tokens = beam_scorer.get_next_tokens()
-    #            next_beam_idx = beam_scorer.get_next_beam_idx()
-    #
-    #            input_ids = torch.cat([input_ids[next_beam_idx, :], next_beam_tokens.unsqueeze(-1)], dim=-1)
-    #            cur_len = cur_len + 1
-    #
-    #            past = self._reorder_cache(next_beam_idx)
-    #
-    #            if beam_scorer.is_done():
-    #                break
+        input_ids = input_ids.repeat_interleave(num_beams, dim=0)
 
-    # add all post processing functions
-    # ...
-    #        return input_ids
+        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view((batch_size * num_beams,))
+
+        while cur_len < max_length:
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            outputs = self(**model_inputs, return_dict=True)
+            next_token_logits = outputs.logits[:, -1, :]
+            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+            next_token_scores = pre_processor(input_ids, next_token_scores)
+
+            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+            next_token_scores, next_tokens = torch.topk(
+                next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
+            )
+
+            next_indices = next_tokens // self.config.vocab_size
+            next_tokens = next_tokens // self.config.vocab_size
+
+            # stateless
+            beam_scores, beam_next_tokens, beam_idx = beam_scorer.update_beams(
+                input_ids,
+                next_token_scores,
+                next_tokens,
+                next_indices,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+            )
+
+            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+            cur_len = cur_len + 1
+
+            model_kwargs = self.update_model_kwargs(outputs, model_kwargs)
+            if model_kwargs["past"] is not None:
+                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+
+            if beam_scorer.is_done():
+                break
+
+        decoded = beam_scorer.finalize(
+            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+        )
+
+        return decoded
 
     @torch.no_grad()
     def beam_sample(self, input_ids, pre_processor, dist_wrapper, beam_scorer, post_processor, kwargs):
@@ -441,12 +498,12 @@ class GenerationMixin:
 # IMPORTANT: Note how the following line has to be between `pre_precossor` and `dist_warper`
 #            scores = scores + next_beam_scores
 #            scores = dist_warper(input_ids, scores)
-#            next_scores, next_tokens = torch.topk(scores)
+#            scores, next_tokens = torch.topk(scores)
 #
 # this function will factor out all of the beam search code that is currently in `_no_beam_search_...`
-#            beam_scorer.update(next_scores, next_tokens)
+#            beam_scorer.update(scores, next_tokens)
 #
-#            next_beam_scores = beam_scorer.get_next_scores()
+#            next_beam_scores = beam_scorer.get_scores()
 #            next_beam_tokens = beam_scorer.get_next_tokens()
 #            next_beam_idx = beam_scorer.get_next_beam_idx()
 #
