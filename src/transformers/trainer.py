@@ -26,6 +26,18 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+# Integrations must be imported before ML frameworks:
+from .integrations import (
+    default_hp_search_backend,
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+    run_hp_search_optuna,
+    run_hp_search_ray,
+)
+
 import numpy as np
 import torch
 from packaging import version
@@ -37,16 +49,6 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
-from .integrations import (
-    default_hp_search_backend,
-    is_comet_available,
-    is_optuna_available,
-    is_ray_available,
-    is_tensorboard_available,
-    is_wandb_available,
-    run_hp_search_optuna,
-    run_hp_search_ray,
-)
 from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup

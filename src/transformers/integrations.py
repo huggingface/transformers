@@ -3,15 +3,21 @@ import math
 import os
 
 
-# Import 3rd-party integrations first:
+from .utils import logging
+
+logger = logging.get_logger(__name__)
+
+# Import 3rd-party integrations before ML frameworks:
 
 try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
-    # XXX: there should be comet_ml.ensure_configured(), like `wandb`, for now emulate it
-    comet_ml.Experiment(project_name="ensure_configured")
-    _has_comet = True
+    if comet_ml.config.get_config("comet.api_key"):
+        _has_comet = True
+    else:
+        logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+        _has_comet = False
 except (ImportError, ValueError):
     _has_comet = False
 
@@ -58,10 +64,6 @@ except ImportError:
 from .file_utils import is_torch_tpu_available
 from .trainer_callback import TrainerCallback
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 # Integration functions:
