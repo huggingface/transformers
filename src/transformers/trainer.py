@@ -1204,7 +1204,7 @@ class Trainer:
         # Make sure we don't delete the best model.
         if self.state.best_model_checkpoint is not None:
             best_model_index = checkpoints_sorted.index(self.state.best_model_checkpoint)
-            checkpoints_sorted[best_model_index], checkpoints_sorted[best_model_index][-1] = (
+            checkpoints_sorted[best_model_index], checkpoints_sorted[-1] = (
                 checkpoints_sorted[-1],
                 checkpoints_sorted[best_model_index],
             )

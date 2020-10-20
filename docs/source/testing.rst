@@ -400,29 +400,46 @@ or if you have multiple gpus, you can specify which one is to be used by ``pytes
     CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
 
 This is handy when you want to run different tasks on different GPUs.
-    
-And we have these decorators that require the condition described by the marker.
 
-``
-@require_torch
-@require_tf
-@require_multigpu
-@require_non_multigpu
-@require_torch_tpu
-@require_torch_and_cuda
-``
+Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+
+* ``require_torch`` - this test will run only under torch
+* ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
+* ``require_torch_multigpu`` - as ``require_torch`` plus requires at least 2 GPUs
+* ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
+
+For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
+
+.. code-block:: python
+
+    @require_torch_multigpu
+    def test_example_with_multigpu():
+
+If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
+
+.. code-block:: python
+
+    @require_tf
+    def test_tf_thing_with_tensorflow():
+
+These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is how to set it up:
+
+.. code-block:: python
+
+    @require_torch_gpu
+    @slow
+    def test_example_slow_on_gpu():
 
 Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
     @parameterized.expand(...)
-    @require_multigpu
+    @require_torch_multigpu
     def test_integration_foo():
-    
-There is no problem whatsoever with ``@pytest.mark.parametrize`` (but it only works with non-unittests) - can use it in any order.
 
-This section will be expanded soon once our work in progress on those decorators is finished.
+This order problem doesn't exist with ``@pytest.mark.parametrize``, you can put it first or last and it will still work. But it only works with non-unittests.
 
 Inside tests:
 
