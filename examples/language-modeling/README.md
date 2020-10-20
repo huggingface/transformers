@@ -63,7 +63,7 @@ python run_language_modeling.py \
     --wwm
 ```
 
-For Chinese Model, we need to generate ref files, case it's char level.
+For Chinese models, we need to generate a reference files, case it's char level.
 
 ```bash
 export TRAIN_FILE=/path/to/dataset/wiki.train.raw
