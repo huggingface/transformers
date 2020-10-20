@@ -247,7 +247,7 @@ def main():
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
-        data_collator=default_data_collator if not data_args.pad_to_max_length else None,
+        data_collator=default_data_collator if data_args.pad_to_max_length else None,
     )
 
     # Training
