@@ -239,7 +239,9 @@ These labels are different according to the model head, for example:
   a tensor of dimension :obj:`(batch_size, seq_length)` with each value corresponding to the expected label of each
   individual token: the labels being the token ID for the masked token, and values to be ignored for the rest (usually
   :obj:`-100`).
-
+- For sequence to sequence tasks,(e.g., :class:`~transformers.BartForConditionalGeneration`, :class:`~transformers.MBartForConditionalGeneration`), the model expects
+  a tensor of dimension :obj:`(batch_size, tgt_seq_length)` with each value corresponding to the target sequences associated with each input sequence.
+During training, both `BART` and `T5` will make the appropriate `decoder_input_ids` and decoder attention masks internally. They usually do not need to be supplied.
 See the documentation of each model for more information on each specific model's labels.
 
 The base models (e.g., :class:`~transformers.BertModel`) do not accept labels, as these are the base transformer models,
