@@ -19,6 +19,8 @@ Disclaimer: The model card has been written by the Hugging Face team.
 
 You can use this model for sentence fusion, *e.g.*
 
+IMPORTANT: The model was not trained on the `"` (double quotation mark) character -> so the before tokenizing the text, it is advised to replace all `"` (double quotation marks) with a single `` ` `` (single back tick).
+
 ```python
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
