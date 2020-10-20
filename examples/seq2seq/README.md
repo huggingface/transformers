@@ -15,7 +15,7 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
 ## Datasets
 
-See (Getting evaluation data)[./eval_datasets.md].
+See [Getting evaluation data](./eval_datasets.md).
 
 ### Tips and Tricks
 
