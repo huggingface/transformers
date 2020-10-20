@@ -34,7 +34,7 @@ import unittest
 import pytest
 
 from parameterized import parameterized
-from transformers.testing_utils import require_torch, require_torch_and_cuda, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 
 # skipping in unittest tests
@@ -63,11 +63,11 @@ def check_slow_torch_cuda():
 @require_torch
 class SkipTester(unittest.TestCase):
     @slow
-    @require_torch_and_cuda
+    @require_torch_gpu
     def test_2_skips_slow_first(self):
         check_slow_torch_cuda()
 
-    @require_torch_and_cuda
+    @require_torch_gpu
     @slow
     def test_2_skips_slow_last(self):
         check_slow_torch_cuda()
@@ -97,12 +97,12 @@ class SkipTester(unittest.TestCase):
 
 
 @slow
-@require_torch_and_cuda
+@require_torch_gpu
 def test_pytest_2_skips_slow_first():
     check_slow_torch_cuda()
 
 
-@require_torch_and_cuda
+@require_torch_gpu
 @slow
 def test_pytest_2_skips_slow_last():
     check_slow_torch_cuda()

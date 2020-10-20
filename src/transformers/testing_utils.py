@@ -154,7 +154,7 @@ def require_tokenizers(test_case):
         return test_case
 
 
-def require_multigpu(test_case):
+def require_torch_multigpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
 
@@ -174,7 +174,7 @@ def require_multigpu(test_case):
         return test_case
 
 
-def require_non_multigpu(test_case):
+def require_torch_non_multigpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
@@ -208,7 +208,7 @@ else:
     torch_device = None
 
 
-def require_torch_and_cuda(test_case):
+def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch. """
     if torch_device != "cuda":
         return unittest.skip("test requires CUDA")(test_case)
