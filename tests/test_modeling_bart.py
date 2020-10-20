@@ -20,43 +20,46 @@ import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-if is_torch_available():
-    import torch
+if not is_torch_available():
+    raise unittest.SkipTest("Skip the whole module as it requires pytorch")
 
-    from transformers import (
-        AutoModel,
-        AutoModelForSequenceClassification,
-        AutoTokenizer,
-        BartConfig,
-        BartForConditionalGeneration,
-        BartForQuestionAnswering,
-        BartForSequenceClassification,
-        BartModel,
-        BartTokenizer,
-        BartTokenizerFast,
-        BertConfig,
-        BlenderbotConfig,
-        MarianConfig,
-        MBartConfig,
-        PegasusConfig,
-        pipeline,
-    )
-    from transformers.modeling_bart import (
-        SinusoidalPositionalEmbedding,
-        _prepare_bart_decoder_inputs,
-        invert_mask,
-        shift_tokens_right,
-    )
+import torch
+
+from transformers import (
+    AutoModel,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    BartConfig,
+    BartForConditionalGeneration,
+    BartForQuestionAnswering,
+    BartForSequenceClassification,
+    BartModel,
+    BartTokenizer,
+    BartTokenizerFast,
+    BertConfig,
+    BlenderbotConfig,
+    MarianConfig,
+    MBartConfig,
+    PegasusConfig,
+    pipeline,
+)
+from transformers.modeling_bart import (
+    SinusoidalPositionalEmbedding,
+    _prepare_bart_decoder_inputs,
+    invert_mask,
+    shift_tokens_right,
+)
+
+
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
-@require_torch
 class ModelTester:
     def __init__(
         self,
@@ -127,14 +130,14 @@ def prepare_bart_inputs_dict(
     }
 
 
-@require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
-        if is_torch_available()
-        else ()
+        BartModel,
+        BartForConditionalGeneration,
+        BartForSequenceClassification,
+        BartForQuestionAnswering,
     )
-    all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (BartForConditionalGeneration,)
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -219,7 +222,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             tiny(**inputs_dict)
 
 
-@require_torch
 class BartHeadTests(unittest.TestCase):
     vocab_size = 99
 
@@ -440,7 +442,6 @@ def _long_tensor(tok_lst):
 TOLERANCE = 1e-4
 
 
-@require_torch
 @require_sentencepiece
 @require_tokenizers
 class BartModelIntegrationTests(unittest.TestCase):
@@ -600,7 +601,6 @@ class BartModelIntegrationTests(unittest.TestCase):
         assert generated_summaries == EXPECTED
 
 
-@require_torch
 class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
     desired_weights = [
         [0, 0, 0, 0, 0],
