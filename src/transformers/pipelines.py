@@ -2642,6 +2642,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
+    use_fast: bool = True,
     **kwargs
 ) -> Pipeline:
     """
@@ -2691,6 +2692,8 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified
             and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no
             model is provided.
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use a Fast tokenizer if possible (a :obj:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
@@ -2752,9 +2755,10 @@ def pipeline(
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
             # For tuple we have (tokenizer name, {kwargs})
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], **tokenizer[1])
+            use_fast = tokenizer[1].pop("use_fast", use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], use_fast=use_fast, **tokenizer[1])
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=use_fast)
 
     # Instantiate config if needed
     if isinstance(config, str):
