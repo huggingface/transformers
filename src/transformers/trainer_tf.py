@@ -6,8 +6,12 @@ import os
 import warnings
 from typing import Callable, Dict, Optional, Tuple
 
+
 # Integrations must be imported before ML frameworks:
-from .integrations import is_comet_available, is_wandb_available
+from .integrations import (  # isort: split
+    is_comet_available,
+    is_wandb_available,
+)
 
 import numpy as np
 import tensorflow as tf

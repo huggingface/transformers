@@ -26,8 +26,9 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+
 # Integrations must be imported before ML frameworks:
-from .integrations import (
+from .integrations import (  # isort: split
     default_hp_search_backend,
     is_comet_available,
     is_optuna_available,
