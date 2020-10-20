@@ -104,7 +104,7 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     chinese_ref_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input ref data file for whole word mask(wwm) in Chinees."},
+        default=None, metadata={"help": "An optional input ref data file for whole word mask in Chinees."},
     )
     line_by_line: bool = field(
         default=False,
