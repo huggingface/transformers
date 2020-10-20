@@ -66,7 +66,10 @@ class DataTrainingArguments:
     the command line.
     """
 
-    task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())})
+    task_name: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
+    )
     max_seq_length: int = field(
         default=128,
         metadata={
@@ -84,11 +87,25 @@ class DataTrainingArguments:
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "A csv or a json file containing the training data."}
+    )
+    validation_file: Optional[str] = field(
+        default=None, metadata={"help": "A csv or a json file containing the validation data."}
+    )
 
     def __post_init__(self):
-        self.task_name = self.task_name.lower()
-        if self.task_name not in task_to_keys.keys():
-            raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
+        if self.task_name is not None:
+            self.task_name = self.task_name.lower()
+            if self.task_name not in task_to_keys.keys():
+                raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
+        elif self.train_file is None or self.validation_file is None:
+            raise ValueError("Need either a GLUE task or a training/validation file.")
+        else:
+            extension = self.train_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            extension = self.validation_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
 
 @dataclass
@@ -159,9 +176,35 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # If adapting this script to your custom task, don't forget to adjust those two variables.
-    num_labels = 3 if data_args.task_name == "mnli" else 1 if data_args.task_name == "stsb" else 2
-    is_regression = data_args.task_name == "stsb"
+    # Get the datasets
+    #
+    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
+    # download the dataset.
+    if data_args.task_name is not None:
+        # Downloading and loading a dataset from the hub.
+        datasets = load_dataset("glue", data_args.task_name)
+    elif data_args.train_file.endswith(".csv"):
+        # Loading a dataset from local csv files
+        datasets = load_dataset(
+            "csv", data_files={"train": data_args.train_file, "validation": data_args.validation_file}
+        )
+    else:
+        # Loading a dataset from local json files
+        datasets = load_dataset(
+            "json", data_files={"train": data_args.train_file, "validation": data_args.validation_file}
+        )
+    # See more about loading your dataset at https://huggingface.co/docs/datasets/loading_datasets.html.
+
+    # Labels
+    if data_args.task_name is not None:
+        label_list = datasets["train"]["label"].names
+    else:
+        # Trying to have good defaults here, don't hesitate to tweak to your needs.
+        labels = datasets["train"]["label"]
+        label_list = list(set(labels))
+        label_list.sort()  # list(set(xxx)) is not deterministic so we sort the labels to make it so.
+    num_labels = len(label_list)
+    is_regression = num_labels == 1
 
     # Load pretrained model and tokenizer
     #
@@ -185,23 +228,20 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
-    # Get datasets
-    #
-    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
-    # download the dataset.
-    #
-    # To load your custom dataset instead of a glue task, you can use the same function to load a dataset from local
-    # files (see: https://huggingface.co/docs/datasets/loading_datasets.html#from-local-files).
-    #
-    # For instance, here is how to load a training and validation sets from csv files:
-    #
-    # datasets = load_dataset("csv", {"train": "train.csv", "validation": "valid.csv"})
-    #
-    # If you data is in the json format, you can use:
-    #
-    # datasets = load_dataset("json", {"train": "train.json", "validation": "valid.json"})
-    datasets = load_dataset("glue", data_args.task_name)
-    sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
+    # Preprocessing the datasets
+    if data_args.task_name is not None:
+        sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
+    else:
+        # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
+        non_label_columns = datasets["train"].column_names
+        non_label_columns.remove("label")
+        if "sentence1" in non_label_columns and "sentence2" in non_label_columns:
+            sentence1_key, sentence2_key = "sentence1", "sentence2"
+        else:
+            if len(non_label_columns) >= 2:
+                sentence1_key, sentence2_key = non_label_columns[:2]
+            else:
+                sentence1_key, sentence2_key = non_label_columns[0], None
 
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -212,31 +252,50 @@ def main():
         padding = False
         max_length = None
 
+    label_to_id = None if data_args.task_name is not None else {v: i for i, v in enumerate(label_list)}
+
     def preprocess_function(examples):
+        # Tokenize the texts
         args = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
-        return tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
+        result = tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
+
+        # Map labels to IDs (not necessary for GLUE tasks)
+        if label_to_id is not None and "label" in examples:
+            result["label"] = [label_to_id[l] for l in examples["label"]]
+        return result
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     train_dataset = datasets["train"]
     eval_dataset = datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
-    test_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
+    if data_args.task_name is not None:
+        test_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+    print(len(train_dataset))
+    print(train_dataset[0])
 
     # Get the metric function
-    metric = load_metric("glue", data_args.task_name)
+    if data_args.task_name is not None:
+        metric = load_metric("glue", data_args.task_name)
+    # TODO: When datasets metrics include regular accuracy, make an else here and remove special branch from
+    # compute_metrics
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
-        return metric.compute(predictions=preds, references=p.label_ids)
+        if data_args.task_name is not None:
+            return metric.compute(predictions=preds, references=p.label_ids)
+        elif is_regression:
+            return {"mse": ((preds - p.label_ids) ** 2).mean().item()}
+        else:
+            return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -275,7 +334,7 @@ def main():
             output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{task}.txt")
             if trainer.is_world_process_zero():
                 with open(output_eval_file, "w") as writer:
-                    logger.info("***** Eval results {} *****".format(task))
+                    logger.info(f"***** Eval results {task} *****")
                     for key, value in eval_result.items():
                         logger.info(f"  {key} = {value}")
                         writer.write(f"{key} = {value}\n")
@@ -293,7 +352,6 @@ def main():
             test_datasets.append(datasets["test_mismatched"])
 
         for test_dataset, task in zip(test_datasets, tasks):
-            label_names = test_dataset.features["label"].names
             # Removing the `label` columns because it contains -1 and Trainer won't like that.
             test_dataset.remove_columns_("label")
             predictions = trainer.predict(test_dataset=test_dataset).predictions
@@ -308,7 +366,7 @@ def main():
                         if is_regression:
                             writer.write(f"{index}\t{item:3.3f}\n")
                         else:
-                            item = label_names[item]
+                            item = label_list[item]
                             writer.write(f"{index}\t{item}\n")
     return eval_results
 
