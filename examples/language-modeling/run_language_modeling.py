@@ -114,7 +114,7 @@ class DataTrainingArguments:
     mlm: bool = field(
         default=False, metadata={"help": "Train with masked-language modeling loss instead of language modeling."}
     )
-    wwm: bool = field(default=False, metadata={"help": "Use Whole Word Mask."})
+    whole_word_mask: bool = field(default=False, metadata={"help": "Whether ot not to use whole word mask."})
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
