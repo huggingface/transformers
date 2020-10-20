@@ -114,9 +114,7 @@ class DataTrainingArguments:
     mlm: bool = field(
         default=False, metadata={"help": "Train with masked-language modeling loss instead of language modeling."}
     )
-    wwm: bool = field(
-        default=False, metadata={"help": "Use Whole Word Mask."}
-    )
+    wwm: bool = field(default=False, metadata={"help": "Use Whole Word Mask."})
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
@@ -153,9 +151,7 @@ def get_dataset(
         if args.line_by_line:
             if args.chinese_ref_file:
                 if not args.wwm or args.mlm:
-                    raise ValueError(
-                        "Need set wwm and mlm to true for Chinese Whole Word Mask"
-                    )
+                    raise ValueError("Need set wwm and mlm to true for Chinese Whole Word Mask")
                 return LineByLineWithRefDataset(
                     tokenizer=tokenizer,
                     file_path=file_path,

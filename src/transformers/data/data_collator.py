@@ -113,6 +113,7 @@ class DataCollatorWithPadding:
             del batch["label_ids"]
         return batch
 
+
 @dataclass
 class DataCollatorForLanguageModeling:
     """
@@ -193,6 +194,7 @@ class DataCollatorForLanguageModeling:
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
+
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
@@ -202,7 +204,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
 
     def __call__(
-            self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             input_ids = [e["input_ids"] for e in examples]
