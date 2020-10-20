@@ -128,7 +128,7 @@ class DataCollatorForLanguageModeling:
     mlm_probability: float = 0.15
 
     def __call__(
-            self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             input_ids = [e["input_ids"] for e in examples]
@@ -207,7 +207,7 @@ class DataCollatorForLanguageModeling:
         return mask_labels
 
     def _tensorize_batch(
-            self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
     ) -> torch.Tensor:
         # In order to accept both lists of lists and lists of Tensors
         if isinstance(examples[0], (list, tuple)):
