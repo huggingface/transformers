@@ -19,6 +19,7 @@ from typing import Iterable, Optional, Tuple
 import torch
 from torch.nn import functional as F
 
+from .file_utils import ModelOutput
 from .generation_utils_beam_search import BeamScorer, BeamSearchBase
 from .generation_utils_samplers import (
     MinLengthSampler,
@@ -127,7 +128,6 @@ class GenerationMixin:
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
         do_sample: Optional[bool] = None,
@@ -144,7 +144,6 @@ class GenerationMixin:
         length_penalty: Optional[float] = None,
         no_repeat_ngram_size: Optional[int] = None,
         num_return_sequences: Optional[int] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
         **model_kwargs
@@ -173,7 +172,21 @@ class GenerationMixin:
             input_ids = torch.ones((1, 1), dtype=torch.long, device=next(self.parameters()).device) * pad_token_id
 
         if self.config.is_encoder_decoder:
-            raise NotImplementedError()
+            encoder = self.get_encoder()
+            encoder_kwargs = {
+                argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
+            }
+            model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
+            batch_size = input_ids.shape[0]
+
+            if "decoder_input_ids" in model_kwargs:
+                input_ids = model_kwargs["decoder_input_ids"]
+            else:
+                decoder_start_token_id = self.get_decoder_start_token_id(bos_token_id)
+                input_ids = (
+                    torch.ones((batch_size, 1), dtype=input_ids.dtype, device=input_ids.device)
+                    * decoder_start_token_id
+                )
 
         # determine generation model
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
@@ -213,6 +226,19 @@ class GenerationMixin:
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids = input_ids.repeat_interleave(num_return_sequences, dim=0)
 
+            # interleave with `num_return_sequences`
+            if "attention_mask" in model_kwargs:
+                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(
+                    num_return_sequences, dim=0
+                )
+
+            if self.config.is_encoder_decoder:
+                assert "encoder_outputs" in model_kwargs
+                encoder_outputs = model_kwargs["encoder_outputs"]
+                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+                    num_return_sequences, dim=0
+                )
+
             # sample
             return self.sample(
                 input_ids,
@@ -238,6 +264,19 @@ class GenerationMixin:
                 do_early_stopping=early_stopping,
                 num_return_sequences=num_return_sequences,
             )
+
+            # interleave with `num_beams`
+            input_ids = input_ids.repeat_interleave(num_beams, dim=0)
+
+            if "attention_mask" in model_kwargs:
+                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(num_beams, dim=0)
+
+            if self.config.is_encoder_decoder:
+                assert "encoder_outputs" in model_kwargs
+                encoder_outputs = model_kwargs["encoder_outputs"]
+                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+                    num_beams, dim=0
+                )
 
             return self.beam_search(
                 input_ids,
@@ -425,10 +464,22 @@ class GenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
-        batch_size, cur_len = input_ids.shape
+        batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
 
-        input_ids = input_ids.repeat_interleave(num_beams, dim=0)
+        batch_beam_size, cur_len = input_ids.shape
+
+        assert num_beams * batch_size == batch_beam_size, "TODO ..."
+
+        if "attention_mask" in model_kwargs:
+            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(num_beams, dim=0)
+
+        if self.config.is_encoder_decoder:
+            assert "encoder_outputs" in model_kwargs
+            encoder_outputs = model_kwargs["encoder_outputs"]
+            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+                num_beams, dim=0
+            )
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
@@ -440,6 +491,12 @@ class GenerationMixin:
             outputs = self(**model_inputs, return_dict=True)
             next_token_logits = outputs.logits[:, -1, :]
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+            # adjust tokens for Bart, *e.g.*
+            next_token_scores = self.adjust_logits_during_generation(
+                next_token_scores, cur_len=cur_len, max_length=max_length
+            )
+
             next_token_scores = pre_processor(input_ids, next_token_scores)
 
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
