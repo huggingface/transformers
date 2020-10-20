@@ -39,6 +39,7 @@ from transformers import (
     DataCollatorForPermutationLanguageModeling,
     HfArgumentParser,
     LineByLineTextDataset,
+    LineByLineWithRefDataset,
     PreTrainedTokenizer,
     TextDataset,
     Trainer,
@@ -101,6 +102,10 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
+    chinese_ref_file: Optional[str] = field(
+        default=False,
+        metadata={"help": "An optional input ref data file for whole word mask(wwm) in Chinees."},
+    )
     line_by_line: bool = field(
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
@@ -108,6 +113,9 @@ class DataTrainingArguments:
 
     mlm: bool = field(
         default=False, metadata={"help": "Train with masked-language modeling loss instead of language modeling."}
+    )
+    wwm: bool = field(
+        default=False, metadata={"help": "Use Whole Word Mask."}
     )
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
@@ -143,6 +151,10 @@ def get_dataset(
 ):
     def _dataset(file_path):
         if args.line_by_line:
+            if args.chinese_ref_file:
+                return LineByLineWithRefDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size,
+                                             ref_path=args.chinese_ref_file)
+
             return LineByLineTextDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size)
         else:
             return TextDataset(
@@ -271,7 +283,7 @@ def main():
         )
     else:
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
+            tokenizer=tokenizer, mlm=data_args.mlm, wwm=data_args.wwm, mlm_probability=data_args.mlm_probability
         )
 
     # Initialize our Trainer

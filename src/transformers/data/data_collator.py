@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
-
+import random
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -124,25 +124,90 @@ class DataCollatorForLanguageModeling:
 
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
+    wwm: bool = True
     mlm_probability: float = 0.15
 
     def __call__(
-        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+            self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
-            examples = [e["input_ids"] for e in examples]
-        batch = self._tensorize_batch(examples)
+            input_ids = [e["input_ids"] for e in examples]
+        else:
+            input_ids = examples
+            examples = [{"input_ids":e} for e in examples]
+
+        batch_input = self._tensorize_batch(input_ids)
+
         if self.mlm:
-            inputs, labels = self.mask_tokens(batch)
+            if self.wwm:  # Whole Word Mask
+                mask_labels = []
+                for e in examples:
+                    ref_tokens = []
+                    for id in e['input_ids'].tolist():
+                        token = self.tokenizer._convert_id_to_token(id)
+                        ref_tokens.append(token)
+
+                    # For Chinese tokens, we need extra inf to mark sub-word, e.g [喜,欢]-> [喜，##欢]
+                    if "chinese_ref" in e:
+                        ref_pos = e['chinese_ref'].tolist()
+                        for i in range(e['input_ids'].size(0)):
+                            if i in ref_pos:
+                                ref_tokens[i] = '##' + ref_tokens[i]
+                    mask_labels.append(self._whole_word_mask(ref_tokens))
+                batch_mask = self._tensorize_batch(mask_labels)
+                inputs, labels = self.mask_tokens(batch_input, batch_mask)
+            else:
+                inputs, labels = self.mask_tokens(batch_input)
             return {"input_ids": inputs, "labels": labels}
         else:
-            labels = batch.clone().detach()
+            labels = batch_input.clone().detach()
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
-            return {"input_ids": batch, "labels": labels}
+            return {"input_ids": batch_input, "labels": labels}
+
+    def _whole_word_mask(self, input_tokens: List[str], max_predictions=512):
+        """
+        Get 0/1 labels for masked tokens with whole word mask proxy
+        """
+
+        cand_indexes = []
+        for (i, token) in enumerate(input_tokens):
+            if token == "[CLS]" or token == "[SEP]":
+                continue
+
+            if len(cand_indexes) >= 1 and token.startswith("##"):
+                cand_indexes[-1].append(i)
+            else:
+                cand_indexes.append([i])
+
+        random.shuffle(cand_indexes)
+        num_to_predict = min(max_predictions, max(1, int(round(len(input_tokens) * self.mlm_probability))))
+        masked_lms = []
+        covered_indexes = set()
+        for index_set in cand_indexes:
+            if len(masked_lms) >= num_to_predict:
+                break
+            # If adding a whole-word mask would exceed the maximum number of
+            # predictions, then just skip this candidate.
+            if len(masked_lms) + len(index_set) > num_to_predict:
+                continue
+            is_any_index_covered = False
+            for index in index_set:
+                if index in covered_indexes:
+                    is_any_index_covered = True
+                    break
+            if is_any_index_covered:
+                continue
+            for index in index_set:
+                covered_indexes.add(index)
+                masked_lms.append(index)
+
+        assert len(covered_indexes) == len(masked_lms)
+        mask_labels = [1 if i in covered_indexes else 0 for i in range(len(input_tokens))]
+        return mask_labels
 
     def _tensorize_batch(
-        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+            self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
     ) -> torch.Tensor:
         # In order to accept both lists of lists and lists of Tensors
         if isinstance(examples[0], (list, tuple)):
@@ -159,19 +224,22 @@ class DataCollatorForLanguageModeling:
                 )
             return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
-    def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def mask_tokens(self, inputs: torch.Tensor, mask_labels: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        Set 'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
         """
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
             )
-
         labels = inputs.clone()
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-        probability_matrix = torch.full(labels.shape, self.mlm_probability)
+        if self.wwm and mask_labels is not None:
+            probability_matrix = mask_labels
+        else:
+            probability_matrix = torch.full(labels.shape, self.mlm_probability)
         special_tokens_mask = [
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
@@ -179,7 +247,10 @@ class DataCollatorForLanguageModeling:
         if self.tokenizer._pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
-        masked_indices = torch.bernoulli(probability_matrix).bool()
+        if self.wwm:
+            masked_indices = probability_matrix.bool()
+        else:
+            masked_indices = torch.bernoulli(probability_matrix).bool()
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
