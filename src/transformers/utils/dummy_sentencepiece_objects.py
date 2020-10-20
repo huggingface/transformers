@@ -74,6 +74,15 @@ class T5Tokenizer:
         requires_sentencepiece(self)
 
 
+class XLMProphetNetTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
 class XLMRobertaTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)

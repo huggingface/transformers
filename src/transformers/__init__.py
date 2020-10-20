@@ -54,6 +54,7 @@ from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
+from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 from .configuration_rag import RagConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
@@ -63,6 +64,7 @@ from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
+from .configuration_xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 from .data import (
@@ -103,6 +105,7 @@ from .file_utils import (
     is_apex_available,
     is_datasets_available,
     is_faiss_available,
+    is_flax_available,
     is_psutil_available,
     is_py3nvml_available,
     is_sentencepiece_available,
@@ -182,6 +185,7 @@ from .tokenization_lxmert import LxmertTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_phobert import PhobertTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 from .tokenization_rag import RagTokenizer
 from .tokenization_retribert import RetriBertTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -209,6 +213,7 @@ if is_sentencepiece_available():
     from .tokenization_pegasus import PegasusTokenizer
     from .tokenization_reformer import ReformerTokenizer
     from .tokenization_t5 import T5Tokenizer
+    from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
     from .tokenization_xlm_roberta import XLMRobertaTokenizer
     from .tokenization_xlnet import XLNetTokenizer
 else:
@@ -249,7 +254,6 @@ if is_tokenizers_available():
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
 else:
     from .utils.dummy_tokenizers_objects import *
-
 
 # Trainer
 from .trainer_callback import (
@@ -489,6 +493,15 @@ if is_torch_available():
         load_tf_weights_in_openai_gpt,
     )
     from .modeling_pegasus import PegasusForConditionalGeneration
+    from .modeling_prophetnet import (
+        PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ProphetNetDecoder,
+        ProphetNetEncoder,
+        ProphetNetForCausalLM,
+        ProphetNetForConditionalGeneration,
+        ProphetNetModel,
+        ProphetNetPreTrainedModel,
+    )
     from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
     from .modeling_reformer import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -548,6 +561,14 @@ if is_torch_available():
         XLMModel,
         XLMPreTrainedModel,
         XLMWithLMHeadModel,
+    )
+    from .modeling_xlm_prophetnet import (
+        XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLMProphetNetDecoder,
+        XLMProphetNetEncoder,
+        XLMProphetNetForCausalLM,
+        XLMProphetNetForConditionalGeneration,
+        XLMProphetNetModel,
     )
     from .modeling_xlm_roberta import (
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -816,6 +837,10 @@ else:
     # They will raise an import error if the user tries to instantiate / use them.
     from .utils.dummy_tf_objects import *
 
+
+if is_flax_available():
+    from .modeling_flax_bert import FlaxBertModel
+    from .modeling_flax_roberta import FlaxRobertaModel
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(

@@ -13,6 +13,7 @@ from pathlib import Path
 from .file_utils import (
     _datasets_available,
     _faiss_available,
+    _flax_available,
     _sentencepiece_available,
     _tf_available,
     _tokenizers_available,
@@ -113,6 +114,18 @@ def require_tf(test_case):
         return unittest.skip("test requires TensorFlow")(test_case)
     else:
         return test_case
+
+
+def require_flax(test_case):
+    """
+    Decorator marking a test that requires JAX & Flax
+
+    These tests are skipped when one / both are not installed
+
+    """
+    if not _flax_available:
+        test_case = unittest.skip("test requires JAX & Flax")(test_case)
+    return test_case
 
 
 def require_sentencepiece(test_case):
