@@ -12,6 +12,18 @@ https://github.com/huggingface/transformers/tree/master/scripts/fsmt
 The build instructions are here:
 https://github.com/stas00/porting/tree/master/datasets/pegasus
 
+Currently, the following datasets are supported:
+* xsum
+* cnn_dailymail
+* newsroom
+* multi_news
+* gigaword
+* wikihow
+* reddit_tifu
+* arxiv
+* pubmed
+* aeslc
+* billsum
 
 ## XSUM
 
