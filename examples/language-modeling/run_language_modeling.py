@@ -151,7 +151,7 @@ def get_dataset(
         if args.line_by_line:
             if args.chinese_ref_file:
                 if not args.wwm or args.mlm:
-                    raise ValueError("Need set wwm and mlm to true for Chinese Whole Word Mask")
+                    raise ValueError("You need to set world whole masking and mlm to True for Chinese Whole Word Mask")
                 return LineByLineWithRefDataset(
                     tokenizer=tokenizer,
                     file_path=file_path,
