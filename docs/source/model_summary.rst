@@ -500,8 +500,8 @@ BART
 <https://arxiv.org/abs/1910.13461>`_, Mike Lewis et al.
 
 Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is
-fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder, on the
-pretraining tasks, a composition of the following transformations are applied:
+fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder
+, on the pretraining tasks, a composition of the following transformations are applied:
 
   * mask random tokens (like in BERT)
   * delete random tokens
@@ -526,12 +526,17 @@ Pegasus
 `PEGASUS: Pre-training with Extracted Gap-sentences forAbstractive Summarization 
 <https://arxiv.org/pdf/1912.08777.pdf>`_, Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 
-Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training objective, called Gap Sentence Generation (GSG).
+Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on
+two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training
+objective, called Gap Sentence Generation (GSG).
 
-  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
-  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
+  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like
+    in BERT)
+  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a
+    causal mask to hide the future words like a regular auto-regressive transformer decoder.
 
-In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are masked and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
+In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are
+masked and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
 
 The library provides a version of this model for conditional generation, which should be used for summarization.
 
@@ -577,11 +582,12 @@ The pretraining includes both supervised and self-supervised training. Supervise
 tasks provided by the GLUE and SuperGLUE benchmarks (converting them into text-to-text tasks as explained above).
 
 Self-supervised training uses corrupted tokens, by randomly removing 15% of the tokens and
-replacing them with individual sentinel tokens (if several consecutive tokens are marked for removal, the whole group is replaced with a single sentinel token). The input of the encoder is the corrupted sentence, the input of the decoder is the
-original sentence and the target is then the dropped out tokens delimited by their sentinel tokens.
+replacing them with individual sentinel tokens (if several consecutive tokens are marked for removal, the whole group
+is replaced with a single sentinel token). The input of the encoder is the corrupted sentence, the input of the decoder
+is the original sentence and the target is then the dropped out tokens delimited by their sentinel tokens.
 
-For instance, if we have the sentence “My dog is very cute .”, and we decide to remove the tokens: "dog", "is" and "cute", the encoder
-input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
+For instance, if we have the sentence “My dog is very cute .”, and we decide to remove the tokens: "dog", "is" and
+"cute", the encoder input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
 
 The library provides a version of this model for conditional generation.
 
@@ -597,7 +603,8 @@ MBart
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mbart-blueviolet">
    </a>
 
-`Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov
+`Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan
+Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov
 Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
 The model architecture and pre-training objective is same as BART, but MBart is trained on 25 languages 
@@ -606,11 +613,12 @@ for pre-training a complete sequence-to-sequence model by denoising full texts i
 
 The library provides a version of this model for conditional generation.
 
-The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-en-ro>`_ can be used for english -> romanian translation.
+The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-en-ro>`_ can be used for english ->
+romanian translation.
 
-The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
+The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other
+translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
 
-.. _multimodal-models:
 
 ProphetNet
 -----------------------------------------------------------------------------------------------------------------------
@@ -624,12 +632,18 @@ ProphetNet
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-prophetnet-blueviolet">
    </a>
 
-`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
+`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
+Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
 
-ProphetNet introduces a novel *sequence-to-sequence* pre-training objective, called *future n-gram prediction*. In future n-gram prediction, the model predicts the next n tokens simultaneously based on previous context tokens at each time step instead instead of just the single next token. The future n-gram prediction explicitly encourages the model to plan for the future tokens and prevent overfitting on strong local correlations.
-The model architecture is based on the original Transformer, but replaces the "standard" self-attention mechanism in the decoder by a a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
+ProphetNet introduces a novel *sequence-to-sequence* pre-training objective, called *future n-gram prediction*. In
+future n-gram prediction, the model predicts the next n tokens simultaneously based on previous context tokens at
+each time step instead instead of just the single next token. The future n-gram prediction explicitly encourages
+the model to plan for the future tokens and prevent overfitting on strong local correlations.
+The model architecture is based on the original Transformer, but replaces the "standard" self-attention mechanism
+in the decoder by a a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
 
-The library provides a pre-trained version of this model for conditional generation and a fine-tuned version for summarization.
+The library provides a pre-trained version of this model for conditional generation and a fine-tuned version for
+summarization.
 
 XLM-ProphetNet
 -----------------------------------------------------------------------------------------------------------------------
@@ -643,11 +657,16 @@ XLM-ProphetNet
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xprophetnet-blueviolet">
    </a>
 
-`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
+`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
+Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
 
-XLM-ProphetNet's model architecture and pre-training objective is same as ProphetNet, but XLM-ProphetNet was pre-trained on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
+XLM-ProphetNet's model architecture and pre-training objective is same as ProphetNet, but XLM-ProphetNet was
+pre-trained on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
 
-The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned versions for headline generation and question generation, respectively.
+The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned
+versions for headline generation and question generation, respectively.
+
+.. _multimodal-models:
 
 Multimodal models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
