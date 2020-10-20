@@ -103,8 +103,7 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     chinese_ref_file: Optional[str] = field(
-        default=NoneŒ,
-        metadata={"help": "An optional input ref data file for whole word mask(wwm) in Chinees."},
+        default=NoneŒ, metadata={"help": "An optional input ref data file for whole word mask(wwm) in Chinees."},
     )
     line_by_line: bool = field(
         default=False,
@@ -114,9 +113,7 @@ class DataTrainingArguments:
     mlm: bool = field(
         default=False, metadata={"help": "Train with masked-language modeling loss instead of language modeling."}
     )
-    wwm: bool = field(
-        default=False, metadata={"help": "Use Whole Word Mask."}
-    )
+    wwm: bool = field(default=False, metadata={"help": "Use Whole Word Mask."})
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
@@ -152,8 +149,12 @@ def get_dataset(
     def _dataset(file_path):
         if args.line_by_line:
             if args.chinese_ref_file:
-                return LineByLineWithRefDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size,
-                                             ref_path=args.chinese_ref_file)
+                return LineByLineWithRefDataset(
+                    tokenizer=tokenizer,
+                    file_path=file_path,
+                    block_size=args.block_size,
+                    ref_path=args.chinese_ref_file,
+                )
 
             return LineByLineTextDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size)
         else:
@@ -277,9 +278,7 @@ def main():
     )
     if config.model_type == "xlnet":
         data_collator = DataCollatorForPermutationLanguageModeling(
-            tokenizer=tokenizer,
-            plm_probability=data_args.plm_probability,
-            max_span_length=data_args.max_span_length,
+            tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_span_length=data_args.max_span_length,
         )
     else:
         data_collator = DataCollatorForLanguageModeling(

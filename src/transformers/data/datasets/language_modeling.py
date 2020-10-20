@@ -37,11 +37,7 @@ class TextDataset(Dataset):
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else directory,
-            "cached_lm_{}_{}_{}".format(
-                tokenizer.__class__.__name__,
-                str(block_size),
-                filename,
-            ),
+            "cached_lm_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
         )
 
         # Make sure only the first process in distributed training processes the dataset,
@@ -114,6 +110,7 @@ class LineByLineTextDataset(Dataset):
     def __getitem__(self, i) -> Dict[str, torch.tensor]:
         return self.examples[i]
 
+
 class LineByLineWithRefDataset(Dataset):
     """
     This will be superseded by a framework-agnostic approach
@@ -140,7 +137,7 @@ class LineByLineWithRefDataset(Dataset):
         assert len(data) == len(ref)
         n = len(self.examples)
         for i in range(n):
-            self.examples[i]['chinese_ref'] = torch.tensor(ref[i], dtype=torch.long)
+            self.examples[i]["chinese_ref"] = torch.tensor(ref[i], dtype=torch.long)
 
     def __len__(self):
         return len(self.examples)
@@ -313,12 +310,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
-            directory,
-            "cached_nsp_{}_{}_{}".format(
-                tokenizer.__class__.__name__,
-                str(block_size),
-                filename,
-            ),
+            directory, "cached_nsp_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
         )
 
         self.tokenizer = tokenizer
