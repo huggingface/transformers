@@ -45,7 +45,7 @@ slightly slower (over-fitting takes more epochs).
 
 We use the `--mlm` flag so that the script may change its loss function.
 
-If use whole-word masking, use both `--mlm` and `--wwm` flag(for English Model).
+If using whole-word masking, use both the`--mlm` and `--wwm` flags.
 
 ```bash
 export TRAIN_FILE=/path/to/dataset/wiki.train.raw
