@@ -5,7 +5,7 @@
 from .glue import GlueDataset, GlueDataTrainingArguments
 from .language_modeling import (
     LineByLineTextDataset,
-    LineByLineWithRefDataset,Œ
+    LineByLineWithRefDataset,
     LineByLineWithSOPTextDataset,
     TextDataset,
     TextDatasetForNextSentencePrediction,
