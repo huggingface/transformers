@@ -14,8 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Finetuning the library models for sequence classification on GLUE."""
+# You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
+import logging
 import os
+import random
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
@@ -23,6 +26,7 @@ from typing import Optional
 import numpy as np
 from datasets import load_dataset, load_metric
 
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
@@ -31,10 +35,10 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    default_data_collator,
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from transformers.utils import logging
 
 
 task_to_keys = {
@@ -49,7 +53,7 @@ task_to_keys = {
     "wnli": ("sentence1", "sentence2"),
 }
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -71,7 +75,14 @@ class DataTrainingArguments:
         },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+    )
+    pad_to_max_length: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to pad all samples to `max_seq_length`. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+        },
     )
 
     def __post_init__(self):
@@ -104,11 +115,6 @@ class ModelArguments:
     )
 
 
-def preprocess_function(examples, tokenizer=None, sentence1_key="sentence", sentence2_key=None, max_length=None):
-    args = (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
-    return tokenizer(*args, padding="max_length", max_length=max_length, truncation=True)
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -129,31 +135,38 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+            "Use --overwrite_output_dir to overcome."
         )
+
+    # Setup logging
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
+    )
 
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
-    # Set the verbosity to info on main process only:
+    # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
-        logging.set_verbosity_info()
+        transformers.utils.logging.set_verbosity_info()
     logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
+    # If adapting this script to your custom task, don't forget to adjust those two variables.
     num_labels = 3 if data_args.task_name == "mnli" else 1 if data_args.task_name == "stsb" else 2
     is_regression = data_args.task_name == "stsb"
 
     # Load pretrained model and tokenizer
     #
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
+    # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
@@ -173,23 +186,53 @@ def main():
     )
 
     # Get datasets
+    #
+    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
+    # download the dataset.
+    #
+    # To load your custom dataset instead of a glue task, you can use the same function to load a dataset from local
+    # files (see: https://huggingface.co/docs/datasets/loading_datasets.html#from-local-files).
+    #
+    # For instance, here is how to load a training and validation sets from csv files:
+    #
+    # datasets = load_dataset("csv", {"train": "train.csv", "validation": "valid.csv"})
+    #
+    # If you data is in the json format, you can use:
+    #
+    # datasets = load_dataset("json", {"train": "train.json", "validation": "valid.json"})
     datasets = load_dataset("glue", data_args.task_name)
     sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
-    encode_kwargs = {
-        "tokenizer": tokenizer,
-        "sentence1_key": sentence1_key,
-        "sentence2_key": sentence2_key,
-        "max_length": data_args.max_seq_length,
-    }
-    datasets = datasets.map(preprocess_function, batched=True, fn_kwargs=encode_kwargs)
+
+    # Padding strategy
+    if data_args.pad_to_max_length:
+        padding = "max_length"
+        max_length = data_args.max_seq_length
+    else:
+        # We will pad later at batch creation
+        padding = False
+        max_length = None
+
+    def preprocess_function(examples):
+        args = (
+            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+        )
+        return tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
+
+    datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     train_dataset = datasets["train"]
     eval_dataset = datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
     test_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
 
+    # Log a few random samples from the training set:
+    for index in random.sample(range(len(train_dataset)), 3):
+        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+
     # Get the metric function
     metric = load_metric("glue", data_args.task_name)
 
+    # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
+    # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
@@ -203,6 +246,8 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
+        # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
+        data_collator=default_data_collator if not data_args.pad_to_max_length else None,
     )
 
     # Training

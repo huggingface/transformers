@@ -67,7 +67,6 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_glue.py
             --model_name_or_path distilbert-base-uncased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --task_name mrpc
