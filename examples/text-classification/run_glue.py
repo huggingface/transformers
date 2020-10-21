@@ -198,14 +198,19 @@ def main():
 
     # Labels
     if data_args.task_name is not None:
-        label_list = datasets["train"].features["label"].names
+        is_regression = data_args.task_name == "stsb"
+        if not is_regression:
+            label_list = datasets["train"].features["label"].names
+            num_labels = len(label_list)
+        else:
+            num_labels = 1
     else:
         # Trying to have good defaults here, don't hesitate to tweak to your needs.
         labels = datasets["train"]["label"]
         label_list = list(set(labels))
         label_list.sort()  # list(set(xxx)) is not deterministic so we sort the labels to make it so.
-    num_labels = len(label_list)
-    is_regression = num_labels == 1
+        num_labels = len(label_list)
+        is_regression = num_labels == 1
 
     # Load pretrained model and tokenizer
     #
@@ -255,7 +260,7 @@ def main():
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
-    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id and data_args.task_name is not None:
+    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id and data_args.task_name is not None and is_regression:
         # Some have all caps in their config, some don't.
         label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
         if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
