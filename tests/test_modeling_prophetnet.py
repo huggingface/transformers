@@ -901,6 +901,15 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_model_with_attn_mask(*config_and_inputs)
 
+    def test_config_save(self):
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        config.add_cross_attention = False
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            config.save_pretrained(tmp_dirname)
+            config = ProphetNetConfig.from_pretrained(tmp_dirname)
+
+        self.assertFalse(config.add_cross_attention)
+
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
