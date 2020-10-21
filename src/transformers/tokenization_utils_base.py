@@ -2135,7 +2135,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
-                **kwargs
+                **kwargs,
             )
         else:
             return self.encode_plus(
