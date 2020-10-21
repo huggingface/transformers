@@ -640,7 +640,7 @@ class BartDecoder(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-            print_tensor(f'decoder layer {idx} output', x)
+            # print_tensor(f'decoder layer {idx} output', x)
 
         if self.layer_norm:  # if config.add_final_layer_norm (mBART)
             x = self.layer_norm(x)

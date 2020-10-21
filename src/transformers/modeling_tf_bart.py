@@ -664,7 +664,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-            print_tensor(f'decoder layer {idx} output', x)
+            #print_tensor(f'decoder layer {idx} output', x)
 
         if self.layer_norm is not None:  # same as if config.add_final_layer_norm
             x = self.layer_norm(x)
