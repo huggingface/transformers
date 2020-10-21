@@ -14,4 +14,4 @@ from transformers import *
 tokenizer = BertTokenizer.from_pretrained("lanwuwei/GigaBERT-v3-Arabic-and-English", do_lower_case=True)
 model = BertForTokenClassification.from_pretrained("lanwuwei/GigaBERT-v3-Arabic-and-English")
 ```
-More coda examples can be found [here](https://github.com/lanwuwei/GigaBERT).
+More code examples can be found [here](https://github.com/lanwuwei/GigaBERT).
