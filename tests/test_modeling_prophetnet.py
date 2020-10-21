@@ -1076,14 +1076,10 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_question_gen_inference(self):
-        model = ProphetNetForConditionalGeneration.from_pretrained(
-            "microsoft/prophetnet-large-uncased-squad-qg"
-        )
+        model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased-squad-qg")
         model.to(torch_device)
 
-        tokenizer = ProphetNetTokenizer.from_pretrained(
-            "microsoft/prophetnet-large-uncased-squad-qg"
-        )
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-squad-qg")
 
         INPUTS = [
             "Bill Gates [SEP] Microsoft was founded by Bill Gates and Paul Allen on April 4, 1975.",
