@@ -1,3 +1,13 @@
+---
+language:
+- en
+- ar
+datasets:
+- gigaword
+- oscar
+- wikipedia
+---
+
 ## GigaBERT-v3
 GigaBERT-v3 is a customized bilingual BERT for English and Arabic. It was pre-trained in a large-scale corpus (Gigaword+Oscar+Wikipedia) with ~10B tokens, showing state-of-the-art zero-shot transfer performance from English to Arabic on information extraction (IE) tasks. More details can be found in the following paper:
 
