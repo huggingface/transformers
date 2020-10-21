@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from transformers.testing_utils import require_multigpu
+from transformers.testing_utils import require_torch_multigpu
 
 from .utils import load_json
 
@@ -182,7 +182,7 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
         return cls
 
-    @require_multigpu
+    @require_torch_multigpu
     def test_multigpu(self):
 
         updates = dict(
