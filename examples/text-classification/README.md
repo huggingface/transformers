@@ -105,35 +105,31 @@ since the data processor for each task inherits from the base class DataProcesso
 
 ## Running on TPUs in PyTorch
 
-**Update**: read the more up-to-date [Running on TPUs](../README.md#running-on-tpus) in the main README.md instead.
-
 Even when running PyTorch, you can accelerate your workloads on Google's TPUs, using `pytorch/xla`. For information on
 how to setup your TPU environment refer to the
 [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
-The following are some examples of running the `*_tpu.py` finetuning scripts on TPUs. All steps for data preparation
-are identical to your normal GPU + Huggingface setup.
-
-For running your GLUE task on MNLI dataset you can run something like the following:
+For running your GLUE task on MNLI dataset you can run something like the following form the root of the transformers
+repo:
 
 ```
-export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
-export TASK_NAME=MNLI
-
-python run_glue_tpu.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
+python examples/xla_spawn.py \
+  --num_cores=8 \
+  transformers/examples/text-classification/run_glue.py \
   --do_train \
   --do_eval \
-  --max_seq_length 128 \
-  --train_batch_size 32 \
-  --learning_rate 3e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/$TASK_NAME \
+  --task_name=mrpc \
+  --num_train_epochs=3 \
+  --max_seq_length=128 \
+  --learning_rate=5e-5 \
+  --output_dir=/tmp/mrpc \
   --overwrite_output_dir \
-  --logging_steps 50 \
-  --save_steps 200 \
-  --num_cores=8
+  --logging_steps=5 \
+  --save_steps=5 \
+  --tpu_metrics_debug \
+  --model_name_or_path=bert-base-cased \
+  --per_device_train_batch_size=64 \
+  --per_device_eval_batch_size=64
 ```
 
 
