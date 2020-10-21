@@ -33,6 +33,7 @@ from transformers import (
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
+    PretrainedConfig,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -252,7 +253,14 @@ def main():
         padding = False
         max_length = None
 
-    label_to_id = None if data_args.task_name is not None else {v: i for i, v in enumerate(label_list)}
+    # Some models have set the order of the labels to use, so let's make sure we do use it.
+    label_to_id = None
+    if model.config.label2id != PretrainedConfig().label2id and data_args.task_name is not None:
+        # Some have all caps in their config, some don't.
+        label_name_to_id = {k.lower(): v for k, v in model.config.label2id.values()}
+        label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
+    elif data_args.task_name is None:
+        label_to_id = {v: i for i, v in enumerate(label_list)}
 
     def preprocess_function(examples):
         # Tokenize the texts
