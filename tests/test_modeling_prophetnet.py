@@ -1077,12 +1077,12 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_question_gen_inference(self):
         model = ProphetNetForConditionalGeneration.from_pretrained(
-            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased-squad-qg"
+            "microsoft/prophetnet-large-uncased-squad-qg"
         )
         model.to(torch_device)
 
         tokenizer = ProphetNetTokenizer.from_pretrained(
-            "/home/patrick/hugging_face/microsoft/prophetnet-large-uncased-squad-qg"
+            "microsoft/prophetnet-large-uncased-squad-qg"
         )
 
         INPUTS = [
