@@ -48,14 +48,6 @@ class BlenderbotForConditionalGeneration(BartForConditionalGeneration):
     """
 
     config_class = BlenderbotConfig
-    authorized_missing_keys = [
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
-    ]
-    keys_to_never_save = [
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
-    ]
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         logits[:, self.config.bos_token_id] = -torch.finfo(torch.float16).max  # near infinity fp16
