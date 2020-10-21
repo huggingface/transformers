@@ -70,7 +70,7 @@ class ConfigTester(object):
         if self.config_class.is_composition:
             return
         config = self.config_class()
-        self.parent.assertIsNone(config)
+        self.parent.assertIsNotNone(config)
 
     def run_common_tests(self):
         self.create_and_test_config_common_properties()
