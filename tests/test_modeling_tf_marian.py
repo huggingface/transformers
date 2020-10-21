@@ -16,26 +16,18 @@
 
 import unittest
 
-from transformers import AutoConfig, AutoTokenizer, MarianConfig, MarianTokenizer, is_torch_available
+from transformers import  AutoTokenizer, MarianConfig, MarianTokenizer, is_tf_available, TranslationPipeline
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from .test_modeling_marian import ModelTester
 
 from .test_modeling_common import ModelTesterMixin
 
 
-if is_torch_available():
-    import torch
+if is_tf_available():
 
-    from transformers import AutoModelWithLMHead, MarianMTModel
-    from transformers.convert_marian_to_pytorch import (
-        ORG_NAME,
-        convert_hf_name_to_opus_name,
-        convert_opus_name_to_hf_name,
-    )
-    from transformers.modeling_bart import shift_tokens_right
-    from transformers.pipelines import TranslationPipeline
-
+    from transformers import TFAutoModelForSeq2SeqLM, TFMarianMTModel
 
 
 class ModelTester:
@@ -56,26 +48,6 @@ class ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         return self.config, {}
-
-
-@require_torch
-class SelectiveCommonTest(unittest.TestCase):
-    all_model_classes = (MarianMTModel,) if is_torch_available() else ()
-
-    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
-
-    def setUp(self):
-        self.model_tester = ModelTester(self)
-
-
-class ModelManagementTests(unittest.TestCase):
-    @slow
-    def test_model_names(self):
-        model_list = HfApi().model_list()
-        model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
-        bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
-        self.assertListEqual([], bad_model_ids)
-        self.assertGreater(len(model_ids), 500)
 
 
 @require_torch
@@ -117,25 +89,19 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: MarianMTModel = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
+        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True).to(torch_device)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
         self.assertEqual(c.max_length, 512)
         self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
-
-        if torch_device == "cuda":
-            return model.half()
-        else:
-            return model
+        return model
 
     def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
         generated_words = self.translate_src_text(**tokenizer_kwargs)
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
-            torch_device
-        )
+        model_inputs = self.tokenizer.prepare_seq2seq_batch(src_texts=self.src_text, **tokenizer_kwargs, return_tensors='tf')
         self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
@@ -143,51 +109,6 @@ class MarianIntegrationTest(unittest.TestCase):
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
 
-
-@require_sentencepiece
-@require_tokenizers
-class TestMarian_EN_DE_More(MarianIntegrationTest):
-    @slow
-    def test_forward(self):
-        src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
-        expected_ids = [38, 121, 14, 697, 38848, 0]
-
-        model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt).to(torch_device)
-
-        self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
-
-        desired_keys = {
-            "input_ids",
-            "attention_mask",
-            "labels",
-        }
-        self.assertSetEqual(desired_keys, set(model_inputs.keys()))
-        model_inputs["decoder_input_ids"] = shift_tokens_right(model_inputs.labels, self.tokenizer.pad_token_id)
-        model_inputs["return_dict"] = True
-        model_inputs["use_cache"] = False
-        with torch.no_grad():
-            outputs = self.model(**model_inputs)
-        max_indices = outputs.logits.argmax(-1)
-        self.tokenizer.batch_decode(max_indices)
-
-    def test_unk_support(self):
-        t = self.tokenizer
-        ids = t.prepare_seq2seq_batch(["||"]).to(torch_device).input_ids[0].tolist()
-        expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
-        self.assertEqual(expected, ids)
-
-    def test_pad_not_split(self):
-        input_ids_w_pad = self.tokenizer.prepare_seq2seq_batch(["I am a small frog <pad>"]).input_ids[0].tolist()
-        expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
-        self.assertListEqual(expected_w_pad, input_ids_w_pad)
-
-    @slow
-    def test_batch_generation_en_de(self):
-        self._assert_generated_batch_equal_expected()
-
-    def test_auto_config(self):
-        config = AutoConfig.from_pretrained(self.model_name)
-        self.assertIsInstance(config, MarianConfig)
 
 
 @require_sentencepiece
@@ -297,30 +218,6 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
 
     def test_pipeline(self):
         device = 0 if torch_device == "cuda" else -1
-        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=device)
+        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="tf", device=device)
         output = pipeline(self.src_text)
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
-
-
-@require_torch
-class TestConversionUtils(unittest.TestCase):
-    def test_renaming_multilingual(self):
-        old_names = [
-            "opus-mt-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
-            "opus-mt-cmn+cn-fi",  # no group
-            "opus-mt-en-de",  # standard name
-            "opus-mt-en-de",  # standard name
-        ]
-        expected = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
-        self.assertListEqual(expected, [convert_opus_name_to_hf_name(x) for x in old_names])
-
-    def test_undoing_renaming(self):
-        hf_names = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
-        converted_opus_names = [convert_hf_name_to_opus_name(x) for x in hf_names]
-        expected_opus_names = [
-            "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
-            "cmn+cn-fi",
-            "en-de",  # standard name
-            "en-de",
-        ]
-        self.assertListEqual(expected_opus_names, converted_opus_names)

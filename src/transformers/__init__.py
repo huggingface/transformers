@@ -592,6 +592,7 @@ if is_torch_available():
         XLNetPreTrainedModel,
         load_tf_weights_in_xlnet,
     )
+    from .modeling_tf_marian import TFMarianMTModel
 
     # Optimization
     from .optimization import (
