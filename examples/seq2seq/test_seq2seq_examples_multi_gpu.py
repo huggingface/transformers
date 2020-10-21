@@ -3,14 +3,12 @@
 import logging
 import os
 import sys
-import tempfile
-import unittest
 from pathlib import Path
 
 import pytest
 import torch
 
-from transformers.testing_utils import require_torch_multigpu
+from transformers.testing_utils import TestCasePlus, require_torch_multigpu
 
 from .utils import load_json
 
@@ -101,11 +99,10 @@ logger.addHandler(stream_handler)
 logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
 
 
-def make_test_data_dir(**kwargs):
-    tmp_dir = Path(tempfile.mkdtemp(**kwargs))
+def make_test_data_dir(tmp_dir):
     for split in ["train", "val", "test"]:
-        _dump_articles((tmp_dir / f"{split}.source"), ARTICLES)
-        _dump_articles((tmp_dir / f"{split}.target"), SUMMARIES)
+        _dump_articles(os.path.join(tmp_dir, f"{split}.source"), ARTICLES)
+        _dump_articles(os.path.join(tmp_dir, f"{split}.target"), SUMMARIES)
     return tmp_dir
 
 
@@ -176,7 +173,7 @@ def execute_async_std(cmd, env=None, stdin=None, timeout=None, quiet=False, echo
     return result
 
 
-class TestSummarizationDistillerMultiGPU(unittest.TestCase):
+class TestSummarizationDistillerMultiGPU(TestCasePlus):
     @classmethod
     def setUpClass(cls):
         logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
@@ -210,8 +207,8 @@ class TestSummarizationDistillerMultiGPU(unittest.TestCase):
         )
         default_updates.update(updates)
         args_d: dict = CHEAP_ARGS.copy()
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
+        tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
+        output_dir = self.get_auto_remove_tmp_dir()
         args_d.update(data_dir=tmp_dir, output_dir=output_dir, **default_updates)
 
         def convert(k, v):
