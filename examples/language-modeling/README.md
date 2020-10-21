@@ -63,7 +63,7 @@ python run_language_modeling.py \
     --wwm
 ```
 
-For Chinese models, we need to generate a reference files, case it's char level.
+For Chinese models, it's same with English model with only --mlm`. If using whole-word masking, we need to generate a reference files, case it's char level.
 
 ```bash
 export TRAIN_FILE=/path/to/dataset/wiki.train.raw

@@ -150,7 +150,7 @@ def get_dataset(
     def _dataset(file_path):
         if args.line_by_line:
             if args.chinese_ref_file is not None:
-                if not args.wwm or args.mlm:
+                if not args.whole_word_mask or not args.mlm:
                     raise ValueError("You need to set world whole masking and mlm to True for Chinese Whole Word Mask")
                 return LineByLineWithRefDataset(
                     tokenizer=tokenizer,
@@ -283,7 +283,7 @@ def main():
             tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_span_length=data_args.max_span_length,
         )
     else:
-        if data_args.mlm and data_args.wwm:
+        if data_args.mlm and data_args.whole_word_mask:
             data_collator = DataCollatorForWholeWordMask(
                 tokenizer=tokenizer, mlm_probability=data_args.mlm_probability
             )
