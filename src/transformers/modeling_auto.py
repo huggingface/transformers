@@ -335,7 +335,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (BertGenerationConfig, BertGenerationDecoder),
-        (ProphetNetConfig, XLMProphetNetForCausalLM),
+        (XLMProphetNetConfig, XLMProphetNetForCausalLM),
         (ProphetNetConfig, ProphetNetForCausalLM),
     ]
 )
