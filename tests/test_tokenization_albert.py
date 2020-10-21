@@ -17,7 +17,8 @@
 import os
 import unittest
 
-from transformers.tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
+from transformers import AlbertTokenizer, AlbertTokenizerFast
+from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -25,6 +26,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/spiece.model")
 
 
+@require_sentencepiece
+@require_tokenizers
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = AlbertTokenizer

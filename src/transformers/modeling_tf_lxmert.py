@@ -17,7 +17,6 @@
 """ TF 2.0 LXMERT model. """
 
 
-import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -34,9 +33,10 @@ from .file_utils import (
 )
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from .tokenization_utils_base import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "LxmertConfig"

@@ -29,7 +29,7 @@ Dataset ID: ```squad``` from  [HugginFace/NLP](https://github.com/huggingface/nl
 How to load it from [nlp](https://github.com/huggingface/nlp)
 
 ```python
-train_dataset  = nlp.load_dataset('squad, split=nlp.Split.TRAIN)
+train_dataset  = nlp.load_dataset('squad', split=nlp.Split.TRAIN)
 valid_dataset = nlp.load_dataset('squad', split=nlp.Split.VALIDATION)
 ```
 Check out more about this dataset and others in [NLP Viewer](https://huggingface.co/nlp/viewer/)

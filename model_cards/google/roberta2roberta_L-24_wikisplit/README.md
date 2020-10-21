@@ -17,6 +17,9 @@ Disclaimer: The model card has been written by the Hugging Face team.
 
 You can use this model for sentence splitting, *e.g.*
 
+**IMPORTANT**: The model was not trained on the `"` (double quotation mark) character -> so the before tokenizing the text, 
+it is advised to replace all `"` (double quotation marks) with two single `'` (single quotation mark).
+
 ```python
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
@@ -25,10 +28,9 @@ model = AutoModelForSeq2SeqLM.from_pretrained("google/roberta2roberta_L-24_wikis
 
 long_sentence = """Due to the hurricane, Lobsterfest has been canceled, making Bob very happy about it and he decides to open Bob 's Burgers for customers who were planning on going to Lobsterfest."""
 
-input_ids = tokenizer(long_sentence, return_tensors="pt").input_ids
+input_ids = tokenizer(tokenizer.bos_token + long_sentence + tokenizer.eos_token, return_tensors="pt").input_ids
 output_ids = model.generate(input_ids)[0]
 print(tokenizer.decode(output_ids, skip_special_tokens=True))
 # should output
-# Due Due hurricane, Lobsterfest has been canceled, making Bob very happy about it. He decides to open B
-# ob's Burgers for customers who were planning on going to Lobsterfest.com.
+# Due to the hurricane, Lobsterfest has been canceled, making Bob very happy about it. He decides to open Bob's Burgers for customers who were planning on going to Lobsterfest. 
 ```

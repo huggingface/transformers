@@ -21,6 +21,7 @@ from collections import OrderedDict
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
+    BartConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
@@ -51,6 +52,7 @@ from .modeling_tf_albert import (
     TFAlbertForTokenClassification,
     TFAlbertModel,
 )
+from .modeling_tf_bart import TFBartForConditionalGeneration
 from .modeling_tf_bert import (
     TFBertForMaskedLM,
     TFBertForMultipleChoice,
@@ -206,6 +208,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
+        (BartConfig, TFBartForConditionalGeneration),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
@@ -256,7 +259,9 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     ]
 )
 
-TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict([(T5Config, TFT5ForConditionalGeneration)])
+TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [(T5Config, TFT5ForConditionalGeneration), (BartConfig, TFBartForConditionalGeneration)]
+)
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
