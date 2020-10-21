@@ -41,7 +41,9 @@ class PretrainedConfig(object):
     Class attributes (overridden by derived classes)
         - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
           recreate the correct object in :class:`~transformers.AutoConfig`.
-        - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple sub-configs. In this case the config has to be initialized from two or more configs of type :class:`~transformers.PretrainedConfig`, *e.g.*: `EncoderDecoderConfig`, `RagConfig`.
+        - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple
+          sub-configs. In this case the config has to be initialized from two or more configs of
+          type :class:`~transformers.PretrainedConfig`, *e.g.*: `EncoderDecoderConfig`, `RagConfig`.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
