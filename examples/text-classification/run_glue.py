@@ -197,7 +197,7 @@ def main():
 
     # Labels
     if data_args.task_name is not None:
-        label_list = datasets["train"]["label"].names
+        label_list = datasets["train"].features["label"].names
     else:
         # Trying to have good defaults here, don't hesitate to tweak to your needs.
         labels = datasets["train"]["label"]
@@ -276,8 +276,6 @@ def main():
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
-    print(len(train_dataset))
-    print(train_dataset[0])
 
     # Get the metric function
     if data_args.task_name is not None:
@@ -291,7 +289,10 @@ def main():
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
         if data_args.task_name is not None:
-            return metric.compute(predictions=preds, references=p.label_ids)
+            result = metric.compute(predictions=preds, references=p.label_ids)
+            if len(result) > 1:
+                result["combined_score"] = np.mean(list(result.values())).item()
+            return result
         elif is_regression:
             return {"mse": ((preds - p.label_ids) ** 2).mean().item()}
         else:
