@@ -100,7 +100,7 @@ extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameteriz
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
 extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
-extras["dev"] = list(itertools.chain(*(map(extras.get, "testing quality docs ja sklearn tf torch sentencepiece".split()))))
+extras["dev"] = list(itertools.chain(*(map(extras.get, "testing quality docs ja sklearn flax tf torch sentencepiece".split()))))
 
 setup(
     name="transformers",
