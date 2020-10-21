@@ -791,7 +791,7 @@ Then the ``@slow`` tests can use large slow models to do qualitative testing. To
 
     grep tiny tests examples
 
-If you need to create such tiny model, here is a [script](https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model [stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de). You can easily adjust it to your specific model's architecture.
+Here is a an example of a `script <https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your specific model's architecture.
 
 It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
 
