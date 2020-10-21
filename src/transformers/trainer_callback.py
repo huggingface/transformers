@@ -19,7 +19,7 @@ Callbacks to use with the Trainer class and customize the training loop.
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from tqdm.auto import tqdm
 
@@ -82,6 +82,8 @@ class TrainerState:
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
+    trial_name: str = None
+    trial_params: Dict[str, Union[str, float, int, bool]] = None
 
     def __post_init__(self):
         if self.log_history is None:
@@ -280,7 +282,6 @@ class CallbackHandler(TrainerCallback):
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
         self.eval_dataloader = None
-        self.trial_info = None
 
         if not any(isinstance(cb, DefaultFlowCallback) for cb in self.callbacks):
             logger.warn(
@@ -378,7 +379,6 @@ class CallbackHandler(TrainerCallback):
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
                 eval_dataloader=self.eval_dataloader,
-                trial_info=self.trial_info,
                 **kwargs,
             )
             # A Callback can skip the return of `control` if it doesn't change it.

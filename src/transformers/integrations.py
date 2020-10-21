@@ -85,6 +85,17 @@ def is_ray_available():
     return _has_ray
 
 
+def hp_params(trial):
+    if is_optuna_available():
+        if isinstance(trial, optuna.Trial):
+            return trial.params
+    if is_ray_available():
+        if isinstance(trial, dict):
+            return trial
+
+    raise RuntimeError(f"Unknown type for trial {trial.__class__}")
+
+
 def default_hp_search_backend():
     if is_optuna_available():
         return "optuna"
@@ -226,8 +237,7 @@ class TensorBoardCallback(TrainerCallback):
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_hyper_param_search and state.is_world_process_zero:
-            trial_info = kwargs.get("trial_info", {})
-            trial_name = trial_info.get("trial_name")
+            trial_name = state.trial_name
             if trial_name is not None:
                 log_dir = os.path.join(args.logging_dir, trial_name)
             else:
@@ -303,8 +313,7 @@ class WandbCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
-            trial_info = kwargs.get("trial_info", {})
-            trial_name = trial_info.get("trial_name")
+            trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
                 run_name = trial_name

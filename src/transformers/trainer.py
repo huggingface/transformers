@@ -39,6 +39,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
+    hp_params,
     is_comet_available,
     is_optuna_available,
     is_ray_available,
@@ -710,8 +711,8 @@ class Trainer:
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
-        trial_name = self.hp_name(trial) if self.hp_name is not None else None
-        self.callback_handler.trial_info = {"trial": self._trial, "trial_name": trial_name}
+        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
+        self.state.trial_params = hp_params(trial) if trial is not None else None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
