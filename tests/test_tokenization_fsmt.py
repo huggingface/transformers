@@ -25,7 +25,8 @@ from transformers.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-FSMT_TINY = "stas/tiny-wmt19-en-de"
+# using a different tiny model than the one used for default params defined in init to ensure proper testing
+FSMT_TINY2 = "stas/tiny-wmt19-en-ru"
 
 
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -93,7 +94,10 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         """this just tests that the online tokenizer files get correctly fetched and
         loaded via its tokenizer_config.json and it's not slow so it's run by normal CI
         """
-        FSMTTokenizer.from_pretrained(FSMT_TINY)
+        tokenizer = FSMTTokenizer.from_pretrained(FSMT_TINY2)
+        self.assertListEqual([tokenizer.src_lang, tokenizer.tgt_lang], ["en", "ru"])
+        self.assertEqual(tokenizer.src_vocab_size, 21)
+        self.assertEqual(tokenizer.tgt_vocab_size, 21)
 
     def test_full_tokenizer(self):
         """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
