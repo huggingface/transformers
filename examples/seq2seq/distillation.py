@@ -266,10 +266,9 @@ def create_module(args):
 
 def distill_main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
-    check_output_dir(args)
+    check_output_dir(args, expected_items=3)
 
     model = create_module(args)
-    args.overwrite_output_dir = True
     return ft_main(args, model=model)
 
 
