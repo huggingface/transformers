@@ -431,7 +431,6 @@ class DecoderLayer(nn.Module):
         output_attentions=False,
     ):
         residual = x
-
         if layer_state is None:
             layer_state = {}
         if self.normalize_before:
@@ -451,7 +450,7 @@ class DecoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
 
-        # Cross attention
+        # Cross-Attention Block
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
@@ -593,12 +592,17 @@ class BartDecoder(nn.Module):
             positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
+        print_tensor('input_ids', input_ids)
+        print(f'embed_scale: {self.embed_scale}')
+        print_tensor('embedded_tok', x)
+        print_tensor('embedded_pos', positions)
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x)
             x += positions
         else:
             x += positions
             x = self.layernorm_embedding(x)
+        print_tensor('x1', x)
 
         x = F.dropout(x, p=self.dropout, training=self.training)
 
@@ -636,6 +640,8 @@ class BartDecoder(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
+            print_tensor(f'decoder layer {idx} output', x)
+
         if self.layer_norm:  # if config.add_final_layer_norm (mBART)
             x = self.layer_norm(x)
 
@@ -643,10 +649,10 @@ class BartDecoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
+        print_tensor(f'decoder output', x)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(

@@ -264,12 +264,24 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, TFFunnelForMaskedLM),
     ]
 )
+from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
+from .modeling_tf_mbart import TFMBartForConditionalGeneration
+from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
+from .configuration_pegasus import PegasusConfig
+from .configuration_mbart import MBartConfig
+from .configuration_blenderbot import BlenderbotConfig
+
 
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         (T5Config, TFT5ForConditionalGeneration),
-        (BartConfig, TFBartForConditionalGeneration),
         (MarianConfig, TFMarianMTModel),
+        (MBartConfig, TFMBartForConditionalGeneration),
+        (PegasusConfig, TFPegasusForConditionalGeneration),
+        (BlenderbotConfig, TFMBartForConditionalGeneration),
+        (BartConfig, TFBartForConditionalGeneration),
+
+
     ]
 )
 

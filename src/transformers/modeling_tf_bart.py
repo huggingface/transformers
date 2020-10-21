@@ -440,8 +440,9 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
+        self.normalize_before = config.normalize_before
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TFAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -449,10 +450,10 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             encoder_decoder_attention=True,
             name="encoder_attn",
         )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.encoder_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.final_layer_norm = LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
         self,
@@ -477,10 +478,12 @@ class TFDecoderLayer(tf.keras.layers.Layer):
 
             Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
+        residual = x  # Make a copy of the input tensor to add later.
         if layer_state is None:
             layer_state = {}
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
 
-        residual = x  # Make a copy of the input tensor to add later.
         # next line mutates layer state and we need a copy of it
         x, self_attn_weights = self.self_attn(
             query=x,
@@ -491,9 +494,12 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
-        x = self.self_attn_layer_norm(x)
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+        # Cross-Attention Block
         residual = x
-        # Cross-Attention
+        if self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
@@ -502,16 +508,19 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
-
-        x = self.encoder_attn_layer_norm(x)
-
+        if not self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
+        # Fully Connected
         residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
         x = self.fc2(x)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
-        x = self.final_layer_norm(x)
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
         return (
             x,
             self_attn_weights,
@@ -567,7 +576,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else Layer())
-        self.layer_norm = (LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None)
+        self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.output_hidden_states = config.output_hidden_states
@@ -609,6 +618,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
             positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
+        print_tensor('input_ids', input_ids)
+        print(f'embed_scale: {self.embed_scale}')
+        print_tensor('embedded_tok', x)
+        print_tensor('embedded_pos', positions)
         #print_tensor('tok_emb', x)
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x) + positions
@@ -651,6 +664,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
+            print_tensor(f'decoder layer {idx} output', x)
+
         if self.layer_norm is not None:  # same as if config.add_final_layer_norm
             x = self.layer_norm(x)
 
@@ -664,6 +679,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = list(all_self_attns) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
+        print_tensor(f'decoder output', x)
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
@@ -1197,7 +1213,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             assert isinstance(past[0], tf.Tensor)
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
             print_tensor('encoder_out', past[0])
-            import ipdb; ipdb.set_trace()
+
             decoder_cached_states = None
         else:
             assert len(past) == 2

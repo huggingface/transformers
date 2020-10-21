@@ -15,6 +15,10 @@ if is_torch_available():
     from transformers import AutoModelForSeq2SeqLM, PegasusConfig, PegasusForConditionalGeneration
 
 XSUM_ENTRY_LONGER = """ The London trio are up for best UK act and best album, as well as getting two nominations in the best song category."We got told like this morning 'Oh I think you're nominated'", said Dappy."And I was like 'Oh yeah, which one?' And now we've got nominated for four awards. I mean, wow!"Bandmate Fazer added: "We thought it's best of us to come down and mingle with everyone and say hello to the cameras. And now we find we've got four nominations."The band have two shots at the best song prize, getting the nod for their Tynchy Stryder collaboration Number One, and single Strong Again.Their album Uncle B will also go up against records by the likes of Beyonce and Kanye West.N-Dubz picked up the best newcomer Mobo in 2007, but female member Tulisa said they wouldn't be too disappointed if they didn't win this time around."At the end of the day we're grateful to be where we are in our careers."If it don't happen then it don't happen - live to fight another day and keep on making albums and hits for the fans."Dappy also revealed they could be performing live several times on the night.The group will be doing Number One and also a possible rendition of the War Child single, I Got Soul.The charity song is a  re-working of The Killers' All These Things That I've Done and is set to feature artists like Chipmunk, Ironik and Pixie Lott.This year's Mobos will be held outside of London for the first time, in Glasgow on 30 September.N-Dubz said they were looking forward to performing for their Scottish fans and boasted about their recent shows north of the border."We just done Edinburgh the other day," said Dappy."We smashed up an N-Dubz show over there. We done Aberdeen about three or four months ago - we smashed up that show over there! Everywhere we go we smash it up!" """
+EXPECTED_SUMMARIES = [
+        "California's largest electricity provider has turned off power to hundreds of thousands of customers.",
+        "Pop group N-Dubz have revealed they were surprised to get four nominations for this year's Mobo Awards."
+    ]
 
 set_verbosity(ERROR)
 
@@ -56,11 +60,7 @@ class SelectiveCommonTest(unittest.TestCase):
 class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "google/pegasus-xsum"
     src_text = [PGE_ARTICLE, XSUM_ENTRY_LONGER]
-    tgt_text = [
-        "California's largest electricity provider has turned off power to hundreds of thousands of customers.",
-        "N-Dubz have said they were surprised to get four nominations for this year's Mobo Awards.",
-    ]
-
+    tgt_text = EXPECTED_SUMMARIES
     @cached_property
     def model(self):
         return AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
@@ -72,7 +72,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
             torch_device
         )
         assert inputs.input_ids.shape == (2, 421)
-        translated_tokens = self.model.generate(**inputs)
+        translated_tokens = self.model.generate(**inputs, num_beams=2)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         assert self.tgt_text == decoded
 

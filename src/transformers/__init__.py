@@ -653,6 +653,9 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
+    from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
+    from .modeling_tf_mbart import TFMBartForConditionalGeneration
+    from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
     from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
