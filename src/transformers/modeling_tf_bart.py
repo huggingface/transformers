@@ -316,7 +316,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
-        embed_dim = embed_tokens.vocab_size
+        embed_dim = embed_tokens.hidden_size
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
@@ -382,8 +382,16 @@ class TFBartEncoder(tf.keras.layers.Layer):
             ), f"expected attention_mask._rank() to be a 2D tensor got {attention_mask._rank()}"
             attention_mask = tf.cast(attention_mask, dtype=tf.float32)
             attention_mask = (1.0 - attention_mask) * LARGE_NEGATIVE
-        inputs_embeds = self.embed_tokens(input_ids)
+
+        #print_tensor('weight', self.embed_tokens._layer.weight)
+        print_tensor('input_ids', input_ids)
+        print(f'embed_scale: {self.embed_scale}')
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        print_tensor('embedded_tok', inputs_embeds)
         embed_pos = self.embed_positions(input_ids)
+        print_tensor('embedded_pos', embed_pos)
+
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
@@ -1183,11 +1191,13 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
+        #print_tensor('encoder_out', past[0])
 
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor)
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
             print_tensor('encoder_out', past[0])
+            import ipdb; ipdb.set_trace()
             decoder_cached_states = None
         else:
             assert len(past) == 2

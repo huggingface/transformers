@@ -348,9 +348,13 @@ class BartEncoder(nn.Module):
         # check attention mask and invert
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)
-
+        print_tensor('weight', self.embed_tokens.weight)
+        print_tensor('input_ids', input_ids)
+        print(f'embed_scale: {self.embed_scale}')
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        print_tensor('embedded_tok', inputs_embeds)
         embed_pos = self.embed_positions(input_ids)
+        print_tensor('embedded_pos', embed_pos)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)

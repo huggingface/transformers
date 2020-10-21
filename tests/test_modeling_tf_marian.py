@@ -89,9 +89,11 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model: TFMarianMTModel = TFMarianMTModel.from_pretrained(self.model_name, from_pt=True)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
+
+        #self.assertEqual(c.model.shared.weight ==)
         self.assertEqual(c.max_length, 512)
         self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
         return model
@@ -104,7 +106,6 @@ class MarianIntegrationTest(unittest.TestCase):
         model_inputs = self.tokenizer.prepare_seq2seq_batch(
             src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
         )
-        self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
         )
@@ -207,7 +208,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         "Es dos años más viejo que yo.",
     ]
 
-    @slow
+    #@slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
@@ -216,7 +217,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         self.assertIsInstance(normalized, str)
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_seq2seq_batch([""])
-
+    @slow
     def test_pipeline(self):
         pipeline = TranslationPipeline(self.model, self.tokenizer, framework="tf")
         output = pipeline(self.src_text)
