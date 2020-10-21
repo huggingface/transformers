@@ -3,7 +3,7 @@ name: Self-hosted runner (1)
 on:
   push:
     branches:
-      - stas00/transformers:gh-actions 
+      - gh-actions 
   repository_dispatch:
 
 jobs:
