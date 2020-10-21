@@ -16,13 +16,13 @@
 
 import unittest
 
-from transformers import  AutoTokenizer, MarianConfig, MarianTokenizer, is_tf_available, TranslationPipeline
+from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-from .test_modeling_marian import ModelTester
 
 from .test_modeling_common import ModelTesterMixin
+from .test_modeling_marian import ModelTester
 
 
 if is_tf_available():
@@ -101,14 +101,15 @@ class MarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(src_texts=self.src_text, **tokenizer_kwargs, return_tensors='tf')
+        model_inputs = self.tokenizer.prepare_seq2seq_batch(
+            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
+        )
         self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
-
 
 
 @require_sentencepiece

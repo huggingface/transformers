@@ -21,7 +21,7 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 from tensorflow import Tensor
-from tensorflow.keras.layers import Dense, LayerNormalization, Dropout, Layer
+from tensorflow.keras.layers import Dense, Dropout, Layer, LayerNormalization
 
 from .activations_tf import ACT2FN
 from .configuration_bart import BartConfig
@@ -323,18 +323,28 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         self.embed_tokens = embed_tokens
         if config.static_position_embeddings:
-            self.embed_positions = TFSinusoidalPositionalEmbedding(config.max_position_embeddings, config.d_model, self.padding_idx, name="embed_positions",)
+            self.embed_positions = TFSinusoidalPositionalEmbedding(
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
+                name="embed_positions",
+            )
         else:
             self.embed_positions = TFLearnedPositionalEmbedding(
-                config.max_position_embeddings, config.d_model, self.padding_idx, config.extra_pos_embeddings, config.extra_pos_embeddings,
-                name="embed_positions")
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
+                config.extra_pos_embeddings,
+                config.extra_pos_embeddings,
+                name="embed_positions",
+            )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = LayerNormalization(epsilon=1e-5, name="layernorm_embedding")if config.add_final_layer_norm else tf.keras.layers.Layer()
-        self.layer_norm = (
-            LayerNormalization(epsilon=1e-5, name="layer_norm")
+        self.layernorm_embedding = (
+            LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
             if config.add_final_layer_norm
-            else None
+            else tf.keras.layers.Layer()
         )
+        self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
         self.return_dict = config.return_dict
 
     def call(
@@ -520,17 +530,19 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         if config.static_position_embeddings:
             self.embed_positions = TFSinusoidalPositionalEmbedding(
-                config.max_position_embeddings, config.d_model, self.padding_idx,
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
                 name="embed_positions",
             )
         else:
             self.embed_positions = TFLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            self.padding_idx,
-            config.extra_pos_embeddings,
-            name="embed_positions",
-        )
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
+                config.extra_pos_embeddings,
+                name="embed_positions",
+            )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (
             tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
@@ -813,6 +825,7 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
         return super().call(positions + self.offset)  # super object is not callable for some reason
 
+
 import numpy as np
 
 
@@ -824,18 +837,18 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
         super().__init__(num_positions, embedding_dim, **kwargs)
-        #self.weight = self._init_weight(*self.weight.shape)
+        # self.weight = self._init_weight(*self.weight.shape)
+
     def build(self, input_shape):
         """Build shared token embedding layer
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         super().build(input_shape)
-        #self.weight = self._init_weight(*self.weight.shape)
-
+        # self.weight = self._init_weight(*self.weight.shape)
 
     @staticmethod
-    def _init_weight( n_pos, dim):
+    def _init_weight(n_pos, dim):
         """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
         The cos features are in the 2nd half of the vector. [dim // 2:]
         """
@@ -843,13 +856,12 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
         # index 0 is all zero
-        position_enc[:, :dim // 2] = np.sin(position_enc[:, 0::2])
+        position_enc[:, : dim // 2] = np.sin(position_enc[:, 0::2])
         position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
         # convert to tensor
         table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
         tf.stop_gradient(table)
         return table
-
 
     def call(self, input_ids, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
@@ -867,10 +879,8 @@ class BiasLayer(tf.keras.layers.Layer):
         super(BiasLayer, self).__init__(*args, **kwargs)
 
     def build(self, input_shape):
-        self.bias = self.add_weight('bias',
-                                    shape=input_shape[1:],
-                                    initializer='zeros',
-                                    trainable=True)
+        self.bias = self.add_weight("bias", shape=input_shape[1:], initializer="zeros", trainable=True)
+
     def call(self, x):
         return x + self.bias
 
@@ -1051,7 +1061,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         super().__init__(config, *args, **kwargs)
         self.model = TFBartModel(config, name="model")
         self.use_cache = config.use_cache
-        self.final_logits_bias = self.add_weight(name="/final_logits_bias", shape=[1, config.vocab_size], initializer='zeros', trainable=True)
+        self.final_logits_bias = self.add_weight(
+            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=True
+        )
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1232,7 +1244,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         bs, vocab_size = scores.shape
         inf_tensor = tf.convert_to_tensor([-float("inf")] * bs, dtype=scores.dtype)
         for x in range(vocab_size):
-            do_inf = (x==token_id) if inverted else (x != token_id)
+            do_inf = (x == token_id) if inverted else (x != token_id)
             if do_inf:
                 output_list.append(inf_tensor)
             else:

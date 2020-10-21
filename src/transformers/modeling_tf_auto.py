@@ -41,6 +41,10 @@ from .configuration_auto import (
     XLNetConfig,
     replace_list_option_in_docstrings,
 )
+from .configuration_blenderbot import BlenderbotConfig
+from .configuration_marian import MarianConfig
+from .configuration_mbart import MBartConfig
+from .configuration_pegasus import PegasusConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_albert import (
@@ -106,14 +110,9 @@ from .modeling_tf_funnel import (
     TFFunnelForTokenClassification,
     TFFunnelModel,
 )
-from .modeling_tf_marian import TFMarianMTModel
-from .configuration_marian import MarianConfig
-from .configuration_pegasus import PegasusConfig
-from .configuration_mbart import MBartConfig
-from .configuration_blenderbot import BlenderbotConfig
-
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from .modeling_tf_marian import TFMarianMTModel
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -267,8 +266,11 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 )
 
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
-    [(T5Config, TFT5ForConditionalGeneration), (BartConfig, TFBartForConditionalGeneration),
-     (MarianConfig, TFMarianMTModel)]
+    [
+        (T5Config, TFT5ForConditionalGeneration),
+        (BartConfig, TFBartForConditionalGeneration),
+        (MarianConfig, TFMarianMTModel),
+    ]
 )
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
