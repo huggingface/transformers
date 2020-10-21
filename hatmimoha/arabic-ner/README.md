@@ -53,7 +53,7 @@ The pre-trained model can recognize the following entities:
 
 -  في مباراة ***كأس السوبر الأوروبي*** 
 
-7. **PRICE**
+7. **PRIZE**
 
 -  ***جائزة نوبل ل لآداب***
 
@@ -89,8 +89,8 @@ id2label = {
     "7": "I-DATE"",
     "8": "B-COMPETITION",
     "9": "I-COMPETITION",
-    "10": "B-PRICE",
-    "11": "I-PRICE",
+    "10": "B-PRIZE",
+    "11": "I-PRIZE",
     "12": "O",
     "13": "B-PRODUCT",
     "14": "I-PRODUCT",
