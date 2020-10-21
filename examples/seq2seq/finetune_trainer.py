@@ -21,6 +21,7 @@ from utils import (
     Seq2SeqDataset,
     assert_all_frozen,
     build_compute_metrics_fn,
+    check_output_dir,
     freeze_embeds,
     freeze_params,
     lmap,
@@ -153,15 +154,7 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
-        )
+    check_output_dir(training_args)
 
     # Setup logging
     logging.basicConfig(
