@@ -56,7 +56,7 @@ We did an automatic hyperprameter search with [Optuna](https://github.com/optuna
 The final model was trained with these hyperparameters on the combination of `sts_de_train.csv` and `sts_de_dev.csv`. The `sts_de_test.csv` was left for testing. The AWS dataset has not been used.
 
 # Evaluation
-The evaluation has been done on the test set of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark). The code is available on [Colab](https://colab.research.google.com/drive/1aCWOqDQx953kEnQ5k4Qn7uiixokocOHv?usp=sharing).
+The evaluation has been done on the test set of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark). The code is available on [Colab](https://colab.research.google.com/drive/1aCWOqDQx953kEnQ5k4Qn7uiixokocOHv?usp=sharing). As the metric for evaluation we use the Spearman’s rank correlation between the  cosine-similarity of the sentence embeddings and STSbenchmark labels.
 
 | Model Name                           | Spearman rank correlation         |
 |--------------------------------------|-----------------------------------|
