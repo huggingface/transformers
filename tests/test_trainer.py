@@ -669,4 +669,4 @@ class TrainerHyperParameterIntegrationTest(unittest.TestCase):
             run_name="test",
             model_init=model_init,
         )
-        trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=20)
+        trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=4)

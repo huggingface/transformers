@@ -834,20 +834,6 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
-    def _rewrite_metrics(self, prefix, metrics):
-        # Special case for prefix.* : do not apply prefix
-        new_metrics = {}
-        for k, v in metrics.items():
-            if k.startswith(prefix):
-                if prefix != "eval":
-                    raise Exception("unknown prefix %s" % prefix)
-                if not k.startswith("eval_"):
-                    raise Exception("unknown prefix %s for %s" % (prefix, k))
-                new_metrics[k] = v
-            else:
-                new_metrics[prefix + "/" + k] = v
-        return new_metrics
-
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
@@ -861,7 +847,7 @@ class Trainer:
             )
             self._logging_loss_scalar = tr_loss_scalar
 
-            self.log("train", logs)
+            self.log(logs)
 
         metrics = None
         if self.control.should_evaluate:
@@ -1011,7 +997,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, prefix, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float]) -> None:
         """
         Log :obj:`logs` on the various objects watching training.
 
@@ -1032,9 +1018,6 @@ class Trainer:
         if self._total_flos is not None:
             self.store_flos()
             logs["total_flos"] = self.state.total_flos
-
-        # Add prefix to all keys
-        logs = self._rewrite_metrics(prefix, logs)
 
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
@@ -1283,7 +1266,7 @@ class Trainer:
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
 
-        self.log("eval", output.metrics)
+        self.log(output.metrics)
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
