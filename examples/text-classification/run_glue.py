@@ -33,7 +33,6 @@ from transformers import (
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
-    PretrainedConfig,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -255,10 +254,16 @@ def main():
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
-    if model.config.label2id != PretrainedConfig().label2id and data_args.task_name is not None:
-        # Some have all caps in their config, some don't.
-        label_name_to_id = {k.lower(): v for k, v in model.config.label2id.values()}
-        label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
+    if data_args.task_name == "mnli" and tokenizer.__class__.__name__ in (
+        "RobertaTokenizer",
+        "RobertaTokenizerFast",
+        "XLMRobertaTokenizer",
+        "BartTokenizer",
+        "BartTokenizerFast",
+    ):
+        # HACK(label indices are swapped in RoBERTa/BART pretrained model)
+        label_to_id = {0: 0, 1: 2, 2: 1}
+        print(label_to_id)
     elif data_args.task_name is None:
         label_to_id = {v: i for i, v in enumerate(label_list)}
 
