@@ -3,10 +3,8 @@ name: Self-hosted runner (scheduled)
 on:
   push:
     branches:
-      - ci_*
+      - gh-actions 
   repository_dispatch:
-  schedule:
-    - cron: "0 0 * * *"
 
 jobs:
   run_all_tests_torch_and_tf_gpu:
