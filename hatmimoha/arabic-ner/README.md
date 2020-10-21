@@ -1,3 +1,6 @@
+---
+language: ar
+---
 # Arabic Named Entity Recognition Model
 
 Pretrained BERT-based ([arabic-bert-base](https://huggingface.co/asafaya/bert-base-arabic)) Named Entity Recognition model for Arabic.
