@@ -20,6 +20,7 @@ import os
 
 from transformers import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -37,6 +38,7 @@ from transformers import (
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AlbertConfig,
+    BartConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
@@ -49,6 +51,7 @@ from transformers import (
     RobertaConfig,
     T5Config,
     TFAlbertForPreTraining,
+    TFBartForConditionalGeneration,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -87,6 +90,7 @@ if is_torch_available():
 
     from transformers import (
         AlbertForPreTraining,
+        BartForConditionalGeneration,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
@@ -113,6 +117,12 @@ if is_torch_available():
 logging.set_verbosity_info()
 
 MODEL_CLASSES = {
+    "bart": (
+        BartConfig,
+        TFBartForConditionalGeneration,
+        BartForConditionalGeneration,
+        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
+    ),
     "bert": (
         BertConfig,
         TFBertForPreTraining,
