@@ -45,6 +45,7 @@ To create the package for pypi.
 """
 
 import shutil
+import itertools
 from pathlib import Path
 
 from setuptools import find_packages, setup
@@ -99,7 +100,7 @@ extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameteriz
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
 extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
-extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch", "sentencepiece!=0.1.92"]
+extras["dev"] = list(itertools.chain(*(map(extras.get, "testing quality docs ja sklearn tf torch sentencepiece".split()))))
 
 setup(
     name="transformers",
