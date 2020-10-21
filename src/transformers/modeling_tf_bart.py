@@ -332,16 +332,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
         else:
             self.embed_positions = TFLearnedPositionalEmbedding(
                 config.max_position_embeddings,
-                config.d_model,
+                embed_tokens.hidden_size,
                 self.padding_idx,
-                config.extra_pos_embeddings,
                 config.extra_pos_embeddings,
                 name="embed_positions",
             )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = (
             LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.add_final_layer_norm
+            if config.normalize_embedding
             else tf.keras.layers.Layer()
         )
         self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
@@ -511,6 +510,21 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
+def print_tensor(msg, t):  # DELEMETME
+    # assert t.shape
+    if t is None:
+        print(f"{msg}: {t}")
+        return
+    ndim = len(t.shape)
+    if ndim == 1:
+        slice = t[:3]
+    elif ndim == 2:
+        slice = t[:3, :3]
+    elif ndim == 3:
+        slice = t[:3, :3, :3]
+    elif ndim == 4:
+        slice = t[:3, :3, :3, :3]
+    print(f"{msg}: {slice}")
 
 class TFBartDecoder(tf.keras.layers.Layer):
     """
@@ -544,16 +558,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 name="embed_positions",
             )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.normalize_embedding
-            else Layer()
-        )
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
-        )
+        self.layernorm_embedding = (LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else Layer())
+        self.layer_norm = (LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None)
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.output_hidden_states = config.output_hidden_states
@@ -588,16 +594,19 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         # embed positions
         positions = self.embed_positions(input_ids, use_cache=use_cache)
+        print_tensor('pos_emb', positions)
 
         if use_cache:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
+        #print_tensor('tok_emb', x)
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x) + positions
         else:
             x = self.layernorm_embedding(x + positions)
+        print_tensor('x1', x)
         x = self.dropout(x)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
@@ -856,7 +865,7 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
         # index 0 is all zero
-        position_enc[:, : dim // 2] = np.sin(position_enc[:, 0::2])
+        position_enc[:, 0: dim // 2] = np.sin(position_enc[:, 0::2])
         position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
         # convert to tensor
         table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
@@ -871,18 +880,8 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
         else:
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
+        print(f'positions: {positions}')
         return super().call(positions)
-
-
-class BiasLayer(tf.keras.layers.Layer):
-    def __init__(self, *args, **kwargs):
-        super(BiasLayer, self).__init__(*args, **kwargs)
-
-    def build(self, input_shape):
-        self.bias = self.add_weight("bias", shape=input_shape[1:], initializer="zeros", trainable=True)
-
-    def call(self, x):
-        return x + self.bias
 
 
 # Public API
@@ -1184,9 +1183,11 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
+
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor)
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
+            print_tensor('encoder_out', past[0])
             decoder_cached_states = None
         else:
             assert len(past) == 2

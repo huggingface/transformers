@@ -385,6 +385,7 @@ class BartEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
+        print_tensor('encoder_out', x)
         return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
@@ -479,6 +480,21 @@ class DecoderLayer(nn.Module):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
+def print_tensor(msg, t):  # DELEMETME
+    # assert t.shape
+    if t is None:
+        print(f"{msg}: {t}")
+        return
+    ndim = len(t.shape)
+    if ndim == 1:
+        slice = t[:3]
+    elif ndim == 2:
+        slice = t[:3, :3]
+    elif ndim == 3:
+        slice = t[:3, :3, :3]
+    elif ndim == 4:
+        slice = t[:3, :3, :3, :3]
+    print(f"{msg}: {slice}")
 
 class BartDecoder(nn.Module):
     """
@@ -1339,7 +1355,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out[:, dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
+        out[:, 0:dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
         out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         out.detach_()
         out.requires_grad = False
