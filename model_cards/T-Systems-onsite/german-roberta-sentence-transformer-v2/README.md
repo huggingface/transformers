@@ -53,4 +53,4 @@ We did an automatic hyperprameter search with [Optuna](https://github.com/optuna
 - weight_decay = 0.003314045812507563
 - warmup_steps_proportion = 0.46141685205829014
 
-The final model was trained with these hyperparameters on the combination of `sts_de_train.csv` and `sts_de_dev.csv`. The `sts_de_train.csv` was left for testing. The AWS dataset has not been used.
+The final model was trained with these hyperparameters on the combination of `sts_de_train.csv` and `sts_de_dev.csv`. The `sts_de_test.csv` was left for testing. The AWS dataset has not been used.
