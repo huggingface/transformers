@@ -1,4 +1,4 @@
-name: Self-hosted runner (scheduled)
+name: Self-hosted runner (1)
 
 on:
   push:
