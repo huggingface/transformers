@@ -751,7 +751,7 @@ More details, example and ways are `here <https://docs.pytest.org/en/latest/skip
 Slow tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for an hour for the test suite to complete on CI. Therefore, with some exceptions, most very slow tests should be marked as in the example below:
+The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be marked as in the example below:
 
 .. code-block:: python
 
@@ -779,8 +779,8 @@ Here is a rough decision making mechanism for choosing which tests should be mar
 
 If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files, pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library, such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine this approach we should have exceptions:
 
-* All tests that need a specific set of weights (e.g., model or tokenizer integration tests, pipeline integration tests) should be set to slow.
-* All tests that need to do a training (e.g, trainer integration tests) should be set to slow.
+* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a tiny version of it (with random weights) for integration tests. 
+* All tests that need to do a training not specifically optimized to be fast should be set to slow.
 * We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked as ``@slow``.
 
 Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast.
