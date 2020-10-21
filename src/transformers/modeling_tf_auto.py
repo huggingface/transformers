@@ -214,6 +214,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
+        (MarianConfig, TFMarianMTModel),
         (BartConfig, TFBartForConditionalGeneration),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),

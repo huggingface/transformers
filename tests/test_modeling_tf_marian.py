@@ -89,7 +89,7 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True).to(torch_device)
+        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
         self.assertEqual(c.max_length, 512)
@@ -217,7 +217,6 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
             self.tokenizer.prepare_seq2seq_batch([""])
 
     def test_pipeline(self):
-        device = 0 if torch_device == "cuda" else -1
-        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="tf", device=device)
+        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="tf")
         output = pipeline(self.src_text)
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
