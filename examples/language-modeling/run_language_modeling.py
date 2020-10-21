@@ -23,12 +23,12 @@ using a masked language modeling (MLM) loss. XLNet is fine-tuned using a permuta
 import logging
 import math
 import os
-from dataclasses import dataclass, field
 from glob import glob
 from typing import Optional
 
 from torch.utils.data import ConcatDataset
 
+from dataclasses import dataclass, field
 from transformers import (
     CONFIG_MAPPING,
     MODEL_WITH_LM_HEAD_MAPPING,
@@ -36,8 +36,8 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
-    DataCollatorForWholeWordMask,
     DataCollatorForPermutationLanguageModeling,
+    DataCollatorForWholeWordMask,
     HfArgumentParser,
     LineByLineTextDataset,
     LineByLineWithRefDataset,

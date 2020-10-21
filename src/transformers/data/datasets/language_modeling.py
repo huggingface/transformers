@@ -1,9 +1,10 @@
+import json
 import os
 import pickle
 import random
 import time
 from typing import Dict, List, Optional
-import json
+
 import torch
 from torch.utils.data.dataset import Dataset
 

@@ -1,8 +1,10 @@
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 import random
+from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
+
 import torch
 from torch.nn.utils.rnn import pad_sequence
+
+from dataclasses import dataclass
 
 from ..tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTrainedTokenizerBase
 

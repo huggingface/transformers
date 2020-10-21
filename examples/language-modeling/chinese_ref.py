@@ -1,10 +1,9 @@
-import json
-import random
 import argparse
+import json
+from typing import List
+
 from ltp import LTP
 from transformers.tokenization_bert import BertTokenizer
-
-from typing import List
 
 
 def _is_chinese_char(cp):
