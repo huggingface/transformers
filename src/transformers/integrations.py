@@ -17,7 +17,8 @@ try:
     if comet_ml.config.get_config("comet.api_key"):
         _has_comet = True
     else:
-        logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+        if os.getenv("COMET_MODE", "").upper() != "DISABLED":
+            logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
         _has_comet = False
 except (ImportError, ValueError):
     _has_comet = False
