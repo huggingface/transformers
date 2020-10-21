@@ -126,9 +126,9 @@ class FSMTConfig(PretrainedConfig):
     # update the defaults from config file
     def __init__(
         self,
-        langs,
-        src_vocab_size,
-        tgt_vocab_size,
+        langs=["en", "de"],
+        src_vocab_size=42024,
+        tgt_vocab_size=42024,
         activation_function="relu",
         d_model=1024,
         max_length=200,

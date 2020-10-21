@@ -67,7 +67,7 @@ class ConfigTester(object):
         self.parent.assertEqual(len(config.label2id), 3)
 
     def check_config_can_be_init_without_params(self):
-        if self.config_class.needs_sub_configs:
+        if self.config_class.is_composition:
             return
         config = self.config_class()
         self.parent.assertIsNone(config)
