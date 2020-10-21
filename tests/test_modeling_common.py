@@ -22,7 +22,8 @@ import unittest
 from typing import List, Tuple
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
+from transformers.file_utils import WEIGHTS_NAME
+from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
 
 
 if is_torch_available():
@@ -112,6 +113,7 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
@@ -127,6 +129,27 @@ class ModelTesterMixin:
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
+
+    def test_save_load_keys_to_never_save(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            keys_to_never_save = getattr(model, "keys_to_never_save", None)
+            if keys_to_never_save is None:
+                continue
+
+            # check the keys are in the original state_dict
+            for k in keys_to_never_save:
+                self.assertIn(k, model.state_dict())
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
+                state_dict_saved = torch.load(output_model_file)
+                for k in keys_to_never_save:
+                    self.assertNotIn(k, state_dict_saved)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -152,6 +175,7 @@ class ModelTesterMixin:
             with torch.no_grad():
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
             out_1 = first.cpu().numpy()
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
@@ -183,10 +207,12 @@ class ModelTesterMixin:
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
@@ -211,7 +237,7 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
-            attentions = outputs[-1]
+            attentions = outputs["attentions"] if "attentions" in outputs.keys() else outputs[-1]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -227,8 +253,14 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = 4
-                decoder_attention_idx = 1
+                correct_outlen = (
+                    self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 4
+                )
+                decoder_attention_idx = (
+                    self.model_tester.decoder_attention_idx
+                    if hasattr(self.model_tester, "decoder_attention_idx")
+                    else 1
+                )
 
                 # loss is at first position
                 if "labels" in inputs_dict:
@@ -238,6 +270,7 @@ class ModelTesterMixin:
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                     decoder_attention_idx += 1
+
                 self.assertEqual(out_len, correct_outlen)
 
                 decoder_attentions = outputs[decoder_attention_idx]
@@ -256,9 +289,16 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
 
-            self_attentions = outputs[-1]
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs["attentions"] if "attentions" in outputs else outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(
@@ -571,8 +611,8 @@ class ModelTesterMixin:
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs[-1]
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
+            hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
@@ -822,6 +862,7 @@ class ModelTesterMixin:
             model.eval()
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -839,7 +880,7 @@ class ModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
-                model(**inputs)
+                model(**inputs)[0]
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -961,7 +1002,7 @@ class ModelTesterMixin:
                         return True
         return False
 
-    @require_multigpu
+    @require_torch_multigpu
     def test_multigpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

@@ -302,7 +302,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beggining
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             config.output_hidden_states = True
@@ -472,10 +472,9 @@ class TFModelTesterMixin:
 
             # Prepare our model
             model = model_class(config)
-
+            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
             # Let's load it from the disk to be sure we can use pretrained weights
             with tempfile.TemporaryDirectory() as tmpdirname:
-                outputs = model(self._prepare_for_class(inputs_dict, model_class))  # build the model
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
 
@@ -494,7 +493,9 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            outputs_dict = model(self._prepare_for_class(inputs_dict, model_class))
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            outputs_dict = model(inputs)
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             input_ids = inputs_keywords.pop("input_ids", None)
@@ -507,28 +508,18 @@ class TFModelTesterMixin:
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        decoder_seq_length = (
-            self.model_tester.decoder_seq_length
-            if hasattr(self.model_tester, "decoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        encoder_seq_length = (
-            self.model_tester.encoder_seq_length
-            if hasattr(self.model_tester, "encoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        decoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else decoder_seq_length
-        )
-        encoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
-        )
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
+            inputs_dict["use_cache"] = False
             config.output_hidden_states = False
             model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            model_inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(model_inputs)
             attentions = [t.numpy() for t in outputs[-1]]
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)

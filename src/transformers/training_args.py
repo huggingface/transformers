@@ -351,6 +351,9 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
+        if self.device.type != "cuda" and self.fp16:
+            raise ValueError("AMP (`--fp16`) can only be used on CUDA devices.")
+
     @property
     def train_batch_size(self) -> int:
         """

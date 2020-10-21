@@ -1,8 +1,8 @@
 import unittest
 
+from transformers import PegasusTokenizer, PegasusTokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import get_tests_dir, require_torch
-from transformers.tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -10,6 +10,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
 
 
+@require_sentencepiece
+@require_tokenizers
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = PegasusTokenizer
