@@ -33,6 +33,7 @@ from transformers import (
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
+    PretrainedConfig,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -254,16 +255,17 @@ def main():
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
-    if data_args.task_name == "mnli" and tokenizer.__class__.__name__ in (
-        "RobertaTokenizer",
-        "RobertaTokenizerFast",
-        "XLMRobertaTokenizer",
-        "BartTokenizer",
-        "BartTokenizerFast",
-    ):
-        # HACK(label indices are swapped in RoBERTa/BART pretrained model)
-        label_to_id = {0: 0, 1: 2, 2: 1}
-        print(label_to_id)
+    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id and data_args.task_name is not None:
+        # Some have all caps in their config, some don't.
+        label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
+        if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+            label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
+        else:
+            logger.warn(
+                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                "\nIgnoring the model labels as a result.",
+            )
     elif data_args.task_name is None:
         label_to_id = {v: i for i, v in enumerate(label_list)}
 
