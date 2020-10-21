@@ -31,7 +31,7 @@ For details of usage and examples see here:
 - [Examples on GitHub](https://github.com/UKPLab/sentence-transformers/tree/master/examples/applications)
 
 ## Training
-The base model is [xlm-roberta-base](https://huggingface.co/xlm-roberta-base). This model has been trained by [Nils Reimers](https://www.nils-reimers.de/) on a large scale paraphrase dataset for 50+ languages. [Nils Reimers](https://www.nils-reimers.de/) about this [on GitHub](https://github.com/UKPLab/sentence-transformers/issues/509#issuecomment-712243280):
+The base model is [xlm-roberta-base](https://huggingface.co/xlm-roberta-base). This model has been further trained by [Nils Reimers](https://www.nils-reimers.de/) on a large scale paraphrase dataset for 50+ languages. [Nils Reimers](https://www.nils-reimers.de/) about this [on GitHub](https://github.com/UKPLab/sentence-transformers/issues/509#issuecomment-712243280):
 
 >A paper is upcoming for the paraphrase models.
 >
