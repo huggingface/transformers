@@ -15,7 +15,7 @@ This model is fine-tuned from [Philip May](https://eniak.de/) and open-sourced b
 ## How to use
 **The usage description above - provided by Hugging Face - is wrong for sentence embeddings! Please use this:**
 
-First install the `sentence-transformers` package (see here: <https://github.com/UKPLab/sentence-transformers>).
+To use this model install the `sentence-transformers` package (see here: <https://github.com/UKPLab/sentence-transformers>).
 
 ```python
 from sentence_transformers import SentenceTransformer
