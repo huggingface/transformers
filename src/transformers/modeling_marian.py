@@ -47,6 +47,14 @@ class MarianMTModel(BartForConditionalGeneration):
 
     """
     config_class = MarianConfig
+    authorized_missing_keys = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
+    keys_to_never_save = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.

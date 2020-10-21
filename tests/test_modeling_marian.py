@@ -21,6 +21,8 @@ from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
+from .test_modeling_common import ModelTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -33,6 +35,37 @@ if is_torch_available():
     )
     from transformers.modeling_bart import shift_tokens_right
     from transformers.pipelines import TranslationPipeline
+
+
+@require_torch
+class ModelTester:
+    def __init__(self, parent):
+        self.config = MarianConfig(
+            vocab_size=99,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+            add_final_layer_norm=True,
+            return_dict=True,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        return self.config, {}
+
+
+@require_torch
+class SelectiveCommonTest(unittest.TestCase):
+    all_model_classes = (MarianMTModel,) if is_torch_available() else ()
+
+    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+
+    def setUp(self):
+        self.model_tester = ModelTester(self)
 
 
 class ModelManagementTests(unittest.TestCase):
