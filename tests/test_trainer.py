@@ -137,9 +137,7 @@ if is_torch_available():
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
-    def get_regression_trainer(
-        a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, trainer_args=None, **kwargs
-    ):
+    def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
         label_names = kwargs.get("label_names", None)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
@@ -152,8 +150,8 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
+        model_init = kwargs.pop("model_init", None)
         args = TrainingArguments(output_dir, **kwargs)
-        trainer_args = trainer_args or {}
         return Trainer(
             model,
             args,
@@ -162,7 +160,7 @@ if is_torch_available():
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
             optimizers=optimizers,
-            **trainer_args,
+            model_init=model_init,
         )
 
 
@@ -660,8 +658,6 @@ class TrainerHyperParameterIntegrationTest(unittest.TestCase):
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
 
-        trainer_args = dict(model_init=model_init)
-
         trainer = get_regression_trainer(
             learning_rate=0.1,
             logging_steps=1,
@@ -669,8 +665,8 @@ class TrainerHyperParameterIntegrationTest(unittest.TestCase):
             num_train_epochs=4,
             disable_tqdm=True,
             load_best_model_at_end=True,
-            trainer_args=trainer_args,
             logging_dir="runs",
             run_name="test",
+            model_init=model_init,
         )
         trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=20)
