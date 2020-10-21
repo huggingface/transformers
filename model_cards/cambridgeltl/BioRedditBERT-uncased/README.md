@@ -1,6 +1,6 @@
 ---
 language: 
-- EN
+- en
 tags:
 - BioNLP
 - social_media
