@@ -17,10 +17,10 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    require_multigpu,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_multigpu,
     slow,
     torch_device,
 )
@@ -558,7 +558,7 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
-    @require_multigpu
+    @require_torch_multigpu
     def test_multigpu_data_parallel_forward(self):
         # Opt-out of this test.
         pass

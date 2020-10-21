@@ -23,7 +23,7 @@ from typing import List, Tuple
 
 from transformers import is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
 
 
 if is_torch_available():
@@ -1002,7 +1002,7 @@ class ModelTesterMixin:
                         return True
         return False
 
-    @require_multigpu
+    @require_torch_multigpu
     def test_multigpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

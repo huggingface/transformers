@@ -41,12 +41,14 @@ IGNORE_NON_TESTED = [
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
+    "test_modeling_flax_bert.py",
+    "test_modeling_flax_roberta.py",
+    "test_modeling_mbart.py",
+    "test_modeling_pegasus.py",
     "test_modeling_tf_camembert.py",
     "test_modeling_tf_xlm_roberta.py",
     "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
-    "test_modeling_pegasus.py",
-    "test_modeling_mbart.py",
 ]
 
 # Update this list for models that are not documented with a comment explaining the reason it should not be.
@@ -88,6 +90,7 @@ def get_model_modules():
         "modeling_outputs",
         "modeling_retribert",
         "modeling_utils",
+        "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_outputs",
