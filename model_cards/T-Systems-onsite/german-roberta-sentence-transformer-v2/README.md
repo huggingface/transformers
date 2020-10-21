@@ -43,7 +43,7 @@ The base model is [xlm-roberta-base](https://huggingface.co/xlm-roberta-base). T
 
 The resulting model called `xlm-r-distilroberta-base-paraphrase-v1` has been released here: <https://github.com/UKPLab/sentence-transformers/releases/tag/v0.3.8>
 
-Building on this cross language model we fine-tuned it for German language on the deepl.com dataset of our [German STSbenchmark Dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark).
+Building on this cross language model we fine-tuned it for German language on the deepl.com dataset of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark).
 
 We did an automatic hyperprameter search with [Optuna](https://github.com/optuna/optuna). Using crossvalidation on the deepl.com test and dev dataset we found the following hyperprameters:
 - batch_size = 15
