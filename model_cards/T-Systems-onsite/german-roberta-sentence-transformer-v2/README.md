@@ -54,3 +54,13 @@ We did an automatic hyperprameter search with [Optuna](https://github.com/optuna
 - warmup_steps_proportion = 0.46141685205829014
 
 The final model was trained with these hyperparameters on the combination of `sts_de_train.csv` and `sts_de_dev.csv`. The `sts_de_test.csv` was left for testing. The AWS dataset has not been used.
+
+# Evaluation
+The evaluation has been done on the test set of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark). The code is available on [Colab](https://colab.research.google.com/drive/1aCWOqDQx953kEnQ5k4Qn7uiixokocOHv?usp=sharing).
+
+| Model Name                           | Spearman rank correlation         |
+|--------------------------------------|-----------------------------------|
+| xlm-r-distilroberta-base-paraphrase-v1                      | 0.8079     |
+| xlm-r-100langs-bert-base-nli-stsb-mean-tokens               | 0.8194     |
+| xlm-r-bert-base-nli-stsb-mean-tokens                        | 0.8194     |
+| **T-Systems-onsite/german-roberta-sentence-transformer-v2** | **0.8529** |
