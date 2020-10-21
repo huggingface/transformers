@@ -782,7 +782,7 @@ If the test is focused on one of the library's internal components (e.g., modeli
 * All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
 * All tests that need to do a training not specifically optimized to be fast should be set to slow.
 * We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked as ``@slow``.
- * If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
+* If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
 
 Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast.
 For example, a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc.
