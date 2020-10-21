@@ -16,6 +16,7 @@
 Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
 """
 
+import copy
 import random
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
@@ -110,10 +111,15 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     Return:
         :obj:`float`: The objective to minimize or maximize
     """
+    metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     _ = metrics.pop("total_flos", None)
-    return loss if len(metrics) == 0 else sum(metrics.values())
+    if len(metrics) != 0:
+        raise RuntimeError(
+            "Metrics contains more entries than just 'eval_loss', 'epoch' and 'total_flos', please provide your own compute_objective function."
+        )
+    return loss
 
 
 def default_hp_space_optuna(trial) -> Dict[str, float]:

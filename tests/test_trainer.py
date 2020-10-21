@@ -21,9 +21,17 @@ import unittest
 import datasets
 import numpy as np
 
-from transformers import AutoTokenizer, PretrainedConfig, TrainingArguments, is_torch_available
+from transformers import AutoTokenizer, EvaluationStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_optuna,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
+from transformers.utils.hp_naming import TrialShortNamer
 
 
 if is_torch_available():
@@ -142,6 +150,7 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
+        model_init = kwargs.pop("model_init", None)
         args = TrainingArguments(output_dir, **kwargs)
         return Trainer(
             model,
@@ -151,6 +160,7 @@ if is_torch_available():
             eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
             optimizers=optimizers,
+            model_init=model_init,
         )
 
 
@@ -617,3 +627,46 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # with enforced DataParallel
         assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+
+
+@require_torch
+@require_optuna
+class TrainerHyperParameterIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+            return {}
+
+        def model_init(trial):
+            if trial is not None:
+                a = trial.suggest_int("a", -4, 4)
+                b = trial.suggest_int("b", -4, 4)
+            else:
+                a = 0
+                b = 0
+            config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(config)
+
+        def hp_name(trial):
+            return MyTrialShortNamer.shortname(trial.params)
+
+        trainer = get_regression_trainer(
+            learning_rate=0.1,
+            logging_steps=1,
+            evaluation_strategy=EvaluationStrategy.EPOCH,
+            num_train_epochs=4,
+            disable_tqdm=True,
+            load_best_model_at_end=True,
+            logging_dir="runs",
+            run_name="test",
+            model_init=model_init,
+        )
+        trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=4)
