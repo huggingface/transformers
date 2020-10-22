@@ -67,13 +67,13 @@ For Chinese models, it's same with English model with only --mlm`. If using whol
 
 **Q :** Why ref file ?
 
-**A :** Suppose we have a Chinese sentence like : `我喜欢你。` The original Chinese-BERT will tokenize it as `['我','喜','欢','你']` in char level.
+**A :** Suppose we have a Chinese sentence like : `我喜欢你` The original Chinese-BERT will tokenize it as `['我','喜','欢','你']` in char level.
 Actually, `喜欢` is a whole word. For whole word mask proxy, We need res like `['我','喜','##欢','你']`.
 So we need a ref file to tell model which pos of BERT original token should be added `##`.
 
 **Q :** Why LTP ?
 
-**A :** Cause the best known Chinese WWM BERT is [https://github.com/ymcui/Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm). It works well on so many Chines Task like CLUE (Chinese GLUE).
+**A :** Cause the best known Chinese WWM BERT is [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm). It works well on so many Chines Task like CLUE (Chinese GLUE).
 They use LTP, so if we want to fine-tune their model, we need LTP.
 
 ```bash
