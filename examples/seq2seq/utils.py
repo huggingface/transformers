@@ -652,7 +652,7 @@ def check_output_dir(args, expected_items=0):
 import asyncio  # noqa
 
 
-class RunOutput:
+class _RunOutput:
     def __init__(self, returncode, stdout, stderr):
         self.returncode = returncode
         self.stdout = stdout
@@ -668,7 +668,7 @@ async def _read_stream(stream, callback):
             break
 
 
-async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> RunOutput:
+async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
     if echo:
         print(cmd)
 
@@ -702,10 +702,10 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     #
     # If it starts hanging, will need to switch s/wait/communicate/ - so perhaps for debug we will enable
     # `wait` as it's easier to see in real time, but for normal runs use `communicate`
-    return RunOutput(await p.wait(), out, err)
+    return _RunOutput(await p.wait(), out, err)
 
 
-def execute_async_std(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> RunOutput:
+def execute_async_std(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
