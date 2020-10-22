@@ -11,7 +11,6 @@ from transformers.testing_utils import require_datasets, require_faiss, require_
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
-from transformers.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
@@ -105,7 +104,7 @@ class RagTokenizerTest(TestCase):
         rag_config.save_pretrained(save_dir)
         rag_tokenizer.save_pretrained(save_dir)
         new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir, config=rag_config)
-        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizerFast)
+        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizer)
         self.assertEqual(new_rag_tokenizer.question_encoder.vocab, rag_tokenizer.question_encoder.vocab)
         self.assertIsInstance(new_rag_tokenizer.generator, BartTokenizer)
         self.assertEqual(new_rag_tokenizer.generator.encoder, rag_tokenizer.generator.encoder)
