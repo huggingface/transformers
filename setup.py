@@ -74,11 +74,12 @@ extras = {}
 # built-in comments to why a certain version of the dependency is listed
 def cleanup(x):
     return re.sub(r' *#.*', '', x.strip()) # comments
+
 def to_list(buffer):
     return list(filter(None, map(cleanup, buffer.splitlines())))
+
 def combine_targets(names):
     return list(chain(*map(extras.get, names)))
-
 
 extras["ja"] = to_list("""
     fugashi>=1.0
@@ -128,7 +129,7 @@ extras["flax"] = to_list("""
     jaxlib==0.1.55
 """)
 if os.name == "nt":  # windows
-    extras.remove("flax") # jax is not supported on windows
+    extras.["flax"] = [] # jax is not supported on windows
 
 extras["onnxruntime"] = to_list("""
     onnxruntime>=1.4.0
