@@ -1,4 +1,3 @@
-import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -6,18 +5,17 @@ from enum import Enum
 from typing import List, Optional, Union
 
 import torch
-from filelock import FileLock
 from torch.utils.data.dataset import Dataset
 
-from ...tokenization_bart import BartTokenizer, BartTokenizerFast
-from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_xlm_roberta import XLMRobertaTokenizer
+from filelock import FileLock
+
+from ...tokenization_utils_base import PreTrainedTokenizerBase
+from ...utils import logging
 from ..processors.glue import glue_convert_examples_to_features, glue_output_modes, glue_processors
 from ..processors.utils import InputFeatures
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -68,7 +66,7 @@ class GlueDataset(Dataset):
     def __init__(
         self,
         args: GlueDataTrainingArguments,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         limit_length: Optional[int] = None,
         mode: Union[str, Split] = Split.train,
         cache_dir: Optional[str] = None,
@@ -85,16 +83,19 @@ class GlueDataset(Dataset):
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else args.data_dir,
             "cached_{}_{}_{}_{}".format(
-                mode.value, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
+                mode.value,
+                tokenizer.__class__.__name__,
+                str(args.max_seq_length),
+                args.task_name,
             ),
         )
         label_list = self.processor.get_labels()
-        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__ in (
-            RobertaTokenizer,
-            RobertaTokenizerFast,
-            XLMRobertaTokenizer,
-            BartTokenizer,
-            BartTokenizerFast,
+        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (
+            "RobertaTokenizer",
+            "RobertaTokenizerFast",
+            "XLMRobertaTokenizer",
+            "BartTokenizer",
+            "BartTokenizerFast",
         ):
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]

@@ -20,26 +20,27 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     from transformers import (
         FlaubertConfig,
-        FlaubertModel,
-        FlaubertWithLMHeadModel,
+        FlaubertForMultipleChoice,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
         FlaubertForSequenceClassification,
         FlaubertForTokenClassification,
-        FlaubertForMultipleChoice,
+        FlaubertModel,
+        FlaubertWithLMHeadModel,
     )
     from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class FlaubertModelTester(object):
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -72,7 +73,7 @@ class FlaubertModelTester(object):
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
+        input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         input_lengths = None
         if self.use_input_lengths:

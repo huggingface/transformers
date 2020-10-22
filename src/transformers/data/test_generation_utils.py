@@ -11,10 +11,7 @@ from transformers.testing_utils import require_torch
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MarianConfig,
-        MarianMTModel,
-    )
+    from transformers import MarianConfig, MarianMTModel
 
 
 @require_torch

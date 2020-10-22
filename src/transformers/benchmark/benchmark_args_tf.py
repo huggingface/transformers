@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from ..file_utils import cached_property, is_tf_available, tf_required
+from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -26,16 +26,46 @@ if is_tf_available():
     import tensorflow as tf
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass
 class TensorFlowBenchmarkArguments(BenchmarkArguments):
+
+    deprecated_args = [
+        "no_inference",
+        "no_cuda",
+        "no_tpu",
+        "no_speed",
+        "no_memory",
+        "no_env_print",
+        "no_multi_process",
+    ]
+
+    def __init__(self, **kwargs):
+        """This __init__ is there for legacy code. When removing
+        deprecated args completely, the class can simply be deleted
+        """
+        for deprecated_arg in self.deprecated_args:
+            if deprecated_arg in kwargs:
+                positive_arg = deprecated_arg[3:]
+                kwargs[positive_arg] = not kwargs.pop(deprecated_arg)
+                logger.warning(
+                    f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or {positive_arg}={kwargs[positive_arg]}"
+                )
+        self.tpu_name = kwargs.pop("tpu_name", self.tpu_name)
+        self.device_idx = kwargs.pop("device_idx", self.device_idx)
+        self.eager_mode = kwargs.pop("eager_mode", self.eager_mode)
+        self.use_xla = kwargs.pop("use_xla", self.use_xla)
+        super().__init__(**kwargs)
+
     tpu_name: str = field(
-        default=None, metadata={"help": "Name of TPU"},
+        default=None,
+        metadata={"help": "Name of TPU"},
     )
     device_idx: int = field(
-        default=0, metadata={"help": "CPU / GPU device index. Defaults to 0."},
+        default=0,
+        metadata={"help": "CPU / GPU device index. Defaults to 0."},
     )
     eager_mode: bool = field(default=False, metadata={"help": "Benchmark models in eager model."})
     use_xla: bool = field(
@@ -48,7 +78,7 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     @cached_property
     @tf_required
     def _setup_tpu(self) -> Tuple["tf.distribute.cluster_resolver.TPUClusterResolver"]:
-        if not self.no_tpu:
+        if self.tpu:
             try:
                 if self.tpu_name:
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver(self.tpu_name)
@@ -96,7 +126,7 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     @property
     @tf_required
     def n_gpu(self) -> int:
-        if not self.no_cuda:
+        if self.cuda:
             return len(self.gpu_list)
         return 0
 

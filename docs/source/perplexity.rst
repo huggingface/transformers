@@ -1,5 +1,5 @@
 Perplexity of fixed-length models
-=================================
+=======================================================================================================================
 
 Perplexity (PPL) is one of the most common metrics for evaluating language
 models. Before diving in, we should note that the metric applies specifically
@@ -31,7 +31,7 @@ relationship to Bits Per Character (BPC) and data compression, check out this
 <https://thegradient.pub/understanding-evaluation-metrics-for-language-models/>`_.
 
 Calculating PPL with fixed-length models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If we weren't limited by a model's context size, we would evaluate the
 model's perplexity by autoregressively factorizing a sequence and
@@ -83,7 +83,7 @@ time. This allows computation to procede much faster while still giving the
 model a large context to make predictions at each step.
 
 Example: Calculating perplexity with GPT-2 in 🤗 Transformers
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Let's demonstrate this process with GPT-2.
 
@@ -125,18 +125,19 @@ are 512 preceding tokens available to condition on).
     lls = []
     for i in tqdm(range(0, encodings.input_ids.size(1), stride)):
         begin_loc = max(i + stride - max_length, 0)
-        end_loc = i + stride
+        end_loc = min(i + stride, encodings.input_ids.size(1))
+        trg_len = end_loc - i    # may be different from stride on last loop
         input_ids = encodings.input_ids[:,begin_loc:end_loc].to(device)
         target_ids = input_ids.clone()
-        target_ids[:,:-stride] = -100
+        target_ids[:,:-trg_len] = -100
 
         with torch.no_grad():
             outputs = model(input_ids, labels=target_ids)
-            log_likelihood = outputs[0] * stride
+            log_likelihood = outputs[0] * trg_len
 
         lls.append(log_likelihood)
-    
-    ppl = torch.exp(torch.stack(lls).sum() / i)
+
+    ppl = torch.exp(torch.stack(lls).sum() / end_loc)
 
 Running this with the stride length equal to the max input length is
 equivalent to the suboptimal, non-sliding-window strategy we discussed above.

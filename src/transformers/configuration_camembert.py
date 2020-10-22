@@ -15,13 +15,11 @@
 # limitations under the License.
 """ CamemBERT configuration """
 
-
-import logging
-
 from .configuration_roberta import RobertaConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-config.json",

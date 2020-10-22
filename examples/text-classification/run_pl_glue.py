@@ -153,7 +153,11 @@ class GLUETransformer(BaseTransformer):
         )
 
         parser.add_argument(
-            "--task", default="", type=str, required=True, help="The GLUE task to run",
+            "--task",
+            default="",
+            type=str,
+            required=True,
+            help="The GLUE task to run",
         )
         parser.add_argument(
             "--gpus",
@@ -177,7 +181,10 @@ def main():
 
     # If output_dir not provided, a folder will be generated in pwd
     if args.output_dir is None:
-        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join(
+            "./results",
+            f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",
+        )
         os.makedirs(args.output_dir)
 
     model = GLUETransformer(args)

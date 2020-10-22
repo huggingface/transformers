@@ -71,10 +71,10 @@ def load_rocstories_dataset(dataset_path):
 
 
 def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token):
-    """ Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
+    """Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
 
-        To Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
-        input_ids[batch, alternative, :] = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
+    To Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
+    input_ids[batch, alternative, :] = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
     """
     tensor_datasets = []
     for dataset in encoded_datasets:
@@ -83,7 +83,10 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
         mc_token_ids = np.zeros((n_batch, 2), dtype=np.int64)
         lm_labels = np.full((n_batch, 2, input_len), fill_value=-100, dtype=np.int64)
         mc_labels = np.zeros((n_batch,), dtype=np.int64)
-        for i, (story, cont1, cont2, mc_label), in enumerate(dataset):
+        for (
+            i,
+            (story, cont1, cont2, mc_label),
+        ) in enumerate(dataset):
             with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
             with_cont2 = [start_token] + story[:cap_length] + [delimiter_token] + cont2[:cap_length] + [clf_token]
             input_ids[i, 0, : len(with_cont1)] = with_cont1

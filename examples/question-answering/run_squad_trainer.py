@@ -137,7 +137,12 @@ def main():
     )
 
     # Initialize our Trainer
-    trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=eval_dataset,)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+    )
 
     # Training
     if training_args.do_train:

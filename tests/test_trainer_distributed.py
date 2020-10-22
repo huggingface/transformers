@@ -13,15 +13,14 @@
 #   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
 #
 
-
-import logging
 import sys
 from typing import Dict
 
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
+from transformers.utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
@@ -60,7 +59,8 @@ if is_torch_available():
 
 if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArguments,))
-    training_args = parser.parse_args_into_dataclasses(sys.argv + ["--output_dir", "./examples"])[0]
+    sys.argv += ["--output_dir", "./examples"]
+    training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
         "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
@@ -99,5 +99,21 @@ if __name__ == "__main__":
         if p.metrics["eval_success"] is not True:
             logger.error(p.metrics)
             exit(1)
+
+        trainer.args.eval_accumulation_steps = 2
+
+        metrics = trainer.evaluate()
+        logger.info(metrics)
+        if metrics["eval_success"] is not True:
+            logger.error(metrics)
+            exit(1)
+
+        p = trainer.predict(dataset)
+        logger.info(p.metrics)
+        if p.metrics["eval_success"] is not True:
+            logger.error(p.metrics)
+            exit(1)
+
+        trainer.args.eval_accumulation_steps = None
 
     logger.info("🔥 All distributed tests successful")

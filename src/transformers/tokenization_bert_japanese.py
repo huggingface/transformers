@@ -16,15 +16,16 @@
 
 
 import collections
-import logging
+import copy
 import os
 import unicodedata
 from typing import Optional
 
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -116,6 +117,13 @@ class BertJapaneseTokenizer(BertTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            do_lower_case=do_lower_case,
+            do_word_tokenize=do_word_tokenize,
+            do_subword_tokenize=do_subword_tokenize,
+            word_tokenizer_type=word_tokenizer_type,
+            subword_tokenizer_type=subword_tokenizer_type,
+            never_split=never_split,
+            mecab_kwargs=mecab_kwargs,
             **kwargs,
         )
         # ^^ We call the grandparent's init, not the parent's.
@@ -129,6 +137,10 @@ class BertJapaneseTokenizer(BertTokenizer):
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
 
         self.do_word_tokenize = do_word_tokenize
+        self.word_tokenizer_type = word_tokenizer_type
+        self.lower_case = do_lower_case
+        self.never_split = never_split
+        self.mecab_kwargs = copy.deepcopy(mecab_kwargs)
         if do_word_tokenize:
             if word_tokenizer_type == "basic":
                 self.word_tokenizer = BasicTokenizer(
@@ -142,6 +154,7 @@ class BertJapaneseTokenizer(BertTokenizer):
                 raise ValueError("Invalid word_tokenizer_type '{}' is specified.".format(word_tokenizer_type))
 
         self.do_subword_tokenize = do_subword_tokenize
+        self.subword_tokenizer_type = subword_tokenizer_type
         if do_subword_tokenize:
             if subword_tokenizer_type == "wordpiece":
                 self.subword_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
@@ -149,6 +162,23 @@ class BertJapaneseTokenizer(BertTokenizer):
                 self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=self.unk_token)
             else:
                 raise ValueError("Invalid subword_tokenizer_type '{}' is specified.".format(subword_tokenizer_type))
+
+    @property
+    def do_lower_case(self):
+        return self.lower_case
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        if self.word_tokenizer_type == "mecab":
+            del state["word_tokenizer"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+        if self.word_tokenizer_type == "mecab":
+            self.word_tokenizer = MecabTokenizer(
+                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.mecab_kwargs or {})
+            )
 
     def _tokenize(self, text):
         if self.do_word_tokenize:
@@ -199,7 +229,7 @@ class MecabTokenizer:
         try:
             import fugashi
         except ModuleNotFoundError as error:
-            raise error(
+            raise error.__class__(
                 "You need to install fugashi to use MecabTokenizer."
                 "See https://pypi.org/project/fugashi/ for installation."
             )
@@ -211,7 +241,7 @@ class MecabTokenizer:
                 try:
                     import ipadic
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The ipadic dictionary is not installed. "
                         "See https://github.com/polm/ipadic-py for installation."
                     )
@@ -222,7 +252,7 @@ class MecabTokenizer:
                 try:
                     import unidic_lite
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The unidic_lite dictionary is not installed. "
                         "See https://github.com/polm/unidic-lite for installation."
                     )
@@ -233,7 +263,7 @@ class MecabTokenizer:
                 try:
                     import unidic
                 except ModuleNotFoundError as error:
-                    raise error(
+                    raise error.__class__(
                         "The unidic dictionary is not installed. "
                         "See https://github.com/polm/unidic-py for installation."
                     )
@@ -249,7 +279,7 @@ class MecabTokenizer:
                 raise ValueError("Invalid mecab_dic is specified.")
 
             mecabrc = os.path.join(dic_dir, "mecabrc")
-            mecab_option = "-d {} -r {} ".format(dic_dir, mecabrc) + mecab_option
+            mecab_option = '-d "{}" -r "{}" '.format(dic_dir, mecabrc) + mecab_option
 
         self.mecab = fugashi.GenericTagger(mecab_option)
 

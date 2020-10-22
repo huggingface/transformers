@@ -17,7 +17,6 @@
 
 import copy
 import json
-import logging
 import os
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -30,26 +29,27 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class ModelCard:
-    r""" Structured Model Card class.
-        Store model card as well as methods for loading/downloading/saving model cards.
+    r"""Structured Model Card class.
+    Store model card as well as methods for loading/downloading/saving model cards.
 
-        Please read the following paper for details and explanation on the sections:
-            "Model Cards for Model Reporting"
-                by Margaret Mitchell, Simone Wu,
-                Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-                Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards.
-            Link: https://arxiv.org/abs/1810.03993
+    Please read the following paper for details and explanation on the sections:
+        "Model Cards for Model Reporting"
+            by Margaret Mitchell, Simone Wu,
+            Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
+            Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards.
+        Link: https://arxiv.org/abs/1810.03993
 
-        Note:
-            A model card can be loaded and saved to disk.
+    Note:
+        A model card can be loaded and saved to disk.
 
-        Parameters:
+    Parameters:
     """
 
     def __init__(self, **kwargs):
@@ -73,8 +73,7 @@ class ModelCard:
                 raise err
 
     def save_pretrained(self, save_directory_or_file):
-        """ Save a model card object to the directory or file `save_directory_or_file`.
-        """
+        """Save a model card object to the directory or file `save_directory_or_file`."""
         if os.path.isdir(save_directory_or_file):
             # If we save using the predefined names, we can load using `from_pretrained`
             output_model_card_file = os.path.join(save_directory_or_file, MODEL_CARD_NAME)
@@ -86,7 +85,7 @@ class ModelCard:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r""" Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
+        r"""Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
 
         Parameters:
             pretrained_model_name_or_path: either:
@@ -123,7 +122,7 @@ class ModelCard:
             modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
             modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
             modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
-            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
+            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
 
         """
         cache_dir = kwargs.pop("cache_dir", None)
@@ -140,7 +139,9 @@ class ModelCard:
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             model_card_file = pretrained_model_name_or_path
         else:
-            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False)
+            model_card_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False, mirror=None
+            )
 
         if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)

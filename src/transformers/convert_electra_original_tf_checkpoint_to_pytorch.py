@@ -16,14 +16,14 @@
 
 
 import argparse
-import logging
 
 import torch
 
 from transformers import ElectraConfig, ElectraForMaskedLM, ElectraForPreTraining, load_tf_weights_in_electra
+from transformers.utils import logging
 
 
-logging.basicConfig(level=logging.INFO)
+logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path, discriminator_or_generator):

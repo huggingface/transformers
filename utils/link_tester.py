@@ -18,7 +18,7 @@ S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 
 
 def list_python_files_in_repository():
-    """ List all python files in the repository.
+    """List all python files in the repository.
 
     This function assumes that the script is executed in the root folder.
     """
@@ -43,7 +43,7 @@ def find_all_links(file_paths):
 
 
 def scan_code_for_links(source):
-    """ Scans the file to find links using a regular expression.
+    """Scans the file to find links using a regular expression.
     Returns a list of links.
     """
     with open(source, "r") as content:
@@ -55,7 +55,7 @@ def scan_code_for_links(source):
 
 
 def check_all_links(links):
-    """ Check that the provided links are valid.
+    """Check that the provided links are valid.
 
     Links are considered valid if a HEAD request to the server
     returns a 200 status code.

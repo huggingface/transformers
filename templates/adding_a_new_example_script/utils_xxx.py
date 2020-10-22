@@ -703,10 +703,10 @@ def write_predictions_extended(
     tokenizer,
     verbose_logging,
 ):
-    """ XLNet write prediction logic (more complex than Bert's).
-        Write final predictions to the json file and log-odds of null if needed.
+    """XLNet write prediction logic (more complex than Bert's).
+    Write final predictions to the json file and log-odds of null if needed.
 
-        Requires utils_squad_evaluate.py
+    Requires utils_squad_evaluate.py
     """
     _PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
         "PrelimPrediction", ["feature_index", "start_index", "end_index", "start_log_prob", "end_log_prob"]

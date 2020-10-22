@@ -5,7 +5,6 @@ from getpass import getpass
 from typing import List, Union
 
 from requests.exceptions import HTTPError
-
 from transformers.commands import BaseTransformersCLICommand
 from transformers.hf_api import HfApi, HfFolder
 
@@ -41,6 +40,7 @@ class UserCommands(BaseTransformersCLICommand):
         upload_parser.add_argument(
             "--filename", type=str, default=None, help="Optional: override individual object filename on S3."
         )
+        upload_parser.add_argument("-y", "--yes", action="store_true", help="Optional: answer Yes to the prompt")
         upload_parser.set_defaults(func=lambda args: UploadCommand(args))
 
 
@@ -222,10 +222,11 @@ class UploadCommand(BaseUserCommand):
                 )
             )
 
-        choice = input("Proceed? [Y/n] ").lower()
-        if not (choice == "" or choice == "y" or choice == "yes"):
-            print("Abort")
-            exit()
+        if not self.args.yes:
+            choice = input("Proceed? [Y/n] ").lower()
+            if not (choice == "" or choice == "y" or choice == "yes"):
+                print("Abort")
+                exit()
         print(ANSI.bold("Uploading... This might take a while if files are large"))
         for filepath, filename in files:
             try:

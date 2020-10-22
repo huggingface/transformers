@@ -16,7 +16,6 @@
 
 import csv
 import json
-import logging
 import os
 import pickle
 import sys
@@ -39,71 +38,108 @@ from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import BatchEncoding, PaddingStrategy
+from .utils import logging
 
 
 if is_tf_available():
     import tensorflow as tf
+
     from .modeling_tf_auto import (
-        TFAutoModel,
-        TFAutoModelForSequenceClassification,
-        TFAutoModelForQuestionAnswering,
-        TFAutoModelForTokenClassification,
-        TFAutoModelWithLMHead,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TFAutoModel,
         TFAutoModelForCausalLM,
+        TFAutoModelForMaskedLM,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForSeq2SeqLM,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
     )
 
 if is_torch_available():
     import torch
+
     from .modeling_auto import (
-        AutoModel,
-        AutoModelForSequenceClassification,
-        AutoModelForQuestionAnswering,
-        AutoModelForTokenClassification,
-        AutoModelForSeq2SeqLM,
-        AutoModelForCausalLM,
-        AutoModelForMaskedLM,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForQuestionAnswering,
+        AutoModelForSeq2SeqLM,
+        AutoModelForSequenceClassification,
+        AutoModelForTokenClassification,
     )
 
 if TYPE_CHECKING:
-    from .modeling_utils import PreTrainedModel
     from .modeling_tf_utils import TFPreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
-def get_framework(model=None):
+def get_framework(model):
     """
     Select framework (TensorFlow or PyTorch) to use.
 
     Args:
-        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`, `optional`):
+        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
-    if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
-        # Both framework are available but the user supplied a model class instance.
-        # Try to guess which framework to use from the model classname
-        framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
-    elif not is_tf_available() and not is_torch_available():
+    if not is_tf_available() and not is_torch_available():
         raise RuntimeError(
             "At least one of TensorFlow 2.0 or PyTorch should be installed. "
             "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
             "To install PyTorch, read the instructions at https://pytorch.org/."
         )
-    else:
-        # framework = 'tf' if is_tf_available() else 'pt'
-        framework = "pt" if is_torch_available() else "tf"
+    if isinstance(model, str):
+        if is_torch_available() and not is_tf_available():
+            model = AutoModel.from_pretrained(model)
+        elif is_tf_available() and not is_torch_available():
+            model = TFAutoModel.from_pretrained(model)
+        else:
+            try:
+                model = AutoModel.from_pretrained(model)
+            except OSError:
+                model = TFAutoModel.from_pretrained(model)
+
+    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
+
+
+def get_default_model(targeted_task: Dict, framework: Optional[str]) -> str:
+    """
+    Select a default model to use for a given task. Defaults to pytorch if ambiguous.
+
+    Args:
+        targeted_task (:obj:`Dict` ):
+           Dictionnary representing the given task, that should contain default models
+
+        framework (:obj:`str`, None)
+           "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
+
+    Returns
+
+        :obj:`str` The model string representing the default model for this pipeline
+    """
+    if is_torch_available() and not is_tf_available():
+        framework = "pt"
+    elif is_tf_available() and not is_torch_available():
+        framework = "tf"
+
+    default_models = targeted_task["default"]["model"]
+    if framework is None:
+        framework = "pt"
+
+    return default_models[framework]
 
 
 class PipelineException(Exception):
@@ -206,7 +242,11 @@ class PipelineDataFormat:
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite: bool = False,
+        self,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite: bool = False,
     ):
         self.output_path = output_path
         self.input_path = input_path
@@ -259,7 +299,11 @@ class PipelineDataFormat:
 
     @staticmethod
     def from_str(
-        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        format: str,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite=False,
     ) -> "PipelineDataFormat":
         """
         Creates an instance of the right subclass of :class:`~transformers.pipelines.PipelineDataFormat` depending
@@ -303,7 +347,11 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     """
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -344,7 +392,11 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     """
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -608,7 +660,10 @@ class Pipeline(_ScikitCompat):
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
-            inputs, add_special_tokens=add_special_tokens, return_tensors=self.framework, padding=padding,
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
         )
 
         return inputs
@@ -726,14 +781,14 @@ class TextGenerationPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
     objective, which includes the uni-directional models in the library (e.g. gpt2).
     See the list of available community models on
-    `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
     """
 
-    # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
+    # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
     # in https://github.com/rusiaaman/XLNet-gen#methodology
     # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
 
-    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    XL_PREFIX = """In 1991, the remains of Russian Tsar Nicholas II and his family
     (except for Alexei and Maria) are discovered.
     The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
     remainder of the story. 1883 Western Siberia,
@@ -742,7 +797,7 @@ class TextGenerationPipeline(Pipeline):
     father initially slaps him for making such an accusation, Rasputin watches as the
     man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
-    with people, even a bishop, begging for his blessing. """
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
     ALLOWED_MODELS = [
         "XLNetLMHeadModel",
@@ -786,7 +841,13 @@ class TextGenerationPipeline(Pipeline):
         return inputs
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self,
+        *args,
+        return_tensors=False,
+        return_text=True,
+        clean_up_tokenization_spaces=False,
+        prefix=None,
+        **generate_kwargs
     ):
         """
         Complete the prompt(s) given as inputs.
@@ -800,6 +861,8 @@ class TextGenerationPipeline(Pipeline):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
+            prefix (:obj:`str`, `optional`):
+                Prefix added to prompt.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate
                 method corresponding to your framework `here <./model.html#generative-models>`__).
@@ -818,27 +881,27 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                if self.model.__class__.__name__ in [
+                prefix = prefix if prefix is not None else self.model.config.prefix
+                if prefix is None and self.model.__class__.__name__ in [
                     "XLNetLMHeadModel",
                     "TransfoXLLMHeadModel",
                     "TFXLNetLMHeadModel",
                     "TFTransfoXLLMHeadModel",
                 ]:
-                    # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
-                    padding_text = self.PADDING_TEXT + self.tokenizer.eos_token
-                    padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
-                    # This impacts max_length and min_length argument that need adjusting.
-                    padding_length = padding["input_ids"].shape[-1]
-                    if "max_length" in generate_kwargs and generate_kwargs["max_length"] is not None:
-                        generate_kwargs["max_length"] += padding_length
-                    if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
-                        generate_kwargs["min_length"] += padding_length
+                    # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
+                    prefix = self.XL_PREFIX
 
-                    inputs = self._parse_and_tokenize(
-                        padding_text + prompt_text, padding=False, add_special_tokens=False
-                    )
-                else:
-                    inputs = self._parse_and_tokenize(prompt_text, padding=False, add_special_tokens=False)
+                if prefix:
+                    prefix_inputs = self._parse_and_tokenize(prefix, padding=False, add_special_tokens=False)
+                    # This impacts max_length and min_length argument that need adjusting.
+                    prefix_length = prefix_inputs["input_ids"].shape[-1]
+                    if generate_kwargs.get("max_length", None) is not None:
+                        generate_kwargs["max_length"] += prefix_length
+                    if generate_kwargs.get("min_length", None) is not None:
+                        generate_kwargs["min_length"] += prefix_length
+
+                prefix = prefix or ""
+                inputs = self._parse_and_tokenize(prefix + prompt_text, padding=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
@@ -912,6 +975,9 @@ class TextClassificationPipeline(Pipeline):
     task identifier: :obj:`"sentiment-analysis"` (for classifying sequences according to positive or negative
     sentiments).
 
+    If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run
+    a softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
+
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task.
     See the up-to-date list of available models on
     `huggingface.co/models <https://huggingface.co/models?filter=text-classification>`__.
@@ -934,7 +1000,7 @@ class TextClassificationPipeline(Pipeline):
 
         Args:
             args (:obj:`str` or :obj:`List[str]`):
-                One or several textts (or one list of prompts) to classify.
+                One or several texts (or one list of prompts) to classify.
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
@@ -946,7 +1012,11 @@ class TextClassificationPipeline(Pipeline):
             If ``self.return_all_scores=True``, one such dictionary is returned per label.
         """
         outputs = super().__call__(*args, **kwargs)
-        scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+
+        if self.model.config.num_labels == 1:
+            scores = 1.0 / (1.0 + np.exp(-outputs))
+        else:
+            scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         if self.return_all_scores:
             return [
                 [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
@@ -1110,7 +1180,7 @@ class FillMaskPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
     which includes the bi-directional models in the library.
     See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=lm-head>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=masked-lm>`__.
 
     .. note::
 
@@ -1224,7 +1294,7 @@ class FillMaskPipeline(Pipeline):
                     values = tf.gather_nd(values, tf.reshape(sort_inds, (-1, 1))).numpy()
                     predictions = target_inds[sort_inds.numpy()]
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
+                masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
                 self.ensure_exactly_one_mask_token(masked_index.numpy())
@@ -1347,7 +1417,10 @@ class TokenClassificationPipeline(Pipeline):
             with self.device_placement():
 
                 tokens = self.tokenizer(
-                    sentence, return_attention_mask=False, return_tensors=self.framework, truncation=True,
+                    sentence,
+                    return_attention_mask=False,
+                    return_tensors=self.framework,
+                    truncation=True,
                 )
 
                 # Forward
@@ -1650,7 +1723,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 max_seq_length=kwargs["max_seq_len"],
                 doc_stride=kwargs["doc_stride"],
                 max_query_length=kwargs["max_question_len"],
-                padding_strategy=PaddingStrategy.DO_NOT_PAD.value,
+                padding_strategy=PaddingStrategy.MAX_LENGTH.value,
                 is_training=False,
                 tqdm_enabled=False,
             )
@@ -1725,7 +1798,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probalities for each span to be
+        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be
         the actual answer.
 
         In addition, it filters out some unwanted/impossible cases like answer len being greater than
@@ -1766,7 +1839,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
         """
-        When decoding from token probalities, this method maps token indexes to actual word in
+        When decoding from token probabilities, this method maps token indexes to actual word in
         the initial context.
 
         Args:
@@ -1872,11 +1945,6 @@ class SummarizationPipeline(Pipeline):
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
         assert len(documents) > 0, "Please provide a document to summarize"
 
-        if self.framework == "tf" and "BartForConditionalGeneration" in self.model.__class__.__name__:
-            raise NotImplementedError(
-                "Tensorflow is not yet supported for Bart. Please consider using T5, e.g. `t5-base`"
-            )
-
         prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
 
         if isinstance(documents[0], list):
@@ -1923,7 +1991,9 @@ class SummarizationPipeline(Pipeline):
                 )
 
             summaries = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
 
             results = []
@@ -1933,7 +2003,9 @@ class SummarizationPipeline(Pipeline):
                     record["summary_token_ids"] = summary
                 if return_text:
                     record["summary_text"] = self.tokenizer.decode(
-                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                        summary,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 results.append(record)
             return results
@@ -2030,7 +2102,9 @@ class TranslationPipeline(Pipeline):
                 )
 
             translations = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
             results = []
             for translation in translations:
@@ -2040,6 +2114,103 @@ class TranslationPipeline(Pipeline):
                 if return_text:
                     record["translation_text"] = self.tokenizer.decode(
                         translation,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+                results.append(record)
+            return results
+
+
+@add_end_docstrings(PIPELINE_INIT_ARGS)
+class Text2TextGenerationPipeline(Pipeline):
+    """
+    Pipeline for text to text generation using seq2seq models.
+
+    This Text2TextGenerationPipeline pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
+    task identifier: :obj:`"text2text-generation"`.
+
+    The models that this pipeline can use are models that have been fine-tuned on a translation task.
+    See the up-to-date list of available models on
+    `huggingface.co/models <https://huggingface.co/models?filter=seq2seq>`__.
+
+    Usage::
+
+        text2text_generator = pipeline("text2text-generation")
+        text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.check_model_type(
+            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        )
+
+    def __call__(
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+    ):
+        r"""
+        Generate the output text(s) using text(s) given as inputs.
+
+        Args:
+            args (:obj:`str` or :obj:`List[str]`):
+                Input text for the encoder.
+            return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+            return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to include the decoded texts in the outputs.
+            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to clean up the potential extra spaces in the text output.
+            generate_kwargs:
+                Additional keyword arguments to pass along to the generate method of the model (see the generate
+                method corresponding to your framework `here <./model.html#generative-models>`__).
+
+        Return:
+            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the
+            following keys:
+
+            - **generated_text** (:obj:`str`, present when ``return_text=True``) -- The generated text.
+            - **generated_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
+              -- The token ids of the generated text.
+        """
+        assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
+
+        if isinstance(args[0], list):
+            assert (
+                self.tokenizer.pad_token_id is not None
+            ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
+            padding = True
+
+        elif isinstance(args[0], str):
+            padding = False
+        else:
+            raise ValueError(
+                " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
+                    args[0]
+                )
+            )
+
+        with self.device_placement():
+            inputs = self._parse_and_tokenize(*args, padding=padding)
+
+            if self.framework == "pt":
+                inputs = self.ensure_tensor_on_device(**inputs)
+
+            generations = self.model.generate(
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
+            )
+            results = []
+            for generation in generations:
+                record = {}
+                if return_tensors:
+                    record["generated_token_ids"] = generation
+                if return_text:
+                    record["generated_text"] = self.tokenizer.decode(
+                        generation,
                         skip_special_tokens=True,
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
@@ -2269,7 +2440,9 @@ class ConversationalPipeline(Pipeline):
                     "You might consider trimming the early phase of the conversation".format(input_length, max_length)
                 )
             generated_responses = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
 
             cleaned_history = self._clean_padding_history(generated_responses)
@@ -2353,7 +2526,8 @@ class ConversationalPipeline(Pipeline):
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
         outputs = BatchEncoding(
-            {"input_ids": outputs, "attention_mask": [[1] * len(outputs)]}, tensor_type=self.framework,
+            {"input_ids": outputs, "attention_mask": [[1] * len(outputs)]},
+            tensor_type=self.framework,
         )
         return outputs
 
@@ -2398,37 +2572,43 @@ SUPPORTED_TASKS = {
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForMaskedLM if is_tf_available() else None,
         "pt": AutoModelForMaskedLM if is_torch_available() else None,
         "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
     },
     "summarization": {
         "impl": SummarizationPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
     },
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_de": {
         "impl": TranslationPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_ro": {
         "impl": TranslationPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
+    },
+    "text2text-generation": {
+        "impl": Text2TextGenerationPipeline,
+        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
         "pt": AutoModelForCausalLM if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
@@ -2515,31 +2695,33 @@ def pipeline(
 
     Examples::
 
-        from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
+        >>> from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 
-        # Sentiment analysis pipeline
-        pipeline('sentiment-analysis')
+        >>> # Sentiment analysis pipeline
+        >>> pipeline('sentiment-analysis')
 
-        # Question answering pipeline, specifying the checkpoint identifier
-        pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
+        >>> # Question answering pipeline, specifying the checkpoint identifier
+        >>> pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
 
-        # Named entity recognition pipeline, passing in a specific model and tokenizer
-        model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        pipeline('ner', model=model, tokenizer=tokenizer)
+        >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
+        >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:
         raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
 
-    framework = framework or get_framework(model)
-
     targeted_task = SUPPORTED_TASKS[task]
-    task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
-        model = targeted_task["default"]["model"][framework]
+        # At that point framework might still be undetermined
+        model = get_default_model(targeted_task, framework)
+
+    framework = framework or get_framework(model)
+
+    task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Try to infer tokenizer from model or config name (if provided as str)
     if tokenizer is None:

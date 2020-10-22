@@ -45,7 +45,8 @@ assignees: ''
  TransfoXL/XLNet: @TevenLeScao 
  examples/seq2seq: @sshleifer
  examples/bert-loses-patience: @JetRunner
- tensorflow: @jplu 
+ tensorflow: @jplu
+ examples/token-classification: @stefan-it
  documentation: @sgugger
  -->
 

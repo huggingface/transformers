@@ -16,7 +16,6 @@
 
 
 import argparse
-import logging
 import os
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from transformers import (
     BartTokenizer,
 )
 from transformers.modeling_bart import _make_linear_from_emb
+from transformers.utils import logging
 
 
 FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn", "bart_xsum/model.pt"]
@@ -40,8 +40,8 @@ if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 SAMPLE_TEXT = " Hello world! cécé herlolip"
 

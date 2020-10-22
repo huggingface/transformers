@@ -16,16 +16,19 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
+
     from transformers import TFXLMRobertaModel
 
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFFlaubertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):

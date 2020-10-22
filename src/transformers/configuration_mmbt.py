@@ -15,23 +15,23 @@
 # limitations under the License.
 """ MMBT configuration """
 
+from .utils import logging
 
-import logging
 
-
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class MMBTConfig(object):
-    """Configuration class to store the configuration of a `MMBT Model`.
+    """
+    This is the configuration class to store the configuration of a :class:`~transformers.MMBTModel`. It is used to
+    instantiate a MMBT model according to the specified arguments, defining the model architecture.
 
     Args:
-        config (:obj:`~transformers.PreTrainedConfig`):
-            Config of the underlying Transformer models. Its values are
-            copied over to use a single config.
-        num_labels (:obj:`int` or :obj:`None`, optional, defaults to `None`):
+        config (:class:`~transformers.PreTrainedConfig`):
+            Config of the underlying Transformer models. Its values are copied over to use a single config.
+        num_labels (:obj:`int`, `optional`):
             Size of final Linear layer for classification.
-        modal_hidden_size (:obj:`int`, optional, defautls to 2048):
+        modal_hidden_size (:obj:`int`, `optional`, defaults to 2048):
             Embedding dimension of the non-text modality encoder.
     """
 

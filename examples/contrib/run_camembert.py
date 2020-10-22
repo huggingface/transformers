@@ -30,7 +30,11 @@ def fill_mask(masked_input, model, tokenizer, topk=5):
             )
         else:
             topk_filled_outputs.append(
-                (masked_input.replace(masked_token, predicted_token), values[index].item(), predicted_token,)
+                (
+                    masked_input.replace(masked_token, predicted_token),
+                    values[index].item(),
+                    predicted_token,
+                )
             )
     return topk_filled_outputs
 

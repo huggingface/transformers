@@ -16,31 +16,32 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     from transformers import (
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaubertConfig,
+        TFFlaubertForMultipleChoice,
+        TFFlaubertForQuestionAnsweringSimple,
+        TFFlaubertForSequenceClassification,
+        TFFlaubertForTokenClassification,
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
-        TFFlaubertForSequenceClassification,
-        TFFlaubertForQuestionAnsweringSimple,
-        TFFlaubertForTokenClassification,
-        TFFlaubertForMultipleChoice,
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
 class TFFlaubertModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -331,13 +332,16 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFFlaubertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
         model = TFFlaubertModel.from_pretrained("jplu/tf-flaubert-small-cased")
 
         input_ids = tf.convert_to_tensor(
-            [[0, 158, 735, 2592, 1424, 6727, 82, 1]], dtype=tf.int32,
+            [[0, 158, 735, 2592, 1424, 6727, 82, 1]],
+            dtype=tf.int32,
         )  # "J'aime flaubert !"
 
         output = model(input_ids)[0]

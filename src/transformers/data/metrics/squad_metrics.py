@@ -10,15 +10,16 @@ that a question is unanswerable.
 
 import collections
 import json
-import logging
 import math
 import re
 import string
 
 from transformers.tokenization_bert import BasicTokenizer
 
+from ...utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 def normalize_answer(s):
@@ -588,10 +589,10 @@ def compute_predictions_log_probs(
     tokenizer,
     verbose_logging,
 ):
-    """ XLNet write prediction logic (more complex than Bert's).
-        Write final predictions to the json file and log-odds of null if needed.
+    """XLNet write prediction logic (more complex than Bert's).
+    Write final predictions to the json file and log-odds of null if needed.
 
-        Requires utils_squad_evaluate.py
+    Requires utils_squad_evaluate.py
     """
     _PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
         "PrelimPrediction", ["feature_index", "start_index", "end_index", "start_log_prob", "end_log_prob"]

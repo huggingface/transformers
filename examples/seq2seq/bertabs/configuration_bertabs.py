@@ -28,7 +28,7 @@ BERTABS_FINETUNED_CONFIG_MAP = {
 
 
 class BertAbsConfig(PretrainedConfig):
-    r""" Class to store the configuration of the BertAbs model.
+    r"""Class to store the configuration of the BertAbs model.
 
     Arguments:
         vocab_size: int

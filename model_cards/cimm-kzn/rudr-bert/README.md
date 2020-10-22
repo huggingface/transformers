@@ -8,16 +8,22 @@ RuDR-BERT - Multilingual, Cased, which pretrained on the raw part of the RuDReC 
 
 If you find this repository helpful, feel free to cite our publication:
 
-[1] https://arxiv.org/abs/2004.03659
+[1] Tutubalina E, Alimova I, Miftahutdinov Z, et al. The Russian Drug Reaction Corpus and Neural Models for Drug Reactions and Effectiveness Detection in User Reviews. 
+   
+   preprint: https://arxiv.org/abs/2004.03659
 ```
-@misc{tutubalina2020russian,
-    title={The Russian Drug Reaction Corpus and Neural Models for Drug Reactions and Effectiveness Detection in User Reviews},
-    author={Elena Tutubalina and Ilseyar Alimova and Zulfat Miftahutdinov and Andrey Sakhovskiy and Valentin Malykh and Sergey Nikolenko},
-    year={2020},
-    eprint={2004.03659},
-    archivePrefix={arXiv},
-    primaryClass={cs.CL}
-}
+@article{10.1093/bioinformatics/btaa675,
+    author = {Tutubalina, Elena and Alimova, Ilseyar and Miftahutdinov, Zulfat and Sakhovskiy, Andrey and Malykh, Valentin and Nikolenko, Sergey},
+    title = "{The Russian Drug Reaction Corpus and Neural Models for Drug Reactions and Effectiveness Detection in User Reviews}",
+    journal = {Bioinformatics},
+    year = {2020},
+    month = {07},
+    issn = {1367-4803},
+    doi = {10.1093/bioinformatics/btaa675},
+    url = {https://doi.org/10.1093/bioinformatics/btaa675},
+    note = {btaa675},
+    eprint = {https://academic.oup.com/bioinformatics/advance-article-pdf/doi/10.1093/bioinformatics/btaa675/33539752/btaa675.pdf},
+} 
 ```
 [2] Tutubalina, EV and Miftahutdinov, Z Sh and Nugmanov, RI and Madzhidov, TI and Nikolenko, SI and Alimova, IS and Tropsha, AE Using semantic analysis of texts for the identification of drugs with similar therapeutic effects.
    [link to paper](https://www.researchgate.net/profile/Elena_Tutubalina/publication/323751823_Using_semantic_analysis_of_texts_for_the_identification_of_drugs_with_similar_therapeutic_effects/links/5bf7cfc3299bf1a0202cbc1f/Using-semantic-analysis-of-texts-for-the-identification-of-drugs-with-similar-therapeutic-effects.pdf)

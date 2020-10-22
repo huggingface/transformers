@@ -28,19 +28,20 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.modeling_tf_xlnet import (
-        TFXLNetModel,
-        TFXLNetLMHeadModel,
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLNetForMultipleChoice,
+        TFXLNetForQuestionAnsweringSimple,
         TFXLNetForSequenceClassification,
         TFXLNetForTokenClassification,
-        TFXLNetForQuestionAnsweringSimple,
-        TFXLNetForMultipleChoice,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLNetLMHeadModel,
+        TFXLNetModel,
     )
 
 
 class TFXLNetModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -347,7 +348,6 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = TFXLNetModelTester(self)

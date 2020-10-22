@@ -20,19 +20,19 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     from transformers import (
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DistilBertConfig,
-        DistilBertModel,
         DistilBertForMaskedLM,
         DistilBertForMultipleChoice,
-        DistilBertForTokenClassification,
         DistilBertForQuestionAnswering,
         DistilBertForSequenceClassification,
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DistilBertForTokenClassification,
+        DistilBertModel,
     )
 
     class DistilBertModelTester(object):
@@ -89,7 +89,7 @@ if is_torch_available():
 
             input_mask = None
             if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+                input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
             sequence_labels = None
             token_labels = None
@@ -179,7 +179,9 @@ if is_torch_available():
             multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
             multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
             result = model(
-                multiple_choice_inputs_ids, attention_mask=multiple_choice_input_mask, labels=choice_labels,
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                labels=choice_labels,
             )
             self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 

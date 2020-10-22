@@ -16,28 +16,56 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import AutoConfig, AutoTokenizer, MarianConfig, MarianTokenizer, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+
+from .test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():
     import torch
-    from transformers import (
-        AutoTokenizer,
-        MarianConfig,
-        AutoConfig,
-        AutoModelWithLMHead,
-        MarianTokenizer,
-        MarianMTModel,
-    )
+
+    from transformers import AutoModelWithLMHead, MarianMTModel
     from transformers.convert_marian_to_pytorch import (
+        ORG_NAME,
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
-        ORG_NAME,
     )
+    from transformers.modeling_bart import shift_tokens_right
     from transformers.pipelines import TranslationPipeline
+
+
+@require_torch
+class ModelTester:
+    def __init__(self, parent):
+        self.config = MarianConfig(
+            vocab_size=99,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+            add_final_layer_norm=True,
+            return_dict=True,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        return self.config, {}
+
+
+@require_torch
+class SelectiveCommonTest(unittest.TestCase):
+    all_model_classes = (MarianMTModel,) if is_torch_available() else ()
+
+    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+
+    def setUp(self):
+        self.model_tester = ModelTester(self)
 
 
 class ModelManagementTests(unittest.TestCase):
@@ -51,6 +79,8 @@ class ModelManagementTests(unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MarianIntegrationTest(unittest.TestCase):
     src = "en"
     tgt = "de"
@@ -75,9 +105,15 @@ class MarianIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
-        cls.tokenizer: MarianTokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls
+
+    @cached_property
+    def tokenizer(self) -> MarianTokenizer:
+        return AutoTokenizer.from_pretrained(self.model_name)
+
+    @property
+    def eos_token_id(self) -> int:
+        return self.tokenizer.eos_token_id
 
     @cached_property
     def model(self):
@@ -108,6 +144,8 @@ class MarianIntegrationTest(unittest.TestCase):
         return generated_words
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_forward(self):
@@ -115,18 +153,21 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         expected_ids = [38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt).to(torch_device)
+
         self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
         desired_keys = {
             "input_ids",
             "attention_mask",
-            "decoder_input_ids",
-            "decoder_attention_mask",
+            "labels",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
+        model_inputs["decoder_input_ids"] = shift_tokens_right(model_inputs.labels, self.tokenizer.pad_token_id)
+        model_inputs["return_dict"] = True
+        model_inputs["use_cache"] = False
         with torch.no_grad():
-            logits, *enc_features = self.model(**model_inputs)
-        max_indices = logits.argmax(-1)
+            outputs = self.model(**model_inputs)
+        max_indices = outputs.logits.argmax(-1)
         self.tokenizer.batch_decode(max_indices)
 
     def test_unk_support(self):
@@ -149,6 +190,8 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         self.assertIsInstance(config, MarianConfig)
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_EN_FR(MarianIntegrationTest):
     src = "en"
     tgt = "fr"
@@ -166,6 +209,8 @@ class TestMarian_EN_FR(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_FR_EN(MarianIntegrationTest):
     src = "fr"
     tgt = "en"
@@ -183,6 +228,8 @@ class TestMarian_FR_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_RU_FR(MarianIntegrationTest):
     src = "ru"
     tgt = "fr"
@@ -194,6 +241,8 @@ class TestMarian_RU_FR(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_MT_EN(MarianIntegrationTest):
     src = "mt"
     tgt = "en"
@@ -205,6 +254,21 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_sentencepiece
+@require_tokenizers
+class TestMarian_en_zh(MarianIntegrationTest):
+    src = "en"
+    tgt = "zh"
+    src_text = ["My name is Wolfgang and I live in Berlin"]
+    expected_text = ["我叫沃尔夫冈 我住在柏林"]
+
+    @slow
+    def test_batch_generation_eng_zho(self):
+        self._assert_generated_batch_equal_expected()
+
+
+@require_sentencepiece
+@require_tokenizers
 class TestMarian_en_ROMANCE(MarianIntegrationTest):
     """Multilingual on target side."""
 

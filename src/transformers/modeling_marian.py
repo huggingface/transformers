@@ -23,11 +23,12 @@ from .modeling_bart import BartForConditionalGeneration
 
 
 class MarianMTModel(BartForConditionalGeneration):
-    config_class = MarianConfig
     r"""
     Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-    Model API is identical to BartForConditionalGeneration.
-    Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
+    Available models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
+
+    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
 
     Examples::
 
@@ -42,12 +43,21 @@ class MarianMTModel(BartForConditionalGeneration):
         >>> tok = MarianTokenizer.from_pretrained(mname)
         >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text])  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
-        >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+        >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
 
     """
+    config_class = MarianConfig
+    authorized_missing_keys = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
+    keys_to_never_save = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        logits[:, self.config.pad_token_id] = float("-inf")
+        logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
-            self._force_token_ids_generation(logits, self.config.eos_token_id)
+            self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
         return logits

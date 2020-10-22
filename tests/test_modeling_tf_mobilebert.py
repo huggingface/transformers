@@ -25,15 +25,16 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers.modeling_tf_mobilebert import (
-        TFMobileBertModel,
         TFMobileBertForMaskedLM,
+        TFMobileBertForMultipleChoice,
         TFMobileBertForNextSentencePrediction,
         TFMobileBertForPreTraining,
-        TFMobileBertForSequenceClassification,
-        TFMobileBertForMultipleChoice,
-        TFMobileBertForTokenClassification,
         TFMobileBertForQuestionAnswering,
+        TFMobileBertForSequenceClassification,
+        TFMobileBertForTokenClassification,
+        TFMobileBertModel,
     )
 
 

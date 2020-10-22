@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
@@ -51,30 +51,15 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class ElectraTokenizer(BertTokenizer):
     r"""
-    Constructs an Electra tokenizer.
+    Construct an ELECTRA tokenizer.
+
     :class:`~transformers.ElectraTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-
-
-class ElectraTokenizerFast(BertTokenizerFast):
-    r"""
-    Constructs a "Fast" Electra Fast tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.ElectraTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

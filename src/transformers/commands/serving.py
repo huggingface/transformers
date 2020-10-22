@@ -1,4 +1,3 @@
-import logging
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
@@ -6,13 +5,15 @@ from transformers import Pipeline
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
+from ..utils import logging
+
 
 try:
-    from uvicorn import run
-    from fastapi import FastAPI, HTTPException, Body
+    from fastapi import Body, FastAPI, HTTPException
     from fastapi.routing import APIRoute
     from pydantic import BaseModel
     from starlette.responses import JSONResponse
+    from uvicorn import run
 
     _serve_dependencies_installed = True
 except (ImportError, AttributeError):
@@ -24,7 +25,7 @@ except (ImportError, AttributeError):
     _serve_dependencies_installed = False
 
 
-logger = logging.getLogger("transformers-cli/serving")
+logger = logging.get_logger("transformers-cli/serving")
 
 
 def serve_command_factory(args: Namespace):
