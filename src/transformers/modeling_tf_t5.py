@@ -24,7 +24,7 @@ from typing import Tuple
 
 import tensorflow as tf
 
-from transformers.modeling_tf_utils import NoLayerEmbedTokens
+from transformers.modeling_tf_utils import TFWrappedEmbeddings
 
 from .configuration_t5 import T5Config
 from .file_utils import (
@@ -953,7 +953,7 @@ class TFT5Model(TFT5PreTrainedModel):
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
 
-        embed_tokens = NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -975,7 +975,7 @@ class TFT5Model(TFT5PreTrainedModel):
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-        embed_tokens = NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 
@@ -1150,7 +1150,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
 
-        embed_tokens = NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1171,7 +1171,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-        embed_tokens = NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 

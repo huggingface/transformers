@@ -31,9 +31,9 @@ from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, T
 # Public API
 from .modeling_tf_utils import (
     DUMMY_INPUTS,
-    NoLayerEmbedTokens,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    TFWrappedEmbeddings,
     cast_bool_to_primitive,
     keras_serializable,
     shape_list,
@@ -797,7 +797,7 @@ class TFBartModel(TFPretrainedBartModel):
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
             pass
 
-        embed_tokens = NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
 

@@ -1067,7 +1067,7 @@ def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor
     return bool_variable
 
 
-class NoLayerEmbedTokens:
+class TFWrappedEmbeddings:
     """
     this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
     class to avoid problem with weight restoring. Also it makes sure that the layer is
