@@ -45,6 +45,8 @@ To create the package for pypi.
 """
 
 import shutil
+import os
+import re
 from itertools import chain
 from pathlib import Path
 
@@ -68,39 +70,156 @@ if stale_egg_info.exists():
 
 
 extras = {}
+# helper functions to make it easier to list dependencies not as a python list, but vertically w/ optional
+# built-in comments to why a certain version of the dependency is listed
+def cleanup(x):
+    return re.sub(r' *#.*', '', x.strip()) # comments
+def to_list(buffer):
+    return list(filter(None, map(cleanup, buffer.splitlines())))
+def combine_targets(names):
+    return list(chain(*map(extras.get, names)))
 
-extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0.0,<2.0", "unidic_lite>=1.0.7", "unidic>=1.0.2"]
-extras["sklearn"] = ["scikit-learn"]
+
+extras["ja"] = to_list("""
+    fugashi>=1.0
+    ipadic>=1.0.0,<2.0
+    unidic>=1.0.2
+    unidic_lite>=1.0.7
+""")
+
+extras["sklearn"] = to_list("""
+    scikit-learn
+""")
 
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
-extras["tf"] = [
-    "tensorflow>=2.0",
-    "onnxconverter-common",
-    "keras2onnx"
-    # "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
-    # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
-]
-extras["tf-cpu"] = [
-    "tensorflow-cpu>=2.0",
-    "onnxconverter-common",
-    "keras2onnx"
-    # "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
-    # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
-]
-extras["torch"] = ["torch>=1.0"]
-extras["flax"] = ["jaxlib==0.1.55", "jax>=0.2.0", "flax==0.2.2"]
-extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
+extras["tf-deps"] = to_list("""
+    keras2onnx
+    onnxconverter-common
+    # onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common,
+    # keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx
+""")
 
-extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
-extras["all"] = extras["serving"] + ["tensorflow", "torch"]
+# keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
+extras["tf-main"] = to_list("""
+    tensorflow>=2.0
+""")
 
-extras["sentencepiece"] = ["sentencepiece!=0.1.92"]
-extras["retrieval"] = ["faiss-cpu", "datasets"]
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"]
-# sphinx-rtd-theme==0.5.0 introduced big changes in the style.
-extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
-extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
-extras["dev"] = list(chain(*map(extras.get, "testing quality docs ja sklearn flax tf torch sentencepiece".split())))
+extras["tf-cpu-main"] = to_list("""
+    tensorflow-cpu>=2.0
+""")
+
+extras["tf"] = combine_targets(to_list("""
+    tf-deps
+    tf-main
+"""))
+
+extras["tf-cpu"] = combine_targets(to_list("""
+    tf-cpu-main
+    tf-deps
+"""))
+
+extras["torch"] = to_list("""
+    torch>=1.0
+""")
+
+extras["flax"] = to_list("""
+    flax==0.2.2
+    jax>=0.2.0
+    jaxlib==0.1.55
+""")
+if os.name == "nt":  # windows
+    extras.remove("flax") # jax is not supported on windows
+
+extras["onnxruntime"] = to_list("""
+    onnxruntime>=1.4.0
+    onnxruntime-tools>=1.4.2
+""")
+
+extras["serving"] = to_list("""
+    fastapi
+    pydantic
+    starlette
+    uvicorn
+""")
+
+extras["sentencepiece"] = to_list("""
+    sentencepiece!=0.1.92
+""")
+
+extras["retrieval"] = to_list("""
+    datasets
+    faiss-cpu
+""")
+
+extras["testing-base"] = to_list("""
+    parameterized
+    psutil
+    pytest
+    pytest-xdist
+    timeout-decorator
+""")
+
+extras["testing"] = combine_targets(to_list("""
+    testing-base
+    retrieval
+"""))
+
+extras["docs"] = to_list("""
+    recommonmark
+    sphinx
+    sphinx-copybutton
+    sphinx-markdown-tables
+    sphinx-rtd-theme==0.4.3 # sphinx-rtd-theme==0.5.0 introduced big changes in the style
+""")
+
+extras["tokenizers"] = to_list("""
+    tokenizers==0.9.2
+""")
+
+extras["quality"] = to_list("""
+    black>=20.8b1
+    flake8>=3.8.3
+    isort>=5.5.4
+""")
+
+extras["dev"] = combine_targets(to_list("""
+    docs
+    flax
+    ja
+    quality
+    sentencepiece
+    sklearn
+    testing
+    tf
+    torch
+"""))
+
+extras["all"] = combine_targets(to_list("""
+    flax
+    sentencepiece
+    tf
+    tokenizers
+    torch
+"""))
+
+# debug 
+if 0:
+    from pprint import pprint
+    pprint(extras)
+
+requirements = to_list("""
+    numpy
+    tokenizers==0.9.2
+    dataclasses;python_version<'3.7' # dataclasses for Python versions that don't have it
+    packaging   # utilities from PyPA to e.g. compare versions
+    filelock    # filesystem locks e.g. to prevent parallel downloads
+    requests    # for downloading models over HTTPS
+    tqdm>=4.27  # progress bars in model download and training scripts
+    regex!=2019.12.17     # for OpenAI GPT
+    sentencepiece!=0.1.92 # for SentencePiece models
+    protobuf
+    sacremoses # for XLM
+""")
 
 setup(
     name="transformers",
@@ -115,27 +234,7 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    install_requires=[
-        "numpy",
-        "tokenizers == 0.9.2",
-        # dataclasses for Python versions that don't have it
-        "dataclasses;python_version<'3.7'",
-        # utilities from PyPA to e.g. compare versions
-        "packaging",
-        # filesystem locks e.g. to prevent parallel downloads
-        "filelock",
-        # for downloading models over HTTPS
-        "requests",
-        # progress bars in model download and training scripts
-        "tqdm >= 4.27",
-        # for OpenAI GPT
-        "regex != 2019.12.17",
-        # for SentencePiece models
-        "sentencepiece != 0.1.92",
-        "protobuf",
-        # for XLM
-        "sacremoses",
-    ],
+    install_requires = install_requires,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",
