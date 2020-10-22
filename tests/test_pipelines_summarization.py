@@ -12,19 +12,10 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "summarization"
     pipeline_running_kwargs = {"num_beams": 2, "min_length": 2, "max_length": 5}
-    small_models = ["sshleifer/bart-tiny-random"]  # Default model - Models tested without the @slow decorator
-    large_models = ["patrickvonplaten/t5-tiny-random"]  # Models tested with the @slow decorator
+    small_models = ["patrickvonplaten/t5-tiny-random"]  # Models tested without the @slow decorator
+    large_models = []  # Models tested with the @slow decorator
     invalid_inputs = [4, "<mask>"]
     mandatory_keys = ["summary_text"]
-
-    @require_tf
-    def test_tf_small(self):
-        pass  # Skip for now because we don't have a Tensorflow BART
-
-    @require_tf
-    @slow
-    def test_tf_large(self):
-        pass  # Skip for now because we don't have a Tensorflow BART
 
     @require_torch
     @slow
