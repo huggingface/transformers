@@ -207,7 +207,7 @@ if 0:
     from pprint import pprint
     pprint(extras)
 
-requirements = to_list("""
+install_requires = to_list("""
     numpy
     tokenizers==0.9.2
     dataclasses;python_version<'3.7' # dataclasses for Python versions that don't have it
