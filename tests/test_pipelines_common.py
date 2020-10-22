@@ -16,6 +16,9 @@ class CustomInputPipelineCommonMixin:
     large_models = None  # Models tested with the @slow decorator
 
     def setUp(self) -> None:
+        if not is_tf_available() and not is_torch_available():
+            return  # Currently no JAX pipelines
+
         # Download needed checkpoints
         models = self.small_models
         if _run_slow_tests:
@@ -92,6 +95,9 @@ class MonoInputPipelineCommonMixin:
     expected_check_keys: Optional[List[str]] = None
 
     def setUp(self) -> None:
+        if not is_tf_available() and not is_torch_available():
+            return  # Currently no JAX pipelines
+
         for model_name in self.small_models:
             pipeline(self.pipeline_task, model=model_name, tokenizer=model_name, **self.pipeline_loading_kwargs)
         for model_name in self.large_models:
