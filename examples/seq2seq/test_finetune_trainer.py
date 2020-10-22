@@ -52,6 +52,7 @@ class TestFinetuneTrainer(TestCasePlus):
 
     def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
 
+        # XXX: remove hardcoded path
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         argv = f"""
