@@ -1197,8 +1197,8 @@ class FillMaskPipeline(Pipeline):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         top_k=5,
-        topk: Optional[int] = None,
         task: str = "",
+        **kwargs
     ):
         super().__init__(
             model=model,
@@ -1213,12 +1213,12 @@ class FillMaskPipeline(Pipeline):
 
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
 
-        if topk is not None:
+        if "topk" in kwargs:
             warnings.warn(
                 "The `topk` argument is deprecated and will be removed in a future version, use `top_k` instead.",
                 FutureWarning,
             )
-            self.top_k = topk
+            self.top_k = kwargs.pop("topk")
         else:
             self.top_k = top_k
 
