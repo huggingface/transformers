@@ -74,18 +74,10 @@ between different runs. We report the median on 5 runs (with different seeds) fo
 | WNLI  | Accuracy                     | 45.07       |
 
 Some of these results are significantly different from the ones reported on the test set
-of GLUE benchmark on the website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the webite.
-
-Before running any one of these GLUE tasks you should download the
-[GLUE data](https://gluebenchmark.com/tasks) by running the following lines at the root of the repo
-```
-python utils/download_glue_data.py --data_dir /path/to/glue --tasks all
-```
-
-after replacing *path/to/glue* with a value that you like. Then you can run
+of GLUE benchmark on the website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the
+website.
 
 ```bash
-export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
 python run_glue.py \
@@ -93,7 +85,6 @@ python run_glue.py \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
-  --data_dir $GLUE_DIR/$TASK_NAME \
   --max_seq_length 128 \
   --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
@@ -114,69 +105,33 @@ since the data processor for each task inherits from the base class DataProcesso
 
 ## Running on TPUs in PyTorch
 
-**Update**: read the more up-to-date [Running on TPUs](../README.md#running-on-tpus) in the main README.md instead.
-
-Even when running PyTorch, you can accelerate your workloads on Google's TPUs, using `pytorch/xla`. For information on how to setup your TPU environment refer to the
+Even when running PyTorch, you can accelerate your workloads on Google's TPUs, using `pytorch/xla`. For information on
+how to setup your TPU environment refer to the
 [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
-The following are some examples of running the `*_tpu.py` finetuning scripts on TPUs. All steps for data preparation are
-identical to your normal GPU + Huggingface setup.
-
-For running your GLUE task on MNLI dataset you can run something like the following:
+For running your GLUE task on MNLI dataset you can run something like the following form the root of the transformers
+repo:
 
 ```
-export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
-export GLUE_DIR=/path/to/glue
-export TASK_NAME=MNLI
-
-python run_glue_tpu.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
+python examples/xla_spawn.py \
+  --num_cores=8 \
+  transformers/examples/text-classification/run_glue.py \
   --do_train \
   --do_eval \
-  --data_dir $GLUE_DIR/$TASK_NAME \
-  --max_seq_length 128 \
-  --train_batch_size 32 \
-  --learning_rate 3e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/$TASK_NAME \
+  --task_name=mrpc \
+  --num_train_epochs=3 \
+  --max_seq_length=128 \
+  --learning_rate=5e-5 \
+  --output_dir=/tmp/mrpc \
   --overwrite_output_dir \
-  --logging_steps 50 \
-  --save_steps 200 \
-  --num_cores=8
+  --logging_steps=5 \
+  --save_steps=5 \
+  --tpu_metrics_debug \
+  --model_name_or_path=bert-base-cased \
+  --per_device_train_batch_size=64 \
+  --per_device_eval_batch_size=64
 ```
 
-### MRPC
-
-#### Fine-tuning example
-
-The following examples fine-tune BERT on the Microsoft Research Paraphrase Corpus (MRPC) corpus and runs in less
-than 10 minutes on a single K-80 and in 27 seconds (!) on single tesla V100 16GB with apex installed.
-
-Before running any one of these GLUE tasks you should download the
-[GLUE data](https://gluebenchmark.com/tasks) by running
-[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
-and unpack it to some directory `$GLUE_DIR`.
-
-```bash
-export GLUE_DIR=/path/to/glue
-
-python run_glue.py \
-  --model_name_or_path bert-base-cased \
-  --task_name MRPC \
-  --do_train \
-  --do_eval \
-  --data_dir $GLUE_DIR/MRPC/ \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/mrpc_output/
-```
-
-Our test ran on a few seeds with [the original implementation hyper-
-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation
-results between 84% and 88%.
 
 #### Using Apex and mixed-precision
 
@@ -184,14 +139,12 @@ Using Apex and 16 bit precision, the fine-tuning on MRPC only takes 27 seconds. 
 [apex](https://github.com/NVIDIA/apex), then run the following example:
 
 ```bash
-export GLUE_DIR=/path/to/glue
 
 python run_glue.py \
   --model_name_or_path bert-base-cased \
   --task_name MRPC \
   --do_train \
   --do_eval \
-  --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
   --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
@@ -206,15 +159,13 @@ Here is an example using distributed training on 8 V100 GPUs. The model used is 
 reaches F1 > 92 on MRPC.
 
 ```bash
-export GLUE_DIR=/path/to/glue
 
 python -m torch.distributed.launch \
     --nproc_per_node 8 run_glue.py \
     --model_name_or_path bert-base-cased \
-    --task_name MRPC \
+    --task_name mrpc \
     --do_train \
     --do_eval \
-    --data_dir $GLUE_DIR/MRPC/ \
     --max_seq_length 128 \
     --per_device_train_batch_size 8 \
     --learning_rate 2e-5 \
@@ -246,7 +197,6 @@ python -m torch.distributed.launch \
     --task_name mnli \
     --do_train \
     --do_eval \
-    --data_dir $GLUE_DIR/MNLI/ \
     --max_seq_length 128 \
     --per_device_train_batch_size 8 \
     --learning_rate 2e-5 \
@@ -272,7 +222,9 @@ The results  are the following:
 
 # Run PyTorch version using PyTorch-Lightning
 
-Run `bash run_pl.sh` from the `glue` directory. This will also install `pytorch-lightning` and the requirements in `examples/requirements.txt`. It is a shell pipeline that will automatically download, pre-process the data and run the specified models. Logs are saved in `lightning_logs` directory.
+Run `bash run_pl.sh` from the `glue` directory. This will also install `pytorch-lightning` and the requirements in
+`examples/requirements.txt`. It is a shell pipeline that will automatically download, preprocess the data and run the
+specified models. Logs are saved in `lightning_logs` directory.
 
 Pass `--gpus` flag to change the number of GPUs. Default uses 1. At the end, the expected results are:
 
