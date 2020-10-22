@@ -4,17 +4,18 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 # A sample finetuning run, you need to specify data_dir, output_dir and model_name_or_path
 # run ./examples/rag/finetune.sh --help to see all the possible options
 
-python examples/rag/finetune.py \
-    --data_dir $DATA_DIR \
-    --output_dir $OUTPUT_DIR \
-    --model_name_or_path $MODLE_NAME_OR_PATH \
+python finetune.py \
+    --data_dir nq-data \
+    --output_dir outputs \
+    --model_name_or_path ./rag-seq-bart-base \
     --model_type rag_sequence \
-    --fp16 \
-    --gpus 8 \
+    --gpus 1 \
     --do_train \
     --do_predict \
-    --n_val -1 \
-    --val_check_interval 0.25 \
+    --fp16 \
+    --profiler \
+    --n_train 500 \
+    --n_val 1 \
     --train_batch_size 8 \
     --eval_batch_size 1 \
     --max_source_length 128 \
@@ -29,6 +30,7 @@ python examples/rag/finetune.py \
     --max_grad_norm 0.1 \
     --lr_scheduler polynomial \
     --learning_rate 3e-05 \
-    --num_train_epochs 100 \
+    --num_train_epochs 1 \
     --warmup_steps 500 \
-    --gradient_accumulation_steps 1
+    --gradient_accumulation_steps 1 \
+    --distributed_retriever ray

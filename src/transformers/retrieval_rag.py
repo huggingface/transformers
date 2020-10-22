@@ -310,13 +310,22 @@ class RagRetriever:
             self.init_retrieval()
 
     @classmethod
-    def from_pretrained(cls, retriever_name_or_path, **kwargs):
+    def get_tokenizers(cls, retriever_name_or_path, **kwargs):
         requires_datasets(cls)
         requires_faiss(cls)
         config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
-        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
+        config.index_name = "legacy"
+        config.use_dummy_dataset = False
+        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path,
+                                                     config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
+        return config, question_encoder_tokenizer, generator_tokenizer
+
+    @classmethod
+    def from_pretrained(cls, retriever_name_or_path, **kwargs):
+        config, question_encoder_tokenizer, generator_tokenizer = \
+            cls.get_tokenizers(retriever_name_or_path, **kwargs)
         return cls(
             config, question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer
         )

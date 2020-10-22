@@ -17,6 +17,8 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
+import ray
+
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -52,6 +54,7 @@ from examples.rag.utils import (  # noqa: E402 # isort:skip
     set_extra_model_params,
     Seq2SeqDataset,
 )
+from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -87,6 +90,9 @@ class GenerativeQAModule(BaseTransformer):
 
         config_class = RagConfig if self.is_rag_model else AutoConfig
         config = config_class.from_pretrained(hparams.model_name_or_path)
+        # Use legacy index.
+        config.index_name = "legacy"
+        config.use_dummy_dataset = False
 
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
@@ -95,7 +101,12 @@ class GenerativeQAModule(BaseTransformer):
                 config.generator.prefix = args.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
-            retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path)
+            if hparams.distributed_retriever == "pytorch":
+                retriever = RagPyTorchDistributedRetriever.from_pretrained(
+                    hparams.model_name_or_path)
+            elif hparams.distributed_retriever == "ray":
+                retriever = RagRayDistributedRetriever.from_pretrained(
+                    hparams.model_name_or_path, hparams.actor_handles)
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
             prefix = config.question_encoder.prefix
         else:
@@ -113,7 +124,7 @@ class GenerativeQAModule(BaseTransformer):
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
 
-        save_git_info(self.hparams.output_dir)
+        #save_git_info(self.hparams.output_dir)
         self.output_dir = Path(self.hparams.output_dir)
         self.metrics_save_path = Path(self.output_dir) / "metrics.json"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
@@ -141,16 +152,31 @@ class GenerativeQAModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
 
-        self.hparams.git_sha = get_git_info()["repo_sha"]
+        #self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.distributed_port = self.hparams.distributed_port
 
+        if hparams.gpus == 1:
+            if hparams.distributed_retriever == "ray":
+                self.model.retriever.init_retrieval(num_actors=1)
+            elif hparams.distributed_retriever == "pytorch":
+                self.model.retriever.init_retrieval(self.distributed_port)
+
+        self.distributed_retriever = hparams.distributed_retriever
+
     def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
+        # if global_rank == 0:
+        #     import pdb; pdb.set_trace()
         logger.info("Custom init_ddp_connection.")
         os.environ["MASTER_PORT"] = str(self.distributed_port)
         super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+        # if self.is_rag_model:
+        #     self.model.retriever.init_retrieval(self.distributed_port)
         if self.is_rag_model:
-            self.model.retriever.init_retrieval(self.distributed_port)
+            if self.distributed_retriever == "pytorch":
+                self.model.retriever.init_retrieval(self.distributed_port)
+            elif self.distributed_retriever == "ray" and global_rank == 0:
+                self.model.retriever.init_retrieval(num_actors=1)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -229,31 +255,31 @@ class GenerativeQAModule(BaseTransformer):
 
         return {"loss": loss_tensors[0], "log": logs}
 
-    def validation_step(self, batch, batch_idx) -> Dict:
-        return self._generative_step(batch)
+    # def validation_step(self, batch, batch_idx) -> Dict:
+    #     return self._generative_step(batch)
 
-    def validation_epoch_end(self, outputs, prefix="val") -> Dict:
-        self.step_count += 1
-        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
-        loss = losses["loss"]
-        gen_metrics = {
-            k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
-        }
-        metrics_tensor: torch.FloatTensor = torch.tensor(gen_metrics[self.val_metric]).type_as(loss)
-        gen_metrics.update({k: v.item() for k, v in losses.items()})
-
-        # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424
-        if dist.is_initialized():
-            dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
-            metrics_tensor = metrics_tensor / dist.get_world_size()
-            gen_metrics.update({self.val_metric: metrics_tensor.item()})
-
-        losses.update(gen_metrics)
-        metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
-        metrics["step_count"] = self.step_count
-        self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
-        preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": metrics_tensor}
+    # def validation_epoch_end(self, outputs, prefix="val") -> Dict:
+    #     self.step_count += 1
+    #     losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
+    #     loss = losses["loss"]
+    #     gen_metrics = {
+    #         k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
+    #     }
+    #     metrics_tensor: torch.FloatTensor = torch.tensor(gen_metrics[self.val_metric]).type_as(loss)
+    #     gen_metrics.update({k: v.item() for k, v in losses.items()})
+    #
+    #     # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424
+    #     if dist.is_initialized():
+    #         dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
+    #         metrics_tensor = metrics_tensor / dist.get_world_size()
+    #         gen_metrics.update({self.val_metric: metrics_tensor.item()})
+    #
+    #     losses.update(gen_metrics)
+    #     metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
+    #     metrics["step_count"] = self.step_count
+    #     self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
+    #     preds = flatten_list([x["preds"] for x in outputs])
+    #     return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": metrics_tensor}
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
@@ -284,11 +310,11 @@ class GenerativeQAModule(BaseTransformer):
         base_metrics.update(gen_time=gen_time, gen_len=summ_len, preds=preds, target=target, **gen_metrics)
         return base_metrics
 
-    def test_step(self, batch, batch_idx):
-        return self._generative_step(batch)
-
-    def test_epoch_end(self, outputs):
-        return self.validation_epoch_end(outputs, prefix="test")
+    # def test_step(self, batch, batch_idx):
+    #     return self._generative_step(batch)
+    #
+    # def test_epoch_end(self, outputs):
+    #     return self.validation_epoch_end(outputs, prefix="test")
 
     def get_dataset(self, type_path) -> Seq2SeqDataset:
         n_obs = self.n_obs[type_path]
@@ -401,11 +427,33 @@ class GenerativeQAModule(BaseTransformer):
             type=str,
             help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
         )
+
+        parser.add_argument(
+            "--distributed_retriever",
+            choices=["ray", "pytorch"],
+            type=str,
+            help="What implementation to use for distributed retriever.",
+        )
+
+        parser.add_argument(
+            "--num_retrieval_workers",
+            type=int,
+            default=1
+        )
         return parser
 
 
 def main(args, model=None) -> GenerativeQAModule:
     Path(args.output_dir).mkdir(exist_ok=True)
+
+    if args.distributed_retriever == "ray":
+        ray.init()
+        num_retrieval_workers = args.num_retrieval_workers
+        retrieval_workers = [RayRetriever.remote() for _ in range(num_retrieval_workers)]
+
+    args.actor_handles = retrieval_workers
+    assert args.actor_handles == retrieval_workers
+    assert model is None
     if model is None:
         model: GenerativeQAModule = GenerativeQAModule(args)
 
@@ -427,6 +475,7 @@ def main(args, model=None) -> GenerativeQAModule:
         from pytorch_lightning.loggers import WandbLogger
 
         logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+
 
     es_callback = (
         get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
