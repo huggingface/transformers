@@ -82,8 +82,6 @@ class GenerationMixin:
             This class returns a `ProcessorList` object, that contains all distribution pre processing functions
             that are ONLY related to sampling
         """
-        # check that args are set if none, fall back to self.config.top_k
-
         # instantiate warpers list
         warpers = ProcessorList()
 
