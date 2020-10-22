@@ -628,18 +628,7 @@ class Trainer:
         self.state.is_hyper_param_search = trial is not None
 
         # Check if saved optimizer or scheduler states exist
-        if (
-            model_path is not None
-            and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
-            and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
-        ):
-            # Load in optimizer and scheduler states
-            self.optimizer.load_state_dict(
-                torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
-            )
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
-            reissue_pt_warnings(caught_warnings)
+        self._load_optimizer_and_scheduler(model_path)
 
         # Mixed precision training with apex (torch < 1.6)
         model = self.model
@@ -830,6 +819,10 @@ class Trainer:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
 
+        if self._total_flos is not None:
+            self.store_flos()
+            self.log({"total_flos": self.state.total_flos})
+
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
@@ -853,8 +846,6 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self.evaluate()
             self._report_to_hp_search(trial, epoch, metrics)
-
-            self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -916,6 +907,34 @@ class Trainer:
         # Maybe delete some older checkpoints.
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True)
+
+    def _load_optimizer_and_scheduler(self, model_path):
+        """If optimizer and scheduler states exist, load them."""
+        if (
+            model_path is not None
+            and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
+            and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
+        ):
+            # Load in optimizer and scheduler states
+            if is_torch_tpu_available():
+                # On TPU we have to take some extra precautions to properly load the states on the right device.
+                optimizer_state = torch.load(os.path.join(model_path, "optimizer.pt"), map_location="cpu")
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    lr_scheduler_state = torch.load(os.path.join(model_path, "scheduler.pt"), map_location="cpu")
+                reissue_pt_warnings(caught_warnings)
+
+                xm.send_cpu_data_to_device(optimizer_state, self.args.device)
+                xm.send_cpu_data_to_device(lr_scheduler_state, self.args.device)
+
+                self.optimizer.load_state_dict(optimizer_state)
+                self.lr_scheduler.load_state_dict(lr_scheduler_state)
+            else:
+                self.optimizer.load_state_dict(
+                    torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
+                )
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
+                reissue_pt_warnings(caught_warnings)
 
     def hyperparameter_search(
         self,
@@ -1015,9 +1034,6 @@ class Trainer:
             return self._log(logs)
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
-        if self._total_flos is not None:
-            self.store_flos()
-            logs["total_flos"] = self.state.total_flos
 
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
@@ -1173,7 +1189,7 @@ class Trainer:
             xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None:
+        if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
@@ -1188,7 +1204,7 @@ class Trainer:
             torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None:
+        if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
@@ -1272,6 +1288,7 @@ class Trainer:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
+        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:

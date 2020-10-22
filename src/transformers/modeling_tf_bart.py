@@ -33,6 +33,7 @@ from .modeling_tf_utils import (
     DUMMY_INPUTS,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    TFWrappedEmbeddings,
     cast_bool_to_primitive,
     keras_serializable,
     shape_list,
@@ -130,36 +131,6 @@ LARGE_NEGATIVE = -1e8
 
 
 logger = logging.get_logger(__name__)
-
-
-class _NoLayerEmbedTokens:
-    """
-    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
-    class to avoid problem with weight restoring. Also it makes sure that the layer is
-    called from the correct scope to avoid problem with saving/storing the correct weights
-    """
-
-    def __init__(self, layer, abs_scope_name=None):
-        self._layer = layer
-        self._abs_scope_name = abs_scope_name
-
-    def call(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer.call(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer.call(inputs, mode)
-
-    def __call__(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer(inputs, mode)
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -826,7 +797,8 @@ class TFBartModel(TFPretrainedBartModel):
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
             pass
 
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
 
