@@ -39,17 +39,65 @@ logger = logging.get_logger(__name__)
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
+def map_roberta_embedding(
+    dictionary: fairseq.data.Dictionary, emb: torch.Tensor, shape: tuple
+):
+    """
+    Convert RoBERTa embedding weights using dict.txt to remove need for gpt2 bpe vocab
+    exercises further down the pipeline.
+
+    This enables direct use of e.g. fill-mask pipeline without modification.
+    """
+
+    # New embedding matrix potentially has a larger shape
+    # than the old one with missing gpt2-bpe tokens mapped to unk
+    new_emb = torch.zeros(shape)
+
+    hf_mask_idx = dictionary.nspecial
+
+    # Special tokens are not mapped based on dict.txt
+    for i in range(hf_mask_idx):
+        new_emb[i] = emb[i]
+
+    # The mask is not special in the original gpt2 dict
+    mask_idx = dictionary.add_symbol("<mask>")
+    new_emb[hf_mask_idx] = emb[mask_idx]
+
+    symb_count = len(dictionary.symbols)
+    # Simple hack since vocab is always biggest
+
+    vocab_size = max(shape)
+    
+    for i in range(hf_mask_idx + 1, vocab_size):
+        if i < symb_count and dictionary.symbols[i].isnumeric():
+            new_emb[int(dictionary.symbols[i])] = emb[i]
+        else:
+            new_emb[i] = emb[dictionary.unk()]
+
+    return torch.nn.Parameter(new_emb)
+
+
 def convert_roberta_checkpoint_to_pytorch(
-    roberta_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
+    roberta_checkpoint_path: str, pytorch_dump_folder_path: str, roberta_dict: bool, classification_head: bool
 ):
     """
     Copy/paste/tweak roberta's weights to our BERT structure.
     """
+
     roberta = FairseqRobertaModel.from_pretrained(roberta_checkpoint_path)
     roberta.eval()  # disable dropout
     roberta_sent_encoder = roberta.model.encoder.sentence_encoder
+
+    if roberta_dict:
+        roberta_dict = fairseq.data.Dictionary.load(roberta_checkpoint_path + "/dict.txt")
+        # We inject unk instead of the missing symbols in the extended embeddings
+        vocab_size = max([int(symbol) for symbol in roberta_dict.symbols if symbol.isnumeric()]) + 1
+    else:
+        print("Note: Dictionary is not loaded (--roberta_dict), this may make inference more tedious down the line.")
+        vocab_size = roberta_sent_encoder.embed_tokens.num_embeddings
+
     config = RobertaConfig(
-        vocab_size=roberta_sent_encoder.embed_tokens.num_embeddings,
+        vocab_size=vocab_size,
         hidden_size=roberta.args.encoder_embed_dim,
         num_hidden_layers=roberta.args.encoder_layers,
         num_attention_heads=roberta.args.encoder_attention_heads,
@@ -67,7 +115,16 @@ def convert_roberta_checkpoint_to_pytorch(
 
     # Now let's copy all the weights.
     # Embeddings
-    model.roberta.embeddings.word_embeddings.weight = roberta_sent_encoder.embed_tokens.weight
+    if roberta_dict:
+        word_emb = map_roberta_embedding(
+            roberta_dict,
+            roberta_sent_encoder.embed_tokens.weight,
+            (vocab_size, roberta.args.encoder_embed_dim)
+        )
+    else:
+        word_emb = roberta_sent_encoder.embed_tokens.weight
+
+    model.roberta.embeddings.word_embeddings.weight = word_emb
     model.roberta.embeddings.position_embeddings.weight = roberta_sent_encoder.embed_positions.weight
     model.roberta.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.roberta.embeddings.token_type_embeddings.weight
@@ -122,16 +179,38 @@ def convert_roberta_checkpoint_to_pytorch(
     if classification_head:
         model.classifier.dense.weight = roberta.model.classification_heads["mnli"].dense.weight
         model.classifier.dense.bias = roberta.model.classification_heads["mnli"].dense.bias
-        model.classifier.out_proj.weight = roberta.model.classification_heads["mnli"].out_proj.weight
+
+        if roberta_dict:
+            model.classifier.out_proj.weight = map_roberta_embedding(
+                roberta_dict,
+                roberta.model.classification_heads["mnli"].out_proj.weight,
+                (vocab_size, config.num_labels)
+            )
+        else:
+            model.classifier.out_proj.weight = roberta.model.classification_heads["mnli"].out_proj.weight
         model.classifier.out_proj.bias = roberta.model.classification_heads["mnli"].out_proj.bias
     else:
         # LM Head
+        
         model.lm_head.dense.weight = roberta.model.encoder.lm_head.dense.weight
         model.lm_head.dense.bias = roberta.model.encoder.lm_head.dense.bias
         model.lm_head.layer_norm.weight = roberta.model.encoder.lm_head.layer_norm.weight
         model.lm_head.layer_norm.bias = roberta.model.encoder.lm_head.layer_norm.bias
-        model.lm_head.decoder.weight = roberta.model.encoder.lm_head.weight
-        model.lm_head.decoder.bias = roberta.model.encoder.lm_head.bias
+
+        if roberta_dict:
+            model.lm_head.decoder.weight = map_roberta_embedding(
+                roberta_dict,
+                roberta.model.encoder.lm_head.weight,
+                (vocab_size, roberta.args.encoder_embed_dim)
+            )
+            model.lm_head.decoder.bias = map_roberta_embedding(
+                roberta_dict,
+                roberta.model.encoder.lm_head.bias,
+                (vocab_size, )
+            )
+        else:
+            model.lm_head.decoder.weight = roberta.model.encoder.lm_head.weight
+            model.lm_head.decoder.bias = roberta.model.encoder.lm_head.bias
 
     # Let's check that we get the same results.
     input_ids: torch.Tensor = roberta.encode(SAMPLE_TEXT).unsqueeze(0)  # batch of size 1
@@ -142,12 +221,16 @@ def convert_roberta_checkpoint_to_pytorch(
     else:
         their_output = roberta.model(input_ids)[0]
     print(our_output.shape, their_output.shape)
-    max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
-    print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
-    success = torch.allclose(our_output, their_output, atol=1e-3)
-    print("Do both models output the same tensors?", "🔥" if success else "💩")
-    if not success:
-        raise Exception("Something went wRoNg")
+
+    if not roberta_dict:
+        max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
+        print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
+        success = torch.allclose(our_output, their_output, atol=1e-3)
+        print("Do both models output the same tensors?", "🔥" if success else "💩")
+        if not success:
+            raise Exception("Something went wRoNg")
+    else:
+        print("Model output not tested since embeddings have been mapped with dict.txt")
 
     pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
@@ -164,9 +247,15 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     parser.add_argument(
+        "--roberta_dict", action="store_true", help="Whether to use fairseq preprocessing dict."
+    )
+    parser.add_argument(
         "--classification_head", action="store_true", help="Whether to convert a final classification head."
     )
     args = parser.parse_args()
     convert_roberta_checkpoint_to_pytorch(
-        args.roberta_checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
+        args.roberta_checkpoint_path, args.pytorch_dump_folder_path, args.roberta_dict, args.classification_head
     )
+
+
+
