@@ -87,19 +87,17 @@ class TestFinetuneTrainer(TestCasePlus):
 
         n_gpu = torch.cuda.device_count()
         if n_gpu > 1:
-            # XXX: fix hardcoded path here and in the other test file ./examples/seq2seq/finetune_trainer.py
-            distributed_args = (
-                f"-m torch.distributed.launch --nproc_per_node={n_gpu} ./examples/seq2seq/finetune_trainer.py".split()
-            )
-            cmd = [sys.executable] + distributed_args + argv
-
-            print("\nRunning: ", " ".join(cmd))
-
             path = Path(__file__).resolve()
+            cur_path = path.parents[0]
             examples_path = path.parents[1]
             src_path = f"{path.parents[2]}/src"
             env = os.environ.copy()
             env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
+            
+            distributed_args = (
+                f"-m torch.distributed.launch --nproc_per_node={n_gpu} {cur_path}/finetune_trainer.py".split()
+            )
+            cmd = [sys.executable] + distributed_args + argv
 
             result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
 
