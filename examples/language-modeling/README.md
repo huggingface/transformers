@@ -73,7 +73,7 @@ So we need a ref file to tell model which pos of BERT original token should be a
 
 **Q :** Why LTP ?
 
-**A :** Cause the best known Chinese WWM BERT is [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm). It works well on so many Chines Task like CLUE (Chinese GLUE).
+**A :** Cause the best known Chinese WWM BERT is [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm) by HIT. It works well on so many Chines Task like CLUE (Chinese GLUE).
 They use LTP, so if we want to fine-tune their model, we need LTP.
 
 ```bash
