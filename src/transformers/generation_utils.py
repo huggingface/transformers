@@ -360,6 +360,9 @@ class GenerationMixin:
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            import ipdb
+
+            ipdb.set_trace()
 
             # forward pass to get next token
             outputs = self(**model_inputs, return_dict=True)
