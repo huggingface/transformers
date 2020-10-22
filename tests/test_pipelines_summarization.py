@@ -21,6 +21,11 @@ class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase
     def test_tf_small(self):
         pass  # Skip for now because we don't have a Tensorflow BART
 
+    @require_tf
+    @slow
+    def test_tf_large(self):
+        pass  # Skip for now because we don't have a Tensorflow BART
+
     @require_torch
     @slow
     def test_integration_torch_summarization(self):

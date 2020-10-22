@@ -132,6 +132,7 @@ class MonoInputPipelineCommonMixin:
             self._test_pipeline(nlp)
 
     @require_torch
+    @slow
     def test_torch_large(self):
         for model_name in self.large_models:
             nlp = pipeline(
@@ -144,6 +145,7 @@ class MonoInputPipelineCommonMixin:
             self._test_pipeline(nlp)
 
     @require_tf
+    @slow
     def test_tf_large(self):
         for model_name in self.large_models:
             nlp = pipeline(
