@@ -53,9 +53,7 @@ class Seq2SeqTrainer(Trainer):
             self.config = config
 
         self.data_args = data_args
-        self.vocab_size = (
-            self.model.config.tgt_vocab_size if isinstance(self.config, FSMTConfig) else self.config.vocab_size
-        )
+        self.vocab_size = self.config.tgt_vocab_size if isinstance(self.config, FSMTConfig) else self.config.vocab_size
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
