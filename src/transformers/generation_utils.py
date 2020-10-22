@@ -360,9 +360,6 @@ class GenerationMixin:
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            import ipdb
-
-            ipdb.set_trace()
 
             # forward pass to get next token
             outputs = self(**model_inputs, return_dict=True)
@@ -372,7 +369,7 @@ class GenerationMixin:
             scores = pre_processor(input_ids, next_token_logits)
 
             # argmax
-            next_tokens = torch.argmax(scores)
+            next_tokens = torch.argmax(scores, dim=-1)
 
             # add code that transfomers next_tokens to tokens_to_add
             if eos_token_id is not None:
