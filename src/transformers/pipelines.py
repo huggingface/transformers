@@ -2659,7 +2659,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - :obj:`"translation_xx_to_yy"`
             - :obj:`"translation"`
             - :obj:`"text-generation"`
-            - :obj:`"conversation"`
+            - :obj:`"conversational"`
 
     Returns:
         (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None))
