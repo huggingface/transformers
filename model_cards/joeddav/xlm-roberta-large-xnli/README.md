@@ -11,7 +11,11 @@ license: mit
 pipeline_tag: zero-shot-classification
 widget:
 - text: "За кого вы голосуете в 2020 году?"
-  labels: "politique, santé publique, économie"
+  labels: "politique étrangère, Europe, élections, affaires, 2020, loisirs de plein air, politique"
+- text: "لمن تصوت في 2020؟"
+  labels: "السياسة الخارجية, أوروبا, الانتخابات, الأعمال التجارية, 2020, الترفيه في الهواء الطلق, السياسة"
+- text: "2020'de kime oy vereceksiniz?"
+  labels: "dış politika, Avrupa, seçimler, iş, 2020, açık hava rekreasyonu, siyaset"
 ---
 
 # xlm-roberta-large-xnli
