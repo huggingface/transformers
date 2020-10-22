@@ -4,6 +4,7 @@ datasets:
 tags:
 - distilbart
 - distilbart-mnli
+pipeline_tag: zero-shot-classification
 ---
 
 # DistilBart-MNLI
