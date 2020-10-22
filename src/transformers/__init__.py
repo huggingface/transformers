@@ -553,6 +553,8 @@ if is_torch_available():
         MPNetForMaskedLM,
         MPNetModel,
         MPNetForQuestionAnswering,
+        MPNetForSequenceClassification,
+        MPNetForMultipleChoice,
     )
     from .modeling_longformer import (
         LongformerModel,

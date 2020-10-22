@@ -49,6 +49,7 @@ from .configuration_auto import (
     SqueezeBertConfig,
     T5Config,
     TransfoXLConfig,
+    MPNetConfig,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -211,6 +212,13 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
+from .modeling_mpnet import (
+    MPNetForMaskedLM,
+    MPNetModel,
+    MPNetForQuestionAnswering,
+    MPNetForSequenceClassification,
+    MPNetForMultipleChoice,
+)
 from .utils import logging
 
 
@@ -247,6 +255,7 @@ MODEL_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationEncoder),
         (DebertaConfig, DebertaModel),
         (DPRConfig, DPRQuestionEncoder),
+        (MPNetConfig, MPNetModel),
     ]
 )
 
@@ -275,6 +284,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
+        (MPNetConfig, MPNetForMaskedLM)
     ]
 )
 
@@ -402,6 +412,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
+        (MPNetConfig, MPNetForQuestionAnswering),
     ]
 )
 
@@ -423,6 +434,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
+        (MPNetConfig, MPNetForSequenceClassification)
     ]
 )
 
