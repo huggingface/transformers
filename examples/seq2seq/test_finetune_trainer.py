@@ -91,8 +91,6 @@ class TestFinetuneTrainer(TestCasePlus):
             path = Path(__file__).resolve()
             cur_path = path.parents[0]
 
-            print("\nRunning: ", " ".join(cmd))
-
             path = Path(__file__).resolve()
             examples_path = path.parents[1]
             src_path = f"{path.parents[2]}/src"
@@ -103,6 +101,8 @@ class TestFinetuneTrainer(TestCasePlus):
                 f"-m torch.distributed.launch --nproc_per_node={n_gpu} {cur_path}/finetune_trainer.py".split()
             )
             cmd = [sys.executable] + distributed_args + argv
+
+            print("\nRunning: ", " ".join(cmd))
 
             result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
 
