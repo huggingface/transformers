@@ -379,6 +379,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     @require_tokenizers
+    @slow
     def test_torch_translation(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]

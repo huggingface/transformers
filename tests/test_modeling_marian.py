@@ -295,6 +295,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_seq2seq_batch([""])
 
+    @slow
     def test_pipeline(self):
         device = 0 if torch_device == "cuda" else -1
         pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=device)
