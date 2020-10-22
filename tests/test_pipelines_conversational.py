@@ -12,7 +12,25 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 class TextGenerationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "conversational"
     small_models = []  # Models tested without the @slow decorator
-    large_models = [None]  # Models tested with the @slow decorator
+    large_models = ["microsoft/DialoGPT-medium"]  # Models tested with the @slow decorator
+    valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
+    invalid_inputs = ["Hi there!", Conversation()]
+
+    def _test_pipeline(self, nlp):  # e overide the default test method to check that the output is a `Conversation` object
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(self.valid_inputs[0])
+        self.assertIsInstance(mono_result, Conversation)
+
+        multi_result = nlp(self.valid_inputs[1])
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], Conversation)
+        # Inactive conversations passed to the pipeline raise a ValueError
+        self.assertRaises(ValueError, nlp, self.valid_inputs[1])
+
+        for bad_input in self.invalid_inputs:
+            self.assertRaises(Exception, nlp, bad_input)
+        self.assertRaises(Exception, nlp, self.invalid_inputs)
 
     @require_torch
     @slow

@@ -2374,11 +2374,12 @@ class ConversationalPipeline(Pipeline):
 
     def __init__(self, min_length_for_response=32, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # We need an at least an eos_token
         assert self.tokenizer.eos_token_id is not None, "DialoguePipeline tokenizer should have an EOS token set"
-        if self.tokenizer.pad_token_id is not None:
-            self.pad_token_id = self.tokenizer.pad_token_id
-        else:
-            self.pad_token_id = self.tokenizer.eos_token_id
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
         self.min_length_for_response = min_length_for_response
 
     def __call__(
@@ -2474,7 +2475,7 @@ class ConversationalPipeline(Pipeline):
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
-        inputs = self.tokenizer.batch_encode_plus(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
+        inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
         for input in inputs:
             input.append(self.tokenizer.eos_token_id)
         return inputs
@@ -2494,7 +2495,7 @@ class ConversationalPipeline(Pipeline):
             sequence_tokens = []
             is_previous_pad = False
             for token in sequence:
-                if token == self.pad_token_id:
+                if token == self.tokenizer.pad_token_id:
                     if is_previous_pad:
                         continue
                     else:
@@ -2528,13 +2529,8 @@ class ConversationalPipeline(Pipeline):
                     else:
                         new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
-        max_len = max([len(item) for item in outputs])
-        outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
-        outputs = BatchEncoding(
-            {"input_ids": outputs, "attention_mask": [[1] * len(outputs)]},
-            tensor_type=self.framework,
-        )
-        return outputs
+        padded_outputs = self.tokenizer.pad({'input_ids': outputs}, padding='longest', return_attention_mask=True, return_tensors=self.framework)
+        return padded_outputs
 
 
 # Register all the supported tasks here

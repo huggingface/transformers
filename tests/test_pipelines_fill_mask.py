@@ -38,9 +38,7 @@ EXPECTED_FILL_MASK_TARGET_RESULT = [
 class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "fill-mask"
     pipeline_loading_kwargs = {"topk": 2}
-    small_models = [
-        "sshleifer/tiny-distilbert-base-cased"
-    ]  # Default model - Models tested without the @slow decorator
+    small_models = ["sshleifer/tiny-distilroberta-base"]  # Models tested without the @slow decorator
     large_models = ["distilroberta-base"]  # Models tested with the @slow decorator
     mandatory_keys = {"sequence", "score", "token"}
     valid_inputs = [
