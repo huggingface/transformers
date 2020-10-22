@@ -39,9 +39,7 @@ logger = logging.get_logger(__name__)
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
-def map_roberta_embedding(
-    dictionary: fairseq.data.Dictionary, emb: torch.Tensor, shape: tuple
-):
+def map_roberta_embedding(dictionary: fairseq.data.Dictionary, emb: torch.Tensor, shape: tuple):
     """
     Convert RoBERTa embedding weights using dict.txt to remove need for gpt2 bpe vocab
     exercises further down the pipeline.
@@ -67,7 +65,7 @@ def map_roberta_embedding(
     # Simple hack since vocab is always biggest
 
     vocab_size = max(shape)
-    
+
     for i in range(hf_mask_idx + 1, vocab_size):
         if i < symb_count and dictionary.symbols[i].isnumeric():
             new_emb[int(dictionary.symbols[i])] = emb[i]
@@ -117,9 +115,7 @@ def convert_roberta_checkpoint_to_pytorch(
     # Embeddings
     if roberta_dict:
         word_emb = map_roberta_embedding(
-            roberta_dict,
-            roberta_sent_encoder.embed_tokens.weight,
-            (vocab_size, roberta.args.encoder_embed_dim)
+            roberta_dict, roberta_sent_encoder.embed_tokens.weight, (vocab_size, roberta.args.encoder_embed_dim)
         )
     else:
         word_emb = roberta_sent_encoder.embed_tokens.weight
@@ -184,14 +180,14 @@ def convert_roberta_checkpoint_to_pytorch(
             model.classifier.out_proj.weight = map_roberta_embedding(
                 roberta_dict,
                 roberta.model.classification_heads["mnli"].out_proj.weight,
-                (vocab_size, config.num_labels)
+                (vocab_size, config.num_labels),
             )
         else:
             model.classifier.out_proj.weight = roberta.model.classification_heads["mnli"].out_proj.weight
         model.classifier.out_proj.bias = roberta.model.classification_heads["mnli"].out_proj.bias
     else:
         # LM Head
-        
+
         model.lm_head.dense.weight = roberta.model.encoder.lm_head.dense.weight
         model.lm_head.dense.bias = roberta.model.encoder.lm_head.dense.bias
         model.lm_head.layer_norm.weight = roberta.model.encoder.lm_head.layer_norm.weight
@@ -199,14 +195,10 @@ def convert_roberta_checkpoint_to_pytorch(
 
         if roberta_dict:
             model.lm_head.decoder.weight = map_roberta_embedding(
-                roberta_dict,
-                roberta.model.encoder.lm_head.weight,
-                (vocab_size, roberta.args.encoder_embed_dim)
+                roberta_dict, roberta.model.encoder.lm_head.weight, (vocab_size, roberta.args.encoder_embed_dim)
             )
             model.lm_head.decoder.bias = map_roberta_embedding(
-                roberta_dict,
-                roberta.model.encoder.lm_head.bias,
-                (vocab_size, )
+                roberta_dict, roberta.model.encoder.lm_head.bias, (vocab_size,)
             )
         else:
             model.lm_head.decoder.weight = roberta.model.encoder.lm_head.weight
@@ -246,9 +238,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
-    parser.add_argument(
-        "--roberta_dict", action="store_true", help="Whether to use fairseq preprocessing dict."
-    )
+    parser.add_argument("--roberta_dict", action="store_true", help="Whether to use fairseq preprocessing dict.")
     parser.add_argument(
         "--classification_head", action="store_true", help="Whether to convert a final classification head."
     )
@@ -256,6 +246,3 @@ if __name__ == "__main__":
     convert_roberta_checkpoint_to_pytorch(
         args.roberta_checkpoint_path, args.pytorch_dump_folder_path, args.roberta_dict, args.classification_head
     )
-
-
-
