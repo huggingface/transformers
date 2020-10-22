@@ -180,9 +180,12 @@ def main():
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or specify a GLUE benchmark task (the dataset will be downloaded automatically from the datasets Hub
     #
-    # For CSV/JSON files, this script will use as labels the column called 'label' and as pair of sentences the sentences in columns called 'sentence1' and 'sentence2' if such column exists or the first two columns if at least two columns are provided.
-    # If the CSVs/JSONs contain only one non-label column, the script does single sentence classification on this single column.
-    # You can easily tweak this behavior (see below)
+    # For CSV/JSON files, this script will use as labels the column called 'label' and as pair of sentences the
+    # sentences in columns called 'sentence1' and 'sentence2' if such column exists or the first two columns not named
+    # label if at least two columns are provided.
+    #
+    # If the CSVs/JSONs contain only one non-label column, the script does single sentence classification on this
+    # single column. You can easily tweak this behavior (see below)
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
@@ -199,7 +202,8 @@ def main():
         datasets = load_dataset(
             "json", data_files={"train": data_args.train_file, "validation": data_args.validation_file}
         )
-    # See more about loading any type of standard or custom dataset at https://huggingface.co/docs/datasets/loading_datasets.html.
+    # See more about loading any type of standard or custom dataset at
+    # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Labels
     if data_args.task_name is not None:
@@ -211,11 +215,12 @@ def main():
             num_labels = 1
     else:
         # Trying to have good defaults here, don't hesitate to tweak to your needs.
-        is_regression = datasets['train'].features['label'].dtype in ['float32', 'float64']
+        is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
         if is_regression:
             num_labels = 1
         else:
-            # A useful fast method: https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
+            # A useful fast method:
+            # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
             label_list = datasets["train"].unique("label").sort()  # Let's sort it for determinism
             num_labels = len(label_list)
 
@@ -251,9 +256,9 @@ def main():
             sentence1_key, sentence2_key = "sentence1", "sentence2"
         else:
             if len(non_label_column_names) >= 2:
-                sentence1_key, sentence2_key = non_label_columns[:2]
+                sentence1_key, sentence2_key = non_label_column_names[:2]
             else:
-                sentence1_key, sentence2_key = non_label_columns[0], None
+                sentence1_key, sentence2_key = non_label_column_names[0], None
 
     # Padding strategy
     if data_args.pad_to_max_length:
