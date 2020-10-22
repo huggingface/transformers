@@ -5,8 +5,10 @@ tags:
 - pytorch
 datasets:
 - yahoo-answers
+pipeline_tag: zero-shot-classification
 widget:
-- text: "Who are you voting for in 2020? <sep> This text is about politics."
+- text: "Who are you voting for in 2020?"
+- context: "politics, public health, economics"
 ---
 
 # bart-lage-mnli-yahoo-answers
