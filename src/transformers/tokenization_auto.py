@@ -266,7 +266,7 @@ class AutoTokenizer:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.,
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
                 request.
-            use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to try to load the fast version of the tokenizer.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like

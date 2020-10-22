@@ -348,82 +348,8 @@ def squad_convert_examples_to_features(
             is_training=not evaluate,
         )
     """
-    if tokenizer.is_fast:
-        return _fast_squad_convert_examples_to_features(
-            examples,
-            tokenizer,
-            max_seq_length,
-            doc_stride,
-            max_query_length,
-            is_training,
-            padding_strategy=padding_strategy,
-            return_dataset=return_dataset,
-            threads=threads,
-            tqdm_enabled=tqdm_enabled,
-        )
-    else:
-        return _slow_squad_convert_examples_to_features(
-            examples,
-            tokenizer,
-            max_seq_length,
-            doc_stride,
-            max_query_length,
-            is_training,
-            padding_strategy=padding_strategy,
-            return_dataset=return_dataset,
-            threads=threads,
-            tqdm_enabled=tqdm_enabled,
-        )
-
-
-def _fast_squad_convert_examples_to_features(
-    examples,
-    tokenizer,
-    max_seq_length,
-    doc_stride,
-    max_query_length,
-    is_training,
-    padding_strategy="max_length",
-    return_dataset=False,
-    threads=1,
-    tqdm_enabled=True,
-):
-    return []
-
-
-def _slow_squad_convert_examples_to_features(
-    examples,
-    tokenizer,
-    max_seq_length,
-    doc_stride,
-    max_query_length,
-    is_training,
-    padding_strategy="max_length",
-    return_dataset=False,
-    threads=1,
-    tqdm_enabled=True,
-):
     # Defining helper methods
     features = []
-
-    ###################
-    # #  NOT MULTI_PROC VERSION
-    # squad_convert_example_to_features_init(tokenizer)
-
-    # for example in examples:
-    #     output = squad_convert_example_to_features(
-    #         example,
-    #         max_seq_length=max_seq_length,
-    #         doc_stride=doc_stride,
-    #         max_query_length=max_query_length,
-    #         padding_strategy=padding_strategy,
-    #         is_training=is_training,
-    #     )
-
-    #     features.append(output)
-
-    #####################
-    # #  MULTI_PROC VERSION
 
     threads = min(threads, cpu_count())
     with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
@@ -443,8 +369,6 @@ def _slow_squad_convert_examples_to_features(
                 disable=not tqdm_enabled,
             )
         )
-
-    ###################
 
     new_features = []
     unique_id = 1000000000

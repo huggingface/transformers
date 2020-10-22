@@ -2690,7 +2690,7 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified
             and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no
             model is provided.
-        use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use a Fast tokenizer if possible (a :obj:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
