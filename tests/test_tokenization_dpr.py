@@ -14,8 +14,7 @@
 # limitations under the License.
 
 
-from transformers.testing_utils import slow
-from transformers.tokenization_dpr import (
+from transformers import (
     DPRContextEncoderTokenizer,
     DPRContextEncoderTokenizerFast,
     DPRQuestionEncoderTokenizer,
@@ -24,33 +23,34 @@ from transformers.tokenization_dpr import (
     DPRReaderTokenizer,
     DPRReaderTokenizerFast,
 )
+from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_utils_base import BatchEncoding
 
 from .test_tokenization_bert import BertTokenizationTest
 
 
+@require_tokenizers
 class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRContextEncoderTokenizer
+    rust_tokenizer_class = DPRContextEncoderTokenizerFast
+    test_rust_tokenizer = True
 
-    def get_rust_tokenizer(self, **kwargs):
-        return DPRContextEncoderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-
+@require_tokenizers
 class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRQuestionEncoderTokenizer
+    rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
+    test_rust_tokenizer = True
 
-    def get_rust_tokenizer(self, **kwargs):
-        return DPRQuestionEncoderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-
+@require_tokenizers
 class DPRReaderTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DPRReaderTokenizer
-
-    def get_rust_tokenizer(self, **kwargs):
-        return DPRReaderTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    rust_tokenizer_class = DPRReaderTokenizerFast
+    test_rust_tokenizer = True
 
     @slow
     def test_decode_best_spans(self):

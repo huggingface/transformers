@@ -32,9 +32,10 @@ class RagRayDistributedRetriever(RagRetriever):
     _init_retrieval = False
 
     def __init__(self, config, question_encoder_tokenizer,
-                 generator_tokenizer, retrieval_workers):
+                 generator_tokenizer, retrieval_workers, index=None):
         super().__init__(
-            config, question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer
+            config, question_encoder_tokenizer=question_encoder_tokenizer,
+            generator_tokenizer=generator_tokenizer, index=index
         )
         self.retrieval_workers = retrieval_workers
         ray.get([worker.init(config, question_encoder_tokenizer,
@@ -55,17 +56,21 @@ class RagRayDistributedRetriever(RagRetriever):
             question_hidden_states, n_docs))
 
     @classmethod
-    def get_tokenizers(cls, retriever_name_or_path, **kwargs):
-        super(RagRayDistributedRetriever, cls).get_tokenizers(
-            retriever_name_or_path, **kwargs)
+    def get_tokenizers(cls, retriever_name_or_path,
+                       indexed_dataset=None, **kwargs):
+        return super(RagRayDistributedRetriever, cls).get_tokenizers(
+            retriever_name_or_path, indexed_dataset, **kwargs)
 
     @classmethod
-    def from_pretrained(cls, retriever_name_or_path, actor_handles, **kwargs):
-        config, question_encoder_tokenizer, generator_tokenizer = \
-            cls.get_tokenizers(retriever_name_or_path, **kwargs)
+    def from_pretrained(cls, retriever_name_or_path, actor_handles,
+                        indexed_dataset=None, **kwargs):
+        config, question_encoder_tokenizer, generator_tokenizer, index = \
+            cls.get_tokenizers(retriever_name_or_path, indexed_dataset,
+                               **kwargs)
         return cls(
             config, question_encoder_tokenizer=question_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
-            retrieval_workers=actor_handles
+            retrieval_workers=actor_handles,
+            index=index
         )
 

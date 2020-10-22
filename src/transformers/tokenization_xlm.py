@@ -20,7 +20,7 @@ import os
 import re
 import sys
 import unicodedata
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import sacremoses as sm
 
@@ -648,6 +648,10 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+    @property
+    def do_lower_case(self):
+        return self.do_lowercase_and_remove_accent
+
     def moses_punct_norm(self, text, lang):
         if lang not in self.cache_moses_punct_normalizer:
             punct_normalizer = sm.MosesPunctNormalizer(lang=lang)
@@ -938,22 +942,16 @@ class XLMTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the vocabulary and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
-        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
+        vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+        merge_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+        )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

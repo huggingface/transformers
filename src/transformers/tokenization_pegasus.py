@@ -19,6 +19,19 @@ from .tokenization_reformer import ReformerTokenizer
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 
 
+SPIECE_UNDERLINE = "▁"
+
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/spiece.model"}
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "google/pegasus-xsum": 512,
+}
+
+
 class PegasusTokenizer(ReformerTokenizer):
     r"""
     Construct a Pegasus tokenizer.
@@ -30,11 +43,13 @@ class PegasusTokenizer(ReformerTokenizer):
     the initialization parameters and other methods.
     """
     offset = 103  # entries 2-104 are only used for pretraining
-    vocab_files_names = {"vocab_file": "spiece.model"}
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Dont use reserved words added_token_encoder, added_tokens_decoder because of
+        # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
         assert len(self.added_tokens_decoder) == 0
         self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
@@ -43,7 +58,7 @@ class PegasusTokenizer(ReformerTokenizer):
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     def _convert_token_to_id(self, token: str) -> int:
-        """ Converts a token (str) in an id using the vocab. """
+        """ Converts a token (str) to an id using the vocab. """
         if token in self.decoder:
             return self.decoder[token]
         elif token in self.added_tokens_decoder:
@@ -52,7 +67,7 @@ class PegasusTokenizer(ReformerTokenizer):
         return sp_id + self.offset
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the vocab."""
+        """Converts an index (integer) to a token (str) using the vocab."""
         if index in self.encoder:
             return self.encoder[index]
         elif index in self.added_tokens_encoder:
@@ -65,11 +80,6 @@ class PegasusTokenizer(ReformerTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model) + self.offset
-
-    def get_vocab(self) -> Dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
@@ -94,12 +104,12 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        Build model inputs from a sequence or a pair of sequences for sequence classification tasks
         by concatenating and adding special tokens.
         A Pegasus sequence has the following format, where ``X`` represents the sequence:
 
         - single sequence: ``X </s>``
-        - pair of sequences: ``A B </s>``  (not intended use)
+        - pair of sequences: ``A B </s>`` (not intended use)
 
         BOS is never used.
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
@@ -144,9 +154,6 @@ class PegasusTokenizer(ReformerTokenizer):
             return model_inputs
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
-        # TODO(@sshleifer): maybe tgt_texts = [self.pad_token + t for t in tgt_texts]  # add decoder_start_token_id
         labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         model_inputs["labels"] = labels
-        # for k, v in decoder_inputs.items():
-        #    model_inputs[f"decoder_{k}"] = v
         return model_inputs

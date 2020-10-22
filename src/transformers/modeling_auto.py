@@ -43,6 +43,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    ProphetNetConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -50,6 +51,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -153,8 +155,9 @@ from .modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
-from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
     RagSequenceForGeneration,
@@ -193,6 +196,11 @@ from .modeling_xlm import (
     XLMForTokenClassification,
     XLMModel,
     XLMWithLMHeadModel,
+)
+from .modeling_xlm_prophetnet import (
+    XLMProphetNetForCausalLM,
+    XLMProphetNetForConditionalGeneration,
+    XLMProphetNetModel,
 )
 from .modeling_xlm_roberta import (
     XLMRobertaForCausalLM,
@@ -247,6 +255,8 @@ MODEL_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationEncoder),
         (DebertaConfig, DebertaModel),
         (DPRConfig, DPRQuestionEncoder),
+        (XLMProphetNetConfig, XLMProphetNetModel),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
@@ -325,6 +335,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (BertGenerationConfig, BertGenerationDecoder),
+        (XLMProphetNetConfig, XLMProphetNetForCausalLM),
+        (ProphetNetConfig, ProphetNetForCausalLM),
     ]
 )
 
@@ -359,6 +371,8 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (BartConfig, BartForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
+        (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),
+        (ProphetNetConfig, ProphetNetForConditionalGeneration),
     ]
 )
 
@@ -381,6 +395,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForSequenceClassification),
         (DebertaConfig, DebertaForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
+        (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
     ]
 )
 
@@ -506,7 +521,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
                 request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
                 messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
@@ -532,7 +547,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 class AutoModel:
     r"""
     This is a generic model class that will be instantiated as one of the base model classes of the library
-    when created with the when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
+    when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
     :meth:`~transformers.AutoModel.from_config` class methods.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).

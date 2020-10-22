@@ -1,15 +1,18 @@
 import unittest
 from typing import Iterable, List, Optional
 
+import pytest
+
 from transformers import pipeline
 from transformers.pipelines import SUPPORTED_TASKS, Conversation, DefaultArgumentHandler, Pipeline
-from transformers.testing_utils import require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import require_tf, require_tokenizers, require_torch, slow, torch_device
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
 
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
+TF_NER_FINETUNED_MODELS = ["Narsil/small"]
 
 # xlnet-base-cased disabled for now, since it crashes TF2
 FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased"]
@@ -20,7 +23,7 @@ FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
 LARGE_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
 
 SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
-TF_SUMMARIZATION_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
+TF_SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
 
 TRANSLATION_FINETUNED_MODELS = [
     ("patrickvonplaten/t5-tiny-random", "translation_en_to_de"),
@@ -223,7 +226,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 model=model_name,
                 tokenizer=model_name,
                 framework="pt",
-                topk=2,
+                top_k=2,
             )
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
@@ -246,7 +249,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 model=model_name,
                 tokenizer=model_name,
                 framework="tf",
-                topk=2,
+                top_k=2,
             )
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
@@ -295,7 +298,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 model=model_name,
                 tokenizer=model_name,
                 framework="pt",
-                topk=2,
+                top_k=2,
             )
             self._test_mono_column_pipeline(
                 nlp,
@@ -323,7 +326,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         ]
         valid_targets = [" Patrick", " Clara"]
         for model_name in LARGE_FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2)
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", top_k=2)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -341,6 +344,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_torch
+    @require_tokenizers
     def test_torch_summarization(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
@@ -376,6 +380,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_torch
+    @require_tokenizers
+    @slow
     def test_torch_translation(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
@@ -388,6 +394,33 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 invalid_inputs,
             )
 
+    @require_torch
+    @slow
+    def test_default_translations(self):
+        # We don't provide a default for this pair
+        with self.assertRaises(ValueError):
+            pipeline(task="translation_cn_to_ar")
+
+        # but we do for this one
+        pipeline(task="translation_en_to_de")
+
+    @require_torch
+    def test_translation_on_odd_language(self):
+        model = TRANSLATION_FINETUNED_MODELS[0][0]
+        pipeline(task="translation_cn_to_ar", model=model)
+
+    @require_torch
+    def test_translation_default_language_selection(self):
+        model = TRANSLATION_FINETUNED_MODELS[0][0]
+        with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
+            nlp = pipeline(task="translation", model=model)
+        self.assertEqual(nlp.task, "translation_en_to_de")
+
+    @require_torch
+    def test_translation_with_no_language_no_model_fails(self):
+        with self.assertRaises(ValueError):
+            pipeline(task="translation")
+
     @require_tf
     @slow
     def test_tf_translation(self):
@@ -398,6 +431,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs)
 
     @require_torch
+    @require_tokenizers
     def test_torch_text2text(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["generated_text"]
@@ -804,6 +838,14 @@ class NerPipelineTests(unittest.TestCase):
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
             self._test_ner_pipeline(nlp, mandatory_keys)
 
+    @require_tf
+    def test_tf_only_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
+        for model_name in TF_NER_FINETUNED_MODELS:
+            # We don't specificy framework='tf' but it gets detected automatically
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
 
 class PipelineCommonTests(unittest.TestCase):
     pipelines = SUPPORTED_TASKS.keys()
@@ -815,6 +857,7 @@ class PipelineCommonTests(unittest.TestCase):
         for task in self.pipelines:
             with self.subTest(msg="Testing TF defaults with TF and {}".format(task)):
                 pipeline(task, framework="tf")
+                pipeline(task)
 
     @require_torch
     @slow
@@ -823,3 +866,4 @@ class PipelineCommonTests(unittest.TestCase):
         for task in self.pipelines:
             with self.subTest(msg="Testing Torch defaults with PyTorch and {}".format(task)):
                 pipeline(task, framework="pt")
+                pipeline(task)

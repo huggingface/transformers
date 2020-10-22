@@ -35,12 +35,15 @@ _CONFIG_FOR_DOC = "DPRConfig"
 
 DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-ctx_encoder-single-nq-base",
+    "facebook/dpr-ctx_encoder-multiset-base",
 ]
 DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-question_encoder-single-nq-base",
+    "facebook/dpr-question_encoder-multiset-base",
 ]
 DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-reader-single-nq-base",
+    "facebook/dpr-reader-multiset-base",
 ]
 
 
@@ -358,7 +361,7 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -403,7 +406,7 @@ DPR_READER_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(n_passages, sequence_length, hidden_size)`, `optional`):

@@ -17,7 +17,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -36,7 +36,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": None,
+    "camembert-base": 512,
 }
 
 SHARED_MODEL_IDENTIFIERS = [
@@ -118,7 +118,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            max_len=512,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -223,6 +222,11 @@ class CamembertTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.fairseq_tokens_to_ids) + len(self.sp_model)
 
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
     def _tokenize(self, text):
         return self.sp_model.EncodeAsPieces(text)
 
@@ -248,14 +252,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use CamembertTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -264,21 +260,13 @@ class CamembertTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

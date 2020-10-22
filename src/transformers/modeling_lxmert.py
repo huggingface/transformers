@@ -15,7 +15,6 @@
 """ PyTorch LXMERT model. """
 
 
-import logging
 import math
 import os
 from dataclasses import dataclass
@@ -35,9 +34,10 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LxmertConfig"
 _TOKENIZER_FOR_DOC = "LxmertTokenizer"
@@ -848,7 +848,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         visual_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
@@ -856,7 +856,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
@@ -964,7 +964,7 @@ class LxmertModel(LxmertPreTrainedModel):
         # Process the visual attention mask
         if visual_attention_mask is not None:
             extended_visual_attention_mask = visual_attention_mask.unsqueeze(1).unsqueeze(2)
-            extended_visual_attention_mask = extended_visual_attention_mask.to(dtype=next(self.parameters()).dtype)
+            extended_visual_attention_mask = extended_visual_attention_mask.to(dtype=self.dtype)
             extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * -10000.0
         else:
             extended_visual_attention_mask = None

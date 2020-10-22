@@ -50,4 +50,5 @@ deploy_doc "b42586e" v2.11.0
 deploy_doc "7fb8bdf" v3.0.2
 deploy_doc "4b3ee9c" v3.1.0
 deploy_doc "3ebb1b3" v3.2.0
-deploy_doc "0613f05" # v3.3.0 Latest stable release
+deploy_doc "0613f05" v3.3.0
+deploy_doc "eb0e0ce" # v3.4.0 Latest stable release

@@ -19,50 +19,71 @@ import collections
 from typing import List, Optional, Union
 
 from .file_utils import add_end_docstrings, add_start_docstrings
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
 from .tokenization_utils_base import BatchEncoding, TensorType
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    }
+        "facebook/dpr-ctx_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+    },
+    "tokenizer_file": {
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+    },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    }
+        "facebook/dpr-question_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+    },
+    "tokenizer_file": {
+        "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-question_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+    },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    }
+        "facebook/dpr-reader-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+    },
+    "tokenizer_file": {
+        "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-reader-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+    },
 }
 
 CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/dpr-ctx_encoder-single-nq-base": 512,
+    "facebook/dpr-ctx_encoder-multiset-base": 512,
 }
 QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/dpr-question_encoder-single-nq-base": 512,
+    "facebook/dpr-question_encoder-multiset-base": 512,
 }
 READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/dpr-reader-single-nq-base": 512,
+    "facebook/dpr-reader-multiset-base": 512,
 }
 
 
 CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
     "facebook/dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-ctx_encoder-multiset-base": {"do_lower_case": True},
 }
 QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
     "facebook/dpr-question_encoder-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-question_encoder-multiset-base": {"do_lower_case": True},
 }
 READER_PRETRAINED_INIT_CONFIGURATION = {
     "facebook/dpr-reader-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-reader-multiset-base": {"do_lower_case": True},
 }
 
 
@@ -83,23 +104,6 @@ class DPRContextEncoderTokenizer(BertTokenizer):
     pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
-class DPRContextEncoderTokenizerFast(BertTokenizerFast):
-    r"""
-    Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DPRContextEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
-
-
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
     Constructs a DPRQuestionEncoder tokenizer.
@@ -108,23 +112,6 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
-
-
-class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
-    r"""
-    Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DPRQuestionEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 
@@ -389,27 +376,6 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
     parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
-    model_input_names = ["attention_mask"]
-
-
-@add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
-class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
-    r"""
-    Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DPRReaderTokenizerFast` is almost identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting and wordpiece. The difference is that is has three inputs
-    strings: question, titles and texts that are combined to be fed to the :class:`~transformers.DPRReader` model.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

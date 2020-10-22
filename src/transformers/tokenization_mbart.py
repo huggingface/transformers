@@ -93,8 +93,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, tokenizer_file=None, **kwargs):
+        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
@@ -108,6 +108,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
+
+    @property
+    def vocab_size(self):
+        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False

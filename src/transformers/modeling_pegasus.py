@@ -50,6 +50,10 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",
-        r"model.encoder.embed_positions",
+        "model.encoder.embed_positions",
         "model.decoder.embed_positions",
+    ]
+    keys_to_never_save = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
     ]
