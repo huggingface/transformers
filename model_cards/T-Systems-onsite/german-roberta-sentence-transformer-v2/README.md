@@ -45,7 +45,7 @@ The resulting model called `xlm-r-distilroberta-base-paraphrase-v1` has been rel
 
 Building on this cross language model we fine-tuned it for German language on the deepl.com dataset of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark).
 
-We did an automatic hyperprameter search with [Optuna](https://github.com/optuna/optuna). Using crossvalidation on the deepl.com test and dev dataset we found the following hyperprameters:
+We did an automatic hyperprameter search for 102 trials with [Optuna](https://github.com/optuna/optuna). Using crossvalidation on the deepl.com test and dev dataset we found the following best hyperprameters:
 - batch_size = 15
 - num_epochs = 4
 - lr = 2.2995320905210864e-05
