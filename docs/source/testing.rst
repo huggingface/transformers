@@ -458,8 +458,8 @@ Distributed training
 
 This is still under development but you can see 2 different tests that perform this successfully. You will need at least 2 GPUs to see that in action:
 
-* a ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default) `<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_seq2seq_examples_multi_gpu.py>`__
-* a normal (non-PL) test `<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__
+* `test_seq2seq_examples_multi_gpu.py <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_seq2seq_examples_multi_gpu.py>`__ - a ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default) 
+* `test_finetune_trainer.py <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal (non-PL) test
 
 To jump right into the execution point, search for the ``execute_async_std`` function in those tests.
 
@@ -467,8 +467,8 @@ You will need at least 2 GPUs to see that in action:
 
 .. code-block:: bash
 
-    CUDA_VISIBLE_DEVICES="0,1" RUN_SLOW=1 pytest -sv examples/seq2seq/test_finetune_trainer.py
-examples/seq2seq/test_seq2seq_examples_multi_gpu.py
+   CUDA_VISIBLE_DEVICES="0,1" RUN_SLOW=1 pytest -sv examples/seq2seq/test_finetune_trainer.py \
+   examples/seq2seq/test_seq2seq_examples_multi_gpu.py
 
 
 Output capture
