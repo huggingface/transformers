@@ -36,13 +36,13 @@ class BeamSearchBase(BeamScorer):
         num_beams: int,
         length_penalty: float = 1.0,
         do_early_stopping: bool = True,
-        num_return_sequences: int = 1,
+        num_beam_hyps_to_keep: int = 1,
     ):
         self.num_beams = num_beams
         self.max_length = max_length
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
-        self.num_return_sequences = num_return_sequences
+        self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
 
         self._is_init = False
         self._beam_hyps = [
@@ -55,9 +55,6 @@ class BeamSearchBase(BeamScorer):
             for _ in range(batch_size)
         ]
         self._done = [False for _ in range(batch_size)]
-
-        if num_return_sequences > num_beams:
-            raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
     def is_done(self):
         return all(self._done)
@@ -140,20 +137,20 @@ class BeamSearchBase(BeamScorer):
                 beam_hyp.add(final_tokens, final_score)
 
         # select the best hypotheses
-        sent_lengths = input_ids.new(batch_size * self.num_return_sequences)
+        sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
         best = []
 
         # retrieve best hypotheses
         for i, beam_hyp in enumerate(self._beam_hyps):
             sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0])
-            for j in range(self.num_return_sequences):
+            for j in range(self.num_beam_hyps_to_keep):
                 best_hyp = sorted_hyps.pop()[1]
-                sent_lengths[self.num_return_sequences * i + j] = len(best_hyp)
+                sent_lengths[self.num_beam_hyps_to_keep * i + j] = len(best_hyp)
                 best.append(best_hyp)
 
         # prepare for adding eos
         sent_max_len = min(sent_lengths.max().item() + 1, self.max_length)
-        decoded = input_ids.new(batch_size * self.num_return_sequences, sent_max_len)
+        decoded = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
             assert pad_token_id is not None, "`pad_token_id` has to be defined"
