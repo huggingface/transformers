@@ -18,7 +18,7 @@ widget:
 
 ## Model Description
 
-This model takes [xlm-roberta-large](https://huggingface.co/xlm-roberta-large) and fine-tunes it on a combination of NLI data in 15 languages. It is intende to be used for zero-shot text classification, such as with the Hugging Face [ZeroShotClassificationPipeline](https://huggingface.co/transformers/master/main_classes/pipelines.html#transformers.ZeroShotClassificationPipeline).
+This model takes [xlm-roberta-large](https://huggingface.co/xlm-roberta-large) and fine-tunes it on a combination of NLI data in 15 languages. It is intended to be used for zero-shot text classification, such as with the Hugging Face [ZeroShotClassificationPipeline](https://huggingface.co/transformers/master/main_classes/pipelines.html#transformers.ZeroShotClassificationPipeline).
 
 You can play with an interactive demo of this zero-shot technique with this model [here](https://huggingface.co/zero-shot/).
 
@@ -117,4 +117,3 @@ This model was pre-trained on set of 100 languages, as described in
 MNLI train set and the XNLI validation and test sets. Finally, it was trained for one additional epoch on only XNLI
 data where the translations for the premise and hypothesis are shuffled such that the premise and hypothesis for
 each example come from the same original English example but the premise and hypothesis are of different languages.
-
