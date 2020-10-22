@@ -88,7 +88,7 @@ python chinese_ref.py \
     --bert=$BERT_RESOURCE \
     --save_path=$SAVE_PATH 
 ```
-Then: 
+Now Chinese Ref is only supported by `LineByLineWithRefDataset` Class, so we need add `line_by_line` flag: 
 
 
 ```bash
@@ -106,6 +106,7 @@ python run_language_modeling.py \
     --do_eval \
     --eval_data_file=$TEST_FILE \
     --mlm \
+    --line_by_line \
     --wwm
 ```
 
