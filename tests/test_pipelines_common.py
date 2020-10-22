@@ -62,12 +62,14 @@ class CustomInputPipelineCommonMixin:
             self._test_pipeline(nlp)
 
     @require_torch
+    @slow
     def test_torch_large(self):
         for model_name in self.large_models:
             nlp = pipeline(task=self.pipeline_task, model=model_name, tokenizer=model_name, framework="pt")
             self._test_pipeline(nlp)
 
     @require_tf
+    @slow
     def test_tf_large(self):
         for model_name in self.large_models:
             nlp = pipeline(task=self.pipeline_task, model=model_name, tokenizer=model_name, framework="tf")
