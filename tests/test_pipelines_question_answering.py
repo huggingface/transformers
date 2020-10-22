@@ -7,8 +7,10 @@ from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "question-answering"
-    small_models = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]  # Models tested without the @slow decorator
-    large_models = [None]  # Models tested with the @slow decorator
+    small_models = [
+        "sshleifer/tiny-distilbert-base-cased-distilled-squad"
+    ]  # Models tested without the @slow decorator
+    large_models = []  # Models tested with the @slow decorator
 
     def _test_pipeline(self, nlp: Pipeline):
         output_keys = {"score", "answer", "start", "end"}

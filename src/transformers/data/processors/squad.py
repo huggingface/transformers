@@ -423,6 +423,7 @@ def _slow_squad_convert_examples_to_features(
     #     features.append(output)
 
     #####################
+    # #  MULTI_PROC VERSION
 
     threads = min(threads, cpu_count())
     with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
@@ -442,6 +443,9 @@ def _slow_squad_convert_examples_to_features(
                 disable=not tqdm_enabled,
             )
         )
+
+    ###################
+
     new_features = []
     unique_id = 1000000000
     example_index = 0

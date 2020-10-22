@@ -1,7 +1,7 @@
 import unittest
 
 from transformers import pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
@@ -16,6 +16,10 @@ class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase
     large_models = ["patrickvonplaten/t5-tiny-random"]  # Models tested with the @slow decorator
     invalid_inputs = [4, "<mask>"]
     mandatory_keys = ["summary_text"]
+
+    @require_tf
+    def test_tf_small(self):
+        pass  # Skip for now because we don't have a Tensorflow BART
 
     @require_torch
     @slow

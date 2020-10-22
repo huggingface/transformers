@@ -16,7 +16,9 @@ class TextGenerationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
     valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
     invalid_inputs = ["Hi there!", Conversation()]
 
-    def _test_pipeline(self, nlp):  # e overide the default test method to check that the output is a `Conversation` object
+    def _test_pipeline(
+        self, nlp
+    ):  # e overide the default test method to check that the output is a `Conversation` object
         self.assertIsNotNone(nlp)
 
         mono_result = nlp(self.valid_inputs[0])

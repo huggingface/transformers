@@ -1,9 +1,9 @@
 import unittest
 from typing import List, Optional
 
-from transformers import pipeline, is_tf_available, is_torch_available
+from transformers import is_tf_available, is_torch_available, pipeline
 from transformers.pipelines import DefaultArgumentHandler, Pipeline
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import _run_slow_tests, require_tf, require_torch, slow
 
 
 VALID_INPUTS = ["A simple string", ["list of strings"]]
@@ -16,20 +16,28 @@ class CustomInputPipelineCommonMixin:
     large_models = None  # Models tested with the @slow decorator
 
     def setUp(self) -> None:
-        # Download all the checkpoints
-        for model_name in (self.small_models + self.large_models):
+        # Download needed checkpoints
+        models = self.small_models
+        if _run_slow_tests:
+            models = models + self.large_models
+
+        for model_name in models:
             if is_torch_available():
-                pipeline(self.pipeline_task,
+                pipeline(
+                    self.pipeline_task,
                     model=model_name,
                     tokenizer=model_name,
                     framework="pt",
-                    **self.pipeline_loading_kwargs)
+                    **self.pipeline_loading_kwargs,
+                )
             if is_tf_available():
-                pipeline(self.pipeline_task,
+                pipeline(
+                    self.pipeline_task,
                     model=model_name,
                     tokenizer=model_name,
                     framework="tf",
-                    **self.pipeline_loading_kwargs)
+                    **self.pipeline_loading_kwargs,
+                )
 
     @require_torch
     @slow
@@ -73,9 +81,9 @@ class MonoInputPipelineCommonMixin:
     pipeline_task = None
     pipeline_loading_kwargs = {}  # Additional kwargs to load the pipeline with
     pipeline_running_kwargs = {}  # Additional kwargs to run the pipeline with
-    small_models = None  # Models tested without the @slow decorator
-    large_models = None  # Models tested with the @slow decorator
-    mandatory_keys = None  # Keys which should be in the output
+    small_models = []  # Models tested without the @slow decorator
+    large_models = []  # Models tested with the @slow decorator
+    mandatory_keys = {}  # Keys which should be in the output
     valid_inputs = VALID_INPUTS  # inputs which are valid
     invalid_inputs = [None]  # inputs which are not allowed
     expected_multi_result: Optional[List] = None
@@ -83,15 +91,9 @@ class MonoInputPipelineCommonMixin:
 
     def setUp(self) -> None:
         for model_name in self.small_models:
-            pipeline(self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                **self.pipeline_loading_kwargs)
+            pipeline(self.pipeline_task, model=model_name, tokenizer=model_name, **self.pipeline_loading_kwargs)
         for model_name in self.large_models:
-            pipeline(self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                **self.pipeline_loading_kwargs)
+            pipeline(self.pipeline_task, model=model_name, tokenizer=model_name, **self.pipeline_loading_kwargs)
 
     @require_torch
     @slow

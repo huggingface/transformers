@@ -37,7 +37,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_base import BatchEncoding, PaddingStrategy
+from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
 
 
@@ -2529,7 +2529,9 @@ class ConversationalPipeline(Pipeline):
                     else:
                         new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
-        padded_outputs = self.tokenizer.pad({'input_ids': outputs}, padding='longest', return_attention_mask=True, return_tensors=self.framework)
+        padded_outputs = self.tokenizer.pad(
+            {"input_ids": outputs}, padding="longest", return_attention_mask=True, return_tensors=self.framework
+        )
         return padded_outputs
 
 
@@ -2638,7 +2640,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
-    use_fast: bool = True,
+    use_fast: bool = False,
     **kwargs
 ) -> Pipeline:
     """
