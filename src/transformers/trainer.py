@@ -830,11 +830,11 @@ class Trainer:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
 
-        self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
-
         if self._total_flos is not None:
             self.store_flos()
             self.log({"total_flos": self.state.total_flos})
+
+        self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
