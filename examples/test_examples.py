@@ -67,10 +67,10 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_glue.py
             --model_name_or_path distilbert-base-uncased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --task_name mrpc
+            --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
+            --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
             --do_train
             --do_eval
             --per_device_train_batch_size=2
