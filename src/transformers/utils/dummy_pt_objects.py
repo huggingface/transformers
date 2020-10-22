@@ -45,6 +45,11 @@ class DataCollatorForSOP:
         requires_pytorch(self)
 
 
+class DataCollatorForWholeWordMask:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DataCollatorWithPadding:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -65,6 +70,11 @@ class GlueDataTrainingArguments:
 
 
 class LineByLineTextDataset:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LineByLineWithRefDataset:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
