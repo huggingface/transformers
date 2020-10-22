@@ -16,7 +16,9 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
+import collections
 import inspect
+import math
 import os
 import re
 import shutil
@@ -37,6 +39,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
+    hp_params,
     is_comet_available,
     is_optuna_available,
     is_ray_available,
@@ -222,6 +225,7 @@ class Trainer:
             model is not None or model_init is not None
         ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
         self.model_init = model_init
+        self.hp_name = None
         if model is None and model_init is not None:
             model = self.call_model_init()
         self.model = model.to(args.device) if model is not None else None
@@ -282,6 +286,15 @@ class Trainer:
                 ),
                 FutureWarning,
             )
+
+        if args.max_steps > 0:
+            logger.info("max_steps is given, it will override any value given in num_train_epochs")
+
+        # Enforce rules on using datasets with no __len__
+        if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
+            raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
+        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
 
         if is_datasets_available():
             if isinstance(train_dataset, datasets.Dataset):
@@ -361,7 +374,7 @@ class Trainer:
         dataset.set_format(type=dataset.format["type"], columns=columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
-        if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
+        if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
         elif is_torch_tpu_available():
             return get_tpu_sampler(self.train_dataset)
@@ -376,7 +389,7 @@ class Trainer:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`self.train_dataset` is a :obj:`torch.utils.data.IterableDataset`, a random sampler
+        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler
         (adapted to distributed training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
@@ -395,9 +408,7 @@ class Trainer:
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
-        if isinstance(eval_dataset, torch.utils.data.IterableDataset):
-            return None
-        elif is_torch_tpu_available():
+        if is_torch_tpu_available():
             return SequentialDistributedSampler(eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
         elif self.args.local_rank != -1:
             return SequentialDistributedSampler(eval_dataset)
@@ -408,19 +419,18 @@ class Trainer:
         """
         Returns the evaluation :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`self.eval_dataset` is a :obj:`torch.utils.data.IterableDataset`, a sequential
-        sampler (adapted to distributed training if necessary) otherwise.
-
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
                 If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
-                accepted by the ``model.forward()`` method are automatically removed.
+                accepted by the ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif eval_dataset is not None and is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+        elif eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
+        elif is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
@@ -438,17 +448,16 @@ class Trainer:
         """
         Returns the test :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`test_dataset` is a :obj:`torch.utils.data.IterableDataset`, a sequential
-        sampler (adapted to distributed training if necessary) otherwise.
-
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
+            test_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
                 The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-                ``model.forward()`` method are automatically removed.
+                ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
-        if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
+        if not isinstance(test_dataset, collections.abc.Sized):
+            raise ValueError("test_dataset must implement __len__")
+        elif is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             self._remove_unused_columns(test_dataset, description="test")
         test_sampler = self._get_eval_sampler(test_dataset)
 
@@ -494,13 +503,18 @@ class Trainer:
     def num_examples(self, dataloader: DataLoader) -> int:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
+
+        Will raise an exception if the underlying dataset dese not implement method :obj:`__len__`
         """
         return len(dataloader.dataset)
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """ HP search setup code """
+        self._trial = trial
+
         if self.hp_search_backend is None or trial is None:
             return
+
         params = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -549,7 +563,10 @@ class Trainer:
         elif model_init_argcount == 1:
             model = self.model_init(trial)
         else:
-            raise Exception("model_init should have 0 or 1 argument.")
+            raise RuntimeError("model_init should have 0 or 1 argument.")
+
+        if model is None:
+            raise RuntimeError("model_init should not return None.")
 
         return model
 
@@ -579,22 +596,36 @@ class Trainer:
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
 
+        # Keeping track whether we can can len() on the dataset or not
+        train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
+
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
-        num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
-        num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-        if self.args.max_steps > 0:
-            max_steps = self.args.max_steps
-            num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
-                self.args.max_steps % num_update_steps_per_epoch > 0
-            )
+
+        # Setting up training control variables:
+        # number of training epochs: num_train_epochs
+        # number of training steps per epoch: num_update_steps_per_epoch
+        # total number of training steps to execute: max_steps
+        if train_dataset_is_sized:
+            num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
+            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+            if self.args.max_steps > 0:
+                max_steps = self.args.max_steps
+                num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
+                    self.args.max_steps % num_update_steps_per_epoch > 0
+                )
+            else:
+                max_steps = math.ceil(self.args.num_train_epochs * num_update_steps_per_epoch)
+                num_train_epochs = math.ceil(self.args.num_train_epochs)
         else:
-            max_steps = int(num_update_steps_per_epoch * self.args.num_train_epochs)
-            num_train_epochs = self.args.num_train_epochs
-        num_train_epochs = int(np.ceil(num_train_epochs))
+            # see __init__. max_steps is set when the dataset has no __len__
+            max_steps = self.args.max_steps
+            num_train_epochs = 1
+            num_update_steps_per_epoch = max_steps
 
         self.create_optimizer_and_scheduler(num_training_steps=max_steps)
         self.state = TrainerState()
+        self.state.is_hyper_param_search = trial is not None
 
         # Check if saved optimizer or scheduler states exist
         if (
@@ -645,8 +676,15 @@ class Trainer:
                 * self.args.gradient_accumulation_steps
                 * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
             )
+
+        num_examples = (
+            self.num_examples(train_dataloader)
+            if train_dataset_is_sized
+            else total_train_batch_size * self.args.max_steps
+        )
+
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", self.num_examples(train_dataloader))
+        logger.info("  Num examples = %d", num_examples)
         logger.info("  Num Epochs = %d", num_train_epochs)
         logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
@@ -673,6 +711,8 @@ class Trainer:
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
+        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
+        self.state.trial_params = hp_params(trial) if trial is not None else None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -703,6 +743,7 @@ class Trainer:
             if self.args.past_index >= 0:
                 self._past = None
 
+            steps_in_epoch = len(epoch_iterator) if train_dataset_is_sized else self.args.max_steps
             self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
 
             for step, inputs in enumerate(epoch_iterator):
@@ -728,8 +769,8 @@ class Trainer:
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
-                    len(epoch_iterator) <= self.args.gradient_accumulation_steps
-                    and (step + 1) == len(epoch_iterator)
+                    steps_in_epoch <= self.args.gradient_accumulation_steps
+                    and (step + 1) == steps_in_epoch
                 ):
                     if self.args.fp16 and _use_native_amp:
                         self.scaler.unscale_(self.optimizer)
@@ -750,16 +791,16 @@ class Trainer:
                     self.lr_scheduler.step()
                     model.zero_grad()
                     self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1) / len(epoch_iterator)
+                    self.state.epoch = epoch + (step + 1) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
 
-                    self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
+                    self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
-            self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
+            self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -793,7 +834,7 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
-    def _maybe_log_save_evalute(self, tr_loss, model, trial, epoch):
+    def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
@@ -812,6 +853,7 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self.evaluate()
             self._report_to_hp_search(trial, epoch, metrics)
+
             self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
 
         if self.control.should_save:
@@ -827,12 +869,15 @@ class Trainer:
             assert model is self.model, f"Model {model} should be a reference to self.model"
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+
         if self.hp_search_backend is not None and trial is not None:
             run_id = trial.number if self.hp_search_backend == HPSearchBackend.OPTUNA else tune.get_trial_id()
-            checkpoint_folder += f"-run-{run_id}"
-        output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
+            run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
+            output_dir = os.path.join(self.args.output_dir, run_name, checkpoint_folder)
+        else:
+            output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
-        self.store_flos()
+            self.store_flos()
         self.save_model(output_dir)
 
         # Save optimizer and scheduler
@@ -879,6 +924,7 @@ class Trainer:
         n_trials: int = 20,
         direction: str = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
+        hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
         **kwargs
     ) -> BestRun:
         """
@@ -936,13 +982,13 @@ class Trainer:
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
         self.hp_search_backend = backend
-
         if self.model_init is None:
             raise RuntimeError(
                 "To use hyperparameter search, you need to pass your model through a model_init function."
             )
 
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
+        self.hp_name = hp_name
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
         run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
@@ -967,12 +1013,12 @@ class Trainer:
                 FutureWarning,
             )
             return self._log(logs)
-
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self._total_flos is not None:
             self.store_flos()
             logs["total_flos"] = self.state.total_flos
+
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
@@ -1173,8 +1219,8 @@ class Trainer:
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
         # Make sure we don't delete the best model.
         if self.state.best_model_checkpoint is not None:
-            best_model_index = checkpoints_sorted.index(self.state.best_model_checkpoint)
-            checkpoints_sorted[best_model_index], checkpoints_sorted[best_model_index][-1] = (
+            best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
+            checkpoints_sorted[best_model_index], checkpoints_sorted[-1] = (
                 checkpoints_sorted[-1],
                 checkpoints_sorted[best_model_index],
             )
@@ -1207,11 +1253,15 @@ class Trainer:
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
-                columns not accepted by the ``model.forward()`` method are automatically removed.
+                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement
+                the :obj:`__len__` method.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
+        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
+
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
@@ -1234,7 +1284,7 @@ class Trainer:
         Args:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-                ``model.forward()`` method are automatically removed.
+                ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
         Returns:
             `NamedTuple`:
@@ -1245,6 +1295,9 @@ class Trainer:
             metrics (:obj:`Dict[str, float]`, `optional`):
                 The potential dictionary of metrics (if the dataset contained labels).
         """
+        if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
+            raise ValueError("test_dataset must implement __len__")
+
         test_dataloader = self.get_test_dataloader(test_dataset)
 
         return self.prediction_loop(test_dataloader, description="Prediction")
@@ -1264,6 +1317,8 @@ class Trainer:
             )
             return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
 
+        if not isinstance(dataloader.dataset, collections.abc.Sized):
+            raise ValueError("dataset must implement __len__")
         prediction_loss_only = (
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
@@ -1425,7 +1480,7 @@ class Trainer:
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
-        For models that inherit from :class:`~transformers.PretrainedModel`, uses
+        For models that inherit from :class:`~transformers.PreTrainedModel`, uses
         that method to compute the number of floating point operations for every backward + forward pass. If using
         another model, either implement such a method in the model or subclass and override this method.
 

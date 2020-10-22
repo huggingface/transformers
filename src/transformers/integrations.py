@@ -85,6 +85,17 @@ def is_ray_available():
     return _has_ray
 
 
+def hp_params(trial):
+    if is_optuna_available():
+        if isinstance(trial, optuna.Trial):
+            return trial.params
+    if is_ray_available():
+        if isinstance(trial, dict):
+            return trial
+
+    raise RuntimeError(f"Unknown type for trial {trial.__class__}")
+
+
 def default_hp_search_backend():
     if is_optuna_available():
         return "optuna"
@@ -192,6 +203,18 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     return best_run
 
 
+def rewrite_logs(d):
+    new_d = {}
+    eval_prefix = "eval_"
+    eval_prefix_len = len(eval_prefix)
+    for k, v in d.items():
+        if k.startswith(eval_prefix):
+            new_d["eval/" + k[eval_prefix_len:]] = v
+        else:
+            new_d["train/" + k] = v
+    return new_d
+
+
 class TensorBoardCallback(TrainerCallback):
     """
     A :class:`~transformers.TrainerCallback` that sends the logs to `TensorBoard
@@ -208,17 +231,39 @@ class TensorBoardCallback(TrainerCallback):
         ), "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
         self.tb_writer = tb_writer
 
-    def on_init_end(self, args, state, control, **kwargs):
-        if self.tb_writer is None and state.is_world_process_zero:
-            self.tb_writer = SummaryWriter(log_dir=args.logging_dir)
+    def _init_summary_writer(self, args, log_dir=None):
+        log_dir = log_dir or args.logging_dir
+        self.tb_writer = SummaryWriter(log_dir=log_dir)
 
     def on_train_begin(self, args, state, control, **kwargs):
+        if not state.is_world_process_zero:
+            return
+
+        log_dir = None
+
+        if state.is_hyper_param_search:
+            trial_name = state.trial_name
+            if trial_name is not None:
+                log_dir = os.path.join(args.logging_dir, trial_name)
+
+        self._init_summary_writer(args, log_dir)
+
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
+            if "model" in kwargs:
+                model = kwargs["model"]
+                if hasattr(model, "config") and model.config is not None:
+                    model_config_json = model.config.to_json_string()
+                    self.tb_writer.add_text("model_config", model_config_json)
             self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
 
     def on_log(self, args, state, control, logs=None, **kwargs):
+        if state.is_world_process_zero:
+            if self.tb_writer is None:
+                self._init_summary_writer(args)
+
         if self.tb_writer:
+            logs = rewrite_logs(logs)
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
                     self.tb_writer.add_scalar(k, v, state.global_step)
@@ -249,7 +294,7 @@ class WandbCallback(TrainerCallback):
         assert _has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
         self._initialized = False
 
-    def setup(self, args, state, model):
+    def setup(self, args, state, model, reinit, **kwargs):
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
@@ -271,21 +316,41 @@ class WandbCallback(TrainerCallback):
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
             combined_dict = {**args.to_sanitized_dict()}
-            if getattr(model, "config", None) is not None:
-                combined_dict = {**model.config.to_dict(), **combined_dict}
-            wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=args.run_name)
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            trial_name = state.trial_name
+            init_args = {}
+            if trial_name is not None:
+                run_name = trial_name
+                init_args["group"] = args.run_name
+            else:
+                run_name = args.run_name
+
+            wandb.init(
+                project=os.getenv("WANDB_PROJECT", "huggingface"),
+                config=combined_dict,
+                name=run_name,
+                reinit=reinit,
+                **init_args,
+            )
+
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
-        if not self._initialized:
-            self.setup(args, state, model)
+        hp_search = state.is_hyper_param_search
+        if not self._initialized or hp_search:
+            print(args.run_name)
+            self.setup(args, state, model, reinit=hp_search, **kwargs)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if not self._initialized:
-            self.setup(args, state, model)
+            self.setup(args, state, model, reinit=False)
         if state.is_world_process_zero:
+            logs = rewrite_logs(logs)
             wandb.log(logs, step=state.global_step)
 
 

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from .tokenization_roberta import RobertaTokenizer
 from .utils import logging
 
 
@@ -54,19 +54,3 @@ class LongformerTokenizer(RobertaTokenizer):
         "vocab_file": {m: vocab_url for m in _all_longformer_models},
         "merges_file": {m: merges_url for m in _all_longformer_models},
     }
-
-
-class LongformerTokenizerFast(RobertaTokenizerFast):
-    r"""
-    Construct a "fast" Longformer tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.LongformerTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer
-    to the superclass for usage examples and documentation concerning parameters.
-    """
-    # merges and vocab same as Roberta
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = {
-        "vocab_file": {m: vocab_url for m in _all_longformer_models},
-        "merges_file": {m: merges_url for m in _all_longformer_models},
-    }
-    slow_tokenizer_class = LongformerTokenizer

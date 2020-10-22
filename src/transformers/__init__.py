@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.3.1"
+__version__ = "3.4.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -54,6 +54,7 @@ from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
+from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 from .configuration_rag import RagConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
@@ -63,6 +64,7 @@ from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
+from .configuration_xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 from .data import (
@@ -92,6 +94,7 @@ from .file_utils import (
     MODEL_CARD_NAME,
     PYTORCH_PRETRAINED_BERT_CACHE,
     PYTORCH_TRANSFORMERS_CACHE,
+    SPIECE_UNDERLINE,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     TRANSFORMERS_CACHE,
@@ -102,10 +105,13 @@ from .file_utils import (
     is_apex_available,
     is_datasets_available,
     is_faiss_available,
+    is_flax_available,
     is_psutil_available,
     is_py3nvml_available,
+    is_sentencepiece_available,
     is_sklearn_available,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
 )
@@ -152,49 +158,42 @@ from .pipelines import (
 from .retrieval_rag import RagRetriever
 
 # Tokenizers
-from .tokenization_albert import AlbertTokenizer, AlbertTokenizerFast
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer, BartTokenizerFast
-from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
-from .tokenization_bert_generation import BertGenerationTokenizer
+from .tokenization_bart import BartTokenizer
+from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
-from .tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_deberta import DebertaTokenizer
-from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_dpr import (
     DPRContextEncoderTokenizer,
-    DPRContextEncoderTokenizerFast,
     DPRQuestionEncoderTokenizer,
-    DPRQuestionEncoderTokenizerFast,
+    DPRReaderOutput,
     DPRReaderTokenizer,
-    DPRReaderTokenizerFast,
 )
-from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
+from .tokenization_electra import ElectraTokenizer
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
-from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
-from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_herbert import HerbertTokenizer, HerbertTokenizerFast
-from .tokenization_layoutlm import LayoutLMTokenizer, LayoutLMTokenizerFast
-from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
-from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
-from .tokenization_mbart import MBartTokenizer, MBartTokenizerFast
-from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
-from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from .tokenization_pegasus import PegasusTokenizer, PegasusTokenizerFast
+from .tokenization_funnel import FunnelTokenizer
+from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_herbert import HerbertTokenizer
+from .tokenization_layoutlm import LayoutLMTokenizer
+from .tokenization_longformer import LongformerTokenizer
+from .tokenization_lxmert import LxmertTokenizer
+from .tokenization_mobilebert import MobileBertTokenizer
+from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_phobert import PhobertTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 from .tokenization_rag import RagTokenizer
-from .tokenization_reformer import ReformerTokenizer, ReformerTokenizerFast
-from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
-from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
-from .tokenization_t5 import T5Tokenizer, T5TokenizerFast
+from .tokenization_retribert import RetriBertTokenizer
+from .tokenization_roberta import RobertaTokenizer
+from .tokenization_squeezebert import SqueezeBertTokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
+    AddedToken,
     BatchEncoding,
     CharSpan,
     PreTrainedTokenizerBase,
@@ -202,10 +201,59 @@ from .tokenization_utils_base import (
     TensorType,
     TokenSpan,
 )
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
+
+
+if is_sentencepiece_available():
+    from .tokenization_albert import AlbertTokenizer
+    from .tokenization_bert_generation import BertGenerationTokenizer
+    from .tokenization_camembert import CamembertTokenizer
+    from .tokenization_marian import MarianTokenizer
+    from .tokenization_mbart import MBartTokenizer
+    from .tokenization_pegasus import PegasusTokenizer
+    from .tokenization_reformer import ReformerTokenizer
+    from .tokenization_t5 import T5Tokenizer
+    from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
+    from .tokenization_xlm_roberta import XLMRobertaTokenizer
+    from .tokenization_xlnet import XLNetTokenizer
+else:
+    from .utils.dummy_sentencepiece_objects import *
+
+if is_tokenizers_available():
+    from .tokenization_albert_fast import AlbertTokenizerFast
+    from .tokenization_bart_fast import BartTokenizerFast
+    from .tokenization_bert_fast import BertTokenizerFast
+    from .tokenization_camembert_fast import CamembertTokenizerFast
+    from .tokenization_distilbert_fast import DistilBertTokenizerFast
+    from .tokenization_dpr_fast import (
+        DPRContextEncoderTokenizerFast,
+        DPRQuestionEncoderTokenizerFast,
+        DPRReaderTokenizerFast,
+    )
+    from .tokenization_electra_fast import ElectraTokenizerFast
+    from .tokenization_funnel_fast import FunnelTokenizerFast
+    from .tokenization_gpt2_fast import GPT2TokenizerFast
+    from .tokenization_herbert_fast import HerbertTokenizerFast
+    from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from .tokenization_longformer_fast import LongformerTokenizerFast
+    from .tokenization_lxmert_fast import LxmertTokenizerFast
+    from .tokenization_mbart_fast import MBartTokenizerFast
+    from .tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from .tokenization_openai_fast import OpenAIGPTTokenizerFast
+    from .tokenization_pegasus_fast import PegasusTokenizerFast
+    from .tokenization_reformer_fast import ReformerTokenizerFast
+    from .tokenization_retribert_fast import RetriBertTokenizerFast
+    from .tokenization_roberta_fast import RobertaTokenizerFast
+    from .tokenization_squeezebert_fast import SqueezeBertTokenizerFast
+    from .tokenization_t5_fast import T5TokenizerFast
+    from .tokenization_utils_fast import PreTrainedTokenizerFast
+    from .tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
+    from .tokenization_xlnet_fast import XLNetTokenizerFast
+
+    if is_sentencepiece_available():
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+else:
+    from .utils.dummy_tokenizers_objects import *
 
 # Trainer
 from .trainer_callback import (
@@ -236,6 +284,7 @@ if is_torch_available():
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSOP,
+        DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
         default_data_collator,
     )
@@ -243,6 +292,7 @@ if is_torch_available():
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
+        LineByLineWithRefDataset,
         LineByLineWithSOPTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
@@ -445,6 +495,15 @@ if is_torch_available():
         load_tf_weights_in_openai_gpt,
     )
     from .modeling_pegasus import PegasusForConditionalGeneration
+    from .modeling_prophetnet import (
+        PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ProphetNetDecoder,
+        ProphetNetEncoder,
+        ProphetNetForCausalLM,
+        ProphetNetForConditionalGeneration,
+        ProphetNetModel,
+        ProphetNetPreTrainedModel,
+    )
     from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
     from .modeling_reformer import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -505,6 +564,14 @@ if is_torch_available():
         XLMPreTrainedModel,
         XLMWithLMHeadModel,
     )
+    from .modeling_xlm_prophetnet import (
+        XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLMProphetNetDecoder,
+        XLMProphetNetEncoder,
+        XLMProphetNetForCausalLM,
+        XLMProphetNetForConditionalGeneration,
+        XLMProphetNetModel,
+    )
     from .modeling_xlm_roberta import (
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         XLMRobertaForCausalLM,
@@ -539,7 +606,6 @@ if is_torch_available():
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
     )
-    from .tokenization_marian import MarianTokenizer
 
     # Trainer
     from .trainer import Trainer
@@ -588,6 +654,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
+    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
@@ -772,6 +839,15 @@ else:
     # Import the same objects as dummies to get them in the namespace.
     # They will raise an import error if the user tries to instantiate / use them.
     from .utils.dummy_tf_objects import *
+
+
+if is_flax_available():
+    from .modeling_flax_bert import FlaxBertModel
+    from .modeling_flax_roberta import FlaxRobertaModel
+else:
+    # Import the same objects as dummies to get them in the namespace.
+    # They will raise an import error if the user tries to instantiate / use them.
+    from .utils.dummy_flax_objects import *
 
 
 if not is_tf_available() and not is_torch_available():

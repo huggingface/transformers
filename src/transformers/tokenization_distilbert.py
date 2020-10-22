@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
 from .utils import logging
 
 
@@ -69,22 +69,3 @@ class DistilBertTokenizer(BertTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["attention_mask"]
-
-
-class DistilBertTokenizerFast(BertTokenizerFast):
-    r"""
-    Construct a "fast" DistilBERT tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    model_input_names = ["attention_mask"]
-    slow_tokenizer_class = DistilBertTokenizer

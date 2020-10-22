@@ -17,3 +17,4 @@ datasets
 fire
 pytest
 conllu
+sentencepiece != 0.1.92
