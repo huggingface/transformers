@@ -11,7 +11,7 @@ license: mit
 pipeline_tag: zero-shot-classification
 widget:
 - text: "За кого вы голосуете в 2020 году?"
-- context: "politique, santé publique, économie"
+  labels: "politique, santé publique, économie"
 ---
 
 # xlm-roberta-large-xnli

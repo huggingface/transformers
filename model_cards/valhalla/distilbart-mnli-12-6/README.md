@@ -5,9 +5,6 @@ tags:
 - distilbart
 - distilbart-mnli
 pipeline_tag: zero-shot-classification
-widget:
-- text: "За кого вы голосуете в 2020 году?"
-- context: "politique, santé publique, économie"
 ---
 
 # DistilBart-MNLI
