@@ -765,12 +765,10 @@ or skip the whole module:
 
 More details, example and ways are `here <https://docs.pytest.org/en/latest/skipping.html>`__.
 
-Custom markers
+Slow tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* Slow tests
-
-Tests that are too slow (e.g. once downloading huge model files) are marked with:
+The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be marked as in the example below:
 
 .. code-block:: python
 
@@ -778,19 +776,45 @@ Tests that are too slow (e.g. once downloading huge model files) are marked with
     @slow
     def test_integration_foo():
 
-To run such tests set ``RUN_SLOW=1`` env var, e.g.:
+Once a test is marked as ``@slow``, to run such tests set ``RUN_SLOW=1`` env var, e.g.:
 
 .. code-block:: bash
 
     RUN_SLOW=1 pytest tests
     
-Some decorators like ``@parametrized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
+Some decorators like ``@parameterized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
     @parameterized.expand(...)
     @slow
     def test_integration_foo():
+
+As explained at the beginning of this document, slow tests get to run on a scheduled basis, rather than in PRs CI checks. So it's possible that some problems will be missed during a PR submission and get merged. Such problems will get caught during the next scheduled CI job. But it also means that it's important to run the slow tests on your machine before submitting the PR.
+
+Here is a rough decision making mechanism for choosing which tests should be marked as slow:
+
+If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files, pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library, such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine this approach we should have exceptions:
+
+* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to do a training not specifically optimized to be fast should be set to slow.
+* We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked as ``@slow``.
+* If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
+
+Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast.
+For example, a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc.
+Then the ``@slow`` tests can use large slow models to do qualitative testing. To see the use of these simply look for *tiny* models with:
+
+.. code-block:: bash
+
+    grep tiny tests examples
+
+Here is a an example of a `script <https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your specific model's architecture.
+
+It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
+
+That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast. If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest tests.
+
 
 Testing the stdout/stderr output
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
