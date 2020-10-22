@@ -20,6 +20,7 @@ from .file_utils import (
     _torch_available,
     _torch_tpu_available,
 )
+from .integrations import _has_optuna, _has_ray
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -154,7 +155,7 @@ def require_tokenizers(test_case):
         return test_case
 
 
-def require_multigpu(test_case):
+def require_torch_multigpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
 
@@ -174,7 +175,7 @@ def require_multigpu(test_case):
         return test_case
 
 
-def require_non_multigpu(test_case):
+def require_torch_non_multigpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
@@ -208,7 +209,7 @@ else:
     torch_device = None
 
 
-def require_torch_and_cuda(test_case):
+def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch. """
     if torch_device != "cuda":
         return unittest.skip("test requires CUDA")(test_case)
@@ -229,6 +230,32 @@ def require_faiss(test_case):
     """Decorator marking a test that requires faiss."""
     if not _faiss_available:
         return unittest.skip("test requires `faiss`")(test_case)
+    else:
+        return test_case
+
+
+def require_optuna(test_case):
+    """
+    Decorator marking a test that requires optuna.
+
+    These tests are skipped when optuna isn't installed.
+
+    """
+    if not _has_optuna:
+        return unittest.skip("test requires optuna")(test_case)
+    else:
+        return test_case
+
+
+def require_ray(test_case):
+    """
+    Decorator marking a test that requires Ray/tune.
+
+    These tests are skipped when Ray/tune isn't installed.
+
+    """
+    if not _has_ray:
+        return unittest.skip("test requires Ray/tune")(test_case)
     else:
         return test_case
 

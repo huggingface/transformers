@@ -356,6 +356,12 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 """
 
 
+FLAX_IMPORT_ERROR = """
+{0} requires the FLAX library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://github.com/google/flax and follow the ones that match your enviromnent.
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -384,6 +390,12 @@ def requires_tf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_tf_available():
         raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
+
+
+def requires_flax(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_flax_available():
+        raise ImportError(FLAX_IMPORT_ERROR.format(name))
 
 
 def requires_tokenizers(obj):

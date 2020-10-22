@@ -1931,14 +1931,21 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> logits = outputs.logits
 
             >>> # Model can also be used with EncoderDecoder framework
-            >>> from transformers import BertTokenizer, EncoderDecoderModel
+            >>> from transformers import BertTokenizer, EncoderDecoderModel, ProphetNetTokenizer
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-uncased-large')
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-uncased-large", "patrickvonplaten/prophetnet-decoder-clm-large-uncased")
+            >>> tokenizer_enc = BertTokenizer.from_pretrained('bert-large-uncased')
+            >>> tokenizer_dec = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "patrickvonplaten/prophetnet-decoder-clm-large-uncased")
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(input_ids=inputs["input_ids"], labels=inputs["input_ids"], return_dict=True)
+            >>> ARTICLE = (
+            ... "the us state department said wednesday it had received no "
+            ... "formal word from bolivia that it was expelling the us ambassador there "
+            ... "but said the charges made against him are `` baseless ."
+            ... )
+            >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
+            >>> labels = tokenizer_dec("us rejects charges against its ambassador in bolivia", return_tensors="pt").input_ids
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:], return_dict=True)
 
             >>> loss = outputs.loss
         """

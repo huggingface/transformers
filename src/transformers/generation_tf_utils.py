@@ -640,6 +640,10 @@ class TFGenerationMixin:
             if temperature != 1.0:
                 next_token_logits = next_token_logits / temperature
 
+            if self.config.is_encoder_decoder and do_sample is False:
+                next_token_logits = self.adjust_logits_during_generation(
+                    next_token_logits, cur_len=cur_len, max_length=max_length
+                )
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
 
@@ -889,6 +893,13 @@ class TFGenerationMixin:
     @staticmethod
     def _reorder_cache(past, beam_idx):
         return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
+
+    def adjust_logits_during_generation(self, logits, **kwargs):
+        """
+        Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to adjust the logits in
+        the generate method.
+        """
+        return logits
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):

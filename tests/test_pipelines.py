@@ -21,7 +21,7 @@ FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
 LARGE_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
 
 SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
-TF_SUMMARIZATION_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
+TF_SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
 
 TRANSLATION_FINETUNED_MODELS = [
     ("patrickvonplaten/t5-tiny-random", "translation_en_to_de"),
@@ -379,6 +379,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     @require_tokenizers
+    @slow
     def test_torch_translation(self):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
