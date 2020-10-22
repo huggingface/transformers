@@ -144,7 +144,7 @@ class TestAll(TestCasePlus):
                 f"--num_train_epochs={epochs}",
                 "--warmup_steps=10",
                 "--val_check_interval=1.0",
-                "--do_predict"
+                "--do_predict",
             ]
         )
         with patch.object(sys, "argv", testargs):
