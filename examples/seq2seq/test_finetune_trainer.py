@@ -1,21 +1,14 @@
 import os
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from transformers import is_torch_available
-from transformers.testing_utils import TestCasePlus, execute_async_std, slow
+from transformers.testing_utils import TestCasePlus, slow
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import main
 from .test_seq2seq_examples import MBART_TINY
 
-
-if is_torch_available():
-    import torch
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
@@ -50,7 +43,6 @@ class TestFinetuneTrainer(TestCasePlus):
         assert "test_results.json" in contents
 
     def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
-
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         argv = f"""
@@ -85,29 +77,8 @@ class TestFinetuneTrainer(TestCasePlus):
         """.split()
         # --eval_beams  2
 
-        n_gpu = torch.cuda.device_count()
-        if n_gpu > 1:
-            # XXX: fix hardcoded path here and in the other test file ./examples/seq2seq/finetune_trainer.py
-            distributed_args = f"-m torch.distributed.launch --nproc_per_node={n_gpu} ./examples/seq2seq/finetune_trainer.py".split()
-            cmd = [sys.executable] + distributed_args + argv
-
-            print("\nRunning: ", " ".join(cmd))
-
-            path = Path(__file__).resolve()
-            examples_path = path.parents[1]
-            src_path = f"{path.parents[2]}/src"
-            env = os.environ.copy()
-            env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
-
-            result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
-
-            assert result.stdout, "produced no output"
-            if result.returncode > 0:
-                pytest.fail(f"failed with returncode {result.returncode}")
-        else:
-            # 0 or 1 gpu
-            testargs = ["finetune_trainer.py"] + argv
-            with patch.object(sys, "argv", testargs):
-                main()
+        testargs = ["finetune_trainer.py"] + argv
+        with patch.object(sys, "argv", testargs):
+            main()
 
         return output_dir

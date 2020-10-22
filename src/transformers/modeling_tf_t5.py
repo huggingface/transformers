@@ -24,6 +24,8 @@ from typing import Tuple
 
 import tensorflow as tf
 
+from transformers.modeling_tf_utils import TFWrappedEmbeddings
+
 from .configuration_t5 import T5Config
 from .file_utils import (
     DUMMY_INPUTS,
@@ -505,36 +507,6 @@ class TFT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class _NoLayerEmbedTokens:
-    """
-    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
-    class to avoid problem with weight restoring. Also it makes sure that the layer is
-    called from the correct scope to avoid problem with saving/storing the correct weights
-    """
-
-    def __init__(self, layer, abs_scope_name=None):
-        self._layer = layer
-        self._abs_scope_name = abs_scope_name
-
-    def call(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer.call(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer.call(inputs, mode)
-
-    def __call__(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer(inputs, mode)
-
-
 ####################################################
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
@@ -980,8 +952,8 @@ class TFT5Model(TFT5PreTrainedModel):
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1003,7 +975,8 @@ class TFT5Model(TFT5PreTrainedModel):
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 
@@ -1177,8 +1150,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1199,7 +1172,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 
