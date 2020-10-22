@@ -9,7 +9,19 @@ tags:
 license: apache-2.0
 ---
 
-[Google's T5](https://ai.googleblog.com/2020/02/exploring-transfer-learning-with-t5.html) 
+## Disclaimer
+
+Due do it's immense size, `t5-11b` requires some special treatment. 
+First, `t5-11b` should be loaded with flag `use_cdn` set to `False` as follows:
+
+```python
+t5 = transformers.T5ForConditionalGeneration.from_pretrained('t5-11b', use_cdn = False)
+```
+
+Secondly, a single GPU will most likely not have enough memory to even load the model into memory as the weights alone amount to over 40 GB.
+Model parallelism has to be used here to overcome this problem as is explained in this [PR](https://github.com/huggingface/transformers/pull/3578).
+
+## [Google's T5](https://ai.googleblog.com/2020/02/exploring-transfer-learning-with-t5.html) 
 
 Pretraining Dataset: [C4](https://huggingface.co/datasets/c4)
 
@@ -25,14 +37,3 @@ Transfer learning, where a model is first pre-trained on a data-rich task before
 
 ![model image](https://camo.githubusercontent.com/623b4dea0b653f2ad3f36c71ebfe749a677ac0a1/68747470733a2f2f6d69726f2e6d656469756d2e636f6d2f6d61782f343030362f312a44304a31674e51663876727255704b657944387750412e706e67)
 
-## Disclaimer
-
-Due do it's immense size, `t5-11b` requires some special treatment. 
-First, `t5-11b` should be loaded with flag `use_cdn` set to `False` as follows:
-
-```python
-t5 = transformers.T5ForConditionalGeneration.from_pretrained('t5-11b', use_cdn = False)
-```
-
-Secondly, a single GPU will most likely not have enough memory to even load the model into memory as the weights alone amount to over 40 GB.
-Model parallelism has to be used here to overcome this problem as is explained in this [PR](https://github.com/huggingface/transformers/pull/3578).
