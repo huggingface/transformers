@@ -218,6 +218,52 @@ positional embeddings.
 Absolute positional embeddings are selected in the range ``[0, config.max_position_embeddings - 1]``. Some models
 use other types of positional embeddings, such as sinusoidal position embeddings or relative position embeddings.
 
+.. _labels:
+
+Labels
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The labels are an optional argument which can be passed in order for the model to compute the loss itself. These labels
+should be the expected prediction of the model: it will use the standard loss in order to compute the loss between
+its predictions and the expected value (the label).
+
+These labels are different according to the model head, for example:
+
+- For sequence classification models (e.g., :class:`~transformers.BertForSequenceClassification`), the model expects
+  a tensor of dimension :obj:`(batch_size)` with each value of the batch corresponding to the expected label of the
+  entire sequence.
+- For token classification models (e.g., :class:`~transformers.BertForTokenClassification`), the model expects
+  a tensor of dimension :obj:`(batch_size, seq_length)` with each value corresponding to the expected label of each
+  individual token.
+- For masked language modeling (e.g., :class:`~transformers.BertForMaskedLM`), the model expects
+  a tensor of dimension :obj:`(batch_size, seq_length)` with each value corresponding to the expected label of each
+  individual token: the labels being the token ID for the masked token, and values to be ignored for the rest (usually
+  -100).
+- For sequence to sequence tasks,(e.g., :class:`~transformers.BartForConditionalGeneration`,
+  :class:`~transformers.MBartForConditionalGeneration`), the model expects a tensor of dimension
+  :obj:`(batch_size, tgt_seq_length)` with each value corresponding to the target sequences associated with each
+  input sequence. During training, both `BART` and `T5` will make the appropriate `decoder_input_ids` and decoder
+  attention masks internally. They usually do not need to be supplied. This does not apply to models leveraging the
+  Encoder-Decoder framework.
+  See the documentation of each model for more information on each specific model's labels.
+
+The base models (e.g., :class:`~transformers.BertModel`) do not accept labels, as these are the base transformer models,
+simply outputting features.
+
+.. _decoder-input-ids:
+
+Decoder input IDs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This input is specific to encoder-decoder models, and contains the input IDs that will be fed to the decoder.
+These inputs should be used for sequence to sequence tasks, such as translation or summarization, and are usually
+built in a way specific to each model.
+
+Most encoder-decoder models (BART, T5) create their :obj:`decoder_input_ids` on their own from the :obj:`labels`.
+In such models, passing the :obj:`labels` is the preferred way to handle training.
+
+Please check each model's docs to see how they handle these input IDs for sequence to sequence training.
+
 .. _feed-forward-chunking:
 
 Feed Forward Chunking

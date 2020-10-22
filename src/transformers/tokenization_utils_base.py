@@ -1191,7 +1191,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
               :obj:`return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
-            - **special_tokens_mask** -- List of 0s and 1s, with 0 specifying added special tokens and 1 specifying
+            - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
               regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
             - **length** -- The length of the inputs (when :obj:`return_length=True`)
 """

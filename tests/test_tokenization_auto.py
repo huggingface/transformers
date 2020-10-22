@@ -34,12 +34,13 @@ from transformers.testing_utils import (
     DUMMY_UNKWOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     require_tokenizers,
+    slow,
 )
 from transformers.tokenization_auto import TOKENIZER_MAPPING
 
 
 class AutoTokenizerTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in (x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
