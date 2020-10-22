@@ -19,7 +19,7 @@ import unittest
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow, torch_device
 
 from .test_modeling_common import ModelTesterMixin
 from .test_modeling_marian import ModelTester
@@ -30,27 +30,8 @@ if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM, TFMarianMTModel
 
 
-class ModelTester:
-    def __init__(self, parent):
-        self.config = MarianConfig(
-            vocab_size=99,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            add_final_layer_norm=True,
-            return_dict=True,
-        )
 
-    def prepare_config_and_inputs_for_common(self):
-        return self.config, {}
-
-
-@require_torch
+@require_tf
 @require_sentencepiece
 @require_tokenizers
 class MarianIntegrationTest(unittest.TestCase):
@@ -89,7 +70,8 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: TFMarianMTModel = TFMarianMTModel.from_pretrained(self.model_name, from_pt=True)
+        # FIXME: TFAutoModelForSeq2SeqLM
+        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
 
