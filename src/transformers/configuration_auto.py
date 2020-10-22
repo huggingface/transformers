@@ -48,6 +48,7 @@ from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Re
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
@@ -88,6 +89,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -131,6 +133,7 @@ CONFIG_MAPPING = OrderedDict(
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
+        ("tapas", TapasConfig),
     ]
 )
 
@@ -172,6 +175,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("rag", "RAG"),
         ("xlm-prophetnet", "XLMProphetNet"),
         ("prophetnet", "ProphetNet"),
+        ("tapas", "TAPAS"),
     ]
 )
 

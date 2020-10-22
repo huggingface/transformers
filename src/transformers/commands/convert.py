@@ -130,6 +130,13 @@ class ConvertCommand(BaseTransformersCLICommand):
                 raise ImportError(IMPORT_ERROR_MESSAGE)
 
             convert_gpt2_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
+        elif self._model_type == "tapas":
+            try:
+                from transformers.convert_tapas_original_tf_checkpoint_to_pytorch import (
+                    convert_tf_checkpoint_to_pytorch,
+                )
+            except ImportError:
+                raise ImportError(IMPORT_ERROR_MESSAGE)
         elif self._model_type == "xlnet":
             try:
                 from transformers.convert_xlnet_original_tf_checkpoint_to_pytorch import (

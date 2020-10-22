@@ -61,6 +61,7 @@ from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Re
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
@@ -190,6 +191,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_retribert import RetriBertTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_squeezebert import SqueezeBertTokenizer
+from .tokenization_tapas import TapasTokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
@@ -293,7 +295,6 @@ if is_torch_available():
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
-        LineByLineWithRefDataset,
         LineByLineWithSOPTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
@@ -557,6 +558,13 @@ if is_torch_available():
         T5Model,
         T5PreTrainedModel,
         load_tf_weights_in_t5,
+    )
+    from .modeling_tapas import (
+        TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TapasModel,
+        TapasForMaskedLM,
+        TapasForQuestionAnswering,
+        load_tf_weights_in_tapas,
     )
     from .modeling_transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,

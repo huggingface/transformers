@@ -50,6 +50,7 @@ from .configuration_auto import (
     RobertaConfig,
     SqueezeBertConfig,
     T5Config,
+    TapasConfig,
     TransfoXLConfig,
     XLMConfig,
     XLMProphetNetConfig,
@@ -73,7 +74,6 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
-from .tokenization_herbert import HerbertTokenizer
 from .tokenization_layoutlm import LayoutLMTokenizer
 from .tokenization_longformer import LongformerTokenizer
 from .tokenization_lxmert import LxmertTokenizer
@@ -85,6 +85,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_retribert import RetriBertTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_squeezebert import SqueezeBertTokenizer
+from .tokenization_tapas import TapasTokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .utils import logging
@@ -125,7 +126,6 @@ if is_tokenizers_available():
     from .tokenization_electra_fast import ElectraTokenizerFast
     from .tokenization_funnel_fast import FunnelTokenizerFast
     from .tokenization_gpt2_fast import GPT2TokenizerFast
-    from .tokenization_herbert_fast import HerbertTokenizerFast
     from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
     from .tokenization_longformer_fast import LongformerTokenizerFast
     from .tokenization_lxmert_fast import LxmertTokenizerFast
@@ -150,7 +150,6 @@ else:
     ElectraTokenizerFast = None
     FunnelTokenizerFast = None
     GPT2TokenizerFast = None
-    HerbertTokenizerFast = None
     LayoutLMTokenizerFast = None
     LongformerTokenizerFast = None
     LxmertTokenizerFast = None
@@ -195,7 +194,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
-        (BertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -210,6 +208,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
+        (TapasConfig, (TapasTokenizer, None)),
     ]
 )
 
