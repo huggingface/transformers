@@ -93,7 +93,7 @@ class MarianIntegrationTest(unittest.TestCase):
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
 
-        #self.assertEqual(c.model.shared.weight ==)
+        # self.assertEqual(c.model.shared.weight ==)
         self.assertEqual(c.max_length, 512)
         self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
         return model
@@ -208,7 +208,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         "Es dos años más viejo que yo.",
     ]
 
-    #@slow
+    # @slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
@@ -217,6 +217,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         self.assertIsInstance(normalized, str)
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_seq2seq_batch([""])
+
     @slow
     def test_pipeline(self):
         pipeline = TranslationPipeline(self.model, self.tokenizer, framework="tf")

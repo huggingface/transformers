@@ -252,15 +252,15 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.self_attn = TFAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-
+        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout_wt = Dropout(config.dropout)
+        self.dropout = Dropout(config.dropout)
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = Dropout(config.activation_dropout)
         self.fc1 = Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-        self.normalize_before = config.normalize_before
+
 
     def call(self, x, encoder_padding_mask, training=False):
         """
@@ -279,7 +279,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
         assert x.shape == residual.shape, f"Self attn modified the shape of query {residual.shape} to {x.shape}"
-        x = self.dropout_wt(x, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
@@ -290,7 +290,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         x = self.activation_fn(self.fc1(x))
         x = self.activation_dropout(x, training=training)
         x = self.fc2(x)
-        x = self.dropout_wt(x, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
@@ -383,14 +383,14 @@ class TFBartEncoder(tf.keras.layers.Layer):
             attention_mask = tf.cast(attention_mask, dtype=tf.float32)
             attention_mask = (1.0 - attention_mask) * LARGE_NEGATIVE
 
-        #print_tensor('weight', self.embed_tokens._layer.weight)
-        print_tensor('input_ids', input_ids)
-        print(f'embed_scale: {self.embed_scale}')
+        # print_tensor('weight', self.embed_tokens._layer.weight)
+        print_tensor("input_ids", input_ids)
+        print(f"embed_scale: {self.embed_scale}")
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        print_tensor('embedded_tok', inputs_embeds)
+        print_tensor("embedded_tok", inputs_embeds)
         embed_pos = self.embed_positions(input_ids)
-        print_tensor('embedded_pos', embed_pos)
+        print_tensor("embedded_pos", embed_pos)
 
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
@@ -403,8 +403,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
         all_attentions = () if output_attentions else None
 
         # encoder layers
-        for encoder_layer in self.layers:
-
+        for i, encoder_layer in enumerate(self.layers):
+            print_tensor(f"encoder layer {i} input", x)
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -527,6 +527,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
+
 def print_tensor(msg, t):  # DELEMETME
     # assert t.shape
     if t is None:
@@ -542,6 +543,7 @@ def print_tensor(msg, t):  # DELEMETME
     elif ndim == 4:
         slice = t[:3, :3, :3, :3]
     print(f"{msg}: {slice}")
+
 
 class TFBartDecoder(tf.keras.layers.Layer):
     """
@@ -575,7 +577,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 name="embed_positions",
             )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = (LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else Layer())
+        self.layernorm_embedding = (
+            LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else Layer()
+        )
         self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -611,23 +615,23 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         # embed positions
         positions = self.embed_positions(input_ids, use_cache=use_cache)
-        print_tensor('pos_emb', positions)
+        print_tensor("pos_emb", positions)
 
         if use_cache:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
-        print_tensor('input_ids', input_ids)
-        print(f'embed_scale: {self.embed_scale}')
-        print_tensor('embedded_tok', x)
-        print_tensor('embedded_pos', positions)
-        #print_tensor('tok_emb', x)
+        print_tensor("input_ids", input_ids)
+        print(f"embed_scale: {self.embed_scale}")
+        print_tensor("embedded_tok", x)
+        print_tensor("embedded_pos", positions)
+        # print_tensor('tok_emb', x)
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x) + positions
         else:
             x = self.layernorm_embedding(x + positions)
-        print_tensor('x1', x)
+        print_tensor("x1", x)
         x = self.dropout(x)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
@@ -664,7 +668,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-            #print_tensor(f'decoder layer {idx} output', x)
+            # print_tensor(f'decoder layer {idx} output', x)
 
         if self.layer_norm is not None:  # same as if config.add_final_layer_norm
             x = self.layer_norm(x)
@@ -679,7 +683,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = list(all_self_attns) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
-        print_tensor(f'decoder output', x)
+        print_tensor(f"decoder output", x)
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
@@ -869,7 +873,9 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
 
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        super().__init__(num_positions, embedding_dim, **kwargs)
+        super().__init__(num_positions, embedding_dim,
+                         #embeddings_initializer="zeros",
+                         **kwargs)
         # self.weight = self._init_weight(*self.weight.shape)
 
     def build(self, input_shape):
@@ -878,7 +884,8 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         super().build(input_shape)
-        # self.weight = self._init_weight(*self.weight.shape)
+
+        self.weight = self._init_weight(self.vocab_size, self.hidden_size)
 
     @staticmethod
     def _init_weight(n_pos, dim):
@@ -889,7 +896,7 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
         # index 0 is all zero
-        position_enc[:, 0: dim // 2] = np.sin(position_enc[:, 0::2])
+        position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
         position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
         # convert to tensor
         table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
@@ -904,7 +911,7 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
         else:
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
-        print(f'positions: {positions}')
+        print(f"positions: {positions}")
         return super().call(positions)
 
 
@@ -1207,12 +1214,12 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
-        #print_tensor('encoder_out', past[0])
+        # print_tensor('encoder_out', past[0])
 
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor)
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            print_tensor('encoder_out', past[0])
+            print_tensor("encoder_out", past[0])
 
             decoder_cached_states = None
         else:
@@ -1229,6 +1236,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         assert isinstance(
             encoder_outputs, TFBaseModelOutput
         ), "encoder_outputs should be a TFBaseModelOutput, Instead got "
+        # import ipdb; ipdb.set_trace()
         return {
             "inputs": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,

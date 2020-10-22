@@ -29,6 +29,7 @@ if is_tf_available():
 
     from transformers import TFAutoModelForSeq2SeqLM
 
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers
@@ -37,7 +38,7 @@ class TestMbartEnRO(unittest.TestCase):
     tgt = "ro"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
-        #""" Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
+        # """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
     ]
     expected_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",

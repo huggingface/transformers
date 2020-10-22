@@ -76,6 +76,7 @@ class ModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
+            static_position_embeddings=True,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -355,3 +356,35 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
+
+
+from transformers.modeling_tf_bart import TFSinusoidalPositionalEmbedding
+
+
+@require_tf
+class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
+    desired_weights = [
+        [0, 0, 0, 0, 0],
+        [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
+        [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
+    ]
+
+    def test_positional_emb_cache_logic(self):
+        pad = 1
+        input_ids = _long_tensor([[4, 10]])
+        emb1 = TFSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6, padding_idx=pad)
+        no_cache = emb1(input_ids, use_cache=False)
+        yes_cache = emb1(input_ids, use_cache=True)
+        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
+        import numpy as np
+
+        np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
+
+    def test_positional_emb_weights_against_marian(self):
+        pad = 1
+        emb1 = TFSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=pad)
+        emb1.build(None)
+        weights = emb1.embeddings.numpy()
+        for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
+            for j in range(5):
+                self.assertAlmostEqual(expected_weight[j], actual_weight[j], places=3)

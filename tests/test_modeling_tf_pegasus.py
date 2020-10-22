@@ -18,11 +18,14 @@ import unittest
 
 from transformers import AutoTokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow
-from .test_modeling_pegasus import PGE_ARTICLE, XSUM_ENTRY_LONGER, EXPECTED_SUMMARIES
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+
+from .test_modeling_pegasus import EXPECTED_SUMMARIES, PGE_ARTICLE, XSUM_ENTRY_LONGER
+
 
 if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM
+
 
 @require_tf
 @require_sentencepiece
@@ -50,7 +53,10 @@ class TFPegasusIntegrationTests(unittest.TestCase):
             src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
         )
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, use_cache=True,
+            model_inputs.input_ids,
+            attention_mask=model_inputs.attention_mask,
+            num_beams=2,
+            use_cache=True,
         )
         generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)
         return generated_words

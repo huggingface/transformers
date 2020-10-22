@@ -348,13 +348,13 @@ class BartEncoder(nn.Module):
         # check attention mask and invert
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)
-        print_tensor('weight', self.embed_tokens.weight)
-        print_tensor('input_ids', input_ids)
-        print(f'embed_scale: {self.embed_scale}')
+        print_tensor("weight", self.embed_tokens.weight)
+        print_tensor("input_ids", input_ids)
+        print(f"embed_scale: {self.embed_scale}")
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        print_tensor('embedded_tok', inputs_embeds)
+        print_tensor("embedded_tok", inputs_embeds)
         embed_pos = self.embed_positions(input_ids)
-        print_tensor('embedded_pos', embed_pos)
+        print_tensor("embedded_pos", embed_pos)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -364,7 +364,8 @@ class BartEncoder(nn.Module):
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for encoder_layer in self.layers:
+        for i, encoder_layer in enumerate(self.layers):
+            print_tensor(f"encoder layer {i} input", x)
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -389,7 +390,7 @@ class BartEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
-        print_tensor('encoder_out', x)
+        print_tensor("encoder_out", x)
         return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
@@ -483,6 +484,7 @@ class DecoderLayer(nn.Module):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
+
 def print_tensor(msg, t):  # DELEMETME
     # assert t.shape
     if t is None:
@@ -498,6 +500,7 @@ def print_tensor(msg, t):  # DELEMETME
     elif ndim == 4:
         slice = t[:3, :3, :3, :3]
     print(f"{msg}: {slice}")
+
 
 class BartDecoder(nn.Module):
     """
@@ -592,17 +595,17 @@ class BartDecoder(nn.Module):
             positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
-        print_tensor('input_ids', input_ids)
-        print(f'embed_scale: {self.embed_scale}')
-        print_tensor('embedded_tok', x)
-        print_tensor('embedded_pos', positions)
+        print_tensor("input_ids", input_ids)
+        print(f"embed_scale: {self.embed_scale}")
+        print_tensor("embedded_tok", x)
+        print_tensor("embedded_pos", positions)
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x)
             x += positions
         else:
             x += positions
             x = self.layernorm_embedding(x)
-        print_tensor('x1', x)
+        print_tensor("x1", x)
 
         x = F.dropout(x, p=self.dropout, training=self.training)
 
@@ -649,7 +652,7 @@ class BartDecoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
-        print_tensor(f'decoder output', x)
+        print_tensor(f"decoder output", x)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         next_cache = next_decoder_cache if use_cache else None
@@ -1114,6 +1117,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
     def prepare_inputs_for_generation(
         self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
     ):
+        import ipdb
+
+        ipdb.set_trace()
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
@@ -1365,7 +1371,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out[:, 0:dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
+        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
         out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         out.detach_()
         out.requires_grad = False
