@@ -17,9 +17,9 @@
 import os
 import unittest
 
+from transformers import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow
-from transformers.tokenization_reformer import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -27,6 +27,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
+@require_sentencepiece
+@require_tokenizers
 class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = ReformerTokenizer

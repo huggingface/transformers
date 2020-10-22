@@ -20,6 +20,7 @@ import os
 import pickle
 import sys
 import uuid
+import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
@@ -115,7 +116,7 @@ def get_framework(model):
     return framework
 
 
-def get_default_model(targeted_task: Dict, framework: Optional[str]) -> str:
+def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
@@ -126,6 +127,9 @@ def get_default_model(targeted_task: Dict, framework: Optional[str]) -> str:
         framework (:obj:`str`, None)
            "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
 
+        task_options (:obj:`Any`, None)
+           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for translation task.
+
     Returns
 
         :obj:`str` The model string representing the default model for this pipeline
@@ -135,7 +139,20 @@ def get_default_model(targeted_task: Dict, framework: Optional[str]) -> str:
     elif is_tf_available() and not is_torch_available():
         framework = "tf"
 
-    default_models = targeted_task["default"]["model"]
+    defaults = targeted_task["default"]
+    if task_options:
+        if task_options not in defaults:
+            raise ValueError("The task does not provide any default models for options {}".format(task_options))
+        default_models = defaults[task_options]["model"]
+    elif "model" in defaults:
+        default_models = targeted_task["default"]["model"]
+    else:
+        # XXX This error message needs to be updated to be more generic if more tasks are going to become
+        # parametrized
+        raise ValueError(
+            'The task defaults can\'t be correctly selectionned. You probably meant "translation_XX_to_YY"'
+        )
+
     if framework is None:
         framework = "pt"
 
@@ -781,7 +798,7 @@ class TextGenerationPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
     objective, which includes the uni-directional models in the library (e.g. gpt2).
     See the list of available community models on
-    `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -1180,7 +1197,7 @@ class FillMaskPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
     which includes the bi-directional models in the library.
     See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=lm-head>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=masked-lm>`__.
 
     .. note::
 
@@ -1945,11 +1962,6 @@ class SummarizationPipeline(Pipeline):
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
         assert len(documents) > 0, "Please provide a document to summarize"
 
-        if self.framework == "tf" and "BartForConditionalGeneration" in self.model.__class__.__name__:
-            raise NotImplementedError(
-                "Tensorflow is not yet supported for Bart. Please consider using T5, e.g. `t5-base`"
-            )
-
         prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
 
         if isinstance(documents[0], list):
@@ -2587,23 +2599,16 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
     },
-    "translation_en_to_fr": {
+    # This task is a special case as it's parametrized by SRC, TGT languages.
+    "translation": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
-    },
-    "translation_en_to_de": {
-        "impl": TranslationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
-    },
-    "translation_en_to_ro": {
-        "impl": TranslationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
+        "default": {
+            ("en", "fr"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
+            ("en", "de"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
+            ("en", "ro"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
+        },
     },
     "text2text-generation": {
         "impl": Text2TextGenerationPipeline,
@@ -2634,6 +2639,49 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
 }
+
+
+def check_task(task: str) -> Tuple[Dict, Any]:
+    """
+    Checks an incoming task string, to validate it's correct and return the
+    default Pipeline and Model classes, and default models if they exist.
+
+    Args:
+        task (:obj:`str`):
+            The task defining which pipeline will be returned. Currently accepted tasks are:
+
+            - :obj:`"feature-extraction"`
+            - :obj:`"sentiment-analysis"`
+            - :obj:`"ner"`
+            - :obj:`"question-answering"`
+            - :obj:`"fill-mask"`
+            - :obj:`"summarization"`
+            - :obj:`"translation_xx_to_yy"`
+            - :obj:`"translation"`
+            - :obj:`"text-generation"`
+            - :obj:`"conversational"`
+
+    Returns:
+        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None))
+            The actual dictionnary required to initialize the pipeline and some
+            extra task options for parametrized tasks like "translation_XX_to_YY"
+
+
+    """
+    if task in SUPPORTED_TASKS:
+        targeted_task = SUPPORTED_TASKS[task]
+        return targeted_task, None
+
+    if task.startswith("translation"):
+        tokens = task.split("_")
+        if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
+            targeted_task = SUPPORTED_TASKS["translation"]
+            return targeted_task, (tokens[1], tokens[3])
+        raise KeyError("Invalid translation task {}, use 'translation_XX_to_YY' format".format(task))
+
+    raise KeyError(
+        "Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys()) + ["translation_XX_to_YY"])
+    )
 
 
 def pipeline(
@@ -2714,15 +2762,12 @@ def pipeline(
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
     # Retrieve the task
-    if task not in SUPPORTED_TASKS:
-        raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
-
-    targeted_task = SUPPORTED_TASKS[task]
+    targeted_task, task_options = check_task(task)
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         # At that point framework might still be undetermined
-        model = get_default_model(targeted_task, framework)
+        model = get_default_model(targeted_task, framework, task_options)
 
     framework = framework or get_framework(model)
 
@@ -2781,5 +2826,16 @@ def pipeline(
                 "Trying to load the model with Tensorflow."
             )
         model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        if task == "translation" and model.config.task_specific_params:
+            for key in model.config.task_specific_params:
+                if key.startswith("translation"):
+                    task = key
+                    warnings.warn(
+                        '"translation" task was used, instead of "translation_XX_to_YY", defaulting to "{}"'.format(
+                            task
+                        ),
+                        UserWarning,
+                    )
+                    break
 
     return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
