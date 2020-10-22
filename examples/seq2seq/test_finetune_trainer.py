@@ -87,8 +87,13 @@ class TestFinetuneTrainer(TestCasePlus):
 
         n_gpu = torch.cuda.device_count()
         if n_gpu > 1:
+
             path = Path(__file__).resolve()
             cur_path = path.parents[0]
+
+            print("\nRunning: ", " ".join(cmd))
+
+            path = Path(__file__).resolve()
             examples_path = path.parents[1]
             src_path = f"{path.parents[2]}/src"
             env = os.environ.copy()
