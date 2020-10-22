@@ -6,11 +6,15 @@ import sys
 from pathlib import Path
 
 import pytest
-import torch
 
-from transformers.testing_utils import TestCasePlus, require_torch_multigpu, execute_async_std
+from transformers import is_torch_available
+from transformers.testing_utils import TestCasePlus, execute_async_std, require_torch_multigpu
 
 from .utils import load_json
+
+
+if is_torch_available():
+    import torch
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -104,6 +108,7 @@ def make_test_data_dir(tmp_dir):
         _dump_articles(os.path.join(tmp_dir, f"{split}.source"), ARTICLES)
         _dump_articles(os.path.join(tmp_dir, f"{split}.target"), SUMMARIES)
     return tmp_dir
+
 
 class TestSummarizationDistillerMultiGPU(TestCasePlus):
     @classmethod
