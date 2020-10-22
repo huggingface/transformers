@@ -41,6 +41,10 @@ class PretrainedConfig(object):
     Class attributes (overridden by derived classes)
         - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
           recreate the correct object in :class:`~transformers.AutoConfig`.
+        - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple
+          sub-configs. In this case the config has to be initialized from two or more configs of
+          type :class:`~transformers.PretrainedConfig` like: :class:`~transformers.EncoderDecoderConfig` or
+          :class:`~RagConfig`.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
@@ -145,6 +149,7 @@ class PretrainedConfig(object):
           use BFloat16 scalars (only used by some TensorFlow models).
     """
     model_type: str = ""
+    is_composition: bool = False
 
     def __init__(self, **kwargs):
         # Attributes with defaults
@@ -476,11 +481,18 @@ class PretrainedConfig(object):
         # get the default config dict
         default_config_dict = PretrainedConfig().to_dict()
 
+        # get class specific config dict
+        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+
         serializable_config_dict = {}
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if key not in default_config_dict or value != default_config_dict[key]:
+            if (
+                key not in default_config_dict
+                or value != default_config_dict[key]
+                or (key in class_config_dict and value != class_config_dict[key])
+            ):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
