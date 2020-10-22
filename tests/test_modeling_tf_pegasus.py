@@ -79,6 +79,7 @@ class PegasusModelTester(ModelTester):
         static_position_embeddings=True,
     )
     hidden_act = "relu"
+    config_cls = PegasusConfig
 
 
 @require_tf
@@ -86,6 +87,8 @@ class TestTFPegasusCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFPegasusForConditionalGeneration,)
     all_generative_model_classes = (TFPegasusForConditionalGeneration,)
     model_tester_cls = PegasusModelTester
+    is_encoder_decoder = True
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = self.model_tester_cls(self)

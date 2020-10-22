@@ -39,6 +39,7 @@ if is_tf_available():
 class ModelTester:
     kwargs = {}
     hidden_act = "gelu"
+    config_cls = BartConfig
 
     def __init__(self, parent):
         self.parent = parent
@@ -58,7 +59,6 @@ class ModelTester:
         self.eos_token_ids = [2]
         self.pad_token_id = 1
         self.bos_token_id = 0
-        # torch.manual_seed(0)
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
@@ -66,7 +66,7 @@ class ModelTester:
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
         input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size + 1)
 
-        config = BartConfig(
+        config = self.config_cls(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,

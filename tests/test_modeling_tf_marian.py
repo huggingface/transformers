@@ -34,6 +34,7 @@ if is_tf_available():
 
 class MarianModelTester(ModelTester):
     kwargs = dict(static_position_embeddings=True, add_bias_logits=True)
+    config_cls = MarianConfig
 
 
 @require_tf
@@ -41,6 +42,8 @@ class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFMarianMTModel,)
     all_generative_model_classes = (TFMarianMTModel,)
     model_tester_cls = MarianModelTester
+    is_encoder_decoder = True
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = self.model_tester_cls(self)
@@ -58,7 +61,6 @@ class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
         pass
 
     def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
         pass
 
     def test_compile_tf_model(self):

@@ -74,6 +74,7 @@ class BlenderbotModelTester(ModelTester):
         do_blenderbot_90_layernorm=True,
         normalize_embeddings=True,
     )
+    config_cls = BlenderbotConfig
 
 
 @require_tf
@@ -81,6 +82,8 @@ class TestTFBlenderbotCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlenderbotForConditionalGeneration,)
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,)
     model_tester_cls = BlenderbotModelTester
+    is_encoder_decoder = True
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = self.model_tester_cls(self)

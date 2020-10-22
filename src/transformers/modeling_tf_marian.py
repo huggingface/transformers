@@ -32,6 +32,15 @@ logger = logging.get_logger(__name__)
 
 @add_start_docstrings("Marian model for machine translation", START_DOCSTRING)
 class TFMarianMTModel(TFBartForConditionalGeneration):
+    authorized_missing_keys = [
+        r"final_logits_bias",
+        r"encoder\.version",
+        r"decoder\.version",
+        "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.weight",
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
     config_class = MarianConfig
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):

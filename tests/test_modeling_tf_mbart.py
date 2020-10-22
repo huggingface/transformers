@@ -72,15 +72,18 @@ class TestMBartEnRO(unittest.TestCase):
         self._assert_generated_batch_equal_expected()
 
 
-class MbartModelTester(ModelTester):
+class MBartModelTester(ModelTester):
     kwargs = dict(normalize_before=True, add_final_layer_norm=True)
+    config_cls = MBartConfig
 
 
 @require_tf
 class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFMBartForConditionalGeneration,)
     all_generative_model_classes = (TFMBartForConditionalGeneration,)
-    model_tester_cls = MbartModelTester
+    model_tester_cls = MBartModelTester
+    is_encoder_decoder = True
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = self.model_tester_cls(self)
