@@ -34,10 +34,13 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES"}
+ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
+
 try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
     USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
-    if USE_TORCH in ("1", "ON", "YES", "AUTO") and USE_TF not in ("1", "ON", "YES"):
+    if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
         import torch
 
         _torch_available = True  # pylint: disable=invalid-name
@@ -52,7 +55,7 @@ try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
     USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 
-    if USE_TF in ("1", "ON", "YES", "AUTO") and USE_TORCH not in ("1", "ON", "YES"):
+    if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
         import tensorflow as tf
 
         assert hasattr(tf, "__version__") and int(tf.__version__[0]) >= 2
@@ -63,6 +66,22 @@ try:
         _tf_available = False
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
+
+
+try:
+    USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
+
+    if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
+        import flax
+        import jax
+
+        logger.info("JAX version {}, Flax: available".format(jax.__version__))
+        logger.info("Flax available: {}".format(flax))
+        _flax_available = True
+    else:
+        _flax_available = False
+except ImportError:
+    _flax_available = False  # pylint: disable=invalid-name
 
 
 try:
@@ -213,6 +232,10 @@ def is_tf_available():
     return _tf_available
 
 
+def is_flax_available():
+    return _flax_available
+
+
 def is_torch_tpu_available():
     return _torch_tpu_available
 
@@ -333,6 +356,12 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 """
 
 
+FLAX_IMPORT_ERROR = """
+{0} requires the FLAX library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://github.com/google/flax and follow the ones that match your enviromnent.
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -361,6 +390,12 @@ def requires_tf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_tf_available():
         raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
+
+
+def requires_flax(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_flax_available():
+        raise ImportError(FLAX_IMPORT_ERROR.format(name))
 
 
 def requires_tokenizers(obj):

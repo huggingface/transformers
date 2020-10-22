@@ -33,6 +33,7 @@ from .file_utils import (
     add_end_docstrings,
     cached_path,
     hf_bucket_url,
+    is_flax_available,
     is_remote_url,
     is_tf_available,
     is_tokenizers_available,
@@ -47,6 +48,8 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+if is_flax_available():
+    import jax.numpy as jnp
 
 if is_tokenizers_available():
     from tokenizers import AddedToken
@@ -143,6 +146,7 @@ class TensorType(ExplicitEnum):
     PYTORCH = "pt"
     TENSORFLOW = "tf"
     NUMPY = "np"
+    JAX = "jax"
 
 
 class CharSpan(NamedTuple):
@@ -576,18 +580,27 @@ class BatchEncoding(UserDict):
             tensor_type = TensorType(tensor_type)
 
         # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW and is_tf_available():
-            as_tensor = tf.constant
-        elif tensor_type == TensorType.PYTORCH and is_torch_available():
-            as_tensor = torch.tensor
-        elif tensor_type == TensorType.NUMPY:
-            as_tensor = np.asarray
-        else:
-            raise ImportError(
-                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    tensor_type
+        if tensor_type == TensorType.TENSORFLOW:
+            if not is_tf_available():
+                raise ImportError(
+                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
-            )
+            as_tensor = tf.constant
+        elif tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            as_tensor = torch.tensor
+        elif tensor_type == TensorType.JAX:
+            if not is_flax_available():
+                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+            as_tensor = jnp.array
+        else:
+            as_tensor = np.asarray
+        # (mfuntowicz: This code is unreachable)
+        # else:
+        #     raise ImportError(
+        #         "Unable to convert output to tensors format {}".format(tensor_type)
+        #     )
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -1227,7 +1240,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
               :obj:`return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
-            - **special_tokens_mask** -- List of 0s and 1s, with 0 specifying added special tokens and 1 specifying
+            - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
               regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
             - **length** -- The length of the inputs (when :obj:`return_length=True`)
 """

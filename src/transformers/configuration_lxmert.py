@@ -15,12 +15,11 @@
 """ LXMERT model configuration """
 
 
-import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "unc-nlp/lxmert-base-uncased": "",

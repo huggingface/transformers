@@ -43,6 +43,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    ProphetNetConfig,
     RagConfig,
     ReformerConfig,
     RetriBertConfig,
@@ -51,6 +52,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -71,12 +73,14 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_fsmt import FSMTTokenizer
 from .tokenization_funnel import FunnelTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_herbert import HerbertTokenizer
 from .tokenization_layoutlm import LayoutLMTokenizer
 from .tokenization_longformer import LongformerTokenizer
 from .tokenization_lxmert import LxmertTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_phobert import PhobertTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 from .tokenization_rag import RagTokenizer
 from .tokenization_retribert import RetriBertTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -95,6 +99,7 @@ if is_sentencepiece_available():
     from .tokenization_pegasus import PegasusTokenizer
     from .tokenization_reformer import ReformerTokenizer
     from .tokenization_t5 import T5Tokenizer
+    from .tokenization_xlm_prophetnet import XLMProphetNetTokenizer
     from .tokenization_xlm_roberta import XLMRobertaTokenizer
     from .tokenization_xlnet import XLNetTokenizer
 else:
@@ -119,6 +124,7 @@ if is_tokenizers_available():
     from .tokenization_electra_fast import ElectraTokenizerFast
     from .tokenization_funnel_fast import FunnelTokenizerFast
     from .tokenization_gpt2_fast import GPT2TokenizerFast
+    from .tokenization_herbert_fast import HerbertTokenizerFast
     from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
     from .tokenization_longformer_fast import LongformerTokenizerFast
     from .tokenization_lxmert_fast import LxmertTokenizerFast
@@ -143,6 +149,7 @@ else:
     ElectraTokenizerFast = None
     FunnelTokenizerFast = None
     GPT2TokenizerFast = None
+    HerbertTokenizerFast = None
     LayoutLMTokenizerFast = None
     LongformerTokenizerFast = None
     LxmertTokenizerFast = None
@@ -187,6 +194,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
+        (BertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -199,6 +207,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
         (DebertaConfig, (DebertaTokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
+        (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
+        (ProphetNetConfig, (ProphetNetTokenizer, None)),
     ]
 )
 

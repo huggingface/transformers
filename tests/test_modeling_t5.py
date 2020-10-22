@@ -43,7 +43,6 @@ class T5ModelTester:
         encoder_seq_length=7,
         decoder_seq_length=9,
         # For common tests
-        seq_length=7,
         is_training=True,
         use_attention_mask=True,
         use_labels=True,
