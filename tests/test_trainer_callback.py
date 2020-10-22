@@ -125,7 +125,7 @@ class TrainerCallbackTest(unittest.TestCase):
             expected_events.append("on_epoch_end")
             if trainer.args.evaluation_strategy == EvaluationStrategy.EPOCH:
                 expected_events += evaluation_events.copy()
-        expected_events.append("on_train_end")
+        expected_events += ["on_log", "on_train_end"]
         return expected_events
 
     def test_init_callback(self):
