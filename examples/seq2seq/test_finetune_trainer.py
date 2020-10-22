@@ -93,7 +93,7 @@ class TestFinetuneTrainer(TestCasePlus):
             src_path = f"{path.parents[2]}/src"
             env = os.environ.copy()
             env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
-            
+
             distributed_args = (
                 f"-m torch.distributed.launch --nproc_per_node={n_gpu} {cur_path}/finetune_trainer.py".split()
             )

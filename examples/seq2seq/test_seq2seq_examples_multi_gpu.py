@@ -163,7 +163,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
         src_path = f"{path.parents[2]}/src"
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
-        
+
         cli_args = [x for x in (convert(k, v) for k, v in args_d.items()) if len(x)]
         cmd = [sys.executable, f"{cur_path}/distillation.py"] + cli_args
 
