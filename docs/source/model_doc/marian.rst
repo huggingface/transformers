@@ -132,4 +132,4 @@ MarianMTModel
 TFMarianMTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MarianMTModel
+.. autoclass:: transformers.TFMarianMTModel

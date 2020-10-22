@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import tempfile
 import unittest
 
 from transformers import AutoTokenizer, MarianTokenizer, TranslationPipeline, is_tf_available
@@ -23,7 +23,74 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 if is_tf_available():
 
-    from transformers import TFAutoModelForSeq2SeqLM, TFMarianMTModel
+    import tensorflow as tf
+
+    from transformers import MarianConfig, TFAutoModelForSeq2SeqLM, TFMarianMTModel
+
+    from .test_configuration_common import ConfigTester
+    from .test_modeling_tf_bart import ModelTester
+    from .test_modeling_tf_common import TFModelTesterMixin
+
+
+class MarianModelTester(ModelTester):
+    kwargs = dict(static_position_embeddings=True, add_bias_logits=True)
+
+
+@require_tf
+class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFMarianMTModel,)
+    all_generative_model_classes = (TFMarianMTModel,)
+    model_tester_cls = MarianModelTester
+
+    def setUp(self):
+        self.model_tester = self.model_tester_cls(self)
+        self.config_tester = ConfigTester(self, config_class=MarianConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_inputs_embeds(self):
+        # inputs_embeds not supported
+        pass
+
+    def test_saved_model_with_hidden_states_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
+    def test_saved_model_with_attentions_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
+    def test_compile_tf_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+
+        model_class = self.all_generative_model_classes[0]
+        input_ids = {
+            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
+            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+        }
+
+        # Prepare our model
+        model = model_class(config)
+        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+        # Let's load it from the disk to be sure we can use pretrained weights
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname)
+
+        outputs_dict = model(input_ids)
+        hidden_states = outputs_dict[0]
+
+        # Add a dense layer on top to test integration with other keras modules
+        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+
+        # Compile extended model
+        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
+        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
 
 class AbstractMarianIntegrationTest(unittest.TestCase):

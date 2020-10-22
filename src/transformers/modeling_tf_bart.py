@@ -869,7 +869,6 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
         else:
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
-        print(f"positions: {positions}")
         return super().call(positions)
 
 

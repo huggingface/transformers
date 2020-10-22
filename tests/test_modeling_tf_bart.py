@@ -37,6 +37,9 @@ if is_tf_available():
 
 @require_tf
 class ModelTester:
+    kwargs = {}
+    hidden_act = "gelu"
+
     def __init__(self, parent):
         self.parent = parent
         self.batch_size = 13
@@ -48,7 +51,7 @@ class ModelTester:
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
-        self.hidden_act = "gelu"
+
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
         self.max_position_embeddings = 20
@@ -79,6 +82,7 @@ class ModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
+            **self.kwargs,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -104,9 +108,10 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    model_tester_cls = ModelTester
 
     def setUp(self):
-        self.model_tester = ModelTester(self)
+        self.model_tester = self.model_tester_cls(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
@@ -116,6 +121,14 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         # inputs_embeds not supported
         pass
 
+    def test_saved_model_with_hidden_states_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
+    def test_saved_model_with_attentions_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -123,7 +136,7 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
-        model_class = TFBartForConditionalGeneration
+        model_class = self.all_generative_model_classes[0]
         input_ids = {
             "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
             "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
@@ -146,14 +159,6 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         # Compile extended model
         extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
 
 
 @require_tf
