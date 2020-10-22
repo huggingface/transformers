@@ -129,7 +129,7 @@ extras["flax"] = to_list("""
     jaxlib==0.1.55
 """)
 if os.name == "nt":  # windows
-    extras.["flax"] = [] # jax is not supported on windows
+    extras["flax"] = [] # jax is not supported on windows
 
 extras["onnxruntime"] = to_list("""
     onnxruntime>=1.4.0
