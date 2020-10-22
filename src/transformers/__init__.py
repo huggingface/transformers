@@ -544,7 +544,6 @@ if is_torch_available():
         T5PreTrainedModel,
         load_tf_weights_in_t5,
     )
-    from .modeling_tf_marian import TFMarianMTModel
     from .modeling_transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         AdaptiveEmbedding,
@@ -752,6 +751,7 @@ if is_tf_available():
         TFLxmertPreTrainedModel,
         TFLxmertVisualFeatureEncoder,
     )
+    from .modeling_tf_marian import TFMarianMTModel
     from .modeling_tf_mbart import TFMBartForConditionalGeneration
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

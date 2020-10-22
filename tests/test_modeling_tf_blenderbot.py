@@ -16,9 +16,9 @@
 
 import unittest
 
-from transformers import AutoTokenizer, BlenderbotSmallTokenizer, is_tf_available
+from transformers import BlenderbotSmallTokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 
 @require_tf

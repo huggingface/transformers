@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
+from transformers import AutoTokenizer, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
@@ -26,30 +26,7 @@ if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM, TFMarianMTModel
 
 
-@require_tf
-@require_sentencepiece
-@require_tokenizers
-class MarianIntegrationTest(unittest.TestCase):
-    src = "en"
-    tgt = "de"
-    src_text = [
-        "I am a small frog.",
-        "Now I can forget the 100 words of german that I know.",
-        "Tom asked his teacher for advice.",
-        "That's how I would do it.",
-        "Tom really admired Mary's courage.",
-        "Turn around and close your eyes.",
-    ]
-    expected_text = [
-        "Ich bin ein kleiner Frosch.",
-        "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
-        "Tom bat seinen Lehrer um Rat.",
-        "So würde ich das machen.",
-        "Tom bewunderte Marias Mut wirklich.",
-        "Drehen Sie sich um und schließen Sie die Augen.",
-    ]
-    # ^^ actual C++ output differs slightly: (1) des Deutschen removed, (2) ""-> "O", (3) tun -> machen
-
+class AbstractMarianIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
@@ -88,73 +65,10 @@ class MarianIntegrationTest(unittest.TestCase):
         return generated_words
 
 
+@require_tf
 @require_sentencepiece
 @require_tokenizers
-class TestMarian_EN_FR(MarianIntegrationTest):
-    src = "en"
-    tgt = "fr"
-    src_text = [
-        "I am a small frog.",
-        "Now I can forget the 100 words of german that I know.",
-    ]
-    expected_text = [
-        "Je suis une petite grenouille.",
-        "Maintenant, je peux oublier les 100 mots d'allemand que je connais.",
-    ]
-
-    @slow
-    def test_batch_generation_en_fr(self):
-        self._assert_generated_batch_equal_expected()
-
-
-@require_sentencepiece
-@require_tokenizers
-class TestMarian_FR_EN(MarianIntegrationTest):
-    src = "fr"
-    tgt = "en"
-    src_text = [
-        "Donnez moi le micro.",
-        "Tom et Mary étaient assis à une table.",  # Accents
-    ]
-    expected_text = [
-        "Give me the microphone.",
-        "Tom and Mary were sitting at a table.",
-    ]
-
-    @slow
-    def test_batch_generation_fr_en(self):
-        self._assert_generated_batch_equal_expected()
-
-
-@require_sentencepiece
-@require_tokenizers
-class TestMarian_RU_FR(MarianIntegrationTest):
-    src = "ru"
-    tgt = "fr"
-    src_text = ["Он показал мне рукопись своей новой пьесы."]
-    expected_text = ["Il m'a montré le manuscrit de sa nouvelle pièce."]
-
-    @slow
-    def test_batch_generation_ru_fr(self):
-        self._assert_generated_batch_equal_expected()
-
-
-@require_sentencepiece
-@require_tokenizers
-class TestMarian_MT_EN(MarianIntegrationTest):
-    src = "mt"
-    tgt = "en"
-    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
-    expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
-
-    @slow
-    def test_batch_generation_mt_en(self):
-        self._assert_generated_batch_equal_expected()
-
-
-@require_sentencepiece
-@require_tokenizers
-class TestMarian_en_zh(MarianIntegrationTest):
+class TestMarian_en_zh(AbstractMarianIntegrationTest):
     src = "en"
     tgt = "zh"
     src_text = ["My name is Wolfgang and I live in Berlin"]
@@ -165,9 +79,10 @@ class TestMarian_en_zh(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+@require_tf
 @require_sentencepiece
 @require_tokenizers
-class TestMarian_en_ROMANCE(MarianIntegrationTest):
+class TestMarian_en_ROMANCE(AbstractMarianIntegrationTest):
     """Multilingual on target side."""
 
     src = "en"
@@ -183,7 +98,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         "Tiene dos años más que yo.",
     ]
 
-    # @slow
+    @slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
