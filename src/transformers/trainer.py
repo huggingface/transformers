@@ -832,6 +832,10 @@ class Trainer:
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
+        if self._total_flos is not None:
+            self.store_flos()
+            self.log({"total_flos": self.state.total_flos})
+
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
@@ -1015,9 +1019,6 @@ class Trainer:
             return self._log(logs)
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
-        if self._total_flos is not None:
-            self.store_flos()
-            logs["total_flos"] = self.state.total_flos
 
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
