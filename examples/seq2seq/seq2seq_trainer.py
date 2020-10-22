@@ -55,6 +55,11 @@ class Seq2SeqTrainer(Trainer):
         self.data_args = data_args
         self.vocab_size = self.config.tgt_vocab_size if isinstance(self.config, FSMTConfig) else self.config.vocab_size
 
+        if self.args.label_smoothing != 0 or (self.data_args is not None and self.data_args.ignore_pad_token_for_loss):
+            assert (
+                self.config.pad_token_id is not None
+            ), "Make sure that `config.pad_token_id` is correcly defined when ignoring `pad_token` for loss calculation or doing label smoothing."
+
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
         Setup the optimizer and the learning rate scheduler.
@@ -125,15 +130,11 @@ class Seq2SeqTrainer(Trainer):
         if self.args.label_smoothing == 0:
             # set all ids to -100 to be ignored
             if self.data_args is not None and self.data_args.ignore_pad_token_for_loss:
-                assert self.config.pad_token_id >= 0, "Make sure that `config.pad_token_id` is correcly defined"
                 inputs["labels"][inputs["labels"] == self.config.pad_token_id] = -100
 
             # compute usual loss via models
             loss, logits = model(**inputs)[:2]
         else:
-            assert (
-                self.config.pad_token_id >= 0
-            ), "Label smoothing is currently only supported if `config.pad_token_id` is defined."
             # compute label smoothed loss
             inputs = copy.deepcopy(inputs)
             labels = inputs.pop("labels")
