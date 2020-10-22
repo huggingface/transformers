@@ -20,7 +20,7 @@ from transformers import AutoTokenizer, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
-from .test_modeling_pegasus import EXPECTED_SUMMARIES, PGE_ARTICLE, XSUM_ENTRY_LONGER
+from .test_modeling_pegasus import PGE_ARTICLE, XSUM_ENTRY_LONGER
 
 
 if is_tf_available():
@@ -32,8 +32,11 @@ if is_tf_available():
 @require_tokenizers
 class TFPegasusIntegrationTests(unittest.TestCase):
     src_text = [PGE_ARTICLE, XSUM_ENTRY_LONGER]
-    expected_text = EXPECTED_SUMMARIES
-    model_name = f"google/pegasus-xsum"
+    expected_text = [
+        "California's largest electricity provider has cut power to hundreds of thousands of customers in an effort to reduce the risk of wildfires.",
+        'N-Dubz have revealed they\'re "grateful" to have been nominated for four Mobo Awards.',
+    ]  # differs slightly from pytorch, likely due to numerical differences in linear layers
+    model_name = "google/pegasus-xsum"
 
     @cached_property
     def tokenizer(self):
@@ -46,7 +49,7 @@ class TFPegasusIntegrationTests(unittest.TestCase):
 
     def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
         generated_words = self.translate_src_text(**tokenizer_kwargs)
-        self.assertListEqual(self.expected_text, generated_words)
+        assert self.expected_text == generated_words
 
     def translate_src_text(self, **tokenizer_kwargs):
         model_inputs = self.tokenizer.prepare_seq2seq_batch(

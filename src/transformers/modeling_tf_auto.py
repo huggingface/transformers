@@ -67,6 +67,7 @@ from .modeling_tf_bert import (
     TFBertLMHeadModel,
     TFBertModel,
 )
+from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
 from .modeling_tf_camembert import (
     TFCamembertForMaskedLM,
     TFCamembertForMultipleChoice,
@@ -113,6 +114,7 @@ from .modeling_tf_funnel import (
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
 from .modeling_tf_marian import TFMarianMTModel
+from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -123,6 +125,7 @@ from .modeling_tf_mobilebert import (
     TFMobileBertModel,
 )
 from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -264,12 +267,6 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, TFFunnelForMaskedLM),
     ]
 )
-from .configuration_blenderbot import BlenderbotConfig
-from .configuration_mbart import MBartConfig
-from .configuration_pegasus import PegasusConfig
-from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
-from .modeling_tf_mbart import TFMBartForConditionalGeneration
-from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
 
 
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
@@ -278,7 +275,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, TFMarianMTModel),
         (MBartConfig, TFMBartForConditionalGeneration),
         (PegasusConfig, TFPegasusForConditionalGeneration),
-        (BlenderbotConfig, TFMBartForConditionalGeneration),
+        (BlenderbotConfig, TFBlenderbotForConditionalGeneration),
         (BartConfig, TFBartForConditionalGeneration),
     ]
 )

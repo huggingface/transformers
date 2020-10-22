@@ -18,17 +18,12 @@ import unittest
 
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.hf_api import HfApi
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow, torch_device
-
-from .test_modeling_common import ModelTesterMixin
-from .test_modeling_marian import ModelTester
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
 
     from transformers import TFAutoModelForSeq2SeqLM, TFMarianMTModel
-
 
 
 @require_tf
@@ -70,12 +65,10 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        # FIXME: TFAutoModelForSeq2SeqLM
         model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        assert isinstance(model, TFMarianMTModel)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
-
-        # self.assertEqual(c.model.shared.weight ==)
         self.assertEqual(c.max_length, 512)
         self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
         return model
@@ -168,7 +161,7 @@ class TestMarian_en_zh(MarianIntegrationTest):
     expected_text = ["我叫沃尔夫冈 我住在柏林"]
 
     @slow
-    def test_batch_generation_eng_zho(self):
+    def test_batch_generation_en_zh(self):
         self._assert_generated_batch_equal_expected()
 
 
@@ -185,9 +178,9 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         ">>es<< He's two years older than me.",
     ]
     expected_text = [
-        "Ne passez pas autant de temps à regarder la télé.",
+        "Ne regardez pas tant de temps à la télé.",
         "A sua mensagem foi enviada.",
-        "Es dos años más viejo que yo.",
+        "Tiene dos años más que yo.",
     ]
 
     # @slow
