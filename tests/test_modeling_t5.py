@@ -592,6 +592,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
+
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertListEqual(
             expected_summaries,

@@ -119,7 +119,7 @@ class BeamSearchBase(BeamScorer):
             # Check if we are done so that we can save a pad step if all(done)
             self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(scores[batch_idx].max().item(), cur_len)
 
-            return next_beam_scores.view(-1), next_beam_tokens.view(-1), next_beam_indexes.view(-1)
+        return next_beam_scores.view(-1), next_beam_tokens.view(-1), next_beam_indexes.view(-1)
 
     def finalize(self, input_ids, scores, next_tokens, next_indexes, **kwargs):
         pad_token_id = kwargs.get("pad_token_id", None)

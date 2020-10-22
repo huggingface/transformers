@@ -70,6 +70,53 @@ class GenerationMixin:
         """
         return logits
 
+    def _prepare_encoder_decoder_kwargs(self, input_ids, model_kwargs):
+        # retrieve encoder hidden states
+        encoder = self.get_encoder()
+        encoder_kwargs = {
+            argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
+        }
+        model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
+        return model_kwargs
+
+    def _prepare_decoder_input_ids(self, input_ids, decoder_start_token_id=None, bos_token_id=None, **model_kwargs):
+
+        if "decoder_input_ids" in model_kwargs:
+            return model_kwargs["decoder_input_ids"]
+
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+        decoder_input_ids = (
+            torch.ones((input_ids.shape[0], 1), dtype=input_ids.dtype, device=input_ids.device)
+            * decoder_start_token_id
+        )
+        return decoder_input_ids
+
+    def _get_decoder_start_token_id(self, decoder_start_token_id, bos_token_id):
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "decoder_start_token_id")
+            and self.config.decoder.decoder_start_token_id is not None
+        ):
+            return self.config.decoder.decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "bos_token_id")
+            and self.config.decoder.bos_token_id is not None
+        ):
+            return self.config.decoder.bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
+
     @staticmethod
     def _reorder_cache(past: Tuple, beam_idx: torch.Tensor) -> Tuple[torch.Tensor]:
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
@@ -156,6 +203,7 @@ class GenerationMixin:
         )
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # TODO(PVP): check if the following ifs should stay here or whether they should be moved into a new function
         if pad_token_id is None and eos_token_id is not None:
@@ -170,27 +218,25 @@ class GenerationMixin:
             input_ids = torch.ones((1, 1), dtype=torch.long, device=next(self.parameters()).device) * pad_token_id
 
         if self.config.is_encoder_decoder:
-            encoder = self.get_encoder()
-            encoder_kwargs = {
-                argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
-            }
-            model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
-            batch_size = input_ids.shape[0]
+            # add encoder_outputs to model_kwargs
+            model_kwargs = self._prepare_encoder_decoder_kwargs(input_ids, model_kwargs)
 
-            if "decoder_input_ids" in model_kwargs:
-                input_ids = model_kwargs["decoder_input_ids"]
-            else:
-                decoder_start_token_id = self.get_decoder_start_token_id(bos_token_id)
-                input_ids = (
-                    torch.ones((batch_size, 1), dtype=input_ids.dtype, device=input_ids.device)
-                    * decoder_start_token_id
-                )
+            # set input_ids as decoder_input_ids
+            input_ids = self._prepare_decoder_input_ids(
+                input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id, **model_kwargs
+            )
+
+            if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
+                raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
 
         # determine generation model
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
         is_beam_gen_mode = (num_beams > 1) and do_sample is False
         is_beam_sample_gen_mode = (num_beams > 1) and do_sample is True
+
+        # set model_kwargs
+        model_kwargs["use_cache"] = use_cache
 
         # get distribution pre_processing samplers
         pre_processor = self.get_dist_pre_processor(
@@ -222,19 +268,20 @@ class GenerationMixin:
             dist_warper = self.get_dist_warpper(top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams)
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
-            input_ids = input_ids.repeat_interleave(num_return_sequences, dim=0)
+            batch_size = input_ids.shape[0]
+            expanded_return_idx = (
+                torch.arange(batch_size).view(-1, 1).repeat(1, num_return_sequences).view(-1).to(input_ids.device)
+            )
+            input_ids = input_ids.index_select(0, expanded_return_idx)
 
-            # interleave with `num_return_sequences`
             if "attention_mask" in model_kwargs:
-                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(
-                    num_return_sequences, dim=0
-                )
+                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].index_select(0, expanded_return_idx)
 
             if self.config.is_encoder_decoder:
                 assert "encoder_outputs" in model_kwargs
                 encoder_outputs = model_kwargs["encoder_outputs"]
-                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-                    num_return_sequences, dim=0
+                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
+                    0, expanded_return_idx
                 )
 
             # sample
@@ -264,16 +311,17 @@ class GenerationMixin:
             )
 
             # interleave with `num_beams`
-            input_ids = input_ids.repeat_interleave(num_beams, dim=0)
+            expanded_beam_idx = torch.arange(batch_size).view(-1, 1).repeat(1, num_beams).view(-1).to(input_ids.device)
+            input_ids = input_ids.index_select(0, expanded_beam_idx)
 
             if "attention_mask" in model_kwargs:
-                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(num_beams, dim=0)
+                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].index_select(0, expanded_beam_idx)
 
             if self.config.is_encoder_decoder:
                 assert "encoder_outputs" in model_kwargs
                 encoder_outputs = model_kwargs["encoder_outputs"]
-                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-                    num_beams, dim=0
+                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
+                    0, expanded_beam_idx
                 )
 
             return self.beam_search(
@@ -338,7 +386,9 @@ class GenerationMixin:
                 )
 
             # update model kwargs
-            model_kwargs = self.update_model_kwargs(outputs, model_kwargs)
+            model_kwargs = self.update_model_kwargs(
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
 
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
             if unfinished_sequences.max() == 0:
@@ -407,7 +457,9 @@ class GenerationMixin:
                 break
 
             # update model kwargs
-            model_kwargs = self.update_model_kwargs(outputs, model_kwargs)
+            model_kwargs = self.update_model_kwargs(
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
 
         return input_ids
 
@@ -430,17 +482,20 @@ class GenerationMixin:
         return sequence_lengths, unfinished_sequences
 
     @staticmethod
-    def update_model_kwargs(outputs, model_kwargs):
+    def update_model_kwargs(outputs, model_kwargs, is_encoder_decoder=False):
         # update past
-        model_kwargs["past"] = outputs.past_key_values if "past_key_values" in outputs else None
-        model_kwargs["past"] = outputs.mems if "mems" in outputs else None
+        if "past_key_values" in outputs:
+            model_kwargs["past"] = outputs.past_key_values
+        elif "mems" in outputs:
+            model_kwargs["past"] = outputs.mems
 
         # update attention mask
-        if "attention_mask" in model_kwargs:
-            attention_mask = model_kwargs["attention_mask"]
-            model_kwargs["attention_mask"] = torch.cat(
-                [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-            )
+        if not is_encoder_decoder:
+            if "attention_mask" in model_kwargs:
+                attention_mask = model_kwargs["attention_mask"]
+                model_kwargs["attention_mask"] = torch.cat(
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                )
 
         return model_kwargs
 
@@ -469,16 +524,6 @@ class GenerationMixin:
 
         assert num_beams * batch_size == batch_beam_size, "TODO ..."
 
-        if "attention_mask" in model_kwargs:
-            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(num_beams, dim=0)
-
-        if self.config.is_encoder_decoder:
-            assert "encoder_outputs" in model_kwargs
-            encoder_outputs = model_kwargs["encoder_outputs"]
-            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-                num_beams, dim=0
-            )
-
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
@@ -496,14 +541,17 @@ class GenerationMixin:
             )
 
             next_token_scores = pre_processor(input_ids, next_token_scores)
-
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+            # reshape for beam search
+            vocab_size = next_token_scores.shape[-1]
+            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
+
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
 
-            next_indices = next_tokens // self.config.vocab_size
-            next_tokens = next_tokens // self.config.vocab_size
+            next_indices = next_tokens // vocab_size
+            next_tokens = next_tokens % vocab_size
 
             # stateless
             beam_scores, beam_next_tokens, beam_idx = beam_scorer.update_beams(
@@ -518,7 +566,9 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
 
-            model_kwargs = self.update_model_kwargs(outputs, model_kwargs)
+            model_kwargs = self.update_model_kwargs(
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
