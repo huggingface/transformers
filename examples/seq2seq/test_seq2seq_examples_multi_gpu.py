@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from transformers import is_torch_available
-from transformers.testing_utils import TestCasePlus, execute_async_std, require_torch_multigpu
+from transformers.testing_utils import TestCasePlus, require_torch_multigpu
 
-from .utils import load_json
+from .utils import execute_async_std, load_json
 
 
 if is_torch_available():

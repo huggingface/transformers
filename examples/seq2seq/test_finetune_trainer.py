@@ -6,12 +6,13 @@ from unittest.mock import patch
 import pytest
 
 from transformers import is_torch_available
-from transformers.testing_utils import TestCasePlus, execute_async_std, slow
+from transformers.testing_utils import TestCasePlus, slow
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import main
 from .test_seq2seq_examples import MBART_TINY
+from .utils import execute_async_std
 
 
 if is_torch_available():
