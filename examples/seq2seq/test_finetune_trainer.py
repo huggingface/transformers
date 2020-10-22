@@ -33,7 +33,7 @@ class TestFinetuneTrainer(TestCasePlus):
     @slow
     def test_finetune_trainer_slow(self):
         # There is a missing call to __init__process_group somewhere
-        output_dir = self.run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=3)
+        output_dir = self.run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10)
 
         # Check metrics
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
