@@ -1905,10 +1905,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Converts a string in a sequence of tokens, using the backend Rust tokenizer.
 
         Note that this method behave differently between fast and slow tokenizers:
-        - in fast tokenizers (instances of :class:`~transformers.PreTrainedTokenizerFast`), this method
-            will replace the unknown tokens with the :obj:`unk_token`,
-        - in slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method
-            keep unknown tokens unchanged.
+            - in fast tokenizers (instances of :class:`~transformers.PreTrainedTokenizerFast`), this method
+                will replace the unknown tokens with the :obj:`unk_token`,
+            - in slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method
+                keep unknown tokens unchanged.
 
         Args:
             text (:obj:`str`):
