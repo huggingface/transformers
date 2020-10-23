@@ -9,3 +9,8 @@ class FailMe(unittest.TestCase):
     def test_error(self):
         print("testing")
         fatal_error(a=5, b=6)
+
+    @unittest.skip("why not")
+    def test_skip(self):
+        print("testing")
+        fatal_error(a=5, b=6)

@@ -21,16 +21,88 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 import pytest  # noqa
 
 
-file_failures = "test_failures.txt"
+report_files = dict(
+    #    failures="tests_failures.txt",
+    #    skipped="tests_skipped.txt",
+    durations="tests_durations.txt",
+    short_summary="tests_short_summary.txt",
+    summary_errors="tests_errors.txt",
+    summary_failures="tests_failures.txt",
+    summary_warnings="tests_warnings.txt",
+    summary_passes="tests_passes.txt",
+    summary_stats="tests_stats.txt",
+)
 
 
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    # execute all other hooks to obtain the report object
-    outcome = yield
-    rep = outcome.get_result()
+# XXX: appending to files, so need to reset them before each pytest run
+# XXX: do we need to lock files to handle xdist?
 
-    # failing test calls only
-    if rep.when == "call" and rep.failed:
-        with open(file_failures, "w") as f:
-            f.write(rep.longreprtext + "\n")
+# @pytest.hookimpl(tryfirst=True, hookwrapper=True)
+# def pytest_runtest_makereport(item, call):
+#     # execute all other hooks to obtain the report object
+#     outcome = yield
+#     report = outcome.get_result()
+
+#     # failing tests
+#     if report.when == "call" and report.failed:
+#         with open(report_files["failures"], "a") as f:
+#             # f.write(report.shortreprtext + "\n")
+#             f.write(report.longreprtext + "\n")
+
+#     # # skipped tests
+#     # if report.skipped and report.outcome == "skipped":
+#     #     with open(report_files["skipped"], "a") as f:
+#     #         f.write(report.longreprtext + "\n")
+
+from _pytest.config import create_terminal_writer  # noqa
+
+
+# create durations report - no longer need to add --durations=XX to get it
+# adapted from https://github.com/pytest-dev/pytest/blob/master/src/_pytest/runner.py#L66
+def pytest_terminal_summary(terminalreporter):
+    tr = terminalreporter
+    config = tr.config
+    orig_writer = config.get_terminal_writer()
+
+    # custom durations report
+    dlist = []
+    for replist in tr.stats.values():
+        for rep in replist:
+            if hasattr(rep, "duration"):
+                dlist.append(rep)
+    if not dlist:
+        return
+    dlist.sort(key=lambda x: x.duration, reverse=True)
+    with open(report_files["durations"], "w") as f:
+        f.write("slowest durations\n")
+        for i, rep in enumerate(dlist):
+            f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
+
+    # use ready made report funcs, we are just hijacking the filehandle to log to a separate file each
+
+    with open(report_files["summary_errors"], "w") as f:
+        tr._tw = create_terminal_writer(tr.config, f)
+        tr.summary_errors()
+
+    with open(report_files["summary_failures"], "w") as f:
+        tr._tw = create_terminal_writer(tr.config, f)
+        tr.summary_failures()
+
+    with open(report_files["summary_warnings"], "w") as f:
+        tr._tw = create_terminal_writer(tr.config, f)
+        tr.summary_warnings()
+
+    with open(report_files["summary_passes"], "w") as f:
+        tr._tw = create_terminal_writer(tr.config, f)
+        tr.summary_passes()
+
+    with open(report_files["short_summary"], "w") as f:
+        tr._tw = create_terminal_writer(tr.config, f)
+        tr.short_test_summary()
+
+    with open(report_files["summary_stats"], "w") as f:
+        tr._tw = create_terminal_writer(tr.config, f)
+        tr.summary_stats()
+
+    # restore the writer
+    tr._tw = orig_writer
