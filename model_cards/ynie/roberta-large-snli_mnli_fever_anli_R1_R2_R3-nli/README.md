@@ -1,3 +1,9 @@
+---
+datasets:
+- snli
+- anli
+license: ___
+---
 This is a strong pre-trained RoBERTa-Large NLI model.  
 
 The training data is a combination of well-known NLI datasets: [`SNLI`](https://nlp.stanford.edu/projects/snli/), [`MNLI`](https://cims.nyu.edu/~sbowman/multinli/), [`FEVER-NLI`](https://github.com/easonnie/combine-FEVER-NSMN/blob/master/other_resources/nli_fever.md), [`ANLI (R1, R2, R3)`](https://github.com/facebookresearch/anli).  
