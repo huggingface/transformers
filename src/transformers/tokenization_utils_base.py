@@ -178,7 +178,7 @@ class TokenSpan(NamedTuple):
 def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list
-    in a python list.
+    to a python list.
     """
     if isinstance(obj, (list, tuple)):
         return [to_py_obj(o) for o in obj]
