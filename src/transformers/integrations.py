@@ -432,7 +432,7 @@ class AzureMLCallback(TrainerCallback):
         if self.azureml_run is None and state.is_world_process_zero:
             self.azureml_run = Run.get_context()
 
-    def on_log(self, args, logs=None, **kwargs):
+    def on_log(self, args, state, control, logs=None, **kwargs):
         if self.azureml_run:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
