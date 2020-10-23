@@ -2,7 +2,10 @@
 datasets:
 - snli
 - anli
-license: ___
+- multi_nli
+- multi_nli_mismatch
+- fever
+license: mit
 ---
 This is a strong pre-trained RoBERTa-Large NLI model.  
 
