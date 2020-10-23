@@ -381,6 +381,8 @@ workflows:
             - run_tests_torch
             - run_tests_tf
             - run_tests_flax
+            - run_tests_pipelines_torch
+            - run_tests_pipelines_tf
             - build_doc
             - deploy_doc: *workflow_filters
     tpu_testing_jobs:
