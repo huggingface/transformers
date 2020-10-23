@@ -422,7 +422,7 @@ class CometCallback(TrainerCallback):
 
 class AzureMLCallback(TrainerCallback):
 
-    def __init__(self, azureml_writer=None):
+    def __init__(self, azureml_run=None):
         assert (
             _has_azureml
         ), "AzureMLCallback requires wandb to be installed. Run `pip install azureml-sdk`."
