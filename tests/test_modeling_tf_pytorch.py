@@ -17,14 +17,7 @@
 import unittest
 
 from transformers import is_tf_available, is_torch_available
-from transformers.testing_utils import (
-    DUMMY_UNKWOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
-    is_pt_tf_cross_test,
-    require_tf,
-    require_torch,
-    slow,
-)
+from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, is_pt_tf_cross_test, slow
 
 
 if is_tf_available():
@@ -76,8 +69,6 @@ if is_torch_available():
 
 
 @is_pt_tf_cross_test
-@require_tf
-@require_torch
 class TFPTAutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):

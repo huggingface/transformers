@@ -1525,8 +1525,6 @@ class TokenizerTesterMixin:
             )
 
     @is_pt_tf_cross_test
-    @require_torch
-    @require_tf
     def test_batch_encode_plus_tensors(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
