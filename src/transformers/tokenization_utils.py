@@ -136,18 +136,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         raise NotImplementedError
 
-    def get_vocab(self) -> Dict[str, int]:
-        """
-        Returns the vocabulary as a dictionary of token to index.
-
-        :obj:`tokenizer.get_vocab()[token]` is equivalent to :obj:`tokenizer.convert_tokens_to_ids(token)` when
-        :obj:`token` is in the vocab.
-
-        Returns:
-            :obj:`Dict[str, int]`: The vocabulary.
-        """
-        raise NotImplementedError()
-
     def get_added_vocab(self) -> Dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index.
@@ -733,47 +721,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """
-        Converts a sequence of token ids in a single string.
-
-        The most simple way to do it is ``" ".join(tokens)`` but we often want to remove
-        sub-word tokenization artifacts at the same time.
-
-        Args:
-            tokens (:obj:`List[str]`): The token to join in a string.
-
-        Return: The joined tokens.
-        """
         return " ".join(tokens)
 
-    def decode(
+    def _decode(
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
     ) -> str:
-        """
-        Converts a sequence of ids in a string, using the tokenizer and vocabulary
-        with options to remove special tokens and clean up tokenization spaces.
-
-        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
-
-        Args:
-            token_ids (:obj:`List[int]`):
-                List of tokenized input ids. Can be obtained using the ``__call__`` method.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to clean up the tokenization spaces.
-            spaces_between_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to add spaces around special tokens.
-                The behavior of Fast tokenizers is to have this to :obj:`False`.
-                This is setup to :obj:`True` in slow tokenizers for backward compatibility.
-
-        Returns:
-            :obj:`str`: The decoded sentence.
-        """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT

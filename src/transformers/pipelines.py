@@ -38,7 +38,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_base import BatchEncoding, PaddingStrategy
+from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
 
 
@@ -2396,11 +2396,12 @@ class ConversationalPipeline(Pipeline):
 
     def __init__(self, min_length_for_response=32, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # We need at least an eos_token
         assert self.tokenizer.eos_token_id is not None, "DialoguePipeline tokenizer should have an EOS token set"
-        if self.tokenizer.pad_token_id is not None:
-            self.pad_token_id = self.tokenizer.pad_token_id
-        else:
-            self.pad_token_id = self.tokenizer.eos_token_id
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
         self.min_length_for_response = min_length_for_response
 
     def __call__(
@@ -2496,7 +2497,7 @@ class ConversationalPipeline(Pipeline):
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
-        inputs = self.tokenizer.batch_encode_plus(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
+        inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
         for input in inputs:
             input.append(self.tokenizer.eos_token_id)
         return inputs
@@ -2516,7 +2517,7 @@ class ConversationalPipeline(Pipeline):
             sequence_tokens = []
             is_previous_pad = False
             for token in sequence:
-                if token == self.pad_token_id:
+                if token == self.tokenizer.pad_token_id:
                     if is_previous_pad:
                         continue
                     else:
@@ -2550,13 +2551,10 @@ class ConversationalPipeline(Pipeline):
                     else:
                         new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
-        max_len = max([len(item) for item in outputs])
-        outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
-        outputs = BatchEncoding(
-            {"input_ids": outputs, "attention_mask": [[1] * len(outputs)]},
-            tensor_type=self.framework,
+        padded_outputs = self.tokenizer.pad(
+            {"input_ids": outputs}, padding="longest", return_attention_mask=True, return_tensors=self.framework
         )
-        return outputs
+        return padded_outputs
 
 
 # Register all the supported tasks here
@@ -2700,6 +2698,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
+    use_fast: bool = False,
     **kwargs
 ) -> Pipeline:
     """
@@ -2749,6 +2748,8 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified
             and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no
             model is provided.
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
@@ -2807,9 +2808,10 @@ def pipeline(
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
             # For tuple we have (tokenizer name, {kwargs})
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], **tokenizer[1])
+            use_fast = tokenizer[1].pop("use_fast", use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], use_fast=use_fast, **tokenizer[1])
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=use_fast)
 
     # Instantiate config if needed
     if isinstance(config, str):

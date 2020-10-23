@@ -175,6 +175,23 @@ class TokenSpan(NamedTuple):
     end: int
 
 
+def to_py_obj(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list
+    to a python list.
+    """
+    if isinstance(obj, (list, tuple)):
+        return [to_py_obj(o) for o in obj]
+    elif is_tf_available() and isinstance(obj, tf.Tensor):
+        return obj.numpy().tolist()
+    elif is_torch_available() and isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().tolist()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
+
 class BatchEncoding(UserDict):
     """
     Holds the output of the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`
@@ -1025,6 +1042,38 @@ class SpecialTokensMixin:
         """
         return self.convert_tokens_to_ids(self.additional_special_tokens)
 
+    @bos_token_id.setter
+    def bos_token_id(self, value):
+        self._bos_token = self.convert_tokens_to_ids(value)
+
+    @eos_token_id.setter
+    def eos_token_id(self, value):
+        self._eos_token = self.convert_tokens_to_ids(value)
+
+    @unk_token_id.setter
+    def unk_token_id(self, value):
+        self._unk_token = self.convert_tokens_to_ids(value)
+
+    @sep_token_id.setter
+    def sep_token_id(self, value):
+        self._sep_token = self.convert_tokens_to_ids(value)
+
+    @pad_token_id.setter
+    def pad_token_id(self, value):
+        self._pad_token = self.convert_tokens_to_ids(value)
+
+    @cls_token_id.setter
+    def cls_token_id(self, value):
+        self._cls_token = self.convert_tokens_to_ids(value)
+
+    @mask_token_id.setter
+    def mask_token_id(self, value):
+        self._mask_token = self.convert_tokens_to_ids(value)
+
+    @additional_special_tokens_ids.setter
+    def additional_special_tokens_ids(self, values):
+        self._additional_special_tokens = [self.convert_tokens_to_ids(value) for value in values]
+
     @property
     def special_tokens_map(self) -> Dict[str, Union[str, List[str]]]:
         """
@@ -1423,6 +1472,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             f"vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
             f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
         )
+
+    def get_vocab(self) -> Dict[str, int]:
+        """
+        Returns the vocabulary as a dictionary of token to index.
+
+        :obj:`tokenizer.get_vocab()[token]` is equivalent to :obj:`tokenizer.convert_tokens_to_ids(token)` when
+        :obj:`token` is in the vocab.
+
+        Returns:
+            :obj:`Dict[str, int]`: The vocabulary.
+        """
+        raise NotImplementedError()
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
@@ -1849,6 +1910,32 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Returns:
             :obj:`Tuple(str)`: Paths to the files saved.
+        """
+        raise NotImplementedError
+
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+        """
+        Converts a string in a sequence of tokens, using the backend Rust tokenizer.
+
+        Note that this method behave differently between fast and slow tokenizers:
+            - in fast tokenizers (instances of :class:`~transformers.PreTrainedTokenizerFast`), this method
+                will replace the unknown tokens with the :obj:`unk_token`,
+            - in slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method
+                keep unknown tokens unchanged.
+
+        Args:
+            text (:obj:`str`):
+                The sequence to be encoded.
+            pair (:obj:`str`, `optional`):
+                A second sequence to be encoded with the first.
+            add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to add the special tokens associated with the corresponding model.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific encode method.
+                See details in :meth:`~transformers.PreTrainedTokenizer.__call__`
+
+        Returns:
+            :obj:`List[str]`: The list of tokens.
         """
         raise NotImplementedError
 
@@ -2456,18 +2543,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     f"Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
-            def to_py_obj(obj):
-                if isinstance(obj, (list, tuple)):
-                    return [to_py_obj(o) for o in obj]
-                elif is_tf_available() and isinstance(obj, tf.Tensor):
-                    return obj.numpy().tolist()
-                elif is_torch_available() and isinstance(obj, torch.Tensor):
-                    return obj.cpu().tolist()
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                else:
-                    return obj
-
             for key, value in encoded_inputs.items():
                 encoded_inputs[key] = to_py_obj(value)
 
@@ -2862,33 +2937,53 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return encoded_inputs
 
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """
+        Converts a sequence of token ids in a single string.
+        The most simple way to do it is ``" ".join(tokens)`` but we often want to remove
+        sub-word tokenization artifacts at the same time.
+        Args:
+            tokens (:obj:`List[str]`): The token to join in a string.
+        Return: The joined tokens.
+        """
+        raise NotImplementedError
+
     def batch_decode(
-        self, sequences: List[List[int]], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+        self,
+        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (:obj:`List[List[int]]`):
+            sequences (:obj:`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the ``__call__`` method.
             skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
 
         Returns:
             :obj:`List[str]`: The list of decoded sentences.
         """
         return [
             self.decode(
-                seq, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=clean_up_tokenization_spaces
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                **kwargs,
             )
             for seq in sequences
         ]
 
     def decode(
         self,
-        token_ids: List[int],
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         **kwargs
@@ -2900,16 +2995,35 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
 
         Args:
-            token_ids (:obj:`List[int]`):
+            token_ids (:obj:`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the ``__call__`` method.
             skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
 
         Returns:
             :obj:`str`: The decoded sentence.
         """
+        # Convert inputs to python lists
+        token_ids = to_py_obj(token_ids)
+
+        return self._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    def _decode(
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
+    ) -> str:
         raise NotImplementedError
 
     def get_special_tokens_mask(

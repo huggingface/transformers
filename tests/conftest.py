@@ -15,3 +15,10 @@ sys.path.insert(1, git_repo_path)
 # silence FutureWarning warnings in tests since often we can't act on them until
 # they become normal warnings - i.e. the tests still need to test the current functionality
 warnings.simplefilter(action="ignore", category=FutureWarning)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipeline are tested")
+    config.addinivalue_line(
+        "markers", "is_pt_tf_cross_test: mark test to run only when PT and TF interactions are tested"
+    )

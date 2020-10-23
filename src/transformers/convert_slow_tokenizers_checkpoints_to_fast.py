@@ -78,15 +78,16 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
                 "=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix)
             )
 
-            file_path = list(tokenizer.pretrained_vocab_files_map.values())[0][checkpoint]
-            next_char = file_path.split(checkpoint)[-1][0]
-            if next_char == "/":
-                dump_path_full = os.path.join(dump_path_full, checkpoint_prefix_name)
-                checkpoint_prefix_name = None
+            if checkpoint in list(tokenizer.pretrained_vocab_files_map.values())[0]:
+                file_path = list(tokenizer.pretrained_vocab_files_map.values())[0][checkpoint]
+                next_char = file_path.split(checkpoint)[-1][0]
+                if next_char == "/":
+                    dump_path_full = os.path.join(dump_path_full, checkpoint_prefix_name)
+                    checkpoint_prefix_name = None
 
-            logger.info(
-                "=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix)
-            )
+                logger.info(
+                    "=> {} with prefix {}, add_prefix {}".format(dump_path_full, checkpoint_prefix_name, add_prefix)
+                )
 
             file_names = tokenizer.save_pretrained(
                 dump_path_full, legacy_format=False, filename_prefix=checkpoint_prefix_name
