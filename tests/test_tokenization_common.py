@@ -177,6 +177,25 @@ class TokenizerTesterMixin:
         self.assertIn("tokenizer_file", signature.parameters)
         self.assertIsNone(signature.parameters["tokenizer_file"].default)
 
+    def test_tokenizer_slow_store_full_signature(self):
+        signature = inspect.signature(self.tokenizer_class.__init__)
+        tokenizer = self.get_tokenizer()
+
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter.default != inspect.Parameter.empty:
+                self.assertIn(parameter_name, tokenizer.init_kwargs)
+
+    def test_tokenizer_fast_store_full_signature(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        signature = inspect.signature(self.rust_tokenizer_class.__init__)
+        tokenizer = self.get_rust_tokenizer()
+
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter.default != inspect.Parameter.empty:
+                self.assertIn(parameter_name, tokenizer.init_kwargs)
+
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return

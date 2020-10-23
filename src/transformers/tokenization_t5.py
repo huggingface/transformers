@@ -121,6 +121,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            extra_ids=0,  # Set this to zero because the additional tokens are already generated
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )

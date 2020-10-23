@@ -621,7 +621,10 @@ class XLMTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
+            **kwargs
         )
 
         # cache of sm.MosesPunctNormalizer instance
