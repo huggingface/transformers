@@ -19,7 +19,7 @@ import unittest
 
 from transformers import is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -231,8 +231,7 @@ def _long_tensor(tok_lst):
 TOLERANCE = 1e-4
 
 
-@require_tf
-@require_torch
+@is_pt_tf_cross_test
 @slow
 class TFBartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
