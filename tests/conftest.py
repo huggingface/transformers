@@ -57,14 +57,14 @@ report_files = dict(
 from _pytest.config import create_terminal_writer  # noqa
 
 
-# create durations report - no longer need to add --durations=XX to get it
-# adapted from https://github.com/pytest-dev/pytest/blob/master/src/_pytest/runner.py#L66
 def pytest_terminal_summary(terminalreporter):
     tr = terminalreporter
     config = tr.config
     orig_writer = config.get_terminal_writer()
 
     # custom durations report
+    # create durations report - no longer need to add --durations=XX to get it
+    # adapted from https://github.com/pytest-dev/pytest/blob/master/src/_pytest/runner.py#L66
     dlist = []
     for replist in tr.stats.values():
         for rep in replist:

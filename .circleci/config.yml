@@ -113,7 +113,6 @@ jobs:
             - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
-                  destination: tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_failures.txt
             - store_artifacts:
