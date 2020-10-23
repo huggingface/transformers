@@ -47,8 +47,8 @@ class PegasusTokenizer(ReformerTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, pad_token="<pad>", **kwargs):
+        super().__init__(*args, **kwargs, pad_token="<pad>")
         # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
         assert len(self.added_tokens_decoder) == 0
