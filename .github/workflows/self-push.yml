@@ -14,7 +14,7 @@ on:
 
 
 jobs:
-  run_tests_torch_and_gpu:
+  run_tests_torch_gpu:
     runs-on: [self-hosted, gpu-tests]
     steps:
       - uses: actions/checkout@v2
@@ -28,12 +28,12 @@ jobs:
         run: pwd
       - run: nvidia-smi
 
-      - name: Loading cache.
-        uses: actions/cache@v2
-        id: cache
-        with:
-          path: .env
-          key: v0-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+    - name: Loading cache.
+      uses: actions/cache@v2
+      id: cache
+      with:
+        path: .env
+        key: v0-tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -83,7 +83,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v0-tests_tf_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -131,7 +131,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-tests_tf_torch_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v0-tests_torch_multiple_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -179,7 +179,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-tests_tf_torch_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v0-tests_tf_multiple_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
