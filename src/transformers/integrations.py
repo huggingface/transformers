@@ -53,6 +53,14 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+try:
+    import mlflow  # noqa: F401
+
+    _has_mlflow = True
+except ImportError:
+    _has_mlflow = False
+
+
 # No transformer imports above this point
 
 from .file_utils import is_torch_tpu_available
@@ -84,6 +92,8 @@ def is_optuna_available():
 def is_ray_available():
     return _has_ray
 
+def is_mlflow_available():
+    return _has_mlflow
 
 def hp_params(trial):
     if is_optuna_available():
@@ -408,3 +418,67 @@ class CometCallback(TrainerCallback):
             experiment = comet_ml.config.get_global_experiment()
             if experiment is not None:
                 experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
+
+class MLflowCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow
+    <https://www.mlflow.org/>`__.
+    """
+
+    def __init__(self):
+        assert _has_mlflow, "MLflow requires mlflow to be installed. Run `pip install mlflow`."
+        self._initialized = False
+        self._log_artifacts = False
+
+    def setup(self, args, state):
+        """
+        Setup the optional MLflow integration.
+
+        Environment:
+            HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
+                Whether to use MLflow .log_artifact() facility to log artifacts.
+
+                This only makes sense if logging to a remote server, e.g. s3 or GCS.
+                If set to `True` or `1`, will copy whatever is in TrainerArgument's output_dir
+                to the local or remote artifact storage. Using it without a remote storage
+                will just copy the files to your artifact location.
+        """
+        log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
+        if log_artifacts in {"TRUE", "1"}:
+            self._log_artifacts = True
+        if state.is_world_process_zero:
+            mlflow.start_run()
+            run_params = args.to_dict()
+            mlflow.log_params(run_params)
+        self._initialized = True
+
+    def on_train_begin(self, args, state, control):
+        if not self._initialized:
+            self.setup(args, state)
+
+    def on_log(self, args, state, control, logs):
+        if not self._initialized:
+            self.setup(args, state)
+        if state.is_world_process_zero:
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    mlflow.log_metric(k, v, step=state.global_step)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" of type %s for key "%s" as a metric. '
+                        "MLflow's log_metric() only accepts float and "
+                        "int types so we dropped this attribute.",
+                        v,
+                        type(v),
+                        k,
+                    )
+
+    def on_train_end(self, args, state, control):
+        if not self._initialized:
+            self.setup(args, state)
+        if state.is_world_process_zero:
+            if self._log_artifacts:
+                logger.info("Logging artifacts. This may take time.")
+                mlflow.log_artifacts(args.output_dir)
+            mlflow.end_run()
