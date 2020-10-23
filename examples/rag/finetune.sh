@@ -9,7 +9,7 @@ python finetune.py \
     --output_dir outputs \
     --model_name_or_path ./rag-seq-bart-base \
     --model_type rag_sequence \
-    --gpus 1 \
+    --gpus 2 \
     --do_train \
     --do_predict \
     --fp16 \
