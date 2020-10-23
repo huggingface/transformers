@@ -188,7 +188,7 @@ class BertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            **kwargs
+            **kwargs,
         )
 
         if not os.path.isfile(vocab_file):

@@ -201,7 +201,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             sep_token=sep_token,
             pad_token=pad_token,
-            **kwargs
+            **kwargs,
         )
 
         self.src_vocab_file = src_vocab_file

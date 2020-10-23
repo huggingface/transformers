@@ -624,7 +624,7 @@ class XLMTokenizer(PreTrainedTokenizer):
             lang2id=lang2id,
             id2lang=id2lang,
             do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
-            **kwargs
+            **kwargs,
         )
 
         # cache of sm.MosesPunctNormalizer instance

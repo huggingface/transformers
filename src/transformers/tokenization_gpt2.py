@@ -170,7 +170,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             add_prefix_space=add_prefix_space,
-            **kwargs
+            **kwargs,
         )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:

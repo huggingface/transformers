@@ -129,7 +129,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            **kwargs
+            **kwargs,
         )
         self.unique_no_split_tokens.append(x_sep_token)
 

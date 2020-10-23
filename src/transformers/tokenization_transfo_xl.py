@@ -176,7 +176,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             additional_special_tokens=additional_special_tokens,
             language=language,
-            **kwargs
+            **kwargs,
         )
 
         if never_split is None:

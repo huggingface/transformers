@@ -103,7 +103,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             model_max_length=model_max_length,
-            **kwargs
+            **kwargs,
         )
         assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
         self.encoder = load_json(vocab)

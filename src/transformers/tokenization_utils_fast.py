@@ -16,7 +16,6 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import copy
 import json
 import os
 import warnings

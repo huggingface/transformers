@@ -137,7 +137,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            **kwargs
+            **kwargs,
         )
 
         try:

@@ -139,7 +139,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
-            **kwargs
+            **kwargs,
         )
 
         self.do_lower_case = do_lower_case
