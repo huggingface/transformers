@@ -1,6 +1,5 @@
 ---
 language: it
-thumbnail:
 ---
 
 # Italian-Bert  (Italian Bert) + POS 🎃🏷
