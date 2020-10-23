@@ -1,5 +1,7 @@
 ---
 language: it
+datasets:
+- xtreme
 ---
 
 # Italian-Bert  (Italian Bert) + POS 🎃🏷
