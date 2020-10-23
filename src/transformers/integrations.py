@@ -425,7 +425,7 @@ class AzureMLCallback(TrainerCallback):
     def __init__(self, azureml_run=None):
         assert (
             _has_azureml
-        ), "AzureMLCallback requires wandb to be installed. Run `pip install azureml-sdk`."
+        ), "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
         self.azureml_run = azureml_run
 
     def on_init_end(self, args, state, control, **kwargs):
@@ -436,4 +436,4 @@ class AzureMLCallback(TrainerCallback):
         if self.azureml_run:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    self.run.log(k, v, description=k)
+                    self.azureml_run.log(k, v, description=k)
