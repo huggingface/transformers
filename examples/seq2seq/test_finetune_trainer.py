@@ -3,10 +3,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from transformers import BertTokenizer, EncoderDecoderModel, is_torch_available
-
 import pytest
 
+from transformers import BertTokenizer, EncoderDecoderModel, is_torch_available
 from transformers.file_utils import is_datasets_available
 from transformers.testing_utils import TestCasePlus, slow
 from transformers.trainer_callback import TrainerState
