@@ -425,6 +425,7 @@ class MLflowCallback(TrainerCallback):
     A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow
     <https://www.mlflow.org/>`__.
     """
+    MAX_LOG_SIZE = 100
 
     def __init__(self):
         assert _has_mlflow, "MLflow requires mlflow to be installed. Run `pip install mlflow`."
@@ -453,7 +454,10 @@ class MLflowCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
-            mlflow.log_params(combined_dict)
+            # MLflow cannot log more than 100 values in one go, so we have to split it
+            combined_dict_items = list(combined_dict.items())
+            for i in range(0, len(combined_dict_items), MLflowCallback.MAX_LOG_SIZE):
+                mlflow.log_params(dict(combined_dict_items[i:i + MLflowCallback.MAX_LOG_SIZE]))
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
