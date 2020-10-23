@@ -25,14 +25,14 @@ Usage:
   BERT checkpoints for subsequent fine-tuning.
 
 :: code-block
-  
+
   # leverage checkpoints for Bert2Bert model...
-  # use BERT's cls token as BOS token and sep token as EOS token
-  encoder = BertGenerationEncoder.from_pretrained("bert-large-uncased", bos_token_id=101, eos_token_id=102)
-  # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
-  decoder = BertGenerationDecoder.from_pretrained("bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102)
-  bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
-  
+  # use BERT's cls token as BOS token and sep token as EOS token encoder =
+  BertGenerationEncoder.from_pretrained("bert-large-uncased", bos_token_id=101, eos_token_id=102) # add cross attention
+  layers and use BERT's cls token as BOS token and sep token as EOS token decoder =
+  BertGenerationDecoder.from_pretrained("bert-large-uncased", add_cross_attention=True, is_decoder=True,
+  bos_token_id=101, eos_token_id=102) bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+
   # create tokenizer...
   tokenizer = BertTokenizer.from_pretrained("bert-large-uncased")
 
@@ -40,8 +40,7 @@ Usage:
   labels = tokenizer('This is a short summary', return_tensors="pt").input_ids
 
   # train...
-  loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels, return_dict=True).loss
-  loss.backward()
+  loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels, return_dict=True).loss loss.backward()
 
 
 - Pretrained :class:`~transformers.EncoderDecoderModel` are also directly available in the model hub, e.g.,
@@ -49,11 +48,12 @@ Usage:
 
 :: code-block
 
-  # instantiate sentence fusion model
-  sentence_fuser = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse")
-  tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
+  # instantiate sentence fusion model sentence_fuser =
+  EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse") tokenizer =
+  AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
-  input_ids = tokenizer('This is the first sentence. This is the second sentence.', add_special_tokens=False, return_tensors="pt").input_ids
+  input_ids = tokenizer('This is the first sentence. This is the second sentence.', add_special_tokens=False,
+  return_tensors="pt").input_ids
 
   outputs = sentence_fuser.generate(input_ids)
 

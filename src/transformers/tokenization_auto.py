@@ -221,8 +221,8 @@ SLOW_TOKENIZER_MAPPING = {
 
 class AutoTokenizer:
     r"""
-    This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library
-    when created with the :meth:`AutoTokenizer.from_pretrained` class method.
+    This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library when
+    created with the :meth:`AutoTokenizer.from_pretrained` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -245,9 +245,7 @@ class AutoTokenizer:
 
         List options
 
-        Params:
-            pretrained_model_name_or_path (:obj:`str`):
-                Can be either:
+        Params: pretrained_model_name_or_path (:obj:`str`): Can be either:
 
                     - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
                       ``bert-base-uncased``.
@@ -257,31 +255,24 @@ class AutoTokenizer:
                       using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.,
                       ``./my_model_directory/``.
                     - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
-                      single vocabulary file (like Bert or XLNet), e.g.: ``./my_model_directory/vocab.txt``.
-                      (Not applicable to all derived classes)
-            inputs (additional positional arguments, `optional`):
-                Will be passed along to the Tokenizer ``__init__()`` method.
-            config (:class:`~transformers.PreTrainedConfig`, `optional`)
-                The configuration object used to dertermine the tokenizer class to instantiate.
-            cache_dir (:obj:`str`, `optional`):
-                Path to a directory in which a downloaded pretrained model configuration should be cached if the
-                standard cache should not be used.
-            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to force the (re-)download the model weights and configuration files and override the
-                cached versions if they exist.
-            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
-            proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
-            use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to try to load the fast version of the tokenizer.
-            kwargs (additional keyword arguments, `optional`):
-                Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
-                ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
-                ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__()`` for more details.
+                      single vocabulary file (like Bert or XLNet), e.g.: ``./my_model_directory/vocab.txt``. (Not
+                      applicable to all derived classes) inputs (additional positional arguments, `optional`): Will be
+                      passed along to the Tokenizer ``__init__()`` method. config
+                      (:class:`~transformers.PreTrainedConfig`, `optional`) The configuration object used to dertermine
+                      the tokenizer class to instantiate. cache_dir (:obj:`str`, `optional`): Path to a directory in
+                      which a downloaded pretrained model configuration should be cached if the standard cache should
+                      not be used. force_download (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether or not
+                      to force the (re-)download the model weights and configuration files and override the cached
+                      versions if they exist. resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                      Whether or not to delete incompletely received files. Will attempt to resume the download if such
+                      a file exists. proxies (:obj:`Dict[str, str]`, `optional`): A dictionary of proxy servers to use
+                      by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128', 'http://hostname':
+                      'foo.bar:4012'}`. The proxies are used on each request. use_fast (:obj:`bool`, `optional`,
+                      defaults to :obj:`False`): Whether or not to try to load the fast version of the tokenizer.
+                      kwargs (additional keyword arguments, `optional`): Will be passed to the Tokenizer ``__init__()``
+                      method. Can be used to set special tokens like ``bos_token``, ``eos_token``, ``unk_token``,
+                      ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``. See
+                      parameters in the ``__init__()`` for more details.
 
         Examples::
 

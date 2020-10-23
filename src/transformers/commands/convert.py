@@ -7,17 +7,16 @@ from ..utils import logging
 
 def convert_command_factory(args: Namespace):
     """
-    Factory function used to convert a model TF 1.0 checkpoint in a PyTorch checkpoint.
-    :return: ServeCommand
+    Factory function used to convert a model TF 1.0 checkpoint in a PyTorch checkpoint. :return: ServeCommand
     """
     return ConvertCommand(
         args.model_type, args.tf_checkpoint, args.pytorch_dump_output, args.config, args.finetuning_task_name
     )
 
 
-IMPORT_ERROR_MESSAGE = """transformers can only be used from the commandline to convert TensorFlow models in PyTorch,
-In that case, it requires TensorFlow to be installed. Please see
-https://www.tensorflow.org/install/ for installation instructions.
+IMPORT_ERROR_MESSAGE = """
+transformers can only be used from the commandline to convert TensorFlow models in PyTorch, In that case, it requires
+TensorFlow to be installed. Please see https://www.tensorflow.org/install/ for installation instructions.
 """
 
 
@@ -25,9 +24,8 @@ class ConvertCommand(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         """
-        Register this command to argparse so it's available for the transformer-cli
-        :param parser: Root parser to register command-specific arguments
-        :return:
+        Register this command to argparse so it's available for the transformer-cli :param parser: Root parser to
+        register command-specific arguments :return:
         """
         train_parser = parser.add_parser(
             "convert",

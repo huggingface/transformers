@@ -17,7 +17,7 @@ work properly.
     the text you give it in tokens the same way for the pretraining corpus, and it will use the same correspondence
     token to index (that we usually call a `vocab`) as during pretraining.
 
-To automatically download the vocab used during pretraining or fine-tuning a given model, you can use the 
+To automatically download the vocab used during pretraining or fine-tuning a given model, you can use the
 :func:`~transformers.AutoTokenizer.from_pretrained` method:
 
 .. code-block::
@@ -39,10 +39,10 @@ is its ``__call__``: you just need to feed your sentence to your tokenizer objec
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
-This returns a dictionary string to list of ints.
-The `input_ids <glossary.html#input-ids>`__ are the indices corresponding to each token in our sentence. We will see
-below what the `attention_mask <glossary.html#attention-mask>`__ is used for and in
-:ref:`the next section <sentence-pairs>` the goal of `token_type_ids <glossary.html#token-type-ids>`__.
+This returns a dictionary string to list of ints. The `input_ids <glossary.html#input-ids>`__ are the indices
+corresponding to each token in our sentence. We will see below what the `attention_mask
+<glossary.html#attention-mask>`__ is used for and in :ref:`the next section <sentence-pairs>` the goal of
+`token_type_ids <glossary.html#token-type-ids>`__.
 
 The tokenizer can decode a list of token ids in a proper sentence:
 
@@ -146,8 +146,8 @@ This will once again return a dict string to list of ints:
 This shows us what the `token_type_ids <glossary.html#token-type-ids>`__ are for: they indicate to the model which part
 of the inputs correspond to the first sentence and which part corresponds to the second sentence. Note that
 `token_type_ids` are not required or handled by all models. By default, a tokenizer will only return the inputs that
-its associated model expects. You can force the return (or the non-return) of any of those special arguments by
-using ``return_input_ids`` or ``return_token_type_ids``.
+its associated model expects. You can force the return (or the non-return) of any of those special arguments by using
+``return_input_ids`` or ``return_token_type_ids``.
 
 If we decode the token ids we obtained, we will see that the special tokens have been properly added.
 
@@ -215,7 +215,7 @@ three arguments you need to know for this are :obj:`padding`, :obj:`truncation` 
       a single sequence).
     - :obj:`'max_length'` to pad to a length specified by the :obj:`max_length` argument or the maximum length accepted
       by the model if no :obj:`max_length` is provided (``max_length=None``). If you only provide a single sequence,
-      padding will still be applied to it. 
+      padding will still be applied to it.
     - :obj:`False` or :obj:`'do_not_pad'` to not pad the sequences. As we have seen before, this is the default
       behavior.
 
@@ -238,9 +238,9 @@ three arguments you need to know for this are :obj:`padding`, :obj:`truncation` 
   truncation/padding to :obj:`max_length` is deactivated.
 
 Here is a table summarizing the recommend way to setup padding and truncation. If you use pair of inputs sequence in
-any of the following examples, you can replace :obj:`truncation=True` by a :obj:`STRATEGY` selected in 
-:obj:`['only_first', 'only_second', 'longest_first']`, i.e. :obj:`truncation='only_second'` or
-:obj:`truncation= 'longest_first'` to control how both sequence in the pair are truncated as detailed before.
+any of the following examples, you can replace :obj:`truncation=True` by a :obj:`STRATEGY` selected in
+:obj:`['only_first', 'only_second', 'longest_first']`, i.e. :obj:`truncation='only_second'` or :obj:`truncation=
+'longest_first'` to control how both sequence in the pair are truncated as detailed before.
 
 +--------------------------------------+-----------------------------------+---------------------------------------------------------------------------------------------+
 | Truncation                           | Padding                           | Instruction                                                                                 |

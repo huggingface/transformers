@@ -43,9 +43,9 @@ _re_comment = re.compile(r"\s*\.\.\s*$")
 # Matches the special tag to ignore some paragraphs.
 _re_doc_ignore = re.compile(r"#\s*docstyle-ignore")
 # Matches the example introduction in docstrings.
-_re_example = re.compile(r"^\s*Examples?\s*::\s*$")
+_re_example = re.compile(r"^\s*(Examples?|Usage)\s*::\s*$")
 # Matches the parameters introduction in docstrings.
-_re_arg_def = re.compile(r"^\s*(Args?|Parameters?)\s*:\s*$")
+_re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Arguments?)\s*:\s*$")
 # Matches the return introduction in docstrings.
 _re_return = re.compile(r"^\s*Returns?\s*:\s*$")
 

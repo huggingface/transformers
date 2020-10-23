@@ -26,13 +26,12 @@ CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.h
 class CTRLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a :class:`~transformers.CTRLModel` or a
-    :class:`~transformers.TFCTRLModel`. It is used to instantiate a CTRL model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the `ctrl <https://huggingface.co/ctrl>`__ architecture from SalesForce.
+    :class:`~transformers.TFCTRLModel`. It is used to instantiate a CTRL model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the `ctrl <https://huggingface.co/ctrl>`__ architecture from SalesForce.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 246534):
@@ -40,8 +39,8 @@ class CTRLConfig(PretrainedConfig):
             :obj:`inputs_ids` passed when calling :class:`~transformers.CTRLModel` or
             :class:`~transformers.TFCTRLModel`.
         n_positions (:obj:`int`, `optional`, defaults to 256):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         n_ctx (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 1280):

@@ -3,7 +3,8 @@ Pretrained models
 
 Here is the full list of the currently provided pretrained models together with a short presentation of each model.
 
-For a list that includes community-uploaded models, refer to `https://huggingface.co/models <https://huggingface.co/models>`__.
+For a list that includes community-uploaded models, refer to `https://huggingface.co/models
+<https://huggingface.co/models>`__.
 
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Architecture       | Shortcut name                                              | Details of the model                                                                                                                  |

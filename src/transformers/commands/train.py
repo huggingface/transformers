@@ -18,8 +18,7 @@ USE_AMP = False
 
 def train_command_factory(args: Namespace):
     """
-    Factory function used to instantiate training command from provided command line arguments.
-    :return: TrainCommand
+    Factory function used to instantiate training command from provided command line arguments. :return: TrainCommand
     """
     return TrainCommand(args)
 
@@ -28,9 +27,8 @@ class TrainCommand(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         """
-        Register this command to argparse so it's available for the transformer-cli
-        :param parser: Root parser to register command-specific arguments
-        :return:
+        Register this command to argparse so it's available for the transformer-cli :param parser: Root parser to
+        register command-specific arguments :return:
         """
         train_parser = parser.add_parser("train", help="CLI tool to train a model on a task.")
 
