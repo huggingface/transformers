@@ -419,6 +419,7 @@ class CometCallback(TrainerCallback):
             if experiment is not None:
                 experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
 
+
 class MLflowCallback(TrainerCallback):
     """
     A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow
@@ -430,7 +431,7 @@ class MLflowCallback(TrainerCallback):
         self._initialized = False
         self._log_artifacts = False
 
-    def setup(self, args, state):
+    def setup(self, args, state, model):
         """
         Setup the optional MLflow integration.
 
@@ -448,17 +449,20 @@ class MLflowCallback(TrainerCallback):
             self._log_artifacts = True
         if state.is_world_process_zero:
             mlflow.start_run()
-            run_params = args.to_dict()
-            mlflow.log_params(run_params)
+            combined_dict = args.to_dict()
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            mlflow.log_params(combined_dict)
         self._initialized = True
 
-    def on_train_begin(self, args, state, control):
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
         if not self._initialized:
-            self.setup(args, state)
+            self.setup(args, state, model)
 
-    def on_log(self, args, state, control, logs):
+    def on_log(self, args, state, control, logs, model=None, **kwargs):
         if not self._initialized:
-            self.setup(args, state)
+            self.setup(args, state, model)
         if state.is_world_process_zero:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
@@ -474,10 +478,8 @@ class MLflowCallback(TrainerCallback):
                         k,
                     )
 
-    def on_train_end(self, args, state, control):
-        if not self._initialized:
-            self.setup(args, state)
-        if state.is_world_process_zero:
+    def on_train_end(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero:
             if self._log_artifacts:
                 logger.info("Logging artifacts. This may take time.")
                 mlflow.log_artifacts(args.output_dir)
