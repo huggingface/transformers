@@ -53,6 +53,12 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+try:
+    from azureml.core.run import Run
+    _has_azureml = True
+except ImportError:
+    _has_azureml = False
+
 # No transformer imports above this point
 
 from .file_utils import is_torch_tpu_available
@@ -83,6 +89,10 @@ def is_optuna_available():
 
 def is_ray_available():
     return _has_ray
+
+
+def is_azureml_available():
+    return _has_azureml
 
 
 def hp_params(trial):
@@ -408,3 +418,22 @@ class CometCallback(TrainerCallback):
             experiment = comet_ml.config.get_global_experiment()
             if experiment is not None:
                 experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
+
+
+class AzureMLCallback(TrainerCallback):
+
+    def __init__(self, azureml_writer=None):
+        assert (
+            _has_azureml
+        ), "AzureMLCallback requires wandb to be installed. Run `pip install azureml-sdk`."
+        self.azureml_run = azureml_run
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.azureml_run is None and state.is_world_process_zero:
+            self.azureml_run = Run.get_context()
+
+    def on_log(self, args, logs=None, **kwargs):
+        if self.azureml_run:
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    self.run.log(k, v, description=k)

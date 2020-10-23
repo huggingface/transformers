@@ -45,6 +45,7 @@ from .integrations import (
     is_ray_available,
     is_tensorboard_available,
     is_wandb_available,
+    is_azureml_available,
     run_hp_search_optuna,
     run_hp_search_ray,
 )
@@ -144,6 +145,11 @@ if is_optuna_available():
 
 if is_ray_available():
     from ray import tune
+
+if is_azureml_available():
+    from .integrations import AzureMLCallback
+
+    DEFAULT_CALLBACKS.append(AzureMLCallback)
 
 logger = logging.get_logger(__name__)
 
