@@ -17,8 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import slow, torch_device
-
+from transformers.testing_utils import slow, torch_device, require_torch
 
 if is_torch_available():
     import torch
@@ -26,6 +25,7 @@ if is_torch_available():
     from transformers import XLMProphetNetForConditionalGeneration, XLMProphetNetTokenizer
 
 
+@require_torch
 class XLMProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):
