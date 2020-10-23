@@ -142,7 +142,7 @@ class Seq2SeqTrainer(Trainer):
         else:
             # compute label smoothed loss
             labels = inputs.pop("labels")
-            logits = model(**inputs)[0]
+            logits = model(**inputs, use_cache=False)[0]
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
             loss, _ = label_smoothed_nll_loss(
                 lprobs, labels, self.args.label_smoothing, ignore_index=self.config.pad_token_id
