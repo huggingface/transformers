@@ -3,7 +3,7 @@ import unittest
 import pytest
 
 from transformers import pipeline
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import is_pipeline_test, require_torch, slow
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
@@ -24,6 +24,7 @@ class TranslationEnToRoPipelineTests(MonoInputPipelineCommonMixin, unittest.Test
     mandatory_keys = ["translation_text"]
 
 
+@is_pipeline_test
 class TranslationNewFormatPipelineTests(unittest.TestCase):
     @require_torch
     @slow

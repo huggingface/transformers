@@ -3,12 +3,13 @@ from typing import List, Optional
 
 from transformers import is_tf_available, is_torch_available, pipeline
 from transformers.pipelines import DefaultArgumentHandler, Pipeline
-from transformers.testing_utils import _run_slow_tests, require_tf, require_torch, slow
+from transformers.testing_utils import _run_slow_tests, is_pipeline_test, require_tf, require_torch, slow
 
 
 VALID_INPUTS = ["A simple string", ["list of strings"]]
 
 
+@is_pipeline_test
 class CustomInputPipelineCommonMixin:
     pipeline_task = None
     pipeline_loading_kwargs = {}
@@ -82,6 +83,7 @@ class CustomInputPipelineCommonMixin:
         raise NotImplementedError
 
 
+@is_pipeline_test
 class MonoInputPipelineCommonMixin:
     pipeline_task = None
     pipeline_loading_kwargs = {}  # Additional kwargs to load the pipeline with
@@ -198,6 +200,7 @@ class MonoInputPipelineCommonMixin:
         self.assertRaises(Exception, nlp, self.invalid_inputs)
 
 
+@is_pipeline_test
 class DefaultArgumentHandlerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.handler = DefaultArgumentHandler()
