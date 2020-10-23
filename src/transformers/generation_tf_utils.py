@@ -917,7 +917,7 @@ def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
 
 
 def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
-    # Copied from fairseq for no_repeat_ngram in beam_search"""
+    # Copied from fairseq for no_repeat_ngram in beam_search
     if cur_len + 1 < no_repeat_ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
         return [[] for _ in range(num_hypos)]

@@ -112,6 +112,7 @@ Code to see available pretrained models:
 
 MarianConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 .. autoclass:: transformers.MarianConfig
     :members:
 

@@ -51,6 +51,7 @@ See Config Values:
 
 BlenderbotConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 .. autoclass:: transformers.BlenderbotConfig
     :members:
 
@@ -69,6 +70,7 @@ BlenderbotSmallTokenizer
 
 BlenderbotForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` and `generate`
 
 .. autoclass:: transformers.BlenderbotForConditionalGeneration
