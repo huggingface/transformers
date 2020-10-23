@@ -114,6 +114,10 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
+            - store_artifacts:
+                  path: ~/transformers/test_failures.txt
+                  destination: test_failures.txt
+                  
     run_tests_tf:
         working_directory: ~/transformers
         docker:
