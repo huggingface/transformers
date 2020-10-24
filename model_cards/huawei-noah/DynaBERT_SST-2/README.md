@@ -7,3 +7,5 @@ allowing both adaptive width and depth using knowledge distillation.
 
 * This code is modified based on the repository developed by Hugging Face: [Transformers v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.1)
 * The results in the paper are produced by using single V100 GPU.
+
+Thanks
