@@ -44,12 +44,27 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model`.
         hidden_size (:obj:`int`, optional, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         num_hidden_layers (:obj:`int`, optional, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, optional, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, optional, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        {% else -%}
+        encoder_layers (:obj:`int`, `optional`, defaults to 12):
+            Number of encoder layers, 6 are used for the `bart-base` model.
+        decoder_layers (:obj:`int`, `optional`, defaults to 12):
+            Number of decoder layers, 6 are used for the `bart-base` model.
+        encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_intermediate_dim (:obj:`int`, `optional`, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_intermediate_dim (:obj:`int`, `optional`, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        {% endif -%}
         hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, "gelu", "relu", "swish" and "gelu_new" are supported.
@@ -66,8 +81,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, optional, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -88,9 +101,21 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self,
         vocab_size=30522,
         hidden_size=768,
+        {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        is_encoder_decoder=False,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
+        {% else -%}
+        is_encoder_decoder=True,
+        encoder_intermediate_dim=4096,
+        encoder_layers=12,
+        encoder_attention_heads=16,
+        decoder_intermediate_dim=4096,
+        decoder_layers=12,
+        decoder_attention_heads=16,
+        force_bos_token_to_be_generated=False,
+        {% endif -%}
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -99,21 +124,33 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        gradient_checkpointing=False,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
+        {% else -%}
+        self.encoder_intermediate_dim = encoder_intermediate_dim,
+        self.encoder_layers = encoder_layers,
+        self.encoder_attention_heads = encoder_attention_heads,
+        self.decoder_intermediate_dim = decoder_intermediate_dim,
+        self.decoder_layers = decoder_layers,
+        self.decoder_attention_heads = decoder_attention_heads,
+        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated,
+        {% endif -%}
+        self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
