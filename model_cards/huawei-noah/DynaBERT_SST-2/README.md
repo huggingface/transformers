@@ -4,8 +4,21 @@
 the subnetworks of it have competitive performances as other similar-sized compressed models.
 The training process of DynaBERT includes first training a width-adaptive BERT and then 
 allowing both adaptive width and depth using knowledge distillation. 
+The overview of DynaBERT learning is shown below. 
 
-* This code is modified based on the repository developed by Hugging Face: [Transformers v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.1)
-* The results in the paper are produced by using single V100 GPU.
+<img src="dynabert_overview.png" width="800" height="320"/>
+<br />
 
-Thanks
+* This code is modified based on the repository developed by Hugging Face: [Transformers v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.1), and is released in [GitHub](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/DynaBERT)
+
+## Reference
+Lu Hou, Zhiqi Huang, Lifeng Shang, Xin Jiang, Qun Liu.
+[DynaBERT: Dynamic BERT with Adaptive Width and Depth](https://arxiv.org/abs/2004.04037).
+```
+@inproceedings{hou2020dynabert,
+  title = {DynaBERT: Dynamic BERT with Adaptive Width and Depth},
+  author = {Lu Hou, Zhiqi Huang, Lifeng Shang, Xin Jiang, Qun Liu},  
+	booktitle = {NeurIPS},
+  year = {2020}
+}
+```
