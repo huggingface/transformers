@@ -111,7 +111,10 @@ class MPNetEmbeddings(nn.Module):
 
         inputs_embeds = self.word_embeddings(input_ids)
         position_embeddings = self.position_embeddings(position_ids)
+
         embeddings = inputs_embeds + position_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
         return embeddings
 
 
