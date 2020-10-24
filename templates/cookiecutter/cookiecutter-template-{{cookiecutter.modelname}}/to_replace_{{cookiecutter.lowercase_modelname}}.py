@@ -54,6 +54,12 @@
         TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
     )
 {% else %}
+    from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+        TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        TF{{cookiecutter.camelcase_modelname}}Model,
+        TFPretrained{{cookiecutter.camelcase_modelname}}Model,
+    )
 {% endif -%}
 # End.
 
@@ -108,7 +114,6 @@ from .modeling_{{cookiecutter.lowercase_modelname}} import (
 )
 {% else -%}
 from .modeling_{{cookiecutter.lowercase_modelname}} import (
-    {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
     {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -194,6 +199,11 @@ from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
     TF{{cookiecutter.camelcase_modelname}}Model,
 )
 {% else -%}
+from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+    TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+    TF{{cookiecutter.camelcase_modelname}}Model,
+    TFPretrained{{cookiecutter.camelcase_modelname}}Model,
+)
 {% endif -%}
 # End.
 
@@ -210,6 +220,7 @@ from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMaskedLM),
 {% else -%}
+        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
 {% endif -%}
 # End.
 
@@ -254,4 +265,10 @@ from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
 # End.
 
 
-
+# Below: "# Model for Seq2Seq Causal LM mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+{% else -%}
+        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
+{% endif -%}
+# End.

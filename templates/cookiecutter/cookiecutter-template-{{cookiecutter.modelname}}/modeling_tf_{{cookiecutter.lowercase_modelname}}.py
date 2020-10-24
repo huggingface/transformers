@@ -42,6 +42,10 @@ from .modeling_tf_utils import (
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
+TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "{{cookiecutter.checkpoint_identifier}}",
+    # See all {{cookiecutter.modelname}} models at https://huggingface.co/models?filter={{cookiecutter.lowercase_modelname}}
+]
 
 _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
@@ -355,8 +359,6 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
 
             if output_attentions:
                 all_attentions += (attn,)
-        if self.layer_norm:
-            x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
             encoder_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in encoder_states]

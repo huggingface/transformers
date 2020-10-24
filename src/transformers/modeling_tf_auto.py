@@ -280,6 +280,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        # Model for Seq2Seq Causal LM mapping
         (T5Config, TFT5ForConditionalGeneration),
         (MarianConfig, TFMarianMTModel),
         (MBartConfig, TFMBartForConditionalGeneration),

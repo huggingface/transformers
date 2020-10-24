@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
 import unittest
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config, is_tf_available
@@ -271,3 +272,213 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
         model = TF{{cookiecutter.camelcase_modelname}}Model.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
         self.assertIsNotNone(model)
 
+{% else -%}
+
+import tempfile
+import unittest
+
+from transformers import is_tf_available
+from transformers.testing_utils import require_tf
+
+from .test_configuration_common import ConfigTester
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+
+
+if is_tf_available():
+    import tensorflow as tf
+
+    from transformers import {{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model
+
+
+@require_tf
+class ModelTester:
+    def __init__(self, parent):
+        self.parent = parent
+        self.batch_size = 13
+        self.seq_length = 7
+        self.is_training = True
+        self.use_labels = False
+        self.vocab_size = 99
+        self.hidden_size = 32
+        self.num_hidden_layers = 5
+        self.num_attention_heads = 4
+        self.intermediate_size = 37
+        self.hidden_act = "gelu"
+        self.hidden_dropout_prob = 0.1
+        self.attention_probs_dropout_prob = 0.1
+        self.max_position_embeddings = 20
+        self.eos_token_ids = [2]
+        self.pad_token_id = 1
+        self.bos_token_id = 0
+
+    def prepare_config_and_inputs_for_common(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
+        eos_tensor = tf.expand_dims(tf.constant([2] * self.batch_size), 1)
+        input_ids = tf.concat([input_ids, eos_tensor], axis=1)
+        input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size + 1)
+
+        config = {{cookiecutter.camelcase_modelname}}Config(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_intermediate_dim=self.intermediate_size,
+            decoder_intermediate_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            eos_token_ids=[2],
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.pad_token_id,
+        )
+        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(config, input_ids)
+        return config, inputs_dict
+
+
+def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
+    config,
+    input_ids,
+    attention_mask=None,
+):
+    if attention_mask is None:
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+    return {
+        "input_ids": input_ids,
+        "decoder_input_ids": input_ids,
+        "attention_mask": attention_mask,
+    }
+
+
+@require_tf
+class TestTF{{cookiecutter.camelcase_modelname}}(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model) if is_tf_available() else ()
+    all_generative_model_classes = (TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,) if is_tf_available() else ()
+    is_encoder_decoder = True
+    test_pruning = False
+
+    def setUp(self):
+        self.model_tester = ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class={{cookiecutter.camelcase_modelname}}Config)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_inputs_embeds(self):
+        # inputs_embeds not supported
+        pass
+
+    def test_compile_tf_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+
+        model_class = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        input_ids = {
+            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
+            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+        }
+
+        # Prepare our model
+        model = model_class(config)
+        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+        # Let's load it from the disk to be sure we can use pretrained weights
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname)
+
+        outputs_dict = model(input_ids)
+        hidden_states = outputs_dict[0]
+
+        # Add a dense layer on top to test integration with other keras modules
+        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+
+        # Compile extended model
+        extendehidden_size = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
+        extendehidden_size.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+    def test_savehidden_size_with_hidden_states_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
+    def test_savehidden_size_with_attentions_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
+
+@require_tf
+class TF{{cookiecutter.camelcase_modelname}}HeadTests(unittest.TestCase):
+
+    vocab_size = 99
+
+    def _get_config_and_data(self):
+        eos_column_vector = tf.ones((4, 1), dtype=tf.int32) * 2
+        input_ids = tf.concat([ids_tensor((4, 6), self.vocab_size - 3) + 3, eos_column_vector], axis=1)
+        batch_size = input_ids.shape[0]
+        config = {{cookiecutter.camelcase_modelname}}Config(
+            vocab_size=self.vocab_size,
+            hidden_size=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_intermediate_dim=32,
+            decoder_intermediate_dim=32,
+            max_position_embeddings=48,
+            eos_token_id=2,
+            pad_token_id=1,
+            bos_token_id=0,
+            return_dict=True,
+            decoder_start_token_id=2,
+        )
+        return config, input_ids, batch_size
+
+    def test_lm_forward(self):
+        config, input_ids, batch_size = self._get_config_and_data()
+        decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
+        lm_model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config)
+        outputs = lm_model(inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False)
+        expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+    def test_lm_uneven_forward(self):
+        config = {{cookiecutter.camelcase_modelname}}Config(
+            vocab_size=10,
+            hidden_size=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_intermediate_dim=32,
+            decoder_intermediate_dim=32,
+            max_position_embeddings=48,
+            return_dict=True,
+        )
+        lm_model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config)
+        context = tf.fill((7, 2), 4)
+        summary = tf.fill((7, 7), 6)
+        outputs = lm_model(inputs=context, decoder_input_ids=summary, use_cache=False)
+        expected_shape = (*summary.shape, config.vocab_size)
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
+        return True
+    try:
+        if tf.debugging.assert_near(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
+        msg = "{} != {}".format(a, b)
+        if prefix:
+            msg = prefix + ": " + msg
+        raise AssertionError(msg)
+
+
+{% endif -%}
