@@ -9,7 +9,7 @@ The overview of DynaBERT learning is shown below.
 <img src="dynabert_overview.png" width="800" height="320"/>
 <br />
 
-* This code is modified based on the repository developed by Hugging Face: [Transformers v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.1), and is released in [GitHub](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/DynaBERT)
+* This code is modified based on the repository developed by Hugging Face: [Transformers v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.1), and is released in [GitHub](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/DynaBERT).
 
 ## Reference
 Lu Hou, Zhiqi Huang, Lifeng Shang, Xin Jiang, Qun Liu.
