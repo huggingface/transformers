@@ -92,8 +92,10 @@ def is_optuna_available():
 def is_ray_available():
     return _has_ray
 
+
 def is_mlflow_available():
     return _has_mlflow
+
 
 def hp_params(trial):
     if is_optuna_available():
@@ -425,6 +427,7 @@ class MLflowCallback(TrainerCallback):
     A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow
     <https://www.mlflow.org/>`__.
     """
+
     MAX_LOG_SIZE = 100
 
     def __init__(self):
@@ -457,7 +460,7 @@ class MLflowCallback(TrainerCallback):
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
             for i in range(0, len(combined_dict_items), MLflowCallback.MAX_LOG_SIZE):
-                mlflow.log_params(dict(combined_dict_items[i:i + MLflowCallback.MAX_LOG_SIZE]))
+                mlflow.log_params(dict(combined_dict_items[i : i + MLflowCallback.MAX_LOG_SIZE]))
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
