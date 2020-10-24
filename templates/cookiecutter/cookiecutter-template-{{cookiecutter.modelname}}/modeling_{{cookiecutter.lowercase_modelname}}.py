@@ -2184,7 +2184,6 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Pretrained{{c
 
         Conditional generation example::
 
-            >>> # Mask filling only works for {{cookiecutter.lowercase_modelname}}-large
             >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration
             >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
             >>> TXT = "My friends are <mask> but they eat too many carbs."
