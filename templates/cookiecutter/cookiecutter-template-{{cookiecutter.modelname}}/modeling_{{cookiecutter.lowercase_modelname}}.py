@@ -1148,6 +1148,8 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
 class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+
+        config.num_labels = 2
         self.num_labels = config.num_labels
 
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
@@ -1467,7 +1469,7 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
         self.self_attn = {{cookiecutter.camelcase_modelname}}Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_probs_dropout_prob)
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.hidden_dropout_prob
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.activation_dropout = config.hidden_dropout_prob
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_intermediate_dim)
         self.fc2 = nn.Linear(config.encoder_intermediate_dim, self.embed_dim)
@@ -1519,8 +1521,6 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         super().__init__()
 
         self.dropout = config.hidden_dropout_prob
-        self.layerdrop = config.encoder_layerdrop
-
         embed_dim = embed_tokens.embedding_dim
         self.padding_idx = embed_tokens.padding_idx
         self.max_source_positions = config.max_position_embeddings
@@ -1570,16 +1570,11 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                attn = None
-            else:
-                x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
+            x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
 
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-        if self.layer_norm:
-            x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
             # T x B x C -> B x T x C
@@ -1604,7 +1599,7 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             dropout=config.attention_probs_dropout_prob,
         )
         self.dropout = config.hidden_dropout_prob
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.activation_dropout = config.hidden_dropout_prob
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
@@ -1687,20 +1682,14 @@ class {{cookiecutter.camelcase_modelname}}Decoder(nn.Module):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: nn.Embedding):
         super().__init__()
         self.dropout = config.hidden_dropout_prob
-        self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
         self.embed_tokens = embed_tokens
-        if config.static_position_embeddings:
-            self.embed_positions = SinusoidalPositionalEmbedding(
-                config.max_position_embeddings, config.hidden_size, config.pad_token_id
-            )
-        else:
-            self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings,
-                config.hidden_size,
-                self.padding_idx,
-            )
+        self.embed_positions = LearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            config.hidden_size,
+            self.padding_idx,
+        )
         self.layers = nn.ModuleList(
             [{{cookiecutter.camelcase_modelname}}DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[{{cookiecutter.camelcase_modelname}}DecoderLayer]
@@ -1766,9 +1755,6 @@ class {{cookiecutter.camelcase_modelname}}Decoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
-
             layer_state = past_key_values[idx] if past_key_values is not None else None
 
             x, layer_self_attn, layer_past = decoder_layer(
@@ -2004,7 +1990,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         else:
             # starts at 0, ends at 1-seq_len
             positions = torch.arange(seq_len, dtype=torch.long, device=self.weight.device)
-        return super().forward(positions + self.offset)
+        return super().forward(positions)
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
