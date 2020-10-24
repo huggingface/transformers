@@ -139,13 +139,13 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         {% else -%}
-        self.encoder_intermediate_dim = encoder_intermediate_dim,
-        self.encoder_layers = encoder_layers,
-        self.encoder_attention_heads = encoder_attention_heads,
-        self.decoder_intermediate_dim = decoder_intermediate_dim,
-        self.decoder_layers = decoder_layers,
-        self.decoder_attention_heads = decoder_attention_heads,
-        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated,
+        self.encoder_intermediate_dim = encoder_intermediate_dim
+        self.encoder_layers = encoder_layers
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_intermediate_dim = decoder_intermediate_dim
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
         {% endif -%}
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -154,3 +154,14 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+
+    {% if cookiecutter.is_encoder_decoder_model == "True" %}
+    @property
+    def num_attention_heads(self) -> int:
+        return self.encoder_attention_heads
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return self.encoder_layers
+    {% endif -%}
+

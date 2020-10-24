@@ -14,7 +14,7 @@
 # To replace in: "src/transformers/__init__.py"
 # Below: "if is_torch_available():"
 # Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
     from .modeling_{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         {{cookiecutter.camelcase_modelname}}ForMaskedLM,
@@ -41,7 +41,7 @@
 
 # Below: "if is_tf_available():"
 # Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
     from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
         TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
@@ -53,7 +53,7 @@
         TF{{cookiecutter.camelcase_modelname}}Model,
         TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
     )
-{% else -%}
+{% else %}
 {% endif -%}
 # End.
 
