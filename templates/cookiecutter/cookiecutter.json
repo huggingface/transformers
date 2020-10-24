@@ -5,5 +5,6 @@
   "camelcase_modelname": "{{cookiecutter.modelname|capitalize}}",
   "authors": "The HuggingFace Team",
   "checkpoint_identifier": "lysbert-base-cased",
-  "tokenizer_type": ["Based on BERT", "Standalone"]
+  "tokenizer_type": ["Based on BERT", "Standalone"],
+  "is_encoder_decoder_model": ["True", "False"]
 }

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for {{cookiecutter.modelname}}."""
 
-{%- if cookiecutter.tokenizer_type == "Based on BERT" -%}
+{%- if cookiecutter.tokenizer_type == "Based on BERT" %}
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .utils import logging
 
@@ -71,8 +71,7 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-{%- elif cookiecutter.license == "Standalone" -%}
-
+{%- elif cookiecutter.license == "Standalone" %}
 import json
 import os
 import warnings
