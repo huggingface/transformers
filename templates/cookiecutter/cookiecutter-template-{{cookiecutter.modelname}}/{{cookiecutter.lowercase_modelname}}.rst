@@ -38,16 +38,7 @@ Tips:
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-{{cookiecutter.camelcase_modelname}} specific outputs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.modeling_albert.{{cookiecutter.camelcase_modelname}}ForPreTrainingOutput
-    :members:
-
-.. autoclass:: transformers.modeling_tf_albert.TF{{cookiecutter.camelcase_modelname}}ForPreTrainingOutput
-    :members:
-
-
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
 {{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -130,3 +121,51 @@ TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
 
 .. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
     :members: call
+
+
+{% else -%}
+
+{{cookiecutter.camelcase_modelname}}Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}Model
+    :members: forward
+
+.. autofunction:: transformers.modeling_{{cookiecutter.lowercase_modelname}}._prepare_{{cookiecutter.lowercase_modelname}}_decoder_inputs
+
+
+{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+    :members: forward
+
+
+{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+    :members: forward
+
+
+{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+    :members: forward
+
+
+
+TF{{cookiecutter.camelcase_modelname}}Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}Model
+    :members: call
+
+
+TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+    :members: call
+{% endif -%}
