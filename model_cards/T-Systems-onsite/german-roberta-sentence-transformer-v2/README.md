@@ -47,7 +47,7 @@ The resulting model called `xlm-r-distilroberta-base-paraphrase-v1` has been rel
 
 Building on this cross language model we fine-tuned it for German language on the [deepl.com](https://www.deepl.com/translator) dataset of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark).
 
-We did an automatic hyperprameter search for 102 trials with [Optuna](https://github.com/optuna/optuna). Using crossvalidation on the deepl.com test and dev dataset we found the following best hyperprameters:
+We did an automatic hyperprameter search for 102 trials with [Optuna](https://github.com/optuna/optuna). Using 10-fold crossvalidation on the deepl.com test and dev dataset we found the following best hyperprameters:
 - batch_size = 15
 - num_epochs = 4
 - lr = 2.2995320905210864e-05
@@ -60,10 +60,10 @@ The final model was trained with these hyperparameters on the combination of `st
 # Evaluation
 The evaluation has been done on the test set of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark). The code is available on [Colab](https://colab.research.google.com/drive/1aCWOqDQx953kEnQ5k4Qn7uiixokocOHv?usp=sharing). As the metric for evaluation we use the Spearman’s rank correlation between the  cosine-similarity of the sentence embeddings and STSbenchmark labels.
 
-| Model Name                           | Spearman rank correlation           |
+| Model Name                           | Spearman rank correlation<br/>(German)           |
 |--------------------------------------|-------------------------------------|
 | xlm-r-distilroberta-base-paraphrase-v1                        | 0.8079     |
 | xlm-r-100langs-bert-base-nli-stsb-mean-tokens                 | 0.8194     |
 | xlm-r-bert-base-nli-stsb-mean-tokens                          | 0.8194     |
-| **T-Systems-onsite/german-roberta-sentence-transformer-v2**   | **0.8529** |
-| **[T-Systems-onsite/cross-en-de-roberta-sentence-transformer](https://huggingface.co/T-Systems-onsite/cross-en-de-roberta-sentence-transformer)** | **0.8550** |
+| **T-Systems-onsite/<br/>german-roberta-sentence-transformer-v2**   | **0.8529** |
+| **[T-Systems-onsite/<br/>cross-en-de-roberta-sentence-transformer](https://huggingface.co/T-Systems-onsite/cross-en-de-roberta-sentence-transformer)** | **0.8550** |
