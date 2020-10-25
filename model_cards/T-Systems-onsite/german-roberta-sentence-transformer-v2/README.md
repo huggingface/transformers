@@ -12,7 +12,7 @@ This model is intended to [compute sentence (text embeddings)](https://www.sbert
 
 Source: [Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks](https://arxiv.org/abs/1908.10084)
 
-This model is fine-tuned from [Philip May](https://eniak.de/) and open-sourced by [T-Systems-onsite](https://www.t-systems-onsite.de/). Special thanks to [Nils Reimers](https://www.nils-reimers.de/) for your awesome open-source work, the Sentence Transformers, the models and all your help on GitHub.
+This model is fine-tuned from [Philip May](https://eniak.de/) and open-sourced by [T-Systems-onsite](https://www.t-systems-onsite.de/). Special thanks to [Nils Reimers](https://www.nils-reimers.de/) for your awesome open-source work, the Sentence Transformers, the models and your help on GitHub.
 
 ## How to use
 **The usage description above - provided by Hugging Face - is wrong for sentence embeddings! Please use this:**
