@@ -44,7 +44,6 @@ class TFMarianMTModel(TFBartForConditionalGeneration):
     config_class = MarianConfig
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        print(f"Gen Step: {cur_len}")
         self._force_token_id_to_be_generated(logits, self.config.pad_token_id, inverted=True)
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             logits = self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
