@@ -79,7 +79,7 @@ class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
         # Prepare our model
         model = model_class(config)
         model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-        # Let's load it from the disk to be sure we can use pretrained weights
+        # Let's load it from the disk to be sure we can use pre-trained weights
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             model = model_class.from_pretrained(tmpdirname)
@@ -130,7 +130,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
         )
-        generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)
         return generated_words
 
 

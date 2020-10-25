@@ -27,43 +27,6 @@ from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 if is_tf_available():
     from transformers import TFBlenderbotForConditionalGeneration
-
-
-@require_tf
-@require_tokenizers
-class TFBlenderbot90MIntegrationTests(unittest.TestCase):
-    src_text = [
-        "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"
-    ]
-    model_name = "facebook/blenderbot-90M"
-
-    @cached_property
-    def tokenizer(self):
-        return BlenderbotSmallTokenizer.from_pretrained(self.model_name)
-
-    @cached_property
-    def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
-        return model
-
-    @slow
-    def test_90_generation_from_long_input(self):
-        model_inputs = self.tokenizer(self.src_text, return_tensors="tf")
-        generated_ids = self.model.generate(
-            model_inputs.input_ids,
-            attention_mask=model_inputs.attention_mask,
-            num_beams=2,
-            use_cache=True,
-        )
-        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
-        assert generated_words in (
-            "i don't know. i just feel like i'm going to throw up. it's not fun.",
-            "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
-            "i'm not sure. i just feel like i've been in a bad situation.",
-        )
-
-
-if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM
 
 
@@ -134,3 +97,37 @@ class TestTFBlenderbotCommon(TFModelTesterMixin, unittest.TestCase):
         # Compile extended model
         extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+
+@require_tf
+@require_tokenizers
+class TFBlenderbot90MIntegrationTests(unittest.TestCase):
+    src_text = [
+        "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"
+    ]
+    model_name = "facebook/blenderbot-90M"
+
+    @cached_property
+    def tokenizer(self):
+        return BlenderbotSmallTokenizer.from_pretrained(self.model_name)
+
+    @cached_property
+    def model(self):
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        return model
+
+    @slow
+    def test_90_generation_from_long_input(self):
+        model_inputs = self.tokenizer(self.src_text, return_tensors="tf")
+        generated_ids = self.model.generate(
+            model_inputs.input_ids,
+            attention_mask=model_inputs.attention_mask,
+            num_beams=2,
+            use_cache=True,
+        )
+        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
+        assert generated_words in (
+            "i don't know. i just feel like i'm going to throw up. it's not fun.",
+            "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
+            "i'm not sure. i just feel like i've been in a bad situation.",
+        )
