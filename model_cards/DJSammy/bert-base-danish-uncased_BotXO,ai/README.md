@@ -6,12 +6,14 @@ tags:
 - masked-lm
 - lm-head
 - da
-license: creative commons attribution 4.0 international
+license: cc-by-4.0
 datasets:
-- common crawl
+- common_crawl
 - wikipedia
+pipeline_tag:
+- fill-mask
 widget:
-- text: "København er [MASK] i Danmark."
+- text: "København er <mask> i Danmark."
 ---
 
 # Danish BERT (uncased) model 
