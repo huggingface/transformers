@@ -56,7 +56,7 @@ from .modeling_tf_albert import (
     TFAlbertForTokenClassification,
     TFAlbertModel,
 )
-from .modeling_tf_bart import TFBartForConditionalGeneration
+from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
 from .modeling_tf_bert import (
     TFBertForMaskedLM,
     TFBertForMultipleChoice,
@@ -171,6 +171,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
+        (BartConfig, TFBartModel),
         (CamembertConfig, TFCamembertModel),
         (XLMRobertaConfig, TFXLMRobertaModel),
         (LongformerConfig, TFLongformerModel),
@@ -194,6 +195,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
+        (BartConfig, TFBartForConditionalGeneration),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),

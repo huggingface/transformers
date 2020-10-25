@@ -84,7 +84,7 @@ jobs:
                 key: v0.3-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ --cov --durations=0 | tee output.txt
+            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pt_tf_cross_test --cov --durations=0 | tee output.txt
             - run: codecov
             - store_artifacts:
                   path: ~/transformers/output.txt
@@ -164,6 +164,56 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
+    run_tests_pipelines_torch:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.3-torch-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install git+https://github.com/huggingface/datasets
+            - run: pip install .[sklearn,torch,testing]
+            - save_cache:
+                  key: v0.3-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
+            - store_artifacts:
+                  path: ~/transformers/output.txt
+                  destination: test_output.txt
+    run_tests_pipelines_tf:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.3-tf-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install git+https://github.com/huggingface/datasets
+            - run: pip install .[sklearn,tf-cpu,testing]
+            - save_cache:
+                  key: v0.3-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
+            - store_artifacts:
+               path: ~/transformers/output.txt
+               destination: test_output.txt
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
@@ -331,6 +381,8 @@ workflows:
             - run_tests_torch
             - run_tests_tf
             - run_tests_flax
+            - run_tests_pipelines_torch
+            - run_tests_pipelines_tf
             - build_doc
             - deploy_doc: *workflow_filters
     tpu_testing_jobs:

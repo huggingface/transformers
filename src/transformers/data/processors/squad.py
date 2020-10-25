@@ -7,11 +7,8 @@ import numpy as np
 from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
-from ...tokenization_bart import BartTokenizer
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_longformer import LongformerTokenizer
-from ...tokenization_roberta import RobertaTokenizer
-from ...tokenization_utils_base import TruncationStrategy
+from ...tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import logging
 from .utils import DataProcessor
 
@@ -112,7 +109,14 @@ def squad_convert_example_to_features(
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        if isinstance(tokenizer, (RobertaTokenizer, LongformerTokenizer, BartTokenizer)):
+        if tokenizer.__class__.__name__ in [
+            "RobertaTokenizer",
+            "LongformerTokenizer",
+            "BartTokenizer",
+            "RobertaTokenizerFast",
+            "LongformerTokenizerFast",
+            "BartTokenizerFast",
+        ]:
             sub_tokens = tokenizer.tokenize(token, add_prefix_space=True)
         else:
             sub_tokens = tokenizer.tokenize(token)
@@ -292,7 +296,7 @@ def squad_convert_example_to_features(
     return features
 
 
-def squad_convert_example_to_features_init(tokenizer_for_convert):
+def squad_convert_example_to_features_init(tokenizer_for_convert: PreTrainedTokenizerBase):
     global tokenizer
     tokenizer = tokenizer_for_convert
 
@@ -344,9 +348,9 @@ def squad_convert_examples_to_features(
             is_training=not evaluate,
         )
     """
-
     # Defining helper methods
     features = []
+
     threads = min(threads, cpu_count())
     with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
@@ -365,6 +369,7 @@ def squad_convert_examples_to_features(
                 disable=not tqdm_enabled,
             )
         )
+
     new_features = []
     unique_id = 1000000000
     example_index = 0

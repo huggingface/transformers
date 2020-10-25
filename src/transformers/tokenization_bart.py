@@ -122,7 +122,7 @@ class BartTokenizer(RobertaTokenizer):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
             - **labels** -- List of token ids for tgt_texts
 
-            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
+            The full set of keys ``[input_ids, attention_mask, labels]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
         """
         kwargs.pop("src_lang", None)
