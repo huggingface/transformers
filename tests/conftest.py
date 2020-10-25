@@ -63,45 +63,45 @@ def pytest_terminal_summary(terminalreporter):
     orig_writer = config.get_terminal_writer()
 
     # custom durations report
-    # create durations report - no longer need to add --durations=XX to get it
+    # note: no longer need to add --durations=XX to get it
     # adapted from https://github.com/pytest-dev/pytest/blob/master/src/_pytest/runner.py#L66
     dlist = []
     for replist in tr.stats.values():
         for rep in replist:
             if hasattr(rep, "duration"):
                 dlist.append(rep)
-    if not dlist:
-        return
-    dlist.sort(key=lambda x: x.duration, reverse=True)
-    with open(report_files["durations"], "w") as f:
-        f.write("slowest durations\n")
-        for i, rep in enumerate(dlist):
-            f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
+    if dlist:
+        dlist.sort(key=lambda x: x.duration, reverse=True)
+        with open(report_files["durations"], "w") as f:
+            # XXX: add a cutoff - having a million 0.000 entries
+            f.write("slowest durations\n")
+            for i, rep in enumerate(dlist):
+                f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
     # use ready made report funcs, we are just hijacking the filehandle to log to a separate file each
 
     with open(report_files["summary_errors"], "w") as f:
-        tr._tw = create_terminal_writer(tr.config, f)
+        tr._tw = create_terminal_writer(config, f)
         tr.summary_errors()
 
     with open(report_files["summary_failures"], "w") as f:
-        tr._tw = create_terminal_writer(tr.config, f)
+        tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
     with open(report_files["summary_warnings"], "w") as f:
-        tr._tw = create_terminal_writer(tr.config, f)
+        tr._tw = create_terminal_writer(config, f)
         tr.summary_warnings()
 
     with open(report_files["summary_passes"], "w") as f:
-        tr._tw = create_terminal_writer(tr.config, f)
+        tr._tw = create_terminal_writer(config, f)
         tr.summary_passes()
 
     with open(report_files["short_summary"], "w") as f:
-        tr._tw = create_terminal_writer(tr.config, f)
+        tr._tw = create_terminal_writer(config, f)
         tr.short_test_summary()
 
     with open(report_files["summary_stats"], "w") as f:
-        tr._tw = create_terminal_writer(tr.config, f)
+        tr._tw = create_terminal_writer(config, f)
         tr.summary_stats()
 
     # restore the writer
