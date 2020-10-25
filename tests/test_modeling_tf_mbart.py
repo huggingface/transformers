@@ -22,7 +22,7 @@ from tests.test_modeling_tf_bart import TFBartModelTester
 from tests.test_modeling_tf_common import TFModelTesterMixin
 from transformers import AutoTokenizer, MBartConfig, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import is_pt_tf_cross_test, require_sentencepiece, require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
@@ -37,8 +37,8 @@ class ModelTester(TFBartModelTester):
 
 @require_tf
 class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFMBartForConditionalGeneration,)
-    all_generative_model_classes = (TFMBartForConditionalGeneration,)
+    all_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
+    all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
     model_tester_cls = ModelTester
     is_encoder_decoder = True
     test_pruning = False
@@ -94,7 +94,7 @@ class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
 
-@require_tf
+@is_pt_tf_cross_test
 @require_sentencepiece
 @require_tokenizers
 class TestMBartEnRO(unittest.TestCase):

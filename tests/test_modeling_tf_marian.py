@@ -18,7 +18,7 @@ import unittest
 
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import is_pt_tf_cross_test, require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_bart import TFBartModelTester
@@ -38,8 +38,8 @@ class ModelTester(TFBartModelTester):
 
 @require_tf
 class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFMarianMTModel,)
-    all_generative_model_classes = (TFMarianMTModel,)
+    all_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
+    all_generative_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
     model_tester_cls = ModelTester
     is_encoder_decoder = True
     test_pruning = False
@@ -133,7 +133,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
         return generated_words
 
 
-@require_tf
+@is_pt_tf_cross_test
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_en_zh(AbstractMarianIntegrationTest):
@@ -147,7 +147,7 @@ class TestMarian_en_zh(AbstractMarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
-@require_tf
+@is_pt_tf_cross_test
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_en_ROMANCE(AbstractMarianIntegrationTest):
