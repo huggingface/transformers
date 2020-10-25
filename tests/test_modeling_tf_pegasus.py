@@ -17,7 +17,7 @@ import unittest
 
 import tensorflow as tf
 
-from transformers import AutoTokenizer, is_tf_available
+from transformers import AutoTokenizer, PegasusConfig, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
@@ -28,7 +28,7 @@ from .test_modeling_tf_common import TFModelTesterMixin
 
 
 if is_tf_available():
-    from transformers import PegasusConfig, TFAutoModelForSeq2SeqLM, TFPegasusForConditionalGeneration
+    from transformers import TFAutoModelForSeq2SeqLM, TFPegasusForConditionalGeneration
 
 
 @require_tf

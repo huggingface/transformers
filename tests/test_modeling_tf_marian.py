@@ -16,20 +16,19 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, MarianTokenizer, TranslationPipeline, is_tf_available
+from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
+from .test_configuration_common import ConfigTester
+from .test_modeling_tf_bart import TFBartModelTester
+from .test_modeling_tf_common import TFModelTesterMixin
+
 
 if is_tf_available():
-
     import tensorflow as tf
 
-    from transformers import MarianConfig, TFAutoModelForSeq2SeqLM, TFMarianMTModel
-
-    from .test_configuration_common import ConfigTester
-    from .test_modeling_tf_bart import TFBartModelTester
-    from .test_modeling_tf_common import TFModelTesterMixin
+    from transformers import TFAutoModelForSeq2SeqLM, TFMarianMTModel
 
 
 class ModelTester(TFBartModelTester):

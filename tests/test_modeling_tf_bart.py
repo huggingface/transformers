@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_tf_available
+from transformers import BartConfig, BartTokenizer, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
 
@@ -30,9 +30,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import BartConfig, TFBartForConditionalGeneration, TFBartModel
+    from transformers import TFBartForConditionalGeneration, TFBartModel
     from transformers.modeling_tf_bart import TFSinusoidalPositionalEmbedding
-    from transformers.tokenization_bart import BartTokenizer
 
 
 @require_tf

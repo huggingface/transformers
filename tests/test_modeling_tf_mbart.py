@@ -30,48 +30,6 @@ if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration
 
 
-@require_tf
-@require_sentencepiece
-@require_tokenizers
-class TestMBartEnRO(unittest.TestCase):
-    src_text = [
-        " UN Chief Says There Is No Military Solution in Syria",
-        # """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
-    ]
-    expected_text = [
-        "Şeful ONU declară că nu există o soluţie militară în Siria",
-        # 'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.',
-    ]
-    model_name = "facebook/mbart-large-en-ro"
-
-    @cached_property
-    def tokenizer(self):
-        return AutoTokenizer.from_pretrained(self.model_name)
-
-    @cached_property
-    def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
-        return model
-
-    def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
-        generated_words = self.translate_src_text(**tokenizer_kwargs)
-        self.assertListEqual(self.expected_text, generated_words)
-
-    def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(
-            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
-        )
-        generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
-        )
-        generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        return generated_words
-
-    @slow
-    def test_batch_generation_en_ro(self):
-        self._assert_generated_batch_equal_expected()
-
-
 class ModelTester(TFBartModelTester):
     config_updates = dict(normalize_before=True, add_final_layer_norm=True)
     config_cls = MBartConfig
@@ -134,3 +92,45 @@ class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
         # Compile extended model
         extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+
+@require_tf
+@require_sentencepiece
+@require_tokenizers
+class TestMBartEnRO(unittest.TestCase):
+    src_text = [
+        " UN Chief Says There Is No Military Solution in Syria",
+        # """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
+    ]
+    expected_text = [
+        "Şeful ONU declară că nu există o soluţie militară în Siria",
+        # 'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.',
+    ]
+    model_name = "facebook/mbart-large-en-ro"
+
+    @cached_property
+    def tokenizer(self):
+        return AutoTokenizer.from_pretrained(self.model_name)
+
+    @cached_property
+    def model(self):
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        return model
+
+    def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
+        generated_words = self.translate_src_text(**tokenizer_kwargs)
+        self.assertListEqual(self.expected_text, generated_words)
+
+    def translate_src_text(self, **tokenizer_kwargs):
+        model_inputs = self.tokenizer.prepare_seq2seq_batch(
+            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
+        )
+        generated_ids = self.model.generate(
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+        )
+        generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        return generated_words
+
+    @slow
+    def test_batch_generation_en_ro(self):
+        self._assert_generated_batch_equal_expected()
