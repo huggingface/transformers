@@ -37,6 +37,7 @@ if is_torch_available():
     from transformers.pipelines import TranslationPipeline
 
 
+@require_torch
 class ModelTester:
     def __init__(self, parent):
         self.config = MarianConfig(
