@@ -47,7 +47,7 @@ The resulting model called `xlm-r-distilroberta-base-paraphrase-v1` has been rel
 
 Building on this cross language model we fine-tuned it for English and German language on the [STSbenchmark](http://ixa2.si.ehu.es/stswiki/index.php/STSbenchmark) dataset. For German language we used the dataset of our [German STSbenchmark dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark) which has been translated with [deepl.com](https://www.deepl.com/translator). Additionaly to the German and English traing samples we generated samples of English and German crossed. We call this _multilingual finetuning with language-crossing_. It doubled the traing-datasize and tests show that it further improves performance.
 
-We did an automatic hyperprameter search for 33 trials with [Optuna](https://github.com/optuna/optuna). Using crossvalidation on the deepl.com test and dev dataset we found the following best hyperprameters:
+We did an automatic hyperprameter search for 33 trials with [Optuna](https://github.com/optuna/optuna). Using 10-fold crossvalidation on the deepl.com test and dev dataset we found the following best hyperprameters:
 - batch_size = 8
 - num_epochs = 2
 - lr = 1.026343323298136e-05,
