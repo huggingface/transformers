@@ -1,6 +1,19 @@
 ---
 language: de
 license: mit
+tags:
+- sentence_embedding
+- search
+- pytorch 
+- xlm-roberta 
+- roberta
+- xlm-r-distilroberta-base-paraphrase-v1
+- paraphrase
+datasets:
+- STSbenchmark
+metrics:
+- Spearman’s rank correlation
+- cosine similarity
 ---
 
 # German RoBERTa for Sentence Embeddings V2
