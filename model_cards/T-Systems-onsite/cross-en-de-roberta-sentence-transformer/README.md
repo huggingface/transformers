@@ -60,7 +60,7 @@ The final model was trained with these hyperparameters on the combination of the
 # Evaluation
 The evaluation has been done on English, German and both languages crossed. The evaluation-code is available on [Colab](https://colab.research.google.com/drive/1gtGnKq_dYU_sDYqMohTYVMVpxMJjyH0M?usp=sharing). As the metric for evaluation we use the Spearman’s rank correlation between the  cosine-similarity of the sentence embeddings and STSbenchmark labels.
 
-| Model Name                                                    | Spearman (German) | Spearman (English) | Spearman (cross) |
+| Model Name                                                    | Spearman<br/>(German) | Spearman<br/>(English) | Spearman<br/>(cross) |
 |---------------------------------------------------------------|-------------------|--------------------|------------------|
 | xlm-r-distilroberta-base-paraphrase-v1                        | 0.8079            | 0.8350             | 0.7983           |
 | [xlm-r-100langs-bert-base-nli-stsb-mean-tokens](https://huggingface.co/sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens)                 | 0.7877            | 0.8465             | 0.7908           |
