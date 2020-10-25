@@ -67,10 +67,10 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_glue.py
             --model_name_or_path distilbert-base-uncased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --task_name mrpc
+            --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
+            --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
             --do_train
             --do_eval
             --per_device_train_batch_size=2
@@ -116,8 +116,8 @@ class ExamplesTests(TestCasePlus):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
-            result = run_pl_glue.main()
-            # for now just testing that the script can run to a completion
+            result = run_pl_glue.main()[0]
+            # for now just testing that the script can run to completion
             self.assertGreater(result["acc"], 0.25)
             #
             # TODO: this fails on CI - doesn't get acc/f1>=0.75:

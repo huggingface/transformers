@@ -432,8 +432,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     self.__class__.__name__, self.__class__.__name__
                 )
             )
-        # Save config in model
+        # Save config and origin of the pretrained weights if given in model
         self.config = config
+        self.name_or_path = config.name_or_path
 
     @property
     def base_model(self) -> nn.Module:
@@ -489,12 +490,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
         if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
+            if hasattr(self, self.base_model_prefix):
+                self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
-        assert decoder.__class__ == encoder.__class__, f"{decoder.__class__} and {encoder.__class__} have to be equal."
+        if decoder.__class__ != encoder.__class__:
+            logger.info(
+                f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder weights are correctly initialized."
+            )
 
         def tie_encoder_to_decoder_recursively(
             decoder_pointer: nn.Module,
@@ -527,7 +533,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     if name.isdigit():
                         encoder_name = str(int(name) + encoder_layer_pos)
                         decoder_name = name
-                        if not isinstance(decoder_modules[decoder_name], type(encoder_modules[encoder_name])):
+                        if not isinstance(decoder_modules[decoder_name], type(encoder_modules[encoder_name])) and len(
+                            encoder_modules
+                        ) != len(decoder_modules):
                             # this can happen if the name corresponds to the position in a list module list of layers
                             # in this case the decoder has added a cross-attention that the encoder does not have
                             # thus skip this step and substract one layer pos from encoder
@@ -716,7 +724,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
-        if getattr(self.config, "xla_device", False):
+        if getattr(self.config, "xla_device", False) and is_torch_tpu_available():
             import torch_xla.core.xla_model as xm
 
             if xm.is_master_ordinal():
@@ -802,7 +810,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
                 request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
                 messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
@@ -874,10 +882,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if pretrained_model_name_or_path is not None:
             if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
-                    # Load from a TF 1.0 checkpoint
+                    # Load from a TF 1.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
                 elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
-                    # Load from a TF 2.0 checkpoint
+                    # Load from a TF 2.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
@@ -933,6 +941,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         else:
             resolved_archive_file = None
 
+        config.name_or_path = pretrained_model_name_or_path
+
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
 
@@ -941,7 +951,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 state_dict = torch.load(resolved_archive_file, map_location="cpu")
             except Exception:
                 raise OSError(
-                    "Unable to load weights from pytorch checkpoint file. "
+                    f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                    f"at '{resolved_archive_file}'"
                     "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
                 )
 

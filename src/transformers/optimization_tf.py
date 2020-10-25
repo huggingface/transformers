@@ -169,7 +169,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         epsilon (:obj:`float`, `optional`, defaults to 1e-7):
             The epsilon paramenter in Adam, which is a small constant for numerical stability.
         amsgrad (:obj:`bool`, `optional`, default to `False`):
-            Wheter to apply AMSGrad varient of this algorithm or not, see
+            Whether to apply AMSGrad varient of this algorithm or not, see
             `On the Convergence of Adam and Beyond <https://arxiv.org/abs/1904.09237>`__.
         weight_decay_rate (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply.

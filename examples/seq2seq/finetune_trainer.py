@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from seq2seq_trainer import Seq2SeqTrainer
+from seq2seq_trainer import Seq2SeqTrainer, arg_to_scheduler_choices
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -16,11 +16,11 @@ from transformers import (
 )
 from transformers.trainer_utils import EvaluationStrategy
 from utils import (
-    LegacySeq2SeqDataset,
     Seq2SeqDataCollator,
     Seq2SeqDataset,
     assert_all_frozen,
     build_compute_metrics_fn,
+    check_output_dir,
     freeze_embeds,
     freeze_params,
     lmap,
@@ -62,6 +62,9 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     dropout: Optional[float] = field(default=None, metadata={"help": "Dropout probability. Goes into model.config."})
     attention_dropout: Optional[float] = field(
         default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
+    )
+    lr_scheduler: Optional[str] = field(
+        default="linear", metadata={"help": f"Which lr scheduler to use. Selected in {arg_to_scheduler_choices}"}
     )
 
 
@@ -134,6 +137,10 @@ class DataTrainingArguments:
     src_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
     tgt_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
     eval_beams: Optional[int] = field(default=None, metadata={"help": "# num_beams to use for evaluation."})
+    ignore_pad_token_for_loss: bool = field(
+        default=True,
+        metadata={"help": "If only pad tokens should be ignored. This assumes that `config.pad_token_id` is defined."},
+    )
 
 
 def main():
@@ -150,15 +157,7 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
-        )
+    check_output_dir(training_args)
 
     # Setup logging
     logging.basicConfig(
@@ -227,7 +226,7 @@ def main():
         freeze_params(model.get_encoder())
         assert_all_frozen(model.get_encoder())
 
-    dataset_class = Seq2SeqDataset if hasattr(tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
+    dataset_class = Seq2SeqDataset
 
     # Get datasets
     train_dataset = (

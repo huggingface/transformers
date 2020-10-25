@@ -42,6 +42,7 @@ from .configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfi
 from .configuration_mobilebert import MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
+from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 from .configuration_rag import RagConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
@@ -51,6 +52,7 @@ from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
+from .configuration_xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 
@@ -85,6 +87,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP
     ]
     for key, value, in pretrained_map.items()
@@ -119,6 +123,8 @@ CONFIG_MAPPING = OrderedDict(
         ("gpt2", GPT2Config),
         ("transfo-xl", TransfoXLConfig),
         ("xlnet", XLNetConfig),
+        ("xlm-prophetnet", XLMProphetNetConfig),
+        ("prophetnet", ProphetNetConfig),
         ("xlm", XLMConfig),
         ("ctrl", CTRLConfig),
         ("electra", ElectraConfig),
@@ -145,7 +151,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
         ("mbart", "mBART"),
-        ("mpnet", "MPNet"),
         ("bart", "BART"),
         ("reformer", "Reformer"),
         ("longformer", "Longformer"),
@@ -168,6 +173,9 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutlm", "LayoutLM"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
+        ("xlm-prophetnet", "XLMProphetNet"),
+        ("prophetnet", "ProphetNet"),
+        ("mpnet", "MPNet"),
     ]
 )
 
@@ -270,7 +278,7 @@ class AutoConfig:
                       our S3, e.g., ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing a configuration file saved using the
                       :meth:`~transformers.PretrainedConfig.save_pretrained` method, or the
-                      :meth:`~transformers.PretrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
+                      :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
                     - A path or url to a saved configuration JSON `file`, e.g.,
                       ``./my_model_directory/configuration.json``.
             cache_dir (:obj:`str`, `optional`):

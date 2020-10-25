@@ -41,11 +41,14 @@ IGNORE_NON_TESTED = [
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
+    "test_modeling_flax_bert.py",
+    "test_modeling_flax_roberta.py",
+    "test_modeling_mbart.py",
+    "test_modeling_pegasus.py",
     "test_modeling_tf_camembert.py",
     "test_modeling_tf_xlm_roberta.py",
+    "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
-    "test_modeling_pegasus.py",
-    "test_modeling_mbart.py",
 ]
 
 # Update this list for models that are not documented with a comment explaining the reason it should not be.
@@ -61,6 +64,7 @@ IGNORE_NON_DOCUMENTED = [
 MODEL_NAME_TO_DOC_FILE = {
     "openai": "gpt.rst",
     "transfo_xl": "transformerxl.rst",
+    "xlm_prophetnet": "xlmprophetnet.rst",
     "xlm_roberta": "xlmroberta.rst",
     "bert_generation": "bertgeneration.rst",
 }
@@ -86,6 +90,7 @@ def get_model_modules():
         "modeling_outputs",
         "modeling_retribert",
         "modeling_utils",
+        "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_outputs",
@@ -242,6 +247,9 @@ def _get_model_name(module):
     splits = module.__name__.split("_")
     # Secial case for transfo_xl
     if splits[-1] == "xl":
+        return "_".join(splits[-2:])
+    # Special case for xlm_prophetnet
+    if splits[-1] == "prophetnet" and splits[-2] == "xlm":
         return "_".join(splits[-2:])
     # Secial case for xlm_roberta
     if splits[-1] == "roberta" and splits[-2] == "xlm":

@@ -18,12 +18,10 @@
 import json
 import os
 import re
-
-from tokenizers import CharBPETokenizer
+from typing import Optional, Tuple
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .utils import logging
 
 
@@ -124,6 +122,10 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         self.cache = {}
 
     @property
+    def do_lower_case(self):
+        return True
+
+    @property
     def vocab_size(self):
         return len(self.encoder)
 
@@ -202,22 +204,16 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the vocabulary and special tokens file to a directory.
-
-        Args:
-            vocab_path (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
-        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
+        vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+        merge_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+        )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))
@@ -236,38 +232,3 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
-
-
-class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
-    """
-    Construct a "fast" GPT Tokenizer (backed by HuggingFace's `tokenizers` library). Based on Byte-Pair-Encoding with
-    the following peculiarities:
-
-    - lowercases all inputs,
-    - uses :obj:`SpaCy` tokenizer and :obj:`ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
-      :obj:`BasicTokenizer` if not.
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
-
-    Args:
-        vocab_file (:obj:`str`):
-            Path to the vocabulary file.
-        merges_file (:obj:`str`):
-            Path to the merges file.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
-
-    def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        kwargs.setdefault("unk_token", unk_token)
-        super().__init__(
-            CharBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, unk_token=unk_token, lowercase=True),
-            **kwargs,
-        )

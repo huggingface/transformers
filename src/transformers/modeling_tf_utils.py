@@ -136,8 +136,7 @@ class TFCausalLanguageModelingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        # make sure only labels that are not equal to -100
-        # are taken into account as loss
+        # make sure only labels that are not equal to -100 do not affect loss
         active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
@@ -346,8 +345,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     self.__class__.__name__, self.__class__.__name__
                 )
             )
-        # Save config in model
+        # Save config and origin of the pretrained weights if given in model
         self.config = config
+        self.name_or_path = config.name_or_path
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -569,7 +569,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
                 request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
                 messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
@@ -640,12 +640,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Load model
         if pretrained_model_name_or_path is not None:
             if os.path.isdir(pretrained_model_name_or_path):
-                if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
+                if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    # Load from a PyTorch checkpoint in priority if from_pt
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
-                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
-                    # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_pt` set to False".format(
@@ -689,6 +689,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
         else:
             resolved_archive_file = None
+
+        config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
@@ -1063,3 +1065,33 @@ def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor
 
     # else variable is bool
     return bool_variable
+
+
+class TFWrappedEmbeddings:
+    """
+    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
+    class to avoid problem with weight restoring. Also it makes sure that the layer is
+    called from the correct scope to avoid problem with saving/storing the correct weights
+    """
+
+    def __init__(self, layer, abs_scope_name=None):
+        self._layer = layer
+        self._abs_scope_name = abs_scope_name
+
+    def call(self, inputs, mode="embedding"):
+        if self._abs_scope_name is None:
+            return self._layer.call(inputs, mode)
+
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer.call(inputs, mode)
+
+    def __call__(self, inputs, mode="embedding"):
+        if self._abs_scope_name is None:
+            return self._layer(inputs, mode)
+
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer(inputs, mode)

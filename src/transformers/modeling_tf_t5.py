@@ -20,8 +20,11 @@ import copy
 import itertools
 import math
 import warnings
+from typing import Tuple
 
 import tensorflow as tf
+
+from transformers.modeling_tf_utils import TFWrappedEmbeddings
 
 from .configuration_t5 import T5Config
 from .file_utils import (
@@ -504,36 +507,6 @@ class TFT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class _NoLayerEmbedTokens:
-    """
-    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
-    class to avoid problem with weight restoring. Also it makes sure that the layer is
-    called from the correct scope to avoid problem with saving/storing the correct weights
-    """
-
-    def __init__(self, layer, abs_scope_name=None):
-        self._layer = layer
-        self._abs_scope_name = abs_scope_name
-
-    def call(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer.call(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer.call(inputs, mode)
-
-    def __call__(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer(inputs, mode)
-
-
 ####################################################
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
@@ -594,7 +567,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         training=False,
         **kwargs,
-    ):
+    ) -> Tuple:
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
@@ -699,7 +672,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
+        # positions we want to attend and  -1e9 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
@@ -721,7 +694,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if num_dims_encoder_attention_mask == 2:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
 
-            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposistion
+            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
             # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
             # encoder_extended_attention_mask = tf.math.equal(encoder_extended_attention_mask,
             #                                         tf.transpose(encoder_extended_attention_mask, perm=(-1, -2)))
@@ -913,7 +886,7 @@ T5_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
@@ -979,8 +952,8 @@ class TFT5Model(TFT5PreTrainedModel):
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1002,7 +975,8 @@ class TFT5Model(TFT5PreTrainedModel):
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 
@@ -1176,8 +1150,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1198,7 +1172,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
 
@@ -1417,7 +1392,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             "use_cache": use_cache,
         }
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past, beam_idx) -> Tuple:
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
 

@@ -10,7 +10,17 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 
-from .file_utils import _datasets_available, _faiss_available, _tf_available, _torch_available, _torch_tpu_available
+from .file_utils import (
+    _datasets_available,
+    _faiss_available,
+    _flax_available,
+    _sentencepiece_available,
+    _tf_available,
+    _tokenizers_available,
+    _torch_available,
+    _torch_tpu_available,
+)
+from .integrations import _has_optuna, _has_ray
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -49,8 +59,48 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
+_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
+_run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
+
+
+def is_pt_tf_cross_test(test_case):
+    """
+    Decorator marking a test as a test that control interactions between PyTorch and TensorFlow.
+
+    PT+TF tests are skipped by default and we can run only them by setting RUN_PT_TF_CROSS_TESTS environment variable
+    to a truthy value and selecting the is_pt_tf_cross_test pytest mark.
+
+    """
+    if not _run_pt_tf_cross_tests or not _torch_available or not _tf_available:
+        return unittest.skip("test is PT+TF test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_pt_tf_cross_test()(test_case)
+
+
+def is_pipeline_test(test_case):
+    """
+    Decorator marking a test as a pipeline test.
+
+    Pipeline tests are skipped by default and we can run only them by setting RUN_PIPELINE_TEST environment variable
+    to a truthy value and selecting the is_pipeline_test pytest mark.
+
+    """
+    if not _run_pipeline_tests:
+        return unittest.skip("test is pipeline test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_pipeline_test()(test_case)
 
 
 def slow(test_case):
@@ -107,7 +157,45 @@ def require_tf(test_case):
         return test_case
 
 
-def require_multigpu(test_case):
+def require_flax(test_case):
+    """
+    Decorator marking a test that requires JAX & Flax
+
+    These tests are skipped when one / both are not installed
+
+    """
+    if not _flax_available:
+        test_case = unittest.skip("test requires JAX & Flax")(test_case)
+    return test_case
+
+
+def require_sentencepiece(test_case):
+    """
+    Decorator marking a test that requires SentencePiece.
+
+    These tests are skipped when SentencePiece isn't installed.
+
+    """
+    if not _sentencepiece_available:
+        return unittest.skip("test requires SentencePiece")(test_case)
+    else:
+        return test_case
+
+
+def require_tokenizers(test_case):
+    """
+    Decorator marking a test that requires 🤗 Tokenizers.
+
+    These tests are skipped when 🤗 Tokenizers isn't installed.
+
+    """
+    if not _tokenizers_available:
+        return unittest.skip("test requires tokenizers")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_multigpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
 
@@ -127,7 +215,7 @@ def require_multigpu(test_case):
         return test_case
 
 
-def require_non_multigpu(test_case):
+def require_torch_non_multigpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
@@ -153,13 +241,15 @@ def require_torch_tpu(test_case):
 
 
 if _torch_available:
-    # Set the USE_CUDA environment variable to select a GPU.
-    torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"
+    # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
+    import torch
+
+    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 else:
     torch_device = None
 
 
-def require_torch_and_cuda(test_case):
+def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch. """
     if torch_device != "cuda":
         return unittest.skip("test requires CUDA")(test_case)
@@ -184,13 +274,49 @@ def require_faiss(test_case):
         return test_case
 
 
-def get_tests_dir():
+def require_optuna(test_case):
     """
-    returns the full path to the `tests` dir, so that the tests can be invoked from anywhere
+    Decorator marking a test that requires optuna.
+
+    These tests are skipped when optuna isn't installed.
+
+    """
+    if not _has_optuna:
+        return unittest.skip("test requires optuna")(test_case)
+    else:
+        return test_case
+
+
+def require_ray(test_case):
+    """
+    Decorator marking a test that requires Ray/tune.
+
+    These tests are skipped when Ray/tune isn't installed.
+
+    """
+    if not _has_ray:
+        return unittest.skip("test requires Ray/tune")(test_case)
+    else:
+        return test_case
+
+
+def get_tests_dir(append_path=None):
+    """
+    Args:
+        append_path: optional path to append to the tests dir path
+
+    Return:
+        The full path to the `tests` dir, so that the tests can be invoked from anywhere.
+        Optionally `append_path` is joined after the `tests` dir the former is provided.
+
     """
     # this function caller's __file__
     caller__file__ = inspect.stack()[1][1]
-    return os.path.abspath(os.path.dirname(caller__file__))
+    tests_dir = os.path.abspath(os.path.dirname(caller__file__))
+    if append_path:
+        return os.path.join(tests_dir, append_path)
+    else:
+        return tests_dir
 
 
 #
@@ -441,9 +567,9 @@ class TestCasePlus(unittest.TestCase):
 def mockenv(**kwargs):
     """this is a convenience wrapper, that allows this:
 
-    @mockenv(USE_CUDA=True, USE_TF=False)
+    @mockenv(RUN_SLOW=True, USE_TF=False)
     def test_something():
-        use_cuda = os.getenv("USE_CUDA", False)
+        run_slow = os.getenv("RUN_SLOW", False)
         use_tf = os.getenv("USE_TF", False)
     """
     return unittest.mock.patch.dict(os.environ, kwargs)

@@ -12,14 +12,14 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 - `MBartForConditionalGeneration`
 - `FSMTForConditionalGeneration`
 - `T5ForConditionalGeneration`
-    
 
 ## Datasets
 
-#### XSUM:
+#### XSUM
+
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz
+wget https://cdn-datasets.huggingface.co/summarization/xsum.tar.gz
 tar -xzvf xsum.tar.gz
 export XSUM_DIR=${PWD}/xsum
 ```
@@ -27,30 +27,44 @@ this should make a directory called `xsum/` with files like `test.source`.
 To use your own data, copy that files format. Each article to be summarized is on its own line.
 
 #### CNN/DailyMail
+
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm_v2.tgz
+wget https://cdn-datasets.huggingface.co/summarization/cnn_dm_v2.tgz
 tar -xzvf cnn_dm_v2.tgz  # empty lines removed
 mv cnn_cln cnn_dm
 export CNN_DIR=${PWD}/cnn_dm
 ```
 this should make a directory called `cnn_dm/` with 6 files.
 
-#### WMT16 English-Romanian Translation Data:
+#### WMT16 English-Romanian Translation Data
+
 download with this command:
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
+wget https://cdn-datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
 ```
 this should make a directory called `wmt_en_ro/` with 6 files.
 
-#### WMT English-German:
+#### WMT English-German
+
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_de.tgz
+wget https://cdn-datasets.huggingface.co/translation/wmt_en_de.tgz
 tar -xzvf wmt_en_de.tgz
 export DATA_DIR=${PWD}/wmt_en_de
 ```
+
+#### FSMT datasets (wmt)
+
+Refer to the scripts starting with `eval_` under:
+https://github.com/huggingface/transformers/tree/master/scripts/fsmt
+
+#### Pegasus (multiple datasets)
+
+Multiple eval datasets are available for download from: 
+https://github.com/stas00/porting/tree/master/datasets/pegasus
+
 
 #### Private Data
 
@@ -64,7 +78,6 @@ test.source
 test.target
 ```
 The `.source` files are the input, the `.target` files are the desired output.
-
 
 ### Tips and Tricks
 
@@ -100,7 +113,7 @@ All finetuning bash scripts call finetune.py (or distillation.py) with reasonabl
 To see all the possible command line options, run:
 
 ```bash
- ./finetune.py --help 
+./finetune.py --help
 ```
 
 ### Finetuning Training Params
@@ -192,7 +205,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ### Fine-tuning using Seq2SeqTrainer
 To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer` releated `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument to calculate BLEU and ROUGE metrics.
 
-With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set. 
+With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set.
 
 To see all the possible command line options, run:
 
@@ -265,6 +278,7 @@ export DATA_DIR=cnn_dm
     --fp16 \
     --bs 32
 ```
+
 ### Multi-GPU Evaluation
 here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
 because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
@@ -391,6 +405,17 @@ runtime: 13H on V-100 16GB GPU.
 pytest examples/seq2seq/
 ```
 
+### Converting pytorch-lightning checkpoints
+pytorch lightning ``-do_predict`` often fails, after you are done training, the best way to evaluate your model is to convert it.
+
+This should be done for you, with a file called `{save_dir}/best_tfmr`. 
+
+If that file doesn't exist but you have a lightning `.ckpt` file, you can run
+```bash
+python convert_pl_checkpoint_to_hf.py PATH_TO_CKPT  randomly_initialized_hf_model_path save_dir/best_tfmr
+```
+Then either `run_eval` or `run_distributed_eval` with `save_dir/best_tfmr` (see previous sections)
+
 
 ## Experimental Features 
 These features are harder to use and not always useful.
@@ -419,4 +444,3 @@ uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
 The feature is still experimental, because:
 + we can make it much more robust if we have memory mapped/preprocessed datasets.
 + The speedup over sortish sampler is not that large at the moment.
-

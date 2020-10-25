@@ -18,8 +18,11 @@
 import os
 import unicodedata
 from shutil import copyfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+import sentencepiece as spm
+
+from .file_utils import SPIECE_UNDERLINE
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
 
@@ -39,8 +42,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "xlnet-base-cased": None,
     "xlnet-large-cased": None,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 # Segments (not really needed)
 SEG_ID_A = 0
@@ -140,15 +141,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         self._pad_token_type_id = 3
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
@@ -173,14 +165,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -324,21 +308,13 @@ class XLNetTokenizer(PreTrainedTokenizer):
             return len(token_ids_0 + sep) * [0] + cls_segment_id
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

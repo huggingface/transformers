@@ -15,7 +15,6 @@
 """ Tokenization classes for python tokenizers.
     For fast tokenizers (provided by HuggingFace's tokenizers library) see tokenization_utils_fast.py
 """
-
 import itertools
 import re
 import unicodedata
@@ -44,6 +43,11 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+# Slow tokenizers are saved in a vocabulary plus three separated files
+SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
+ADDED_TOKENS_FILE = "added_tokens.json"
+TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
 def _is_whitespace(char):
@@ -132,18 +136,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         raise NotImplementedError
 
-    def get_vocab(self) -> Dict[str, int]:
-        """
-        Returns the vocabulary as a dictionary of token to index.
-
-        :obj:`tokenizer.get_vocab()[token]` is equivalent to :obj:`tokenizer.convert_tokens_to_ids(token)` when
-        :obj:`token` is in the vocab.
-
-        Returns:
-            :obj:`Dict[str, int]`: The vocabulary.
-        """
-        raise NotImplementedError()
-
     def get_added_vocab(self) -> Dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index.
@@ -182,7 +174,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
             print('We have added', num_added_toks, 'tokens')
-            # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+            # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
             model.resize_token_embeddings(len(tokenizer))
         """
         new_tokens = [str(tok) for tok in new_tokens]
@@ -190,7 +182,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         tokens_to_add = []
         for token in new_tokens:
             assert isinstance(token, str)
-            if not special_tokens and self.init_kwargs.get("do_lower_case", False):
+            if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
             if (
                 token != self.unk_token
@@ -239,6 +231,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Converts a string in a sequence of tokens, using the tokenizer.
 
+        Note that, unlike Fast tokenizers (instances of PreTrainedTokenizerFast), this method
+        won't replace the unknown tokens with the `unk_token` yet (this is done in the `encode()` method)
+
         Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
         Takes care of added tokens.
 
@@ -268,7 +263,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
         # TODO: should this be in the base class?
-        if self.init_kwargs.get("do_lower_case", False):
+        if hasattr(self, "do_lower_case") and self.do_lower_case:
             # convert non-special tokens to lowercase
             escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
@@ -675,7 +670,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formated with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -726,39 +721,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """
-        Converts a sequence of token ids in a single string.
-
-        The most simple way to do it is ``" ".join(tokens)`` but we often want to remove
-        sub-word tokenization artifacts at the same time.
-
-        Args:
-            tokens (:obj:`List[str]`): The token to join in a string.
-
-        Return: The joined tokens.
-        """
         return " ".join(tokens)
 
-    def decode(
-        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        spaces_between_special_tokens: bool = True,
     ) -> str:
-        """
-        Converts a sequence of ids in a string, using the tokenizer and vocabulary
-        with options to remove special tokens and clean up tokenization spaces.
-
-        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
-
-        Args:
-            token_ids (:obj:`List[int]`):
-                List of tokenized input ids. Can be obtained using the ``__call__`` method.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to clean up the tokenization spaces.
-
-        Returns:
-            :obj:`str`: The decoded sentence.
-        """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
@@ -778,30 +749,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-        text = " ".join(sub_texts)
+
+        if spaces_between_special_tokens:
+            text = " ".join(sub_texts)
+        else:
+            text = "".join(sub_texts)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text
         else:
             return text
-
-    def save_vocabulary(self, save_directory) -> Tuple[str]:
-        """
-        Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
-        and special token mappings.
-
-        .. warning::
-            Please use :meth:`~transformers.PreTrainedTokenizer.save_pretrained` to save the full tokenizer state if
-            you want to reload it using the :meth:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
-
-        Args:
-            save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
-
-        Returns:
-            A tuple of :obj:`str`: The files saved.
-        """
-        raise NotImplementedError
 
     def prepare_seq2seq_batch(
         self,

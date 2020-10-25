@@ -17,6 +17,9 @@
 
 import os
 from shutil import copyfile
+from typing import Dict, Optional, Tuple
+
+import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
@@ -83,32 +86,13 @@ class ReformerTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
 
-    def __init__(
-        self,
-        vocab_file,
-        eos_token="</s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        additional_special_tokens=[],
-        **kwargs
-    ):
+    def __init__(self, vocab_file, eos_token="</s>", unk_token="<unk>", additional_special_tokens=[], **kwargs):
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
-            pad_token=pad_token,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use ReformerTokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
 
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
@@ -118,7 +102,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return self.sp_model.get_piece_size()
 
-    def get_vocab(self):
+    def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
@@ -130,14 +114,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use ReformerTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -164,21 +140,13 @@ class ReformerTokenizer(PreTrainedTokenizer):
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

@@ -18,6 +18,19 @@ vocab_files_names = {
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "source_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/source.spm"},
+    "target_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/target.spm"},
+    "vocab": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/vocab.json"},
+    "tokenizer_config_file": {
+        "Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/tokenizer_config.json"
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
+PRETRAINED_INIT_CONFIGURATION = {}
+
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/vocab.json
 
 
@@ -63,6 +76,9 @@ class MarianTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = vocab_files_names
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
@@ -189,27 +205,22 @@ class MarianTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
-        save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
+        save_json(
+            self.encoder,
+            save_dir / ((filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab"]),
+        )
 
         for orig, f in zip(["source.spm", "target.spm"], self.spm_files):
-            dest_path = save_dir / Path(f).name
+            dest_path = save_dir / ((filename_prefix + "-" if filename_prefix else "") + Path(f).name)
             if not dest_path.exists():
                 copyfile(f, save_dir / orig)
 
-        return tuple(save_dir / f for f in self.vocab_files_names)
+        return tuple(
+            save_dir / ((filename_prefix + "-" if filename_prefix else "") + f) for f in self.vocab_files_names
+        )
 
     def get_vocab(self) -> Dict:
         vocab = self.encoder.copy()
