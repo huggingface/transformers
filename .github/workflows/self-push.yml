@@ -63,6 +63,13 @@ jobs:
         source .env/bin/activate
         python -m pytest -n 2 --dist=loadfile -s ./tests/
 
+    - name: test suite reports artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: tests_results
+        path: tests_*
+
+
   run_tests_torch_and_tf_multiple_gpu:
     runs-on: [self-hosted, multi-gpu]
     steps:
