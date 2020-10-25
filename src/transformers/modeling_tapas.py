@@ -27,7 +27,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .activations import ACT2FN
 from .configuration_tapas import TapasConfig
 from .file_utils import (ModelOutput, 
-                        add_code_sample_docstrings, 
                         add_start_docstrings, 
                         add_start_docstrings_to_callable,
                         replace_return_docstrings,
@@ -71,8 +70,7 @@ class TableQuestionAnsweringOutput(ModelOutput):
     Output type of :class:`~transformers.TapasForQuestionAnswering`.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` and :obj:`answer` (and possibly`:obj:`aggregation_function_id`, 
-        :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` and :obj:`answer` (and possibly :obj:`aggregation_labels`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
             Total loss as the sum of the hierarchical cell selection log-likelihood loss, (optionally) supervised cell selection
             loss and (optionally) the semi-supervised regression loss and (optionally) supervised loss for aggregations.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
@@ -761,17 +759,17 @@ class TapasModel(TapasPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import TapasModel, TapasTokenizer
+            >>> from transformers import TapasTokenizer, TapasModel
             >>> import pandas as pd
 
-            >>> model = TapasModel.from_pretrained('tapas-base-finetuned-wtq', return_dict=True)
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
+            >>> model = TapasModel.from_pretrained('tapas-base-finetuned-wtq', return_dict=True)
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["How many movies has George Clooney played in?", "How old is he?"]
 
-            >>> inputs = tokenizer(table, queries, return_tensors="pt)
+            >>> inputs = tokenizer(table, queries, return_tensors="pt")
             >>> outputs = model(**inputs)
 
             >>> last_hidden_states = outputs.last_hidden_state
@@ -850,12 +848,6 @@ class TapasModel(TapasPreTrainedModel):
 
 
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top. """, TAPAS_START_DOCSTRING)
-@add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="tapas-base-finetuned-wtq",
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
 class TapasForMaskedLM(TapasPreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
@@ -872,6 +864,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         return self.lm_head
 
     @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -894,6 +887,25 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import TapasTokenizer, TapasForMaskedLM
+            >>> import pandas as pd
+
+            >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base')
+            >>> model = TapasForMaskedLM.from_pretrained('tapas-base', return_dict=True)
+
+            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
+            >>> table = pd.DataFrame.from_dict(data)
+
+            >>> inputs = tokenizer(table, "How many [MASK] has George [MASK] played in?", return_tensors="pt")
+            >>> labels = tokenizer(table, "How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
+            
+            >>> outputs = model(**inputs, labels=labels)
+            >>> last_hidden_states = outputs.last_hidden_state
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1011,7 +1023,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         inputs_embeds=None,
         table_mask=None,
         label_ids=None,
-        aggregation_function_id=None,
+        aggregation_labels=None,
         answer=None,
         numeric_values=None,
         numeric_values_scale=None,
@@ -1024,8 +1036,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             Mask for the table. Indicates which tokens belong to the table (1). Question tokens, table headers and padding are 0.
         label_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Labels per token.
-        aggregation_function_id (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Aggregation function id for every example in the batch.
+        aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
+            Aggregation function id for every example in the batch for computing the aggregation loss.
+            Indices should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`.
+            Note: this is called "aggregation_function_id" in the original implementation. 
         answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
             Answer for every example in the batch. Nan if there is no scalar answer.
         numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
@@ -1037,17 +1051,17 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         
         Examples::
 
-            >>> from transformers import TapasForQuestionAnswering, TapasTokenizer
+            >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
             >>> import pandas as pd
 
-            >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq', return_dict=True)
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
+            >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq', return_dict=True)
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["How many movies has George Clooney played in?", "How old is he?"]
 
-            >>> inputs = tokenizer(table, queries, return_tensors="pt)
+            >>> inputs = tokenizer(table, queries, return_tensors="pt")
             >>> outputs = model(**inputs)
 
             >>> logits = outputs.logits
@@ -1221,10 +1235,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             ######################f###################################################
             if self.config.num_aggregation_labels > 0:
                 # Note that `aggregate_mask` is None if the setting is supervised.
-                if aggregation_function_id is not None:
-                    assert label_ids.shape[0] == aggregation_function_id.shape[0]
+                if aggregation_labels is not None:
+                    assert label_ids.shape[0] == aggregation_labels.shape[0]
                     per_example_additional_loss = utils._calculate_aggregation_loss(
-                        logits_aggregation, aggregate_mask, aggregation_function_id, self.config
+                        logits_aggregation, aggregate_mask, aggregation_labels, self.config
                     )
                 else:
                     raise ValueError("You have to specify aggregation function ids")
@@ -1290,12 +1304,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="tapas-base-finetuned-tabfact-with-reset-and-intermediate-pretraining",
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1316,6 +1325,25 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
             Note: this is called "classification_class_index" in the original implementation. 
+
+        Returns:
+        
+        Examples::
+
+            >>> from transformers import TapasTokenizer, TapasForSequenceClassification
+            >>> import pandas as pd
+
+            >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-tabfact')
+            >>> model = TapasForSequenceClassification.from_pretrained('tapas-base-finetuned-tabfact', return_dict=True)
+
+            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
+            >>> table = pd.DataFrame.from_dict(data)
+            >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors having more than 60 movies"]
+
+            >>> inputs = tokenizer(table, queries, return_tensors="pt")
+            >>> outputs = model(**inputs)
+
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
