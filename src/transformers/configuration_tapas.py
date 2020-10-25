@@ -41,8 +41,6 @@ class TapasConfig(BertConfig):
             Weight for positive labels.
         num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
             The number of aggregation classes to predict.
-        num_classification_labels (:obj:`int`, `optional`, defaults to 0):
-            The number of classes to predict.
         aggregation_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the aggregation loss.
         use_answer_as_supervision (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -104,7 +102,6 @@ class TapasConfig(BertConfig):
         type_vocab_size=[3, 256, 256, 2, 256, 256, 10],
         positive_weight=10.0,
         num_aggregation_labels=0,
-        num_classification_labels=0,
         aggregation_loss_importance=1.0,
         use_answer_as_supervision=False,
         answer_loss_importance=1.0,
@@ -134,7 +131,6 @@ class TapasConfig(BertConfig):
         # Fine-tuning task arguments
         self.positive_weight = positive_weight
         self.num_aggregation_labels = num_aggregation_labels
-        self.num_classification_labels = num_classification_labels
         self.aggregation_loss_importance = aggregation_loss_importance
         self.use_answer_as_supervision = use_answer_as_supervision
         self.answer_loss_importance = answer_loss_importance

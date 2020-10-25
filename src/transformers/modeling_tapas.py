@@ -22,7 +22,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import ACT2FN
 from .configuration_tapas import TapasConfig
@@ -38,6 +38,7 @@ from .modeling_outputs import (
     BaseModelOutput, 
     BaseModelOutputWithPooling, 
     MaskedLMOutput,
+    SequenceClassifierOutput,
 )
 from .modeling_utils import (
     PreTrainedModel,
@@ -70,16 +71,14 @@ class TableQuestionAnsweringOutput(ModelOutput):
     Output type of :class:`~transformers.TapasForQuestionAnswering`.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` and :obj:`answer` (and possibly :obj:`classification_class_index`,
-        `:obj:`aggregation_function_id`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
-            Total loss as the sum of the hierarchical cell selection log-likelihood loss, (optionally) classification loss, (optionally) supervised cell selection
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` and :obj:`answer` (and possibly`:obj:`aggregation_function_id`, 
+        :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
+            Total loss as the sum of the hierarchical cell selection log-likelihood loss, (optionally) supervised cell selection
             loss and (optionally) the semi-supervised regression loss and (optionally) supervised loss for aggregations.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the cell selection head, for every token.
         logits_aggregation (:obj:`torch.FloatTensor`, `optional`, of shape :obj:`(batch_size, num_aggregation_labels)`):
             Prediction scores of the aggregation head, for every aggregation operator.
-        logits_cls (:obj:`torch.FloatTensor`, `optional`, of shape :obj:`(batch_size, num_classification_labels)`):
-            Prediction scores of the classification head, for every class index.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -94,7 +93,6 @@ class TableQuestionAnsweringOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     logits_aggregation: torch.FloatTensor = None
-    logits_cls: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -172,8 +170,11 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "output_bias_agg")
             elif scope_names[0] == "output_weights_agg":
                 pointer = getattr(pointer, "output_weights_agg")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
+            # classification head
+            elif scope_names[0] == "output_bias_cls":
+                pointer = getattr(pointer, "output_bias_cls")
+            elif scope_names[0] == "output_weights_cls":
+                pointer = getattr(pointer, "output_weights_cls")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -956,8 +957,8 @@ class TapasLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Tapas Model with a cell selection head and optionally aggregation and classification heads on top for question-answering 
-    tasks on tables (linear layers on top of the hidden-states output to compute `logits` and optionally `logits_aggregation` and `logits_cls`). """,
+    """Tapas Model with a cell selection head and optionally aggregation head on top for question-answering 
+    tasks on tables (linear layers on top of the hidden-states output to compute `logits` and optionally `logits_aggregation`), e.g. for SQA, WTQ or WikiSQL tasks. """,
     TAPAS_START_DOCSTRING,
 )
 class TapasForQuestionAnswering(TapasPreTrainedModel):
@@ -996,14 +997,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             )  # here, a truncated normal is used in the original implementation
             self.output_bias_agg = nn.Parameter(torch.zeros([config.num_aggregation_labels]))
 
-        # classification head
-        if config.num_classification_labels > 0:
-            self.output_weights_cls = nn.Parameter(torch.empty([config.num_classification_labels, config.hidden_size]))
-            nn.init.normal_(
-                self.output_weights_cls, std=0.02
-            )  # here, a truncated normal is used in the original implementation
-            self.output_bias_cls = nn.Parameter(torch.zeros([config.num_classification_labels]))
-
         self.init_weights()
 
     @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1022,7 +1015,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         answer=None,
         numeric_values=None,
         numeric_values_scale=None,
-        classification_class_index=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1040,8 +1032,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             Numeric values of every token. Nan for tokens which are not numeric values.
         numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Scale of the numeric values of every token.
-        classification_class_index (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Classification class index for every example in the batch.
 
         Returns:
         
@@ -1152,13 +1142,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 self.config.allow_empty_column_selection,
             )
 
-        ########## Classification logits ###########
-        logits_cls = None
-        if self.config.num_classification_labels > 0:
-            logits_cls = utils.compute_classification_logits(
-                pooled_output, self.output_weights_cls, self.output_bias_cls
-            )
-
         ########## Aggregation logits ##############
         logits_aggregation = None
         if self.config.num_aggregation_labels > 0:
@@ -1222,23 +1205,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 )
                 dist_per_token = torch.distributions.Bernoulli(logits=logits)
 
-            ### Classification loss
-            #######################
-            if self.config.num_classification_labels > 0:
-                if classification_class_index is not None:
-                    assert label_ids.shape[0] == classification_class_index.shape[0]
-                    one_hot_labels = torch.nn.functional.one_hot(
-                        classification_class_index, num_classes=self.config.num_classification_labels
-                    ).type(torch.float32)
-                    log_probs = torch.nn.functional.log_softmax(logits_cls, dim=-1)
-
-                    per_example_classification_intermediate = -torch.sum(one_hot_labels * log_probs, dim=-1)
-
-                    cls_loss = torch.mean(per_example_classification_intermediate)
-                    total_loss += cls_loss
-                else:
-                    raise ValueError("You have to specify classification class indices")
-
             ### Supervised cell selection
             #############################
             if self.config.span_prediction != "none":
@@ -1291,14 +1257,109 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 logits, column_logits, label_ids, cell_index, col_index, cell_mask
             )
         if not return_dict:
-            output = (logits, logits_aggregation, logits_cls) + outputs[2:]
+            output = (logits, logits_aggregation) + outputs[2:]
             return ((total_loss,) + output) if calculate_loss else output
 
         return TableQuestionAnsweringOutput(
             loss=total_loss,
             logits=logits,
             logits_aggregation=logits_aggregation,
-            logits_cls=logits_cls,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+@add_start_docstrings(
+    """Tapas Model with a sequence classification head on top (a linear layer on top of
+    the pooled output), e.g. for TabFact (Chen et al., 2020). """,
+    TAPAS_START_DOCSTRING,
+)
+class TapasForSequenceClassification(TapasPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.tapas = TapasModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        
+        # classification head
+        self.output_weights_cls = nn.Parameter(torch.empty([config.num_labels, config.hidden_size]))
+        nn.init.normal_(
+            self.output_weights_cls, std=0.02
+        )  # here, a truncated normal is used in the original implementation
+        self.output_bias_cls = nn.Parameter(torch.zeros([config.num_labels]))
+
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="tapas-base-finetuned-tabfact-with-reset-and-intermediate-pretraining",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Note: this is called "classification_class_index" in the original implementation. 
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        outputs = self.tapas(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        
+        ########## Classification logits ###########
+        logits_cls = None
+        if self.config.num_labels > 0:
+            logits_cls = utils.compute_classification_logits(
+                pooled_output, self.output_weights_cls, self.output_bias_cls
+            )
+
+        ########## Classification loss #############
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits_cls.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits_cls.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits_cls,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits_cls,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

@@ -138,3 +138,9 @@ TapasForQuestionAnswering
 
 .. autoclass:: transformers.TapasForQuestionAnswering
     :members:
+
+TapasForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TapasForSequenceClassification
+    :members: forward
