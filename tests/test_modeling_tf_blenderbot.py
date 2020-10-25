@@ -26,8 +26,7 @@ from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
-    from transformers import TFBlenderbotForConditionalGeneration
-    from transformers import TFAutoModelForSeq2SeqLM
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration
 
 
 class BlenderbotModelTester(ModelTester):

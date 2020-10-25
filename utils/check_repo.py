@@ -67,6 +67,7 @@ MODEL_NAME_TO_DOC_FILE = {
     "xlm_prophetnet": "xlmprophetnet.rst",
     "xlm_roberta": "xlmroberta.rst",
     "bert_generation": "bertgeneration.rst",
+    "marian": "marian.rst",
 }
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -148,7 +149,6 @@ def get_model_doc_files():
     _ignore_modules = [
         "auto",
         "dialogpt",
-        "marian",
         "retribert",
     ]
     doc_files = []
@@ -245,6 +245,7 @@ def check_models_are_documented(module, doc_file):
 def _get_model_name(module):
     """ Get the model name for the module defining it."""
     splits = module.__name__.split("_")
+
     # Secial case for transfo_xl
     if splits[-1] == "xl":
         return "_".join(splits[-2:])
