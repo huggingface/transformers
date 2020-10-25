@@ -121,14 +121,6 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         # inputs_embeds not supported
         pass
 
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -159,6 +151,14 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         # Compile extended model
         extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+    def test_saved_model_with_hidden_states_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
+
+    def test_saved_model_with_attentions_output(self):
+        # Should be uncommented during patrick TF refactor
+        pass
 
 
 @require_tf
