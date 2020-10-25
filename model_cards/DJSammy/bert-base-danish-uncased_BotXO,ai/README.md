@@ -10,7 +10,7 @@ license: cc-by-4.0
 datasets:
 - common_crawl
 - wikipedia
-pipeline_tag:
+pipeline:
 - fill-mask
 widget:
 - text: "København er <mask> i Danmark."
