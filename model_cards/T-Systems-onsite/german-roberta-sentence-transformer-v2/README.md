@@ -4,7 +4,7 @@ license: mit
 ---
 
 # German RoBERTa for Sentence Embeddings V2
-**The new [T-Systems-onsite/cross-en-de-roberta-sentence-transformers](https://huggingface.co/T-Systems-onsite/cross-en-de-roberta-sentence-transformers) model is slightly better for German language. It is also the current best model for English language and works cross-lingually. Please consider using that model.**
+**The new [T-Systems-onsite/cross-en-de-roberta-sentence-transformer](https://huggingface.co/T-Systems-onsite/cross-en-de-roberta-sentence-transformer) model is slightly better for German language. It is also the current best model for English language and works cross-lingually. Please consider using that model.**
 
 This model is intended to [compute sentence (text embeddings)](https://www.sbert.net/docs/usage/computing_sentence_embeddings.html) for German text. These embeddings can then be compared with [cosine-similarity](https://en.wikipedia.org/wiki/Cosine_similarity) to find sentences with a similar semantic meaning. For example this can be useful for [semantic textual similarity](https://www.sbert.net/docs/usage/semantic_textual_similarity.html), [semantic search](https://www.sbert.net/docs/usage/semantic_search.html), or [paraphrase mining](https://www.sbert.net/docs/usage/paraphrase_mining.html). To do this you have to use the [Sentence Transformers Python framework](https://github.com/UKPLab/sentence-transformers).
 
@@ -66,4 +66,4 @@ The evaluation has been done on the test set of our [German STSbenchmark dataset
 | xlm-r-100langs-bert-base-nli-stsb-mean-tokens                 | 0.8194     |
 | xlm-r-bert-base-nli-stsb-mean-tokens                          | 0.8194     |
 | **T-Systems-onsite/german-roberta-sentence-transformer-v2**   | **0.8529** |
-| **[T-Systems-onsite/cross-en-de-roberta-sentence-transformer](https://huggingface.co/T-Systems-onsite/cross-en-de-roberta-sentence-transformers)** | **0.8550** |
+| **[T-Systems-onsite/cross-en-de-roberta-sentence-transformer](https://huggingface.co/T-Systems-onsite/cross-en-de-roberta-sentence-transformer)** | **0.8550** |
