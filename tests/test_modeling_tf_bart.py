@@ -36,10 +36,10 @@ if is_tf_available():
 
 
 @require_tf
-class ModelTester:
-    kwargs = {}
-    hidden_act = "gelu"
+class TFBartModelTester:
     config_cls = BartConfig
+    config_updates = {}
+    hidden_act = "gelu"
 
     def __init__(self, parent):
         self.parent = parent
@@ -82,7 +82,7 @@ class ModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
-            **self.kwargs,
+            **self.config_updates,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -108,7 +108,7 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    model_tester_cls = ModelTester
+    model_tester_cls = TFBartModelTester
 
     def setUp(self):
         self.model_tester = self.model_tester_cls(self)

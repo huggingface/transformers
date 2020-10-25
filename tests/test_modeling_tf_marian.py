@@ -28,12 +28,12 @@ if is_tf_available():
     from transformers import MarianConfig, TFAutoModelForSeq2SeqLM, TFMarianMTModel
 
     from .test_configuration_common import ConfigTester
-    from .test_modeling_tf_bart import ModelTester
+    from .test_modeling_tf_bart import TFBartModelTester
     from .test_modeling_tf_common import TFModelTesterMixin
 
 
-class MarianModelTester(ModelTester):
-    kwargs = dict(static_position_embeddings=True, add_bias_logits=True)
+class ModelTester(TFBartModelTester):
+    config_updates = dict(static_position_embeddings=True, add_bias_logits=True)
     config_cls = MarianConfig
 
 
@@ -41,7 +41,7 @@ class MarianModelTester(ModelTester):
 class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFMarianMTModel,)
     all_generative_model_classes = (TFMarianMTModel,)
-    model_tester_cls = MarianModelTester
+    model_tester_cls = ModelTester
     is_encoder_decoder = True
     test_pruning = False
 

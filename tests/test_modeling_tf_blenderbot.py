@@ -18,7 +18,7 @@ import unittest
 import tensorflow as tf
 
 from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_tf_bart import ModelTester
+from tests.test_modeling_tf_bart import TFBartModelTester
 from tests.test_modeling_tf_common import TFModelTesterMixin
 from transformers import BlenderbotConfig, BlenderbotSmallTokenizer, is_tf_available
 from transformers.file_utils import cached_property
@@ -29,8 +29,8 @@ if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration
 
 
-class BlenderbotModelTester(ModelTester):
-    kwargs = dict(
+class ModelTester(TFBartModelTester):
+    config_updates = dict(
         normalize_before=True,
         static_position_embeddings=True,
         do_blenderbot_90_layernorm=True,
@@ -43,7 +43,7 @@ class BlenderbotModelTester(ModelTester):
 class TestTFBlenderbotCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlenderbotForConditionalGeneration,)
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,)
-    model_tester_cls = BlenderbotModelTester
+    model_tester_cls = ModelTester
     is_encoder_decoder = True
     test_pruning = False
 

@@ -23,7 +23,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_pegasus import PGE_ARTICLE, XSUM_ENTRY_LONGER
-from .test_modeling_tf_bart import ModelTester
+from .test_modeling_tf_bart import TFBartModelTester
 from .test_modeling_tf_common import TFModelTesterMixin
 
 
@@ -73,8 +73,8 @@ class TFPegasusIntegrationTests(unittest.TestCase):
         self._assert_generated_batch_equal_expected()
 
 
-class PegasusModelTester(ModelTester):
-    kwargs = dict(
+class ModelTester(TFBartModelTester):
+    config_updates = dict(
         normalize_before=True,
         static_position_embeddings=True,
     )
@@ -86,7 +86,7 @@ class PegasusModelTester(ModelTester):
 class TestTFPegasusCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFPegasusForConditionalGeneration,)
     all_generative_model_classes = (TFPegasusForConditionalGeneration,)
-    model_tester_cls = PegasusModelTester
+    model_tester_cls = ModelTester
     is_encoder_decoder = True
     test_pruning = False
 

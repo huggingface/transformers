@@ -18,7 +18,7 @@ import unittest
 import tensorflow as tf
 
 from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_tf_bart import ModelTester
+from tests.test_modeling_tf_bart import TFBartModelTester
 from tests.test_modeling_tf_common import TFModelTesterMixin
 from transformers import AutoTokenizer, MBartConfig, is_tf_available
 from transformers.file_utils import cached_property
@@ -72,8 +72,8 @@ class TestMBartEnRO(unittest.TestCase):
         self._assert_generated_batch_equal_expected()
 
 
-class MBartModelTester(ModelTester):
-    kwargs = dict(normalize_before=True, add_final_layer_norm=True)
+class ModelTester(TFBartModelTester):
+    config_updates = dict(normalize_before=True, add_final_layer_norm=True)
     config_cls = MBartConfig
 
 
@@ -81,7 +81,7 @@ class MBartModelTester(ModelTester):
 class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFMBartForConditionalGeneration,)
     all_generative_model_classes = (TFMBartForConditionalGeneration,)
-    model_tester_cls = MBartModelTester
+    model_tester_cls = ModelTester
     is_encoder_decoder = True
     test_pruning = False
 
