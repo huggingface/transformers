@@ -30,7 +30,7 @@ For details of usage and examples see here:
 - [Paraphrase Mining](https://www.sbert.net/docs/usage/paraphrase_mining.html)
 - [Semantic Search](https://www.sbert.net/docs/usage/semantic_search.html)
 - [Cross-Encoders](https://www.sbert.net/docs/usage/cross-encoder.html)
-- [Examples on GitHub](https://github.com/UKPLab/sentence-transformers/tree/master/examples/applications)
+- [Examples on GitHub](https://github.com/UKPLab/sentence-transformers/tree/master/examples)
 
 ## Training
 The base model is [xlm-roberta-base](https://huggingface.co/xlm-roberta-base). This model has been further trained by [Nils Reimers](https://www.nils-reimers.de/) on a large scale paraphrase dataset for 50+ languages. [Nils Reimers](https://www.nils-reimers.de/) about this [on GitHub](https://github.com/UKPLab/sentence-transformers/issues/509#issuecomment-712243280):
