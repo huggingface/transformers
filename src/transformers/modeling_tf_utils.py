@@ -640,12 +640,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Load model
         if pretrained_model_name_or_path is not None:
             if os.path.isdir(pretrained_model_name_or_path):
-                if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
+                if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    # Load from a PyTorch checkpoint in priority if from_pt
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
-                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
-                    # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_pt` set to False".format(

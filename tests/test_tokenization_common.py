@@ -25,7 +25,14 @@ from itertools import takewhile
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_tf, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    is_pt_tf_cross_test,
+    require_tf,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 from transformers.tokenization_utils import AddedToken
 
 
@@ -1517,8 +1524,7 @@ class TokenizerTesterMixin:
                 string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
             )
 
-    @require_torch
-    @require_tf
+    @is_pt_tf_cross_test
     def test_batch_encode_plus_tensors(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

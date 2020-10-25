@@ -16,6 +16,11 @@ sys.path.insert(1, git_repo_path)
 # they become normal warnings - i.e. the tests still need to test the current functionality
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipeline are tested")
+    config.addinivalue_line(
+        "markers", "is_pt_tf_cross_test: mark test to run only when PT and TF interactions are tested"
+    )
 
 # generate dedicated reports
 import pytest  # noqa
@@ -106,3 +111,5 @@ def pytest_terminal_summary(terminalreporter):
 
     # restore the writer
     tr._tw = orig_writer
+
+
