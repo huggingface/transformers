@@ -66,5 +66,5 @@ The evaluation has been done on English, German and both languages crossed. The 
 | [xlm-r-100langs-bert-base-nli-stsb-mean-tokens](https://huggingface.co/sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens)                 | 0.7877            | 0.8465             | 0.7908           |
 | xlm-r-bert-base-nli-stsb-mean-tokens                          | 0.7877            | 0.8465             | 0.7908           |
 | [roberta-large-nli-stsb-mean-tokens](https://huggingface.co/sentence-transformers/roberta-large-nli-stsb-mean-tokens)                            | 0.6371            | 0.8639             | 0.4109           |
-| [T-Systems-onsite/german-roberta-sentence-transformer-v2](https://huggingface.co/T-Systems-onsite/german-roberta-sentence-transformer-v2)       | 0.8529            | 0.8634             | 0.8415           |
-| **T-Systems-onsite/cross-en-de-roberta-sentence-transformer** | **0.8550**        |  **0.8660**        | **0.8525**       |
+| [T-Systems-onsite/<br/>german-roberta-sentence-transformer-v2](https://huggingface.co/T-Systems-onsite/german-roberta-sentence-transformer-v2)       | 0.8529            | 0.8634             | 0.8415           |
+| **T-Systems-onsite/<br/>cross-en-de-roberta-sentence-transformer** | **0.8550**        |  **0.8660**        | **0.8525**       |
