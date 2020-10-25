@@ -18,7 +18,8 @@
 import logging
 from typing import List, Optional
 
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
+from .tokenization_bert_fast import BertTokenizerFast
 from .tokenization_utils import AddedToken
 
 
