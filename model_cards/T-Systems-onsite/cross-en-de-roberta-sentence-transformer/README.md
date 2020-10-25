@@ -58,7 +58,7 @@ We did an automatic hyperprameter search for 33 trials with [Optuna](https://git
 The final model was trained with these hyperparameters on the combination of the train and dev datasets from English, German and the crossings of them. The testset was left for testing.
 
 # Evaluation
-The evaluation has been done on English, German and both languages crossed. The evaluation-code is available on [Colab](https://colab.research.google.com/drive/1aCWOqDQx953kEnQ5k4Qn7uiixokocOHv?usp=sharing). As the metric for evaluation we use the Spearman’s rank correlation between the  cosine-similarity of the sentence embeddings and STSbenchmark labels.
+The evaluation has been done on English, German and both languages crossed. The evaluation-code is available on [Colab](https://colab.research.google.com/drive/1gtGnKq_dYU_sDYqMohTYVMVpxMJjyH0M?usp=sharing). As the metric for evaluation we use the Spearman’s rank correlation between the  cosine-similarity of the sentence embeddings and STSbenchmark labels.
 
 | Model Name                                                    | Spearman (German) | Spearman (English) | Spearman (cross) |
 |---------------------------------------------------------------|-------------------|--------------------|------------------|
