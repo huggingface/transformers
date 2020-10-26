@@ -124,6 +124,7 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     @require_tf
     def test_tf_small(self):
         for model_name in self.small_models:
+            print(model_name)
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
             nlp = pipeline(
                 task="ner",
@@ -135,17 +136,17 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             )
             self._test_pipeline(nlp)
 
-    #         for model_name in self.small_models:
-    #             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-    #             nlp = pipeline(
-    #                 task="ner",
-    #                 model=model_name,
-    #                 tokenizer=tokenizer,
-    #                 framework="tf",
-    #                 grouped_entities=True,
-    #                 ignore_subwords=False,
-    #             )
-    #             self._test_pipeline(nlp)
+            for model_name in self.small_models:
+                tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+                nlp = pipeline(
+                    task="ner",
+                    model=model_name,
+                    tokenizer=tokenizer,
+                    framework="tf",
+                    grouped_entities=True,
+                    ignore_subwords=False,
+                )
+                self._test_pipeline(nlp)
 
     @require_torch
     def test_pt_defaults(self):
@@ -163,10 +164,9 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             )
             self._test_pipeline(nlp)
 
-
-#         for model_name in self.small_models:
-#             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-#             nlp = pipeline(
-#                 task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=False
-#             )
-#             self._test_pipeline(nlp)
+        for model_name in self.small_models:
+            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+            nlp = pipeline(
+                task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=False
+            )
+            self._test_pipeline(nlp)

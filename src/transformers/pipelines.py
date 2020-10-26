@@ -1532,7 +1532,6 @@ class TokenClassificationPipeline(Pipeline):
 
                 entities += [entity]
 
-            # Append grouped entities
             if self.grouped_entities:
                 answers += [self.group_entities(entities)]
             # Append ungrouped entities
@@ -1554,14 +1553,11 @@ class TokenClassificationPipeline(Pipeline):
         entity = entities[0]["entity"].split("-")[-1]
         scores = np.nanmean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
-        if self.tokenizer.is_fast:
-            word = self.tokenizer.decode(self.tokenizer.convert_tokens_to_ids(tokens))
-        else:
-            word = self.tokenizer.convert_tokens_to_string(tokens)
+
         entity_group = {
             "entity_group": entity,
             "score": np.mean(scores),
-            "word": word,
+            "word": self.tokenizer.convert_tokens_to_string(tokens),
         }
         return entity_group
 
