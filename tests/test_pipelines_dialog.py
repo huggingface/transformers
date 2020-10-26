@@ -9,6 +9,7 @@ class DialoguePipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "conversational"
     small_models = []  # Default model - Models tested without the @slow decorator
     large_models = ["microsoft/DialoGPT-medium"]  # Models tested with the @slow decorator
+    valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
 
     def _test_pipeline(self, nlp: Pipeline):
         valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
