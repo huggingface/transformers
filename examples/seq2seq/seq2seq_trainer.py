@@ -60,6 +60,11 @@ class Seq2SeqTrainer(Trainer):
                 self.config.pad_token_id is not None
             ), "Make sure that `config.pad_token_id` is correcly defined when ignoring `pad_token` for loss calculation or doing label smoothing."
 
+        if self.config.pad_token_id is None:
+            assert (
+                self.config.eos_token_id is not None
+            ), "Make sure that `config.eos_token_id` is defined when `config.pad_token_id` is not defined."
+
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
         Setup the optimizer and the learning rate scheduler.
@@ -178,21 +183,21 @@ class Seq2SeqTrainer(Trainer):
         """
         inputs = self._prepare_inputs(inputs)
 
+        pred_kwargs = {
+            "max_length": self.data_args.val_max_target_length
+            if self.data_args is not None
+            else self.config.max_length,
+            "num_beams": self.data_args.eval_beams if self.data_args is not None else self.config.num_beams,
+        }
+
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
-            gen_kwargs = {
-                "max_length": self.data_args.val_max_target_length
-                if self.data_args is not None
-                else self.config.max_length,
-                "num_beams": self.data_args.eval_beams if self.data_args is not None else self.config.num_beams,
-            }
             generated_tokens = model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                **gen_kwargs,
+                **pred_kwargs,
             )
             # in case the batch is shorter than max length, the output should be padded
-            if self.config.pad_token_id is not None:
-                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, pred_kwargs["max_length"])
 
             # compute loss on predict data
         with torch.no_grad():
@@ -205,13 +210,16 @@ class Seq2SeqTrainer(Trainer):
         logits = generated_tokens if self.args.predict_with_generate else logits
 
         labels = inputs["labels"]
-        if self.config.pad_token_id is not None:
-            labels = self._pad_tensors_to_max_len(labels, self.config.max_length)
+
+        labels = self._pad_tensors_to_max_len(labels, pred_kwargs["max_length"])
 
         return (loss, logits, labels)
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        padded_tensor = self.config.pad_token_id * torch.ones(
+        # If PAD token is not defined at least EOS token has to be defined
+        pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else self.config.eos_token_id
+
+        padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
         )
         padded_tensor[:, : tensor.shape[-1]] = tensor

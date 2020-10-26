@@ -63,7 +63,9 @@ class TestFinetuneTrainer(TestCasePlus):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
         bert2bert.config.vocab_size = bert2bert.config.encoder.vocab_size
+        bert2bert.config.eos_token_id = tokenizer.sep_token_id
         bert2bert.config.decoder_start_token_id = tokenizer.cls_token_id
+        bert2bert.config.max_length = 128
 
         train_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="train[:1%]")
         val_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="validation[:1%]")
