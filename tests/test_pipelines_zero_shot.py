@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 
 from transformers.pipelines import Pipeline, pipeline
 
@@ -18,28 +19,23 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
             sum += score
         self.assertAlmostEqual(sum, 1.0)
 
-    def _test_set_entailment_id(self, nlp: Pipeline):
-        model = nlp.model
-        tokenizer = nlp.tokenizer
-        config = model.config
+    def _test_entailment_id(self, nlp: Pipeline):
+        config = nlp.model.config
+        original_config = deepcopy(config)
 
         config.label2id = {"LABEL_0": 0, "LABEL_1": 1, "LABEL_2": 2}
-        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer)
         self.assertEqual(nlp.entailment_id, -1)
 
         config.label2id = {"entailment": 0, "neutral": 1, "contradiction": 2}
-        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer)
         self.assertEqual(nlp.entailment_id, 0)
 
-        config.label2id = {"ENTAIL": 1, "CONTR": 0}
-        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer)
-        self.assertEqual(nlp.entailment_id, 1)
+        config.label2id = {"ENTAIL": 0, "NON-ENTAIL": 1}
+        self.assertEqual(nlp.entailment_id, 0)
 
-        config.label2id = {"entailment": 0, "neutral": 1, "contradiction": 2}
-        nlp = pipeline(
-            task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer, entailment_id=2
-        )
+        config.label2id = {"ENTAIL": 2, "NEUTRAL": 1,, "CONTR"}
         self.assertEqual(nlp.entailment_id, 2)
+
+        nlp.model.config = original_config
 
     def _test_pipeline(self, nlp: Pipeline):
         output_keys = {"sequence", "labels", "scores"}
@@ -82,7 +78,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         ]
         self.assertIsNotNone(nlp)
 
-        self._test_set_entailment_id(nlp)
+        self._test_entailment_id(nlp)
 
         for mono_input in valid_mono_inputs:
             mono_result = nlp(**mono_input)
