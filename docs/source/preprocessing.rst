@@ -51,7 +51,7 @@ The tokenizer can decode a list of token ids in a proper sentence:
     >>> tokenizer.decode(encoded_input["input_ids"])
     "[CLS] Hello, I'm a single sentence! [SEP]"
 
-As you can see, the tokenizer automatically added some special tokens that the model expect. Not all model need special
+As you can see, the tokenizer automatically added some special tokens that the model expects. Not all models need special
 tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we would have
 seen the same sentence as the original one here. You can disable this behavior (which is only advised if you have added
 those special tokens yourself) by passing ``add_special_tokens=False``.
@@ -76,7 +76,7 @@ tokenizer:
                         [1, 1, 1, 1, 1],
                         [1, 1, 1, 1, 1, 1, 1, 1]]}
 
-We get back a dictionary once again, this time with values being list of list of ints.
+We get back a dictionary once again, this time with values being lists of lists of ints.
 
 If the purpose of sending several sentences at a time to the tokenizer is to build a batch to feed the model, you will
 probably want:
@@ -114,7 +114,7 @@ You can do all of this by using the following options when feeding your list of 
                                [1, 1, 1, 1, 1, 0, 0, 0, 0],
                                [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 
-It returns a dictionary string to tensor. We can now see what the `attention_mask <glossary.html#attention-mask>`__ is
+It returns a dictionary with string keys and tensor values. We can now see what the `attention_mask <glossary.html#attention-mask>`__ is
 all about: it points out which tokens the model should pay attention to and which ones it should not (because they
 represent padding in this case).
 
@@ -127,7 +127,7 @@ can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer 
 Preprocessing pairs of sentences
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Sometimes you need to feed pair of sentences to your model. For instance, if you want to classify if two sentences in a
+Sometimes you need to feed a pair of sentences to your model. For instance, if you want to classify if two sentences in a
 pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input is
 then represented like this: :obj:`[CLS] Sequence A [SEP] Sequence B [SEP]`
 
@@ -179,7 +179,7 @@ list of first sentences and the list of second sentences:
                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}
 
-As we can see, it returns a dictionary with the values being list of lists of ints.
+As we can see, it returns a dictionary where each value is a list of lists of ints.
 
 To double-check what is fed to the model, we can decode each list in `input_ids` one by one:
 
@@ -286,7 +286,7 @@ predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Na
 
 .. warning::
 
-    Pre-tokenized does not mean your inputs are already tokenized (you wouldn't need to pass them though the tokenizer
+    Pre-tokenized does not mean your inputs are already tokenized (you wouldn't need to pass them through the tokenizer
     if that was the case) but just split into words (which is often the first step in subword tokenization algorithms
     like BPE).
 
