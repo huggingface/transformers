@@ -111,8 +111,11 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         """Replace non-padding symbols with their position numbers. Position numbers begin at
         padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
         `utils.make_positions`.
-        :param tf.Tensor x:
-        :return tf.Tensor:
+
+        Args:
+            x: tf.Tensor
+
+        Returns: tf.Tensor
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
         incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
@@ -122,8 +125,11 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """We are provided embeddings directly. We cannot infer which are padded so just generate
         sequential position ids.
-        :param tf.Tensor inputs_embeds:
-        :return tf.Tensor:
+
+        Args:
+            inputs_embeds: tf.Tensor
+
+        Returns: tf.Tensor
         """
         seq_length = shape_list(inputs_embeds)[1]
         position_ids = tf.range(self.padding_idx + 1, seq_length + self.padding_idx + 1, dtype=tf.int32)[tf.newaxis, :]

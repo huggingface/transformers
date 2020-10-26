@@ -31,7 +31,8 @@ logger = logging.get_logger("transformers-cli/serving")
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
-    :return: ServeCommand
+
+    Returns: ServeCommand
     """
     nlp = pipeline(
         task=args.task,
@@ -81,8 +82,9 @@ class ServeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-        :param parser: Root parser to register command-specific arguments
-        :return:
+
+        Args:
+            parser: Root parser to register command-specific arguments
         """
         serve_parser = parser.add_parser(
             "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."

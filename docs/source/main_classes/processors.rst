@@ -112,7 +112,7 @@ Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Here is an example using the processors as well as the conversion method using data files:
 
-Example::
+.. code-block::
 
     # Loading a V2 processor
     processor = SquadV2Processor()
@@ -133,7 +133,7 @@ Example::
 
 Using `tensorflow_datasets` is as easy as using a data file:
 
-Example::
+.. code-block::
 
     # tensorflow_datasets only handle Squad V1.
     tfds_examples = tfds.load("squad")

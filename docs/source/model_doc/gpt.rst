@@ -45,6 +45,8 @@ Note:
 If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install 
 ``ftfy`` and ``SpaCy``::
 
+.. code-block:: bash
+
     pip install spacy ftfy==4.4.3
     python -m spacy download en
 
