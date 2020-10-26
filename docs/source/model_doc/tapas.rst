@@ -45,11 +45,10 @@ The original code can be found `here <https://github.com/google-research/tapas>`
 
 Tips:
 
-- TAPAS is a model that uses relative position embeddings by default (restarting the position embeddings at every cell). According to
+- TAPAS is a model that uses relative position embeddings by default (restarting the position embeddings at every cell of the table). According to
   the authors, this usually results in a slightly better performance, and allows you to encode longer sequences without running out 
   of embeddings.
-  If you don't want this, set the `reset_position_index_per_cell` parameter of :class:`~transformers.TapasConfig` to False, and make 
-  sure you're loading the weights of a model that was pretrained with absolute position embeddings.
+  If you don't want this, you can set the `reset_position_index_per_cell` parameter of :class:`~transformers.TapasConfig` to False.
 - TAPAS has checkpoints fine-tuned on SQA, which are capable of answering questions related to a table in a conversational set-up. This 
   means that you can ask follow-up questions such as "what is his age?" related to the previous question. Note that the forward pass of 
   TAPAS is a bit different in case of a conversational set-up: in that case, you have to feed every training example one by one to the 

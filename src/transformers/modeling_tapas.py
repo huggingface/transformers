@@ -203,7 +203,7 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
             e.args += (pointer.shape, array.shape)
             raise
         logger.info("Initialize PyTorch weight {}".format(name))
-        # added a check whether the array is a scalar (because bias terms are scalar => should first be converted to numpy arrays)
+        # added a check to see whether the array is a scalar (because bias terms in Tapas checkpoints can be scalar => should first be converted to numpy arrays)
         if np.isscalar(array):
             array = np.array(array)
         pointer.data = torch.from_numpy(array)
@@ -665,7 +665,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
             Token indices that encode tabular structure. Indices can be obtained using :class:`~transformers.TapasTokenizer`. See this class for more info. 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
+            Indices of positions of each input sequence tokens in the position embeddings. If ``reset_position_index_per_cell`` of :class:`~transformers.TapasConfig` is set to ``True``, relative position embeddings will be used.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):

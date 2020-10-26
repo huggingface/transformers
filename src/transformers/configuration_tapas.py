@@ -40,7 +40,7 @@ class TapasConfig(BertConfig):
         positive_weight (:obj:`float`, `optional`, defaults to 10.0):
             Weight for positive labels.
         num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
-            The number of aggregation classes to predict.
+            The number of aggregation operators to predict.
         aggregation_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the aggregation loss.
         use_answer_as_supervision (:obj:`bool`, `optional`, defaults to :obj:`False`):
