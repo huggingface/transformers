@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Base classes common to both the slow and the fast tokenization classes:
-PreTrainedTokenizerBase (host all the user fronting encoding methodes) Special token mixing (host the special
-tokens logic) and BatchEncoding (wrap the dictionary of output with special method for the Fast tokenizers)
+Base classes common to both the slow and the fast tokenization classes: PreTrainedTokenizerBase (host all the user
+fronting encoding methodes) Special token mixing (host the special tokens logic) and BatchEncoding (wrap the dictionary
+of output with special method for the Fast tokenizers)
 """
 
 import copy

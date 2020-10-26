@@ -753,7 +753,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         tokenizerself. Otherwise, we use Moses.
 
         Details of tokenization:
-        
+
             - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
             - [pythainlp](https://github.com/PyThaiNLP/pythainlp): Thai tokenizer
@@ -762,14 +762,14 @@ class XLMTokenizer(PreTrainedTokenizer):
               [KyTea](https://github.com/neubig/kytea)
             - Install with the following steps:
 
-            ..
-            
+            ::
+
                 git clone git@github.com:neubig/kytea.git && cd kytea
                 autoreconf -i
                 ./configure --prefix=$HOME/local
                 make && make install
                 pip install kytea
-            
+
             - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
             - Install with `pip install jieba`
 

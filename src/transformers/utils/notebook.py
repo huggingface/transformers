@@ -31,7 +31,7 @@ def format_time(t):
 
 def html_progress_bar(value, total, prefix, label, width=300):
     # docstyle-ignore
-    f"""
+    return f"""
     <div>
         <style>
             /* Turns off some styling */
@@ -46,6 +46,7 @@ def html_progress_bar(value, total, prefix, label, width=300):
       <progress value='{value}' max='{total}' style='width:{width}px; height:20px; vertical-align: middle;'></progress>
       {label}
     </div>
+    """
 
 
 def text_to_html_table(items):

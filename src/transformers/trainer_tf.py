@@ -238,7 +238,8 @@ class TFTrainer:
 
         Environment:
             WANDB_PROJECT:
-                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project.
+                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different
+                project.
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely.
         """
@@ -763,9 +764,8 @@ class TFTrainer:
                 such as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
                 by calling ``model(features, **labels)``
 
-        Returns: `NamedTuple`
-            A namedtuple with the following keys:
-            
+        Returns: `NamedTuple` A namedtuple with the following keys:
+
             - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
             - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset

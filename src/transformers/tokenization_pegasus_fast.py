@@ -70,7 +70,7 @@ class PegasusTokenizerFast(ReformerTokenizerFast):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
         Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
-        
+
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>`` (not intended use)
 

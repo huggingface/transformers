@@ -191,21 +191,18 @@ class Trainer:
 
             The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
             able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
-            layers, dropout probabilities etc).
-        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            layers, dropout probabilities etc). compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
-            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
-            A list of callbacks to customize the training loop. Will add those to the list of default callbacks
-            detailed in :doc:`here <callback>`.
+            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values. callbacks (List of
+            :obj:`~transformers.TrainerCallback`, `optional`): A list of callbacks to customize the training loop. Will
+            add those to the list of default callbacks detailed in :doc:`here <callback>`.
 
             If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
-            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+            optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+            containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
-            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
-        kwargs:
-            Deprecated keyword arguments.
+            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`. kwargs: Deprecated keyword
+            arguments.
     """
 
     def __init__(
@@ -1312,8 +1309,7 @@ class Trainer:
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
-        Returns: `NamedTuple` 
-            A namedtuple with the following keys:
+        Returns: `NamedTuple` A namedtuple with the following keys:
 
             - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
             - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).

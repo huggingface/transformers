@@ -267,11 +267,11 @@ class CustomDPRReaderTokenizerMixin:
         """
         Get the span predictions for the extractive Q&A model.
 
-        Returns: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`.
-            Each `DPRReaderOutput` is a `Tuple` with:
-            
-            - **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to other spans
-              in the same passage. It corresponds to the sum of the start and end logits of the span.
+        Returns: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`. Each
+        `DPRReaderOutput` is a `Tuple` with:
+
+            - **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to
+              other spans in the same passage. It corresponds to the sum of the start and end logits of the span.
             - **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
               compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
             - **doc_id**: ``int``` the id of the passage.
