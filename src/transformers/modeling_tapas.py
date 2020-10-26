@@ -180,11 +180,17 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "output_bias_agg")
             elif scope_names[0] == "output_weights_agg":
                 pointer = getattr(pointer, "output_weights_agg")
-            # classification head
+            # # classification head
+            # elif scope_names[0] == "output_bias_cls":
+            #     pointer = getattr(pointer, "output_bias_cls")
+            # elif scope_names[0] == "output_weights_cls":
+            #     pointer = getattr(pointer, "output_weights_cls")
             elif scope_names[0] == "output_bias_cls":
-                pointer = getattr(pointer, "output_bias_cls")
+                pointer = getattr(pointer, "classifier")
+                pointer = getattr(pointer, "bias")
             elif scope_names[0] == "output_weights_cls":
-                pointer = getattr(pointer, "output_weights_cls")
+                pointer = getattr(pointer, "classifier")
+                pointer = getattr(pointer, "weight")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -1322,12 +1328,15 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         self.tapas = TapasModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         
-        # classification head
-        self.output_weights_cls = nn.Parameter(torch.empty([config.num_labels, config.hidden_size]))
-        nn.init.normal_(
-            self.output_weights_cls, std=0.02
-        )  # here, a truncated normal is used in the original implementation
-        self.output_bias_cls = nn.Parameter(torch.zeros([config.num_labels]))
+        # # classification head
+        # self.output_weights_cls = nn.Parameter(torch.empty([config.num_labels, config.hidden_size]))
+        # nn.init.normal_(
+        #     self.output_weights_cls, std=0.02
+        # )  # here, a truncated normal is used in the original implementation
+        # self.output_bias_cls = nn.Parameter(torch.zeros([config.num_labels]))
+
+        # new classification head
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1394,12 +1403,15 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
 
         pooled_output = self.dropout(pooled_output)
         
-        ########## Classification logits ###########
-        logits_cls = None
-        if self.config.num_labels > 0:
-            logits_cls = utils.compute_classification_logits(
-                pooled_output, self.output_weights_cls, self.output_bias_cls
-            )
+        # ########## Classification logits (old) ###########
+        # logits_cls = None
+        # if self.config.num_labels > 0:
+        #     logits_cls = utils.compute_classification_logits(
+        #         pooled_output, self.output_weights_cls, self.output_bias_cls
+        #     )
+        
+        # Classification logits (new)
+        logits = self.classifier(pooled_output)
 
         ########## Classification loss #############
         loss = None
@@ -1407,18 +1419,18 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             if self.num_labels == 1:
                 #  We are doing regression
                 loss_fct = MSELoss()
-                loss = loss_fct(logits_cls.view(-1), labels.view(-1))
+                loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits_cls.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits_cls,) + outputs[2:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
-            logits=logits_cls,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
