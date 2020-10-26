@@ -10,8 +10,8 @@ import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
-from tensorflow.python.keras.callbacks import EarlyStopping, CSVLogger
 from tensorflow.python.keras import callbacks as callbacks_module
+from tensorflow.python.keras.callbacks import CSVLogger, EarlyStopping
 
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
@@ -73,7 +73,7 @@ class TFTrainer:
         args: TFTrainingArguments,
         train_dataset: Optional[tf.data.Dataset] = None,
         eval_dataset: Optional[tf.data.Dataset] = None,
-        callbacks = None,
+        callbacks=None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional[tf.summary.SummaryWriter] = None,
         optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (
@@ -567,7 +567,8 @@ class TFTrainer:
                     model=self.model,
                     verbose=1,
                     epochs=epochs,
-                    steps=t_total)
+                    steps=t_total,
+                )
 
             # Set the stop_training flag to false
             self.model.stop_training = False
@@ -590,7 +591,7 @@ class TFTrainer:
                         continue
 
                     callbacks.on_train_batch_begin(step)
-                    
+
                     self.distributed_training_steps(batch)
 
                     self.global_step = iterations.numpy()
@@ -640,7 +641,7 @@ class TFTrainer:
 
                     if self.global_step % self.steps_per_epoch == 0:
                         break
-                
+
                 callbacks.on_epoch_end(epoch_iter, logs)
                 self.train_loss.reset_states()
 
