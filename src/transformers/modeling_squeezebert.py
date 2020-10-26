@@ -421,8 +421,6 @@ SQUEEZEBERT_START_DOCSTRING = r"""
 
     Hierarchy::
 
-    ::
-
         Internal class hierarchy:
             SqueezeBertModel
                 SqueezeBertEncoder
