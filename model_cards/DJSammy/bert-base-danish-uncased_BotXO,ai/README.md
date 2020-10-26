@@ -10,7 +10,7 @@ datasets:
 - wikipedia
 pipeline_tag: fill-mask
 widget:
-- text: "København er <mask> i Danmark."
+- text: "København er [MASK] i Danmark."
 ---
 
 # Danish BERT (uncased) model 
