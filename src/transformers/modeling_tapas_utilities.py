@@ -555,45 +555,7 @@ def compute_token_logits(sequence_output, temperature, output_weights, output_bi
     return logits
 
 
-def compute_classification_logits(pooled_output, output_weights_cls, output_bias_cls):
-    """Computes logits for each classification of the sequence.
-    Args:
-        pooled_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
-            Output of the pooler (BertPooler) on top of the encoder layer.
-        output_weights_cls (:obj:`torch.FloatTensor` of shape :obj:`(num_labels, hidden_size)`):
-            Weights of the linear classification head.
-        output_bias_cls (:obj:`torch.FloatTensor` of shape :obj:`(num_labels)`):
-            Bias of the linear classification head.
-    Returns:
-        logits_cls (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
-            Logits per class.
-    """
-    logits_cls = torch.matmul(pooled_output, output_weights_cls.T)
-    logits_cls += output_bias_cls
-
-    return logits_cls
-
-
-def _calculate_aggregation_logits(pooled_output, output_weights_agg, output_bias_agg):
-    """Calculates the aggregation logits.
-    Args:
-        pooled_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
-            Output of the pooler (BertPooler) on top of the encoder layer.
-        output_weights_agg (:obj:`torch.FloatTensor` of shape :obj:`(num_aggregation_labels, hidden_size)`):
-            Weights of the linear aggregation head.
-        output_bias_agg (:obj:`torch.FloatTensor` of shape :obj:`(num_aggregation_labels,)`):
-            Bias of the linear aggregation head.
-    Returns:
-        logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
-            Logits per aggregation operation.
-    """
-    logits_aggregation = torch.matmul(pooled_output, output_weights_agg.T)
-    logits_aggregation += output_bias_agg
-
-    return logits_aggregation
-
-
-def _calculate_aggregate_mask(answer, pooled_output, cell_select_pref, label_ids, output_weights_agg, output_bias_agg):
+def _calculate_aggregate_mask(answer, pooled_output, cell_select_pref, label_ids, aggregation_classifier):
     """Finds examples where the model should select cells with no aggregation.
 
     Returns a mask that determines for which examples should the model select
@@ -614,17 +576,15 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_select_pref, label_ids
             Preference for cell selection in ambiguous cases.
         label_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Labels per token.
-        output_weights_agg (:obj:`torch.FloatTensor` of shape :obj:`(num_aggregation_labels, hidden_size)`):
-            Weights of the linear aggregation head.
-        output_bias_agg (:obj:`torch.FloatTensor` of shape :obj:`(num_aggregation_labels,)`):
-            Bias of the linear aggregation head.
+       aggregation_classifier (:obj:`torch.nn.Linear`):
+            Aggregation head. 
     Returns:
         aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`):
             A mask set to 1 for examples that should use aggregation functions.
     """
     # torch.FloatTensor(batch_size,)
     aggregate_mask_init = torch.logical_not(torch.isnan(answer)).type(torch.FloatTensor).to(answer.device)
-    logits_aggregation = _calculate_aggregation_logits(pooled_output, output_weights_agg, output_bias_agg)
+    logits_aggregation = aggregation_classifier(pooled_output)
     dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
     # Index 0 correponds to "no aggregation".
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)

@@ -177,14 +177,12 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "column_output_weights")
             # aggregation head
             elif scope_names[0] == "output_bias_agg":
-                pointer = getattr(pointer, "output_bias_agg")
+                pointer = getattr(pointer, "aggregation_classifier")
+                pointer = getattr(pointer, "bias")
             elif scope_names[0] == "output_weights_agg":
-                pointer = getattr(pointer, "output_weights_agg")
-            # # classification head
-            # elif scope_names[0] == "output_bias_cls":
-            #     pointer = getattr(pointer, "output_bias_cls")
-            # elif scope_names[0] == "output_weights_cls":
-            #     pointer = getattr(pointer, "output_weights_cls")
+                pointer = getattr(pointer, "aggregation_classifier")
+                pointer = getattr(pointer, "weight")
+            # classification head
             elif scope_names[0] == "output_bias_cls":
                 pointer = getattr(pointer, "classifier")
                 pointer = getattr(pointer, "bias")
@@ -1021,11 +1019,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
         # aggregation head
         if config.num_aggregation_labels > 0:
-            self.output_weights_agg = nn.Parameter(torch.empty([config.num_aggregation_labels, config.hidden_size]))
-            nn.init.normal_(
-                self.output_weights_agg, std=0.02
-            )  # here, a truncated normal is used in the original implementation
-            self.output_bias_agg = nn.Parameter(torch.zeros([config.num_aggregation_labels]))
+            self.aggregation_classifier = nn.Linear(config.hidden_size, config.num_aggregation_labels)
 
         self.init_weights()
 
@@ -1182,9 +1176,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         ########## Aggregation logits ##############
         logits_aggregation = None
         if self.config.num_aggregation_labels > 0:
-            logits_aggregation = utils._calculate_aggregation_logits(
-                pooled_output, self.output_weights_agg, self.output_bias_agg
-            )
+            logits_aggregation = self.aggregation_classifier(pooled_output)
 
         # Total loss calculation
         total_loss = 0.0
@@ -1213,8 +1205,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                         pooled_output,
                         self.config.cell_select_pref,
                         label_ids,
-                        self.output_weights_agg,
-                        self.output_bias_agg,
+                        self.aggregation_classifier
                     )
                 else:
                     raise ValueError("You have to specify answers in order to calculate the aggregate mask")
@@ -1328,15 +1319,6 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
 
         self.tapas = TapasModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        
-        # # classification head
-        # self.output_weights_cls = nn.Parameter(torch.empty([config.num_labels, config.hidden_size]))
-        # nn.init.normal_(
-        #     self.output_weights_cls, std=0.02
-        # )  # here, a truncated normal is used in the original implementation
-        # self.output_bias_cls = nn.Parameter(torch.zeros([config.num_labels]))
-
-        # new classification head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1403,18 +1385,8 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         pooled_output = outputs[1]
 
         pooled_output = self.dropout(pooled_output)
-        
-        # ########## Classification logits (old) ###########
-        # logits_cls = None
-        # if self.config.num_labels > 0:
-        #     logits_cls = utils.compute_classification_logits(
-        #         pooled_output, self.output_weights_cls, self.output_bias_cls
-        #     )
-        
-        # Classification logits (new)
         logits = self.classifier(pooled_output)
 
-        ########## Classification loss #############
         loss = None
         if labels is not None:
             if self.num_labels == 1:
