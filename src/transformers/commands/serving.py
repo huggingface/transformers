@@ -31,7 +31,7 @@ logger = logging.get_logger("transformers-cli/serving")
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
-    
+
     Returns: ServeCommand
     """
     nlp = pipeline(
@@ -82,7 +82,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-        
+
         Args:
             parser: Root parser to register command-specific arguments
         """

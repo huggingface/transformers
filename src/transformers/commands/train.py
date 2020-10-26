@@ -19,7 +19,7 @@ USE_AMP = False
 def train_command_factory(args: Namespace):
     """
     Factory function used to instantiate training command from provided command line arguments.
-    
+
     Returns: TrainCommand
     """
     return TrainCommand(args)
@@ -30,7 +30,7 @@ class TrainCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-        
+
         Args:
             parser: Root parser to register command-specific arguments
         """

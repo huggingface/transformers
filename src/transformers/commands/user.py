@@ -70,7 +70,7 @@ class BaseUserCommand:
 
 class LoginCommand(BaseUserCommand):
     def run(self):
-        print( # docstyle-ignore
+        print(  # docstyle-ignore
             """
         _|    _|  _|    _|    _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|_|_|_|    _|_|      _|_|_|  _|_|_|_|
         _|    _|  _|    _|  _|        _|          _|    _|_|    _|  _|            _|        _|    _|  _|        _|
