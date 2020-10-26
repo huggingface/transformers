@@ -62,7 +62,7 @@ class Seq2SeqTrainer(Trainer):
 
         if self.config.pad_token_id is None and self.config.eos_token_id is not None:
             logger.warn(
-                f"The `config.pad_token_id` is `None`. Use `config.eos_token_id` = {self.config.eos_token_id} for padding."
+                f"The `config.pad_token_id` is `None`. Using `config.eos_token_id` = {self.config.eos_token_id} for padding.."
             )
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
