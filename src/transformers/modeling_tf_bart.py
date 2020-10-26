@@ -814,7 +814,8 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         super().build(input_shape)  # Instantiates self.weight so it can be loaded
-        self.weight = self._init_weight(self.vocab_size, self.hidden_size)  # overwrite with good defaults
+        weight: np.ndarray = self._init_weight(self.vocab_size, self.hidden_size)
+        self.set_weights([weight])  # overwrite self.weight to correct value
 
     @staticmethod
     def _init_weight(n_pos, dim):
