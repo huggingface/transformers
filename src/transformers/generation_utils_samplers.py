@@ -171,7 +171,7 @@ class NoBadWordsSampler(Sampler):
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)
-        scores = self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
+        self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
 
@@ -179,11 +179,11 @@ class NoBadWordsSampler(Sampler):
         if len(tokens) == 0:
             # if bad word tokens is just one token always ban it
             return True
-        if len(tokens) > len(prev_tokens):
+        elif len(tokens) > len(prev_tokens):
             # if bad word tokens are longer then prev input_ids they can't be equal
             return False
 
-        if prev_tokens[-len(tokens) :] == tokens:
+        elif prev_tokens[-len(tokens) :] == tokens:
             # if tokens match
             return True
         else:
@@ -216,7 +216,7 @@ class NoBadWordsSampler(Sampler):
             for token in batch_banned_tokens:
                 banned_mask_list.append([idx, token])
         if not banned_mask_list:
-            return scores
+            return
         banned_mask = torch.LongTensor(banned_mask_list)
         indices = torch.ones(len(banned_mask))
         # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
@@ -228,4 +228,3 @@ class NoBadWordsSampler(Sampler):
             torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
         )
         scores.masked_fill_(banned_mask, -float("inf"))
-        return scores
