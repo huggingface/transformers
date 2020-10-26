@@ -130,8 +130,7 @@ class Seq2SeqTrainer(Trainer):
                 else DistributedSampler(self.train_dataset)
             )
 
-    def _compute_loss(self, model, inputs):
-        labels = inputs.pop("labels")
+    def _compute_loss(self, model, inputs, labels):
         if self.args.label_smoothing == 0:
             if self.data_args is not None and self.data_args.ignore_pad_token_for_loss:
                 # force training to ignore pad token
@@ -152,7 +151,8 @@ class Seq2SeqTrainer(Trainer):
         return loss, logits
 
     def compute_loss(self, model, inputs):
-        loss, _ = self._compute_loss(model, inputs)
+        labels = inputs.pop("labels")
+        loss, _ = self._compute_loss(model, inputs, labels)
         return loss
 
     def prediction_step(
@@ -197,17 +197,16 @@ class Seq2SeqTrainer(Trainer):
             if generated_tokens.shape[-1] < pred_kwargs["max_length"]:
                 generated_tokens = self._pad_tensors_to_max_len(generated_tokens, pred_kwargs["max_length"])
 
-            # compute loss on predict data
+        labels = inputs.pop("labels")
         with torch.no_grad():
-            loss, logits = self._compute_loss(model, inputs)
+            # compute loss on predict data
+            loss, logits = self._compute_loss(model, inputs, labels)
 
         loss = loss.mean().detach()
         if self.args.prediction_loss_only:
             return (loss, None, None)
 
         logits = generated_tokens if self.args.predict_with_generate else logits
-
-        labels = inputs["labels"]
 
         if labels.shape[-1] < pred_kwargs["max_length"]:
             labels = self._pad_tensors_to_max_len(labels, pred_kwargs["max_length"])
