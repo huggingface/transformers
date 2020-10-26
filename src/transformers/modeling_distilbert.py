@@ -284,7 +284,7 @@ class Transformer(nn.Module):
 
     def forward(
         self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=None
-    ): # docstyle-ignore
+    ):  # docstyle-ignore
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
