@@ -166,6 +166,9 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         tokens = token.split(" ")
         words = []
         for token in tokens:
+            if not len(token):
+                continue
+
             token = token.lower()
             word = tuple(token)
             word = tuple(list(word[:-1]) + [word[-1] + "</w>"])
