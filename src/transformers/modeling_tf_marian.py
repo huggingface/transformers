@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TF BART model, ported from the fairseq repo."""
+"""TF Marian model, ported from the fairseq repo."""
 from .configuration_marian import MarianConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_bart import BART_START_DOCSTRING, TFBartForConditionalGeneration
