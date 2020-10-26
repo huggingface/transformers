@@ -118,7 +118,7 @@ class DataCollatorWithPadding:
 class DataCollatorForLanguageModeling:
     """
     Data collator used for language modeling.
-    
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
     """
@@ -200,7 +200,7 @@ class DataCollatorForLanguageModeling:
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
     Data collator used for language modeling.
-    
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
     """
@@ -389,7 +389,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 class DataCollatorForPermutationLanguageModeling:
     """
     Data collator used for permutation language modeling.
-    
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for permutation language modeling with procedures specific to XLNet
     """

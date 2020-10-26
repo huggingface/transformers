@@ -106,7 +106,7 @@ def is_memory_tracing_enabled():
 class Frame(NamedTuple):
     """
     `Frame` is a NamedTuple used to gather the current frame state. `Frame` has the following fields:
-    
+
         - 'filename' (string): Name of the file currently executed
         - 'module' (string): Name of the module currently executed
         - 'line_number' (int): Number of the line currently executed
