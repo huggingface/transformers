@@ -306,9 +306,8 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
 
 @add_start_docstrings(
     """
-                      MMBT Model with a sequence classification/regression head on top (a linear layer on top of the
-                      pooled output)
-                      """,
+    MMBT Model with a sequence classification/regression head on top (a linear layer on top of the pooled output)
+    """,
     MMBT_START_DOCSTRING,
     MMBT_INPUTS_DOCSTRING,
 )
@@ -319,16 +318,18 @@ class MMBTForClassification(nn.Module):
             config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs: **loss**:
-    (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``: Classification (or
-    regression if config.num_labels==1) loss. **logits**: ``torch.FloatTensor`` of shape ``(batch_size,
-    config.num_labels)`` Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    **hidden_states**: (`optional`, returned when ``output_hidden_states=True``) list of ``torch.FloatTensor`` (one for
-    the output of each layer + the output of the embeddings) of shape ``(batch_size, sequence_length, hidden_size)``:
-    Hidden-states of the model at the output of each layer plus the initial embedding outputs. **attentions**:
-    (`optional`, returned when ``output_attentions=True``) list of ``torch.FloatTensor`` (one for each layer) of shape
-    ``(batch_size, num_heads, sequence_length, sequence_length)``: Attentions weights after the attention softmax, used
-    to compute the weighted average in the self-attention heads.
+    Returns: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification (or regression if config.num_labels==1) loss.
+        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
