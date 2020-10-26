@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library).
-    For slow (python) tokenizers see tokenization_utils.py
+"""
+ Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
+ see tokenization_utils.py
 """
 
 import json
@@ -71,9 +72,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     Handles all the shared methods for tokenization and special tokens, as well as methods for
     downloading/caching/loading pretrained tokenizers, as well as adding tokens to the vocabulary.
 
-    This class also contains the added tokens in a unified way on top of all tokenizers so we don't
-    have to handle the specific vocabulary augmentation methods of the various underlying
-    dictionary structures (BPE, sentencepiece...).
+    This class also contains the added tokens in a unified way on top of all tokenizers so we don't have to handle the
+    specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
     slow_tokenizer_class: PreTrainedTokenizer = None
@@ -170,10 +170,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
-        """Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
+        """
+        Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
 
-        Overflowing tokens are converted to additional examples (like batches) so the output values of
-        the dict are lists (overflows) of lists (tokens).
+        Overflowing tokens are converted to additional examples (like batches) so the output values of the dict are
+        lists (overflows) of lists (tokens).
 
         Output shape: (overflows, sequence length)
         """
@@ -263,8 +264,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
         """
-        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary
-        and added tokens.
+        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
+        added tokens.
 
         Args:
             ids (:obj:`int` or :obj:`List[int]`):
@@ -511,10 +512,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         legacy_format: bool = True,
         filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
-        """Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
+        """
+        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
-        Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens}
-        using the specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
+        Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
+        specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
         """
         if legacy_format:
             added_tokens_file = os.path.join(

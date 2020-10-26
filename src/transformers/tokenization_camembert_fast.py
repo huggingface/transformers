@@ -66,11 +66,10 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
-    vocab_file (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+    vocab_file (:obj:`str`): `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm`
+    extension) that contains the vocabulary necessary to instantiate a tokenizer. bos_token (:obj:`str`, `optional`,
+    defaults to :obj:`"<s>"`): The beginning of sequence token that was used during pretraining. Can be used a sequence
+    classifier token.
 
             .. note::
 
@@ -147,9 +146,8 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        An CamemBERT sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An CamemBERT sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
@@ -204,8 +202,8 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        CamemBERT, like RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. CamemBERT, like
+        RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):

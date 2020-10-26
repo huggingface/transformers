@@ -10,7 +10,7 @@ Overview
 The Reformer model was proposed in the paper `Reformer: The Efficient Transformer
 <https://arxiv.org/abs/2001.04451.pdf>`__ by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 
-The abstract from the paper is the following: 
+The abstract from the paper is the following:
 
 *Large Transformer models routinely achieve state-of-the-art results on a number of tasks but training these models can
 be prohibitively costly, especially on long sequences. We introduce two techniques to improve the efficiency of
@@ -36,12 +36,12 @@ would result in a position encoding matrix:
 .. math::
     X_{i,j}, \text{ with } i \in \left[1,\ldots, d\right] \text{ and } j \in \left[1,\ldots, n_s\right] 
 
-which alone has over 500M parameters to store. Axial positional encodings factorize :math:`X_{i,j}` into two matrices: 
+which alone has over 500M parameters to store. Axial positional encodings factorize :math:`X_{i,j}` into two matrices:
 
 .. math::
     X^{1}_{i,j}, \text{ with } i \in \left[1,\ldots, d^1\right] \text{ and } j \in \left[1,\ldots, n_s^1\right] 
 
-and 
+and
 
 .. math::
     X^{2}_{i,j}, \text{ with } i \in \left[1,\ldots, d^2\right] \text{ and } j \in \left[1,\ldots, n_s^2\right] 
@@ -67,22 +67,23 @@ factorized embedding vectors: :math:`x^1_{k, l} + x^2_{l, k}`, where as the :obj
 Using the above example again, axial position encoding with :math:`d^1 = 2^5, d^2 = 2^5, n_s^1 = 2^9, n_s^2 = 2^{10}`
 can drastically reduced the number of parameters to :math:`2^{14} + 2^{15} \approx 49000` parameters.
 
-In practice, the parameter :obj:`config.axial_pos_embds_dim` is set to a tuple :math:`(d^1, d^2)` which sum has to
-be equal to :obj:`config.hidden_size` and :obj:`config.axial_pos_shape` is set to a tuple :math:`(n_s^1, n_s^2)` which
-product has to be equal to :obj:`config.max_embedding_size`, which during training has to be equal to the
-`sequence length` of the :obj:`input_ids`.
+In practice, the parameter :obj:`config.axial_pos_embds_dim` is set to a tuple :math:`(d^1, d^2)` which sum has to be
+equal to :obj:`config.hidden_size` and :obj:`config.axial_pos_shape` is set to a tuple :math:`(n_s^1, n_s^2)` which
+product has to be equal to :obj:`config.max_embedding_size`, which during training has to be equal to the `sequence
+length` of the :obj:`input_ids`.
 
 
 LSH Self Attention
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 In Locality sensitive hashing (LSH) self attention the key and query projection weights are tied. Therefore, the key
 query embedding vectors are also tied. LSH self attention uses the locality sensitive hashing mechanism proposed in
 `Practical and Optimal LSH for Angular Distance <https://arxiv.org/abs/1509.02897>`__ to assign each of the tied key
 query embedding vectors to one of :obj:`config.num_buckets` possible buckets. The premise is that the more "similar"
 key query embedding vectors (in terms of *cosine similarity*) are to each other, the more likely they are assigned to
-the same bucket. 
+the same bucket.
 
-The accuracy of the LSH mechanism can be improved by increasing :obj:`config.num_hashes` or directly the argument 
+The accuracy of the LSH mechanism can be improved by increasing :obj:`config.num_hashes` or directly the argument
 :obj:`num_hashes` of the forward function so that the output of the LSH self attention better approximates the output
 of the "normal" full self attention. The buckets are then sorted and chunked into query key embedding vector chunks
 each of length :obj:`config.lsh_chunk_length`. For each chunk, the query embedding vectors attend to its key vectors
@@ -92,11 +93,11 @@ neighboring chunks and :obj:`config.lsh_num_chunks_after` following neighboring 
 For more information, see the `original Paper <https://arxiv.org/abs/2001.04451>`__ or this great `blog post
 <https://www.pragmatic.ml/reformer-deep-dive/>`__.
 
-Note that :obj:`config.num_buckets` can also be factorized into a list
-:math:`(n_{\text{buckets}}^1, n_{\text{buckets}}^2)`. This way instead of assigning the query key embedding vectors to
-one of :math:`(1,\ldots, n_{\text{buckets}})` they are assigned to one of
-:math:`(1-1,\ldots, n_{\text{buckets}}^1-1, \ldots, 1-n_{\text{buckets}}^2, \ldots, n_{\text{buckets}}^1-n_{\text{buckets}}^2)`.
-This is crucial for very long sequences to save memory.
+Note that :obj:`config.num_buckets` can also be factorized into a list :math:`(n_{\text{buckets}}^1,
+n_{\text{buckets}}^2)`. This way instead of assigning the query key embedding vectors to one of :math:`(1,\ldots,
+n_{\text{buckets}})` they are assigned to one of :math:`(1-1,\ldots, n_{\text{buckets}}^1-1, \ldots,
+1-n_{\text{buckets}}^2, \ldots, n_{\text{buckets}}^1-n_{\text{buckets}}^2)`. This is crucial for very long sequences to
+save memory.
 
 When training a model from scratch, it is recommended to leave :obj:`config.num_buckets=None`, so that depending on the
 sequence length a good value for :obj:`num_buckets` is calculated on the fly. This value will then automatically be
@@ -128,7 +129,7 @@ multiple of :obj:`config.lsh_chunk_length` and :obj:`config.local_chunk_length` 
 Positional Encodings are correctly set as described above. Reformer is very memory efficient so that the model can
 easily be trained on sequences as long as 64000 tokens.
 
-For training, the :class:`~transformers.ReformerModelWithLMHead` should be used as follows: 
+For training, the :class:`~transformers.ReformerModelWithLMHead` should be used as follows:
 
 .. code-block::
 

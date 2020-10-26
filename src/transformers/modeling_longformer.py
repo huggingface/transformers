@@ -80,9 +80,8 @@ def _get_question_end_index(input_ids, sep_token_id):
 
 def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=True):
     """
-    Computes global attention mask by putting attention on all tokens
-    before `sep_token_id` if `before_sep_token is True` else after
-    `sep_token_id`.
+    Computes global attention mask by putting attention on all tokens before `sep_token_id` if `before_sep_token is
+    True` else after `sep_token_id`.
     """
     question_end_index = _get_question_end_index(input_ids, sep_token_id)
     question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
@@ -101,9 +100,9 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
 
 # Copied from transformers.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
 
     Args:
         x: torch.Tensor x:
@@ -175,8 +174,8 @@ class LongformerEmbeddings(nn.Module):
         return embeddings
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """We are provided embeddings directly. We cannot infer which are padded so just generate
-        sequential position ids.
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
         Args:
             inputs_embeds: torch.Tensor inputs_embeds:
@@ -233,11 +232,11 @@ class LongformerSelfAttention(nn.Module):
         output_attentions=False,
     ):
         """
-        LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
-        Padding to `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
+        LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
+        `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
 
-        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to
-            -ve: no attention
+        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
+
               0: local attention
             +ve: global attention
 
@@ -408,8 +407,10 @@ class LongformerSelfAttention(nn.Module):
 
     @staticmethod
     def _pad_and_diagonalize(chunked_hidden_states):
-        """shift every row 1 step right, converting columns into diagonals.
-        Example:
+        """
+        shift every row 1 step right, converting columns into diagonals.
+
+        Example::
               chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
                                        -1.8348,  0.7672,  0.2986,  0.0285,
                                        -0.7584,  0.4206, -0.0405,  0.1599,
@@ -470,9 +471,11 @@ class LongformerSelfAttention(nn.Module):
         ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
 
     def _sliding_chunks_query_key_matmul(self, query: torch.Tensor, key: torch.Tensor, window_overlap: int):
-        """Matrix multiplication of query and key tensors using with a sliding window attention pattern.
-        This implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer)
-        with an overlap of size window_overlap"""
+        """
+        Matrix multiplication of query and key tensors using with a sliding window attention pattern. This
+        implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer) with an
+        overlap of size window_overlap
+        """
         batch_size, seq_len, num_heads, head_dim = query.size()
         assert (
             seq_len % (window_overlap * 2) == 0
@@ -536,8 +539,10 @@ class LongformerSelfAttention(nn.Module):
     def _sliding_chunks_matmul_attn_probs_value(
         self, attn_probs: torch.Tensor, value: torch.Tensor, window_overlap: int
     ):
-        """Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors.
-        Returned tensor will be of the same shape as `attn_probs`"""
+        """
+        Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors. Returned tensor will be of the
+        same shape as `attn_probs`
+        """
         batch_size, seq_len, num_heads, head_dim = value.size()
 
         assert seq_len % (window_overlap * 2) == 0
@@ -968,8 +973,8 @@ class LongformerLMHead(nn.Module):
 
 
 class LongformerPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
@@ -996,9 +1001,9 @@ LONGFORMER_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.LongformerConfig`): Model configuration class with all the parameters of the
@@ -1012,41 +1017,40 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.LongformerTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.LongformerTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to decide the attention given on each token, local attention or global attenion.
-            Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
+            Mask to decide the attention given on each token, local attention or global attenion. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
-            for classification, the <s> token should be given global attention. For QA, all question tokens should also have
-            global attention. Please refer to the `Longformer paper <https://arxiv.org/abs/2004.05150>`__ for more details.
-            Mask values selected in ``[0, 1]``:
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the `Longformer paper <https://arxiv.org/abs/2004.05150>`__ for more
+            details. Mask values selected in ``[0, 1]``:
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
@@ -1071,17 +1075,16 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 class LongformerModel(LongformerPreTrainedModel):
     """
     This class copied code from :class:`~transformers.RobertaModel` and overwrote standard self-attention with
-    longformer self-attention to provide the ability to process
-    long sequences following the self-attention approach described in `Longformer: the Long-Document Transformer
-    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer self-attention
-    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
-    memory and compute.
+    longformer self-attention to provide the ability to process long sequences following the self-attention approach
+    described in `Longformer: the Long-Document Transformer <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy,
+    Matthew E. Peters, and Arman Cohan. Longformer self-attention combines a local (sliding window) and global
+    attention to extend to long documents without the O(n^2) increase in memory and compute.
 
     The self-attention module :obj:`LongformerSelfAttention` implemented here supports the combination of local and
-    global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
-    and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
-    tasks. Future release will add support for autoregressive attention, but the support for dilated attention
-    requires a custom CUDA kernel to be memory and compute efficient.
+    global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive and
+    dilated attention are more relevant for autoregressive language modeling than finetuning on downstream tasks.
+    Future release will add support for autoregressive attention, but the support for dilated attention requires a
+    custom CUDA kernel to be memory and compute efficient.
 
     """
 
@@ -1112,9 +1115,9 @@ class LongformerModel(LongformerPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -1323,10 +1326,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
@@ -1391,8 +1393,10 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Longformer Model transformer with a sequence classification/regression head on top (a linear layer
-    on top of the pooled output) e.g. for GLUE tasks. """,
+    """
+    Longformer Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
@@ -1430,9 +1434,8 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1499,8 +1502,10 @@ class LongformerClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD /
-    TriviaQA (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD /
+    TriviaQA (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
@@ -1535,12 +1540,12 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
 
         Returns:
 
@@ -1630,8 +1635,10 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Longformer Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    Longformer Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
+    """,
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForTokenClassification(LongformerPreTrainedModel):
@@ -1670,8 +1677,8 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1719,8 +1726,10 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Longformer Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    Longformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for RocStories/SWAG tasks.
+    """,
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForMultipleChoice(LongformerPreTrainedModel):
@@ -1755,9 +1764,9 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

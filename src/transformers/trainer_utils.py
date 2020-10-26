@@ -28,8 +28,8 @@ from .tokenization_utils_base import ExplicitEnum
 
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf``
-    (if installed).
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
+    installed).
 
     Args:
         seed (:obj:`int`): The seed to set.

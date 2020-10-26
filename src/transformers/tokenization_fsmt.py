@@ -56,8 +56,8 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 def get_pairs(word):
     """
-    Return set of symbol pairs in a word.
-    word is represented as tuple of symbols (symbols being variable-length strings)
+    Return set of symbol pairs in a word. word is represented as tuple of symbols (symbols being variable-length
+    strings)
     """
     pairs = set()
     prev_char = word[0]
@@ -164,12 +164,12 @@ class FSMTTokenizer(PreTrainedTokenizer):
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
 
@@ -332,12 +332,16 @@ class FSMTTokenizer(PreTrainedTokenizer):
         Tokenize a string given language code using Moses.
 
         Details of tokenization:
-        - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
+
+            - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
 
         Args:
-            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported languages. However, we don't enforce it.
-            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False) (bool). If True, we only apply BPE.
+
+            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
+              languages. However, we don't enforce it.
+            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
+              (bool). If True, we only apply BPE.
 
         Returns:
             List of tokens.
@@ -382,9 +386,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A FAIRSEQ Transformer sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A FAIRSEQ Transformer sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s> B </s>``
@@ -445,8 +448,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A FAIRSEQ Transformer sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A FAIRSEQ
+        Transformer sequence pair mask has the following format:
 
         ::
 
@@ -465,8 +468,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
             sequence(s).
 
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        An FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An
+        FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
         """
         sep = [self.sep_token_id]
 

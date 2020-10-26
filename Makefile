@@ -15,6 +15,7 @@ modified_only_fixup:
 		black $(modified_py_files); \
 		isort $(modified_py_files); \
 		flake8 $(modified_py_files); \
+		python utils/style_doc.py $(modified_py_files) --max_len 119; \
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -31,6 +32,7 @@ quality:
 	black --check $(check_dirs)
 	isort --check-only $(check_dirs)
 	flake8 $(check_dirs)
+	python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
 	${MAKE} extra_quality_checks
 
 # Format source code automatically and check is there are any problems left that need manual fixing
@@ -38,6 +40,7 @@ quality:
 style:
 	black $(check_dirs)
 	isort $(check_dirs)
+	python utils/style_doc.py src/transformers docs/source --max_len 119
 
 # Super fast fix and check target that only works on relevant modified files since the branch was made
 

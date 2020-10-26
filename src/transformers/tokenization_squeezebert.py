@@ -46,7 +46,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class SqueezeBertTokenizer(BertTokenizer):
     r"""
-    Constructs a  SqueezeBert tokenizer.
+    Constructs a SqueezeBert tokenizer.
 
     :class:`~transformers.SqueezeBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.

@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for python tokenizers.
-    For fast tokenizers (provided by HuggingFace's tokenizers library) see tokenization_utils_fast.py
+"""
+ Tokenization classes for python tokenizers. For fast tokenizers (provided by HuggingFace's tokenizers library) see
+ tokenization_utils_fast.py
 """
 import itertools
 import re
@@ -108,12 +109,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     Inherits from :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase`.
 
-    Handle all the shared methods for tokenization and special tokens as well as methods
-    downloading/caching/loading pretrained tokenizers as well as adding tokens to the vocabulary.
+    Handle all the shared methods for tokenization and special tokens as well as methods downloading/caching/loading
+    pretrained tokenizers as well as adding tokens to the vocabulary.
 
-    This class also contain the added tokens in a unified way on top of all tokenizers so we don't
-    have to handle the specific vocabulary augmentation methods of the various underlying
-    dictionary structures (BPE, sentencepiece...).
+    This class also contain the added tokens in a unified way on top of all tokenizers so we don't have to handle the
+    specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
     def __init__(self, **kwargs):
@@ -153,8 +153,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
-        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
-        vocabulary, they are added to it with indices starting from length of the current vocabulary.
+        Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
+        it with indices starting from length of the current vocabulary.
 
         Args:
             new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
@@ -231,11 +231,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Converts a string in a sequence of tokens, using the tokenizer.
 
-        Note that, unlike Fast tokenizers (instances of PreTrainedTokenizerFast), this method
-        won't replace the unknown tokens with the `unk_token` yet (this is done in the `encode()` method)
+        Note that, unlike Fast tokenizers (instances of PreTrainedTokenizerFast), this method won't replace the unknown
+        tokens with the `unk_token` yet (this is done in the `encode()` method)
 
-        Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
-        Takes care of added tokens.
+        Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies
+        (BPE/SentencePieces/WordPieces). Takes care of added tokens.
 
         Args:
             text (:obj:`str`):
@@ -354,9 +354,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _tokenize(self, text, **kwargs):
         """
-        Converts a string in a sequence of tokens (string), using the tokenizer.
-        Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies
-        (BPE/SentencePieces/WordPieces).
+        Converts a string in a sequence of tokens (string), using the tokenizer. Split in words for word-based
+        vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
 
         Do NOT take care of added tokens.
         """
@@ -589,8 +588,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         verbose: bool = True,
     ) -> BatchEncoding:
         """
-        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
-        It adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
+        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
+        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
         manages a moving window (with user defined stride) for overflowing tokens
 
         Args:
@@ -641,8 +640,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining :obj:`kwargs` as well.
-        We test the :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
+        This method should pop the arguments from kwargs and return the remaining :obj:`kwargs` as well. We test the
+        :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
 
         Args:
             test (:obj:`str`):
@@ -689,8 +688,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
         """
-        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary
-        and added tokens.
+        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
+        added tokens.
 
         Args:
             ids (:obj:`int` or :obj:`List[int]`):
@@ -782,13 +781,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             tgt_texts: (:obj:`List[str]`, `optional`):
                 List of summaries or target language texts.
             max_length (:obj:`int`, `optional`):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts).
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                Controls the maximum length for encoder inputs (documents to summarize or source language texts). If
+                left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             max_target_length (:obj:`int`, `optional`):
-                Controls the maximum length of decoder inputs (target language texts or summaries).
-                If left unset or set to :obj:`None`, this will use the max_length value.
+                Controls the maximum length of decoder inputs (target language texts or summaries). If left unset or
+                set to :obj:`None`, this will use the max_length value.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
@@ -829,8 +828,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
             - **labels** -- List of token ids for tgt_texts
 
-            The full set of keys ``[input_ids, attention_mask, labels]``,
-            will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
+            The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
+            Otherwise, input_ids, attention_mask will be the only keys.
         """
         raise NotImplementedError(
             "If your model requires more than input_ids for a typical forward pass, you should implement this method. "
