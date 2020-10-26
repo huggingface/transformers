@@ -36,9 +36,10 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         self.assertEqual(nlp.entailment_id, 1)
 
         config.label2id = {"entailment": 0, "neutral": 1, "contradiction": 2}
-        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer, entailment_id=2)
+        nlp = pipeline(
+            task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer, entailment_id=2
+        )
         self.assertEqual(nlp.entailment_id, 2)
-
 
     def _test_pipeline(self, nlp: Pipeline):
         output_keys = {"sequence", "labels", "scores"}

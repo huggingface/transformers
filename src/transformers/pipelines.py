@@ -1078,13 +1078,15 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return sequence_pairs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS, """\
+@add_end_docstrings(
+    PIPELINE_INIT_ARGS,
+    """\
         entailment_id (:obj:`int`, `optional`, defaults to :obj:`None`):
             The label id of the model's `entailment` class. If :obj:`None` (default), the pipeline will attempt
             to look up the entailment id in the model config's :attr:`~transformers.PretrainedConfig.label2id`
             mapping. If the config does not specify the entailment id, the value will be set to -1, indicating the
             last dimension of the model output.
-"""
+""",
 )
 class ZeroShotClassificationPipeline(Pipeline):
     """
@@ -1179,7 +1181,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
             contr_id = -1 if self.entailment_id == 0 else 0
-            entail_contr_logits = reshaped_outputs[..., [contr_dim, self.entailment_id]]
+            entail_contr_logits = reshaped_outputs[..., [contr_id, self.entailment_id]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[..., 1]
 
