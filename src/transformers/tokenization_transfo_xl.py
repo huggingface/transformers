@@ -68,13 +68,13 @@ DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
 def tokenize_numbers(text_array: List[str]) -> List[str]:
     """
     Splits large comma-separated numbers and floating point values. This is done by replacing commas with ' @,@ ' and
-    dots with ' @.@ '
+    dots with ' @.@ '.
 
     Args:
-        text_array: An already tokenized text as lis
+        text_array: An already tokenized text as list.
 
     Returns:
-        A list of strings with tokenized number
+        A list of strings with tokenized numbers.
 
     Example::
         >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
@@ -91,13 +91,13 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
 def detokenize_numbers(text: str) -> str:
     """
-    Inverts the operation of `tokenize_numbers`. This is replacing ' @,@ ' and ' @.@' by ',' and '.'
+    Inverts the operation of `tokenize_numbers`. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
 
     Args:
-        text: A string where the number should be detokenize
+        text: A string where the number should be detokenized.
 
     Returns:
-        A detokenized strin
+        A detokenized string.
 
     Example::
         >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")

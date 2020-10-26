@@ -752,19 +752,25 @@ class XLMTokenizer(PreTrainedTokenizer):
         Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific
         tokenizerself. Otherwise, we use Moses.
 
-        Details of tokenization: - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
-
+        Details of tokenization:
+        
+            - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
-        - [pythainlp](https://github.com/PyThaiNLP/pythainlp): Thai tokenizer
-
+            - [pythainlp](https://github.com/PyThaiNLP/pythainlp): Thai tokenizer
             - Install with `pip install pythainlp`
-        - [kytea](https://github.com/chezou/Mykytea-python): Japanese tokenizer, wrapper of
-          [KyTea](https://github.com/neubig/kytea)
-
+            - [kytea](https://github.com/chezou/Mykytea-python): Japanese tokenizer, wrapper of
+              [KyTea](https://github.com/neubig/kytea)
             - Install with the following steps:
-            ``` git clone git@github.com:neubig/kytea.git && cd kytea autoreconf -i ./configure --prefix=$HOME/local
-            make && make install pip install kytea ``` - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
 
+            ..
+            
+                git clone git@github.com:neubig/kytea.git && cd kytea
+                autoreconf -i
+                ./configure --prefix=$HOME/local
+                make && make install
+                pip install kytea
+            
+            - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
             - Install with `pip install jieba`
 
         (*) The original XLM used [Stanford

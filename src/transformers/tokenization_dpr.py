@@ -134,6 +134,8 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of
         size :obj:`(n_passages, sequence_length)` with the format:
 
+    ::
+
         [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
@@ -262,13 +264,18 @@ class CustomDPRReaderTokenizerMixin:
         num_spans_per_passage: int = 4,
     ) -> List[DPRSpanPrediction]:
         """
-        Get the span predictions for the extractive Q&A model. Outputs: `List` of `DPRReaderOutput` sorted by
-        descending `(relevance_score, span_score)`. Each `DPRReaderOutput` is a `Tuple` with: **span_score**: ``float``
-        that corresponds to the score given by the reader for this span compared to other spans in the same passage. It
-        corresponds to the sum of the start and end logits of the span. **relevance_score**: ``float`` that corresponds
-        to the score of the each passage to answer the question, compared to all the other passages. It corresponds to
-        the output of the QA classifier of the DPRReader. **doc_id**: ``int``` the id of the passage. **start_index**:
-        ``int`` the start index of the span (inclusive). **end_index**: ``int`` the end index of the span (inclusive).
+        Get the span predictions for the extractive Q&A model.
+
+        Returns: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`. Each
+        `DPRReaderOutput` is a `Tuple` with:
+
+            - **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to
+              other spans in the same passage. It corresponds to the sum of the start and end logits of the span.
+            - **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
+              compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
+            - **doc_id**: ``int``` the id of the passage.
+            - **start_index**: ``int`` the start index of the span (inclusive).
+            - **end_index**: ``int`` the end index of the span (inclusive).
 
         Examples::
 

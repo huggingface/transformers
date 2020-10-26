@@ -114,8 +114,9 @@ class FlaubertTokenizer(XLMTokenizer):
         """
         Tokenize a string given language code using Moses.
 
-        Details of tokenization: - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
+        Details of tokenization:
 
+            - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
 
         Args:

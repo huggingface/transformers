@@ -1312,10 +1312,13 @@ class Trainer:
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
-        Returns:
-            `NamedTuple`: predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`. label_ids
-            (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some). metrics (:obj:`Dict[str,
-            float]`, `optional`): The potential dictionary of metrics (if the dataset contained labels).
+        Returns: `NamedTuple` 
+            A namedtuple with the following keys:
+
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
+            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+              contained labels).
         """
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")

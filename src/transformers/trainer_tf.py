@@ -236,9 +236,11 @@ class TFTrainer:
         One can subclass and override this method to customize the setup if needed. Find more information `here
         <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
-        Environment: WANDB_PROJECT: (Optional): str - "huggingface" by default, set this to a custom string to store
-        results in a different project WANDB_DISABLED: (Optional): boolean - defaults to false, set to "true" to
-        disable wandb entirely
+        Environment:
+            WANDB_PROJECT:
+                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project.
+            WANDB_DISABLED:
+                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely.
         """
         if hasattr(self, "_setup_wandb"):
             warnings.warn(
@@ -255,9 +257,13 @@ class TFTrainer:
         """
         Setup the optional Comet.ml integration.
 
-        Environment: COMET_MODE: (Optional): str - "OFFLINE", "ONLINE", or "DISABLED" COMET_PROJECT_NAME: (Optional):
-        str - Comet.ml project name for experiments COMET_OFFLINE_DIRECTORY: (Optional): str - folder to use for saving
-        offline experiments when `COMET_MODE` is "OFFLINE"
+        Environment:
+            COMET_MODE:
+                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME:
+                (Optional): str - Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY:
+                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
 
         For a number of configurable items in the environment, see `here
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
@@ -757,10 +763,13 @@ class TFTrainer:
                 such as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
                 by calling ``model(features, **labels)``
 
-        Returns:
-            `NamedTuple`: predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`. label_ids
-            (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some). metrics (:obj:`Dict[str,
-            float]`, `optional`): The potential dictionary of metrics (if the dataset contained labels).
+        Returns: `NamedTuple`
+            A namedtuple with the following keys:
+            
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
+            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+              contained labels).
         """
         test_ds, steps, num_examples = self.get_test_tfdataset(test_dataset)
 

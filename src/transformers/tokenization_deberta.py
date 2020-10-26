@@ -292,12 +292,12 @@ def load_vocab(name=None, tag=None, no_cache=False, cache_dir=None):
 
 class GPT2Tokenizer(object):
     """
-      A wrapper of GPT2 tokenizer with similar interface as BERT tokenizer
+    A wrapper of GPT2 tokenizer with similar interface as BERT tokenizer
 
     Args:
-      vocab_file (:obj:`str`, optional):
-        The local path of vocabulary package or the release name of vocabulary in `DeBERTa GitHub releases
-        <https://github.com/microsoft/DeBERTa/releases>`_, \ e.g. "bpe_encoder", default: `None`.
+        vocab_file (:obj:`str`, optional):
+            The local path of vocabulary package or the release name of vocabulary in `DeBERTa GitHub releases
+            <https://github.com/microsoft/DeBERTa/releases>`_, \ e.g. "bpe_encoder", default: `None`.
 
             If it's `None`, then it will download the vocabulary in the latest release from GitHub. The vocabulary file
             is a \ state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files
@@ -311,10 +311,8 @@ class GPT2Tokenizer(object):
             - We remapped the token ids in our dictionary with regarding to the new special tokens, `[PAD]` => 0,
               `[CLS]` => 1, `[SEP]` => 2, `[UNK]` => 3, `[MASK]` => 50264
 
-      special_tokens (:obj:`list`, optional):
-        List of special tokens to be added to the end of the vocabulary.
-
-
+        special_tokens (:obj:`list`, optional):
+            List of special tokens to be added to the end of the vocabulary.
     """
 
     def __init__(self, vocab_file=None, special_tokens=None):

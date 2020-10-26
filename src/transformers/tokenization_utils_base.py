@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Base classes common to both the slow and the fast tokenization classes:
-    PreTrainedTokenizerBase (host all the user fronting encoding methodes) Special token mixing (host the special
-    tokens logic) and BatchEncoding (wrap the dictionary of output with special method for the Fast tokenizers)
+Base classes common to both the slow and the fast tokenization classes:
+PreTrainedTokenizerBase (host all the user fronting encoding methodes) Special token mixing (host the special
+tokens logic) and BatchEncoding (wrap the dictionary of output with special method for the Fast tokenizers)
 """
 
 import copy
@@ -1224,21 +1224,25 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
             - **input_ids** -- List of token ids to be fed to a model.
 
-              `What are input IDs? <../glossary.html#input-ids>`__ - **token_type_ids** -- List of token type ids to be
-              fed to a model (when :obj:`return_token_type_ids=True` or if `"token_type_ids"` is in
-              :obj:`self.model_input_names`).
+              `What are input IDs? <../glossary.html#input-ids>`__
 
-              `What are token type IDs? <../glossary.html#token-type-ids>`__ - **attention_mask** -- List of indices
-              specifying which tokens should be attended to by the model (when :obj:`return_attention_mask=True` or if
-              `"attention_mask"` is in :obj:`self.model_input_names`).
+            - **token_type_ids** -- List of token type ids to be fed to a model (when :obj:`return_token_type_ids=True`
+              or if `"token_type_ids"` is in :obj:`self.model_input_names`).
 
-              `What are attention masks? <../glossary.html#attention-mask>`__ - **overflowing_tokens** -- List of
-              overflowing tokens sequences (when a :obj:`max_length` is specified and
-              :obj:`return_overflowing_tokens=True`). - **num_truncated_tokens** -- Number of tokens truncated (when a
-              :obj:`max_length` is specified and :obj:`return_overflowing_tokens=True`). - **special_tokens_mask** --
-              List of 0s and 1s, with 1 specifying added special tokens and 0 specifying regular sequence tokens (when
-              :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`). - **length** -- The length of
-              the inputs (when :obj:`return_length=True`)
+              `What are token type IDs? <../glossary.html#token-type-ids>`__
+
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
+
+              `What are attention masks? <../glossary.html#attention-mask>`__
+
+            - **overflowing_tokens** -- List of overflowing tokens sequences (when a :obj:`max_length` is specified and
+              :obj:`return_overflowing_tokens=True`).
+            - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
+              :obj:`return_overflowing_tokens=True`).
+            - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
+              regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
+            - **length** -- The length of the inputs (when :obj:`return_length=True`)
 """
 
 INIT_TOKENIZER_DOCSTRING = r"""
