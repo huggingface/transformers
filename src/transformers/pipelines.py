@@ -1079,6 +1079,15 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(
+    """\
+            entailment_dim (:obj:`int`, `optional`, defaults to :obj:`None`):
+                The output dimension of the model that corresponds to "entailment". If :obj:`None` (default), the
+                pipeline will attempt to look up the entailment dimension in the model config's id2label mapping.
+                If the config does not specify the entailment dimension, the value will be set to -1, indicating
+                the last dimension of the model output.
+"""
+)
 class ZeroShotClassificationPipeline(Pipeline):
     """
     NLI-based zero-shot classification pipeline using a :obj:`ModelForSequenceClassification` trained on NLI (natural
@@ -1097,8 +1106,16 @@ class ZeroShotClassificationPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
     """
 
-    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), entailment_dim=None, *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
+
+        if entailment_dim is None:
+            entailment_dim = -1  # if not found in config, we set to last dimension
+            for label, ind in self.model.config.label2id.items():
+                if "entail" in label.lower():
+                    entailment_dim = ind
+
+        self.entailment_dim = entailment_dim
 
     def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
@@ -1156,11 +1173,12 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         if not multi_class:
             # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., -1]
+            entail_logits = reshaped_outputs[..., self.entailment_dim]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
-            entail_contr_logits = reshaped_outputs[..., [0, -1]]
+            contr_dim = -1 if self.entailment_dim == 0 else 0
+            entail_contr_logits = reshaped_outputs[..., [contr_dim, self.entailment_dim]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[..., 1]
 

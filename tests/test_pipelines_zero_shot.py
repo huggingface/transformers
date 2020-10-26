@@ -1,6 +1,6 @@
 import unittest
 
-from transformers.pipelines import Pipeline
+from transformers.pipelines import Pipeline, pipeline
 
 from .test_pipelines_common import CustomInputPipelineCommonMixin
 
@@ -17,6 +17,28 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         for score in result["scores"]:
             sum += score
         self.assertAlmostEqual(sum, 1.0)
+
+    def _test_set_entailment_dim(self, nlp: Pipeline):
+        model = nlp.model
+        tokenizer = nlp.tokenizer
+        config = model.config
+
+        config.label2id = {"LABEL_0": 0, "LABEL_1": 1, "LABEL_2": 2}
+        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer)
+        self.assertEqual(nlp.entailment_dim, -1)
+
+        config.label2id = {"entailment": 0, "neutral": 1, "contradiction": 2}
+        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer)
+        self.assertEqual(nlp.entailment_dim, 0)
+
+        config.label2id = {"ENTAIL": 1, "CONTR": 0}
+        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer)
+        self.assertEqual(nlp.entailment_dim, 1)
+
+        config.label2id = {"entailment": 0, "neutral": 1, "contradiction": 2}
+        nlp = pipeline(task="zero-shot-classification", config=config, model=model, tokenizer=tokenizer, entailment_dim=2)
+        self.assertEqual(nlp.entailment_dim, 2)
+
 
     def _test_pipeline(self, nlp: Pipeline):
         output_keys = {"sequence", "labels", "scores"}
@@ -58,6 +80,8 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
             },
         ]
         self.assertIsNotNone(nlp)
+
+        self._test_set_entailment_dim(nlp)
 
         for mono_input in valid_mono_inputs:
             mono_result = nlp(**mono_input)
