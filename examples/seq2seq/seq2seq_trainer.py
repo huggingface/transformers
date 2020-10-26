@@ -1,4 +1,3 @@
-import copy
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -132,21 +131,19 @@ class Seq2SeqTrainer(Trainer):
             )
 
     def _compute_loss(self, model, inputs):
-        inputs = copy.deepcopy(inputs)
+        labels = inputs.pop("labels")
         if self.args.label_smoothing == 0:
             if self.data_args is not None and self.data_args.ignore_pad_token_for_loss:
                 # force training to ignore pad token
-                labels = inputs.pop("labels")
                 logits = model(**inputs, use_cache=False)[0]
 
                 loss_fct = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
                 loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
             else:
                 # compute usual loss via models
-                loss, logits = model(**inputs, use_cache=False)[:2]
+                loss, logits = model(**inputs, labels=labels, use_cache=False)[:2]
         else:
             # compute label smoothed loss
-            labels = inputs.pop("labels")
             logits = model(**inputs, use_cache=False)[0]
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
             loss, _ = label_smoothed_nll_loss(
