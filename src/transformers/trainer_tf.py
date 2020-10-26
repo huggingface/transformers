@@ -11,7 +11,6 @@ import tensorflow as tf
 from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 from tensorflow.python.keras import callbacks as callbacks_module
-from tensorflow.python.keras.callbacks import CSVLogger, EarlyStopping
 
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
