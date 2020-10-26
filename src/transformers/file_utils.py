@@ -289,6 +289,7 @@ def torch_only_method(fn):
     return wrapper
 
 
+# docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
 ```
@@ -306,6 +307,7 @@ that python file if that's the case.
 """
 
 
+# docstyle-ignore
 TOKENIZERS_IMPORT_ERROR = """
 {0} requires the 🤗 Tokenizers library but it was not found in your enviromnent. You can install it with:
 ```
@@ -318,6 +320,7 @@ In a notebook or a colab, you can install it by executing a cell with
 """
 
 
+# docstyle-ignore
 SENTENCEPIECE_IMPORT_ERROR = """
 {0} requires the SentencePiece library but it was not found in your enviromnent. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
@@ -325,6 +328,7 @@ that match your enviromnent.
 """
 
 
+# docstyle-ignore
 FAISS_IMPORT_ERROR = """
 {0} requires the faiss library but it was not found in your enviromnent. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
@@ -332,12 +336,14 @@ that match your enviromnent.
 """
 
 
+# docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your enviromnent.
 """
 
 
+# docstyle-ignore
 SKLEARN_IMPORT_ERROR = """
 {0} requires the scikit-learn library but it was not found in your enviromnent. You can install it with:
 ```
@@ -350,12 +356,14 @@ In a notebook or a colab, you can install it by executing a cell with
 """
 
 
+# docstyle-ignore
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
 """
 
 
+# docstyle-ignore
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your enviromnent.

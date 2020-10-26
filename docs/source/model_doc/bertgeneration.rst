@@ -47,7 +47,7 @@ Usage:
 - Pretrained :class:`~transformers.EncoderDecoderModel` are also directly available in the model hub, e.g.,
 
 
-:: code-block
+.. code-block::
 
   # instantiate sentence fusion model
   sentence_fuser = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse")

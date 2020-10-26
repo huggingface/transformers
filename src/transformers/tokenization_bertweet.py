@@ -488,6 +488,7 @@ domains and tasks. The basic logic is this:
 
 # This particular element is used in a couple ways, so we define it
 # with a name:
+# docstyle-ignore
 EMOTICONS = r"""
     (?:
       [<>]?
@@ -505,7 +506,7 @@ EMOTICONS = r"""
 
 # URL pattern due to John Gruber, modified by Tom Winzig. See
 # https://gist.github.com/winzig/8894715
-
+# docstyle-ignore
 URLS = r"""			# Capture 1: entire matched URL
   (?:
   https?:				# URL protocol and colon
@@ -549,6 +550,7 @@ URLS = r"""			# Capture 1: entire matched URL
   )
 """
 
+# docstyle-ignore
 # The components of the tokenizer:
 REGEXPS = (
     URLS,
@@ -628,18 +630,16 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
     Remove entities from text by converting them to their
     corresponding unicode character.
 
-    :param text: a unicode string or a byte string encoded in the given
-    `encoding` (which defaults to 'utf-8').
+    Args:
+        text:
+            A unicode string or a byte string encoded in the given `encoding` (which defaults to 'utf-8').
+        keep (list):
+            List of entity names which should not be replaced. This supports both numeric entities (``&#nnnn;`` and ``&#hhhh;``)
+            and named entities (such as ``&nbsp;`` or ``&gt;``).
+        remove_illegal (bool):
+            If `True`, entities that can't be converted are removed. Otherwise, entities that can't be converted are kept "as is".
 
-    :param list keep:  list of entity names which should not be replaced.\
-    This supports both numeric entities (``&#nnnn;`` and ``&#hhhh;``)
-    and named entities (such as ``&nbsp;`` or ``&gt;``).
-
-    :param bool remove_illegal: If `True`, entities that can't be converted are\
-    removed. Otherwise, entities that can't be converted are kept "as
-    is".
-
-    :returns: A unicode string with the entities removed.
+    Returns: A unicode string with the entities removed.
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py
 
@@ -688,16 +688,16 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
 class TweetTokenizer:
     r"""
-    Tokenizer for tweets.
+    Examples::
 
+        >>> # Tokenizer for tweets.
         >>> from nltk.tokenize import TweetTokenizer
         >>> tknzr = TweetTokenizer()
         >>> s0 = "This is a cooool #dummysmiley: :-) :-P <3 and some arrows < > -> <--"
         >>> tknzr.tokenize(s0)
         ['This', 'is', 'a', 'cooool', '#dummysmiley', ':', ':-)', ':-P', '<3', 'and', 'some', 'arrows', '<', '>', '->', '<--']
 
-    Examples using `strip_handles` and `reduce_len parameters`:
-
+        >>> # Examples using `strip_handles` and `reduce_len parameters`:
         >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
         >>> s1 = '@remy: This is waaaaayyyy too much for you!!!!!!'
         >>> tknzr.tokenize(s1)
@@ -711,10 +711,11 @@ class TweetTokenizer:
 
     def tokenize(self, text):
         """
-        :param text: str
-        :rtype: list(str)
-        :return: a tokenized list of strings; concatenating this list returns\
-        the original string if `preserve_case=False`
+        Args:
+            text: str
+
+        Returns: list(str)
+            A tokenized list of strings; concatenating this list returns the original string if `preserve_case=False`
         """
         # Fix HTML character entities:
         text = _replace_html_entities(text)
