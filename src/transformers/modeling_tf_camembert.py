@@ -148,9 +148,9 @@ class TFCamembertForMultipleChoice(TFRobertaForMultipleChoice):
 
 @add_start_docstrings(
     """
-CamemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-""",
+    CamemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     CAMEMBERT_START_DOCSTRING,
 )
 class TFCamembertForQuestionAnswering(TFRobertaForQuestionAnswering):

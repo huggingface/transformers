@@ -138,16 +138,16 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         training=False,
     ):
         """
-        Get token embeddings of inputs
+        Get token embeddings of inputs.
 
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear"
+            mode: string, a valid value is one of "embedding" and "linear".
 
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; (2) mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size]
+            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
+            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
+            vocab_size].
 
         Raises:
             ValueError: if mode is not valid.
@@ -192,10 +192,10 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
     def _linear(self, inputs):
         """
-        Computes logits by running inputs through a linear layer
+        Computes logits by running inputs through a linear layer.
 
         Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size].
 
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].

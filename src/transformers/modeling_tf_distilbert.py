@@ -98,16 +98,16 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
     def call(self, input_ids=None, position_ids=None, inputs_embeds=None, mode="embedding", training=False):
         """
-        Get token embeddings of inputs
+        Get token embeddings of inputs.
 
         Args:
             inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
-            mode: string, a valid value is one of "embedding" and "linear"
+            mode: string, a valid value is one of "embedding" and "linear".
 
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; (2) mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size]
+            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
+            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
+            vocab_size].
 
         Raises:
             ValueError: if mode is not valid.
@@ -124,10 +124,11 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
     def _embedding(self, input_ids, position_ids, inputs_embeds, training=False):
         """
-        Parameters ---------- input_ids: tf.Tensor(bs, max_seq_length) The token ids to embed.
+        Parameters:
+            input_ids: tf.Tensor(bs, max_seq_length) The token ids to embed.
 
-        Outputs ------- embeddings: tf.Tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings,
-        no token_type embeddings)
+        Returns:
+            tf.Tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type embeddings)
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -155,7 +156,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         Computes logits by running inputs through a linear layer
 
         Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
 
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
@@ -200,11 +201,15 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
     def call(self, query, key, value, mask, head_mask, output_attentions, training=False):
         """
-        Parameters ---------- query: tf.Tensor(bs, seq_length, dim) key: tf.Tensor(bs, seq_length, dim) value:
-        tf.Tensor(bs, seq_length, dim) mask: tf.Tensor(bs, seq_length)
+        Parameters:
+            query: tf.Tensor(bs, seq_length, dim)
+            key: tf.Tensor(bs, seq_length, dim)
+            value: tf.Tensor(bs, seq_length, dim)
+            mask: tf.Tensor(bs, seq_length)
 
-        Outputs ------- weights: tf.Tensor(bs, n_heads, seq_length, seq_length) Attention weights context:
-        tf.Tensor(bs, seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
+        Returns:
+            weights: tf.Tensor(bs, n_heads, seq_length, seq_length) Attention weights
+            context: tf.Tensor(bs, seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
@@ -297,10 +302,13 @@ class TFTransformerBlock(tf.keras.layers.Layer):
 
     def call(self, x, attn_mask, head_mask, output_attentions, training=False):  # removed: src_enc=None, src_len=None
         """
-        Parameters ---------- x: tf.Tensor(bs, seq_length, dim) attn_mask: tf.Tensor(bs, seq_length)
+        Parameters:
+            x: tf.Tensor(bs, seq_length, dim)
+            attn_mask: tf.Tensor(bs, seq_length)
 
-        Outputs ------- sa_weights: tf.Tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
-        tf.Tensor(bs, seq_length, dim) The output of the transformer block contextualization.
+        Outputs:
+            sa_weights: tf.Tensor(bs, n_heads, seq_length, seq_length) The attention weights
+            ffn_output: tf.Tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
         # Self-Attention
         sa_output = self.attention(x, x, x, attn_mask, head_mask, output_attentions, training=training)
@@ -331,15 +339,21 @@ class TFTransformer(tf.keras.layers.Layer):
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
     def call(self, x, attn_mask, head_mask, output_attentions, output_hidden_states, return_dict, training=False):
+        # docstyle-ignore
         """
-        Parameters ---------- x: tf.Tensor(bs, seq_length, dim) Input sequence embedded. attn_mask: tf.Tensor(bs,
-        seq_length) Attention mask on the sequence.
+        Parameters:
+            x: tf.Tensor(bs, seq_length, dim) Input sequence embedded.
+            attn_mask: tf.Tensor(bs, seq_length) Attention mask on the sequence.
 
-        Outputs ------- hidden_state: tf.Tensor(bs, seq_length, dim) Sequence of hiddens states in the last (top) layer
-        all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)] Tuple of length n_layers with the hidden states from
-        each layer. Optional: only if output_hidden_states=True all_attentions: Tuple[tf.Tensor(bs, n_heads,
-        seq_length, seq_length)] Tuple of length n_layers with the attention weights from each layer Optional: only if
-        output_attentions=True
+        Returns:
+            hidden_state: tf.Tensor(bs, seq_length, dim)
+                Sequence of hiddens states in the last (top) layer
+            all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
+                Tuple of length n_layers with the hidden states from each layer.
+                Optional: only if output_hidden_states=True
+            all_attentions: Tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
+                Tuple of length n_layers with the attention weights from each layer
+                Optional: only if output_attentions=True
         """
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
