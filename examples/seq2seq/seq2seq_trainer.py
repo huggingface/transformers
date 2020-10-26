@@ -60,11 +60,6 @@ class Seq2SeqTrainer(Trainer):
                 self.config.pad_token_id is not None
             ), "Make sure that `config.pad_token_id` is correcly defined when ignoring `pad_token` for loss calculation or doing label smoothing."
 
-        if self.config.pad_token_id is None:
-            assert (
-                self.config.eos_token_id is not None
-            ), "Make sure that `config.eos_token_id` is defined when `config.pad_token_id` is not defined."
-
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
         Setup the optimizer and the learning rate scheduler.
@@ -197,7 +192,8 @@ class Seq2SeqTrainer(Trainer):
                 **pred_kwargs,
             )
             # in case the batch is shorter than max length, the output should be padded
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, pred_kwargs["max_length"])
+            if generated_tokens.shape[-1] < pred_kwargs["max_length"]:
+                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, pred_kwargs["max_length"])
 
             # compute loss on predict data
         with torch.no_grad():
@@ -211,13 +207,19 @@ class Seq2SeqTrainer(Trainer):
 
         labels = inputs["labels"]
 
-        labels = self._pad_tensors_to_max_len(labels, pred_kwargs["max_length"])
+        if labels.shape[-1] < pred_kwargs["max_length"]:
+            labels = self._pad_tensors_to_max_len(labels, pred_kwargs["max_length"])
 
         return (loss, logits, labels)
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
         # If PAD token is not defined at least EOS token has to be defined
         pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else self.config.eos_token_id
+
+        if pad_token_id is None:
+            raise ValueError(
+                f"Make sure that either `config.pad_token_id` or `config.eos_token_id` is defined if tensor has to be padded to `max_length`={max_length}"
+            )
 
         padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
