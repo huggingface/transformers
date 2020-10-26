@@ -83,15 +83,18 @@ class SqueezeBertConfig(PretrainedConfig):
         output_groups (:obj:`int`, `optional`, defaults to 4):
             The number of groups in the third feed forward network layer.
 
-    Example:
+    Examples::
 
         >>> from transformers import SqueezeBertModel, SqueezeBertConfig
 
-        >>> # Initializing a SqueezeBERT configuration >>> configuration = SqueezeBertConfig()
+        >>> # Initializing a SqueezeBERT configuration
+        >>> configuration = SqueezeBertConfig()
 
-        >>> # Initializing a model from the configuration above >>> model = SqueezeBertModel(configuration)
+        >>> # Initializing a model from the configuration above
+        >>> model = SqueezeBertModel(configuration)
 
-        >>> # Accessing the model configuration >>> configuration = model.config
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
 
     Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
     checkpoints.

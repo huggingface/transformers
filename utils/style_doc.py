@@ -48,7 +48,7 @@ _re_doc_ignore = re.compile(r"(\.\.|#)\s*docstyle-ignore")
 # Matches the example introduction in docstrings.
 _re_example = re.compile(r"^\s*(Examples?|Usage)\s*::\s*$")
 # Matches the parameters introduction in docstrings.
-_re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Params|Arguments?)\s*:\s*$")
+_re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Params|Arguments?|Environment)\s*:\s*$")
 # Matches the return introduction in docstrings.
 _re_return = re.compile(r"^\s*(Returns?|Raises?)\s*:\s*$")
 # Matches any doc special word without an empty line before.

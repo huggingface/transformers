@@ -312,11 +312,14 @@ class WandbCallback(TrainerCallback):
         One can subclass and override this method to customize the setup if needed. Find more information `here
         <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
-        Environment: WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`): Can be :obj:`"gradients"`,
-        :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient logging or :obj:`"all"` to log
-        gradients and parameters. WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`): Set this to
-        a custom string to store results in a different project. WANDB_DISABLED (:obj:`bool`, `optional`, defaults to
-        :obj:`False`): Whether or not to disable wandb entirely.
+        Environment:
+            WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
+                Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
+                logging or :obj:`"all"` to log gradients and parameters.
+            WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
+                Set this to a custom string to store results in a different project.
+            WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to disable wandb entirely.
         """
         self._initialized = True
         if state.is_world_process_zero:
@@ -375,9 +378,13 @@ class CometCallback(TrainerCallback):
         """
         Setup the optional Comet.ml integration.
 
-        Environment: COMET_MODE (:obj:`str`, `optional`): "OFFLINE", "ONLINE", or "DISABLED" COMET_PROJECT_NAME
-        (:obj:`str`, `optional`): Comet.ml project name for experiments COMET_OFFLINE_DIRECTORY (:obj:`str`,
-        `optional`): Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
+        Environment:
+            COMET_MODE (:obj:`str`, `optional`):
+                "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME (:obj:`str`, `optional`):
+                Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
+                Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
 
         For a number of configurable items in the environment, see `here
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
@@ -429,8 +436,9 @@ class MLflowCallback(TrainerCallback):
         """
         Setup the optional MLflow integration.
 
-        Environment: HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`): Whether to use MLflow .log_artifact() facility
-        to log artifacts.
+        Environment:
+            HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
+                Whether to use MLflow .log_artifact() facility to log artifacts.
 
                 This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
                 whatever is in TrainerArgument's output_dir to the local or remote artifact storage. Using it without a

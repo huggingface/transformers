@@ -174,11 +174,16 @@ def get_system_metadata(repo_root):
     )
 
 
+# docstyle-ignore
 FRONT_MATTER_TEMPLATE = """
---- language: {} tags: - translation
+---
+language:
+{}
+tags:
+- translation
 
-license: apache-2.0 ---
-
+license: apache-2.0
+---
 """
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")

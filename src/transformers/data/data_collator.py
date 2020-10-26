@@ -117,8 +117,10 @@ class DataCollatorWithPadding:
 @dataclass
 class DataCollatorForLanguageModeling:
     """
-    Data collator used for language modeling. - collates batches of tensors, honoring their tokenizer's pad_token -
-    preprocesses batches for masked language modeling
+    Data collator used for language modeling.
+    
+    - collates batches of tensors, honoring their tokenizer's pad_token
+    - preprocesses batches for masked language modeling
     """
 
     tokenizer: PreTrainedTokenizerBase
@@ -197,8 +199,10 @@ class DataCollatorForLanguageModeling:
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
-    Data collator used for language modeling. - collates batches of tensors, honoring their tokenizer's pad_token -
-    preprocesses batches for masked language modeling
+    Data collator used for language modeling.
+    
+    - collates batches of tensors, honoring their tokenizer's pad_token
+    - preprocesses batches for masked language modeling
     """
 
     def __call__(
@@ -314,8 +318,10 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 @dataclass
 class DataCollatorForSOP(DataCollatorForLanguageModeling):
     """
-    Data collator used for sentence order prediction task. - collates batches of tensors, honoring their tokenizer's
-    pad_token - preprocesses batches for both masked language modeling and sentence order prediction
+    Data collator used for sentence order prediction task.
+
+    - collates batches of tensors, honoring their tokenizer's pad_token
+    - preprocesses batches for both masked language modeling and sentence order prediction
     """
 
     def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
@@ -382,8 +388,10 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 @dataclass
 class DataCollatorForPermutationLanguageModeling:
     """
-    Data collator used for permutation language modeling. - collates batches of tensors, honoring their tokenizer's
-    pad_token - preprocesses batches for permutation language modeling with procedures specific to XLNet
+    Data collator used for permutation language modeling.
+    
+    - collates batches of tensors, honoring their tokenizer's pad_token
+    - preprocesses batches for permutation language modeling with procedures specific to XLNet
     """
 
     tokenizer: PreTrainedTokenizerBase
