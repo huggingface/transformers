@@ -136,7 +136,7 @@ class WordEmbeddings(tf.keras.layers.Layer):
         self._vocab_size = config.vocab_size
         self._hidden_size = config.hidden_size
         self._initializer_range = config.initializer_range
-    
+
     def build(self, input_shape):
         self.word_embeddings = self.add_weight(
             name="weight",
@@ -146,12 +146,12 @@ class WordEmbeddings(tf.keras.layers.Layer):
         )
 
         super().build(input_shape=input_shape)
-    
+
     def call(self, input_ids):
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.word_embeddings, indices=flat_input_ids)
         embeddings = tf.reshape(tensor=embeddings, shape=tf.concat([tf.shape(input_ids), [self._hidden_size]], axis=0))
-        
+
         embeddings.set_shape(shape=input_ids.shape.as_list() + [self._hidden_size])
 
         return embeddings
@@ -164,7 +164,7 @@ class TokenTypeEmbeddings(tf.keras.layers.Layer):
         self._type_vocab_size = config.type_vocab_size
         self._hidden_size = config.hidden_size
         self._initializer_range = config.initializer_range
-    
+
     def build(self, input_shape):
         self.token_type_embeddings = self.add_weight(
             name="embeddings",
@@ -174,13 +174,15 @@ class TokenTypeEmbeddings(tf.keras.layers.Layer):
         )
 
         super().build(input_shape=input_shape)
-    
+
     def call(self, token_type_ids):
         flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
         one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self._type_vocab_size, dtype=self._compute_dtype)
         embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(tensor=embeddings, shape=tf.concat([tf.shape(token_type_ids), [self._hidden_size]], axis=0))
-        
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat([tf.shape(token_type_ids), [self._hidden_size]], axis=0)
+        )
+
         embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self._hidden_size])
 
         return embeddings
@@ -193,7 +195,7 @@ class PositionEmbeddings(tf.keras.layers.Layer):
         self._max_position_embeddings = config.max_position_embeddings
         self._hidden_size = config.hidden_size
         self._initializer_range = config.initializer_range
-    
+
     def build(self, input_shape):
         self._position_embeddings = self.add_weight(
             name="embeddings",
@@ -205,7 +207,7 @@ class PositionEmbeddings(tf.keras.layers.Layer):
 
     def call(self, position_ids):
         input_shape = tf.shape(input=position_ids)
-        position_embeddings = self._position_embeddings[:input_shape[1], :]
+        position_embeddings = self._position_embeddings[: input_shape[1], :]
 
         return tf.broadcast_to(input=position_embeddings, shape=input_shape)
 
@@ -222,7 +224,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.embeddings = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-    
+
     def call(
         self,
         input_ids=None,
@@ -281,7 +283,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         tmp_position_embeddings = self.position_embeddings(position_ids=tmp_word_embeddings)
         tmp_token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        final_embeddings = self.embeddings(inputs=[tmp_word_embeddings, tmp_position_embeddings, tmp_token_type_embeddings])
+        final_embeddings = self.embeddings(
+            inputs=[tmp_word_embeddings, tmp_position_embeddings, tmp_token_type_embeddings]
+        )
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(final_embeddings, training=training)
 
@@ -560,7 +564,6 @@ class TFBertEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
-
 
 
 class TFBertPooler(tf.keras.layers.Layer):

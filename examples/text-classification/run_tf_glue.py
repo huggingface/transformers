@@ -1,8 +1,6 @@
 # coding=utf-8
 """ Fine-tuning the library models for sequence classification."""
 
-
-import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,6 +26,7 @@ from transformers import (
     glue_tasks_num_labels,
     logging,
 )
+
 
 logging.enable_default_handler()
 logging.set_verbosity_info()
