@@ -32,7 +32,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         config.label2id = {"ENTAIL": 0, "NON-ENTAIL": 1}
         self.assertEqual(nlp.entailment_id, 0)
 
-        config.label2id = {"ENTAIL": 2, "NEUTRAL": 1,, "CONTR"}
+        config.label2id = {"ENTAIL": 2, "NEUTRAL": 1, "CONTR": 0}
         self.assertEqual(nlp.entailment_id, 2)
 
         nlp.model.config = original_config
