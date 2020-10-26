@@ -15,7 +15,6 @@
 import tempfile
 import unittest
 
-import tensorflow as tf
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_tf_bart import TFBartModelTester
@@ -28,6 +27,7 @@ from transformers.testing_utils import is_pt_tf_cross_test, require_sentencepiec
 if is_tf_available():
 
     from transformers import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration
+    import tensorflow as tf
 
 
 class ModelTester(TFBartModelTester):

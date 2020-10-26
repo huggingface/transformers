@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-import tensorflow as tf
+
 
 from transformers import AutoTokenizer, PegasusConfig, is_tf_available
 from transformers.file_utils import cached_property
@@ -29,6 +29,7 @@ from .test_modeling_tf_common import TFModelTesterMixin
 
 if is_tf_available():
     from transformers import TFAutoModelForSeq2SeqLM, TFPegasusForConditionalGeneration
+    import tensorflow as tf
 
 
 class ModelTester(TFBartModelTester):
