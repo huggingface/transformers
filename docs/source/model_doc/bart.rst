@@ -29,10 +29,10 @@ The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/ma
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Bart doesn't use :obj:`token_type_ids` for sequence classification. Use :class:`~transformers.BartTokenizer` 
-  or :meth:`~transformers.BartTokenizer.encode` to get the proper splitting.
+- Bart doesn't use :obj:`token_type_ids` for sequence classification. Use :class:`~transformers.BartTokenizer` or
+  :meth:`~transformers.BartTokenizer.encode` to get the proper splitting.
 - The forward pass of :class:`~transformers.BartModel` will create decoder inputs (using the helper function
-  :func:`transformers.modeling_bart._prepare_bart_decoder_inputs`)  if they are not passed. This is different than some
+  :func:`transformers.modeling_bart._prepare_bart_decoder_inputs`) if they are not passed. This is different than some
   other modeling APIs.
 - Model predictions are intended to be identical to the original implementation. This only works, however, if the
   string you pass to :func:`fairseq.encode` starts with a space.

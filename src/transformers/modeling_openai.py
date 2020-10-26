@@ -272,8 +272,9 @@ class Block(nn.Module):
 
 
 class OpenAIGPTPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = OpenAIGPTConfig
@@ -314,8 +315,8 @@ class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -335,14 +336,15 @@ OPENAI_GPT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 OPENAI_GPT_INPUTS_DOCSTRING = r"""
@@ -350,35 +352,33 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.OpenAIGPTTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.OpenAIGPTTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`__
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -421,8 +421,8 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.tokens_embed = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
@@ -526,8 +526,10 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """OpenAI GPT Model transformer with a language modeling head on top
-    (linear layer with weights tied to the input embeddings). """,
+    """
+    OpenAI GPT Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
@@ -563,11 +565,9 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
-            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
+            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -607,10 +607,11 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """OpenAI GPT Model transformer with a language modeling and a multiple-choice classification
-    head on top e.g. for RocStories/SWAG tasks. The two heads are two linear layers.
-    The language modeling head has its weights tied to the input embeddings,
-    the classification head takes as input the input of a specified classification token index in the input sequence).
+    """
+OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
+input embeddings, the classification head takes as input the input of a specified classification token index in the
+input sequence).
 """,
     OPENAI_GPT_START_DOCSTRING,
 )
@@ -648,18 +649,16 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     ):
         r"""
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input):
-            Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1]``.
+            Index of the classification token in each input sequence. Selected in the range ``[0, input_ids.size(-1) -
+            1]``.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            ``labels = input_ids`` Indices are selected in ``[-1, 0, ..., config.vocab_size]`` All labels set to
+            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
+            `input_ids` above)
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
@@ -735,15 +734,14 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The Original OpenAI GPT Model transformer with a sequence classification head on top
-    (linear layer).
+    """
+    The Original OpenAI GPT Model transformer with a sequence classification head on top (linear layer).
     :class:`~transformers.OpenAIGPTForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-2) do.
-    Since it does classification on the last token, it requires to know the position of the last token.
-    If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token
-    in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch.
-    Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it
-    does the same (take the last value in each row of the batch).
+    other causal models (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the
+    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
+    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
+    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
+    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
@@ -778,9 +776,8 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

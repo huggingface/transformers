@@ -64,12 +64,14 @@ class ContextPooler(nn.Module):
 
 
 class XSoftmax(torch.autograd.Function):
-    """Masked Softmax which is optimized for saving memory
+    """
+    Masked Softmax which is optimized for saving memory
 
     Args:
       input (:obj:`torch.tensor`): The input tensor that will apply softmax.
       mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax caculation.
-      dim (int): The dimenssion that will apply softmax.
+      dim (int): The dimenssion that will apply softmax
+
     Example::
       import torch
       from transformers.modeling_deroberta import XSoftmax
@@ -154,7 +156,8 @@ class XDropout(torch.autograd.Function):
 
 
 class StableDropout(torch.nn.Module):
-    """Optimized dropout module for stabilizing the training
+    """
+    Optimized dropout module for stabilizing the training
 
     Args:
 
@@ -169,7 +172,8 @@ class StableDropout(torch.nn.Module):
         self.context_stack = None
 
     def forward(self, x):
-        """Call the module
+        """
+        Call the module
 
         Args:
             x (:obj:`torch.tensor`): The input tensor to apply dropout
@@ -430,11 +434,12 @@ class DebertaEncoder(nn.Module):
 
 
 def build_relative_position(query_size, key_size, device):
-    """Build relative position according to the query and key
+    """
+    Build relative position according to the query and key
 
-    We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key :math:`P_k` is range from (0, key_size),
-    The relative positions from query to key is
-    :math:`R_{q \\rightarrow k} = P_q - P_k`
+    We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key
+    :math:`P_k` is range from (0, key_size), The relative positions from query to key is :math:`R_{q \\rightarrow k} =
+    P_q - P_k`
 
     Args:
         query_size (int): the length of query
@@ -469,12 +474,13 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 
 
 class DisentangledSelfAttention(torch.nn.Module):
-    """ Disentangled self-attention module
+    """
+    Disentangled self-attention module
 
     Parameters:
         config (:obj:`str`):
-            A model config class instance with the configuration to build a new model. The schema is similar to `BertConfig`, \
-            for more details, please refer :class:`~transformers.DebertaConfig`
+            A model config class instance with the configuration to build a new model. The schema is similar to
+            `BertConfig`, \ for more details, please refer :class:`~transformers.DebertaConfig`
 
     """
 
@@ -529,14 +535,18 @@ class DisentangledSelfAttention(torch.nn.Module):
         relative_pos=None,
         rel_embeddings=None,
     ):
-        """Call the module
+        """
+        Call the module
 
         Args:
             hidden_states (:obj:`torch.FloatTensor`):
-                Input states to the module usally the output from previous layer, it will be the Q,K and V in `Attention(Q,K,V)`
+                Input states to the module usally the output from previous layer, it will be the Q,K and V in
+                `Attention(Q,K,V)`
 
             attention_mask (:obj:`torch.ByteTensor`):
-                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maxium sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j` th token.
+                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maxium
+                sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
+                th token.
 
             return_att (:obj:`bool`, optional):
                 Whether return the attention maxitrix.
@@ -545,10 +555,12 @@ class DisentangledSelfAttention(torch.nn.Module):
                 The `Q` state in `Attention(Q,K,V)`.
 
             relative_pos (:obj:`torch.LongTensor`):
-                The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with values ranging in [`-max_relative_positions`, `max_relative_positions`].
+                The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with
+                values ranging in [`-max_relative_positions`, `max_relative_positions`].
 
             rel_embeddings (:obj:`torch.FloatTensor`):
-                The embedding of relative distances. It's a tensor of shape [:math:`2 \\times \\text{max_relative_positions}`, `hidden_size`].
+                The embedding of relative distances. It's a tensor of shape [:math:`2 \\times
+                \\text{max_relative_positions}`, `hidden_size`].
 
 
         """
@@ -737,8 +749,9 @@ class DebertaEmbeddings(nn.Module):
 
 
 class DebertaPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = DebertaConfig
@@ -755,21 +768,22 @@ class DebertaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-DEBERTA_START_DOCSTRING = r"""    The DeBERTa model was proposed in
-    `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`_
-    by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of BERT/RoBERTa with two improvements, i.e.
-    disentangled attention and enhanced mask decoder. With those two improvements, it out perform BERT/RoBERTa on a majority
-    of tasks with 80GB pre-trianing data.
+DEBERTA_START_DOCSTRING = r"""
+    The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention
+    <https://arxiv.org/abs/2006.03654>`_ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of
+    BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
+    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pre-trianing data.
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.```
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.```
 
 
     Parameters:
         config (:class:`~transformers.DebertaConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 DEBERTA_INPUTS_DOCSTRING = r"""
@@ -777,26 +791,24 @@ DEBERTA_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.DebertaTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.DebertaTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: ``1`` for
+            tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``: ``0`` corresponds to a `sentence A` token, ``1`` corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -804,9 +816,11 @@ DEBERTA_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under
+            returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned
+            tensors for more detail.
         return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
@@ -834,9 +848,9 @@ class DebertaModel(DebertaPreTrainedModel):
         self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
@@ -928,8 +942,10 @@ class DebertaModel(DebertaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     DEBERTA_START_DOCSTRING,
 )
 class DebertaForSequenceClassification(DebertaPreTrainedModel):
@@ -977,9 +993,8 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

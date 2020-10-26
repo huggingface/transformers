@@ -37,8 +37,8 @@ XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class XLMProphetNetEncoder(ProphetNetEncoder):
     r"""
-    This class overrides :class:`~transformers.ProphetNetEncoder`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetEncoder`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -59,8 +59,8 @@ class XLMProphetNetEncoder(ProphetNetEncoder):
 
 class XLMProphetNetDecoder(ProphetNetDecoder):
     r"""
-    This class overrides :class:`~transformers.ProphetNetDecoder`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetDecoder`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -81,8 +81,8 @@ class XLMProphetNetDecoder(ProphetNetDecoder):
 
 class XLMProphetNetModel(ProphetNetModel):
     r"""
-    This class overrides :class:`~transformers.ProphetNetModel`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -104,8 +104,8 @@ class XLMProphetNetModel(ProphetNetModel):
 
 class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
     r"""
-    This class overrides :class:`~transformers.ProphetNetForConditionalGeneration`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetForConditionalGeneration`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
 
     Example::
 
@@ -127,8 +127,8 @@ class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
 
 class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
     r"""
-    This class overrides :class:`~transformers.ProphetNetForCausalLM`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetForCausalLM`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 

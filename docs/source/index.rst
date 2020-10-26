@@ -47,6 +47,7 @@ The documentation is organized in five parts:
 - **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
   transformers model
 - The three last section contain the documentation of each public class and function, grouped in:
+
     - **MAIN CLASSES** for the main classes exposing the important APIs of the library.
     - **MODELS** for the classes and functions related to each model implemented in the library.
     - **INTERNAL HELPERS** for the classes and functions we use internally.
@@ -122,7 +123,7 @@ conversion utilities for the following models:
 20. :doc:`MarianMT <model_doc/marian>` Machine translation models trained using `OPUS <http://opus.nlpl.eu/>`__ data by
     Jörg Tiedemann. The `Marian Framework <https://marian-nmt.github.io/>`__ is being developed by the Microsoft
     Translator Team.
-21. :doc:`MBart <model_doc/mbart>` (from Facebook) released with the paper  `Multilingual Denoising Pre-training for
+21. :doc:`MBart <model_doc/mbart>` (from Facebook) released with the paper `Multilingual Denoising Pre-training for
     Neural Machine Translation <https://arxiv.org/abs/2001.08210>`__ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li,
     Sergey Edunov, Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 22. :doc:`Pegasus <model_doc/pegasus>` (from Google) released with the paper `PEGASUS: Pre-training with Extracted

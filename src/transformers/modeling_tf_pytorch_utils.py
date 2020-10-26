@@ -28,15 +28,19 @@ logger = logging.get_logger(__name__)
 
 
 def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
-    """Convert a TF 2.0 model variable name in a pytorch model weight name.
+    """
+    Convert a TF 2.0 model variable name in a pytorch model weight name.
 
     Conventions for TF2.0 scopes -> PyTorch attribute names conversions:
+
         - '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
         - '_._' is replaced by a new level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
 
     return tuple with:
+
         - pytorch model weight name
-        - transpose: boolean indicating weither TF2.0 and PyTorch weights matrices are transposed with regards to each other
+        - transpose: boolean indicating weither TF2.0 and PyTorch weights matrices are transposed with regards to each
+          other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
     tf_name = re.sub(
@@ -245,9 +249,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
 
 def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
-    """Load TF 2.0 HDF5 checkpoint in a PyTorch model
-    We use HDF5 to easily do transfer learning
-    (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
+    """
+    Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
+    https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
     """
     try:
         import tensorflow as tf  # noqa: F401

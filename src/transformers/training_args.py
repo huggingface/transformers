@@ -35,11 +35,11 @@ def default_logdir() -> str:
 @dataclass
 class TrainingArguments:
     """
-    TrainingArguments is the subset of the arguments we use in our example scripts
-    **which relate to the training loop itself**.
+    TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
+    itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
+    them on the command line.
 
     Parameters:
         output_dir (:obj:`str`):
@@ -128,7 +128,8 @@ class TrainingArguments:
             Number of update steps between two evaluations if :obj:`evaluation_strategy="steps"`. Will default to the
             same value as :obj:`logging_steps` if not set.
         dataloader_num_workers (:obj:`int`, `optional`, defaults to 0):
-            Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the main process.
+            Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
+            main process.
         past_index (:obj:`int`, `optional`, defaults to -1):
             Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
@@ -143,15 +144,14 @@ class TrainingArguments:
             If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
             forward method.
 
-            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
-        label_names (:obj:`List[str]`, `optional`):
-            The list of keys in your dictionary of inputs that correspond to the labels.
+            (Note that this behavior is not implemented for :class:`~transformers.TFTrainer` yet.) label_names
+            (:obj:`List[str]`, `optional`): The list of keys in your dictionary of inputs that correspond to the
+            labels.
 
             Will eventually default to :obj:`["labels"]` except if the model used is one of the
-            :obj:`XxxForQuestionAnswering` in which case it will default to
-            :obj:`["start_positions", "end_positions"]`.
-        load_best_model_at_end (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to load the best model found during training at the end of training.
+            :obj:`XxxForQuestionAnswering` in which case it will default to :obj:`["start_positions",
+            "end_positions"]`. load_best_model_at_end (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether or
+            not to load the best model found during training at the end of training.
 
             .. note::
 
@@ -164,10 +164,9 @@ class TrainingArguments:
             loss).
 
             If you set this value, :obj:`greater_is_better` will default to :obj:`True`. Don't forget to set it to
-            :obj:`False` if your metric is better when lower.
-        greater_is_better (:obj:`bool`, `optional`)
-            Use in conjunction with :obj:`load_best_model_at_end` and :obj:`metric_for_best_model` to specify if better
-            models should have a greater metric or not. Will default to:
+            :obj:`False` if your metric is better when lower. greater_is_better (:obj:`bool`, `optional`) Use in
+            conjunction with :obj:`load_best_model_at_end` and :obj:`metric_for_best_model` to specify if better models
+            should have a greater metric or not. Will default to:
 
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.

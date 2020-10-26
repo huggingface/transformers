@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch XLNet model.
+"""
+ PyTorch XLNet model.
 """
 
 
@@ -58,9 +59,9 @@ XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
-    """A map of modules from TF to PyTorch.
-    I use a map to keep the PyTorch model as
-    identical to the original PyTorch model as possible.
+    """
+    A map of modules from TF to PyTorch. I use a map to keep the PyTorch model as identical to the original PyTorch
+    model as possible.
     """
 
     tf_to_pt_map = {}
@@ -541,8 +542,9 @@ class XLNetLayer(nn.Module):
 
 
 class XLNetPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = XLNetConfig
@@ -598,8 +600,8 @@ class XLNetModelOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -634,8 +636,8 @@ class XLNetLMHeadModelOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -668,8 +670,8 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -702,8 +704,8 @@ class XLNetForTokenClassificationOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -738,8 +740,8 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -774,8 +776,8 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -796,13 +798,15 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
+            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+            losses.
         start_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the top config.start_n_top start token possibilities (beam-search).
         start_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Indices for the top config.start_n_top start token possibilities (beam-search).
         end_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
-            Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
+            Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities
+            (beam-search).
         end_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
         cls_logits (``torch.FloatTensor`` of shape ``(batch_size,)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
@@ -817,8 +821,8 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -841,14 +845,15 @@ XLNET_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.XLNetConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 XLNET_INPUTS_DOCSTRING = r"""
@@ -856,14 +861,13 @@ XLNET_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.XLNetTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.XLNetTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -871,8 +875,8 @@ XLNET_INPUTS_DOCSTRING = r"""
             `What are attention masks? <../glossary.html#attention-mask>`__
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (see :obj:`mems` output below) . Can be used to speed up sequential
-            decoding. The token ids which have their past given to this model should not be passed as
-            :obj:`input_ids` as they have already been computed.
+            decoding. The token ids which have their past given to this model should not be passed as :obj:`input_ids`
+            as they have already been computed.
 
             :obj::obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
         perm_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`):
@@ -881,24 +885,23 @@ XLNET_INPUTS_DOCSTRING = r"""
             - if ``perm_mask[k, i, j] = 0``, i attend to j in batch k;
             - if ``perm_mask[k, i, j] = 1``, i does not attend to j in batch k.
 
-            If not set, each token attends to all the others (full bidirectional attention).
-            Only used during pretraining (to define factorization order) or for sequential decoding (generation).
+            If not set, each token attends to all the others (full bidirectional attention). Only used during
+            pretraining (to define factorization order) or for sequential decoding (generation).
         target_mapping (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_predict, sequence_length)`, `optional`):
-            Mask to indicate the output tokens to use.
-            If ``target_mapping[k, i, j] = 1``, the i-th predict in batch k is on the j-th token.
-            Only used during pretraining for partial prediction or for sequential decoding (generation).
+            Mask to indicate the output tokens to use. If ``target_mapping[k, i, j] = 1``, the i-th predict in batch k
+            is on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
+            (generation).
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
         input_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Negative of :obj:`attention_mask`, i.e. with 0 for real tokens and 1 for padding which is kept for
-            compatibility with the original code base.
+            Mask to avoid performing attention on padding token indices. Negative of :obj:`attention_mask`, i.e. with 0
+            for real tokens and 1 for padding which is kept for compatibility with the original code base.
 
             Mask values selected in ``[0, 1]``:
 
@@ -907,8 +910,7 @@ XLNET_INPUTS_DOCSTRING = r"""
 
             You can only uses one of :obj:`input_mask` and :obj:`attention_mask`.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -1279,8 +1281,9 @@ class XLNetModel(XLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a language modeling head on top
-    (linear layer with weights tied to the input embeddings). """,
+    """
+    XLNet Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    """,
     XLNET_START_DOCSTRING,
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel):
@@ -1360,18 +1363,16 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`):
-            Labels for masked language modeling.
-            :obj:`num_predict` corresponds to :obj:`target_mapping.shape[1]`. If :obj:`target_mapping` is :obj`None`,
-            then :obj:`num_predict` corresponds to :obj:`sequence_length`.
+            Labels for masked language modeling. :obj:`num_predict` corresponds to :obj:`target_mapping.shape[1]`. If
+            :obj:`target_mapping` is :obj`None`, then :obj:`num_predict` corresponds to :obj:`sequence_length`.
 
             The labels should correspond to the masked input words that should be predicted and depends on
-            :obj:`target_mapping`. Note in order to perform standard auto-regressive language modeling a
-            `<mask>` token has to be added to the :obj:`input_ids` (see the :obj:`prepare_inputs_for_generation`
-            function and examples below)
+            :obj:`target_mapping`. Note in order to perform standard auto-regressive language modeling a `<mask>` token
+            has to be added to the :obj:`input_ids` (see the :obj:`prepare_inputs_for_generation` function and examples
+            below)
 
-            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored, the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to ``-100`` are ignored, the
+            loss is only computed for labels in ``[0, ..., config.vocab_size]``
 
         Return:
 
@@ -1447,8 +1448,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    XLNet Model with a sequence classification/regression head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
+    """,
     XLNET_START_DOCSTRING,
 )
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
@@ -1488,9 +1491,8 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
+            config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1540,8 +1542,10 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    XLNet Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     XLNET_START_DOCSTRING,
 )
 class XLNetForTokenClassification(XLNetPreTrainedModel):
@@ -1580,9 +1584,9 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
+            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
@@ -1635,8 +1639,10 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RACE/SWAG tasks. """,
+    """
+    XLNet Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RACE/SWAG tasks.
+    """,
     XLNET_START_DOCSTRING,
 )
 class XLNetForMultipleChoice(XLNetPreTrainedModel):
@@ -1675,9 +1681,9 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
@@ -1734,8 +1740,10 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     XLNET_START_DOCSTRING,
 )
 class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
@@ -1776,12 +1784,12 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
@@ -1841,8 +1849,10 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     XLNET_START_DOCSTRING,
 )
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
@@ -1884,19 +1894,20 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Labels whether a question has an answer or no answer (SQuAD 2.0)
         cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-            Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
+            Labels for position (index) of the classification token to use as input for computing plausibility of the
+            answer.
         p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
-            1.0 means token should be masked. 0.0 mean token is not masked.
+            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
+            masked. 0.0 mean token is not masked.
 
         Returns:
 

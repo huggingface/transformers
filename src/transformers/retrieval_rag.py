@@ -75,7 +75,8 @@ class Index:
 
         Returns:
             :obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`: A tensor of indices of retrieved documents.
-            :obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`: A tensor of vector representations of retrieved documents.
+            :obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`: A tensor of vector representations of
+            retrieved documents.
         """
         raise NotImplementedError
 
@@ -87,16 +88,17 @@ class Index:
 
     def init_index(self):
         """
-        A function responsible for loading the index into memory. Should be called only once per training run of a RAG model.
-        E.g. if the model is trained on multiple GPUs in a distributed setup, only one of the workers will load the index.
+        A function responsible for loading the index into memory. Should be called only once per training run of a RAG
+        model. E.g. if the model is trained on multiple GPUs in a distributed setup, only one of the workers will load
+        the index.
         """
         raise NotImplementedError
 
 
 class LegacyIndex(Index):
     """
-    An index which can be deserialized from the files built using https://github.com/facebookresearch/DPR.
-    We use default faiss index parameters as specified in that repository.
+    An index which can be deserialized from the files built using https://github.com/facebookresearch/DPR. We use
+    default faiss index parameters as specified in that repository.
 
     Args:
         vector_size (:obj:`int`):
@@ -234,17 +236,20 @@ class HFIndexBase(Index):
 
 class CanonicalHFIndex(HFIndexBase):
     """
-    A wrapper around an instance of :class:`~datasets.Datasets`. If ``index_path`` is set to ``None``,
-    we load the pre-computed index available with the :class:`~datasets.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
+    A wrapper around an instance of :class:`~datasets.Datasets`. If ``index_path`` is set to ``None``, we load the
+    pre-computed index available with the :class:`~datasets.arrow_dataset.Dataset`, otherwise, we load the index from
+    the indicated path on disk.
 
     Args:
         vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
         dataset_name (:obj:`str`, optional, defaults to ``wiki_dpr``):
-            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``datasets.list_datasets()``).
+            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids
+            with ``datasets.list_datasets()``).
         dataset_split (:obj:`str`, optional, defaults to ``train``)
             Which split of the ``dataset`` to load.
         index_name (:obj:`str`, optional, defaults to ``train``)
-            The index_name of the index associated with the ``dataset``. The index loaded from ``index_path`` will be saved under this name.
+            The index_name of the index associated with the ``dataset``. The index loaded from ``index_path`` will be
+            saved under this name.
         index_path (:obj:`str`, optional, defaults to ``None``)
             The path to the serialized faiss index on disk.
         use_dummy_dataset (:obj:`bool`, optional, defaults to ``False``): If True, use the dummy configuration of the dataset for tests.
@@ -292,14 +297,14 @@ class CanonicalHFIndex(HFIndexBase):
 
 class CustomHFIndex(HFIndexBase):
     """
-    A wrapper around an instance of :class:`~datasets.Datasets`.
-    The dataset and the index are both loaded from the indicated paths on disk.
+    A wrapper around an instance of :class:`~datasets.Datasets`. The dataset and the index are both loaded from the
+    indicated paths on disk.
 
     Args:
         vector_size (:obj:`int`): the dimension of the passages embeddings used by the index
         dataset_path (:obj:`str`):
-            The path to the serialized dataset on disk.
-            The dataset should have 3 columns: title (str), text (str) and embeddings (arrays of dimension vector_size)
+            The path to the serialized dataset on disk. The dataset should have 3 columns: title (str), text (str) and
+            embeddings (arrays of dimension vector_size)
         index_path (:obj:`str`)
             The path to the serialized faiss index on disk.
     """
@@ -328,17 +333,17 @@ class CustomHFIndex(HFIndexBase):
 
 class RagRetriever:
     """
-    Retriever used to get documents from vector queries.
-    It retrieves the documents embeddings as well as the documents contents, and it formats them to be used with a RagModel.
+    Retriever used to get documents from vector queries. It retrieves the documents embeddings as well as the documents
+    contents, and it formats them to be used with a RagModel.
 
     Args:
         config (:class:`~transformers.RagConfig`):
-            The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
-            You can load your own custom dataset with ``config.index_name="custom"`` or use a canonical one (default) from the datasets library
-            with ``config.index_name="wiki_dpr"`` for example.
+            The configuration of the RAG model this Retriever is used with. Contains parameters indicating which
+            ``Index`` to build. You can load your own custom dataset with ``config.index_name="custom"`` or use a
+            canonical one (default) from the datasets library with ``config.index_name="wiki_dpr"`` for example.
         question_encoder_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
-            The tokenizer that was used to tokenize the question.
-            It is used to decode the question and then use the generator_tokenizer.
+            The tokenizer that was used to tokenize the question. It is used to decode the question and then use the
+            generator_tokenizer.
         generator_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
         index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
@@ -470,8 +475,8 @@ class RagRetriever:
                 Prefix added at the beginning of each input, typically used with T5-based models.
 
         Return:
-            :obj:`tuple(tensors)`:
-                a tuple consisting of two elements: contextualized ``input_ids`` and a compatible ``attention_mask``.
+            :obj:`tuple(tensors)`: a tuple consisting of two elements: contextualized ``input_ids`` and a compatible
+            ``attention_mask``.
         """
 
         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
@@ -542,11 +547,10 @@ class RagRetriever:
                 The number of docs retrieved per query.
 
         Return:
-            :obj:`Tuple[np.ndarray, np.ndarray, List[dict]]`:
-            A tuple with the following objects:
+            :obj:`Tuple[np.ndarray, np.ndarray, List[dict]]`: A tuple with the following objects:
 
-            - **retrieved_doc_embeds** (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`) -- The
-              retrieval embeddings of the retrieved docs per query.
+            - **retrieved_doc_embeds** (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`) -- The retrieval
+              embeddings of the retrieved docs per query.
             - **doc_ids** (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`) -- The ids of the documents in the
               index
             - **doc_dicts** (:obj:`List[dict]`): The :obj:`retrieved_doc_embeds` examples per query.
@@ -581,16 +585,18 @@ class RagRetriever:
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
 
-        Output:
-            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+        Returns: :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following
+        fields:
 
             - **context_input_ids** -- List of token ids to be fed to a model.
 
               `What are input IDs? <../glossary.html#input-ids>`__
-            - **context_attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
+
+            - **context_attention_mask** -- List of indices specifying which tokens should be attended to by the model
+            (when :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
 
               `What are attention masks? <../glossary.html#attention-mask>`__
+
             - **retrieved_doc_embeds** -- List of embeddings of the retrieved documents
             - **doc_ids** -- List of ids of the retrieved documents
         """

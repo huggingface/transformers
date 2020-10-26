@@ -298,8 +298,7 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases
-    <https://www.wandb.com/>`__.
+    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases <https://www.wandb.com/>`__.
     """
 
     def __init__(self):
@@ -310,8 +309,8 @@ class WandbCallback(TrainerCallback):
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information
-        `here <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information `here
+        <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
@@ -368,8 +367,7 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML
-    <https://www.comet.ml/site/>`__.
+    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML <https://www.comet.ml/site/>`__.
     """
 
     def __init__(self):
@@ -388,8 +386,8 @@ class CometCallback(TrainerCallback):
             COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
                 Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
 
-        For a number of configurable items in the environment,
-        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
+        For a number of configurable items in the environment, see `here
+        <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
         """
         self._initialized = True
         if state.is_world_process_zero:
@@ -424,8 +422,7 @@ class CometCallback(TrainerCallback):
 
 class MLflowCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow
-    <https://www.mlflow.org/>`__.
+    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
     """
 
     MAX_LOG_SIZE = 100
@@ -443,10 +440,9 @@ class MLflowCallback(TrainerCallback):
             HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
                 Whether to use MLflow .log_artifact() facility to log artifacts.
 
-                This only makes sense if logging to a remote server, e.g. s3 or GCS.
-                If set to `True` or `1`, will copy whatever is in TrainerArgument's output_dir
-                to the local or remote artifact storage. Using it without a remote storage
-                will just copy the files to your artifact location.
+                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
+                whatever is in TrainerArgument's output_dir to the local or remote artifact storage. Using it without a
+                remote storage will just copy the files to your artifact location.
         """
         log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
         if log_artifacts in {"TRUE", "1"}:

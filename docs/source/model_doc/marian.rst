@@ -3,7 +3,7 @@ MarianMT
 
 **Bugs:** If you see something strange, file a `Github Issue
 <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__
-and assign @sshleifer. 
+and assign @sshleifer.
 
 Translations should be similar, but not identical to, output in the test set linked to in each model card.
 
@@ -12,13 +12,14 @@ Implementation Notes
 
 - Each model is about 298 MB on disk, there are more than 1,000 models.
 - The list of supported language pairs can be found `here <https://huggingface.co/Helsinki-NLP>`__.
-- Models were originally trained by 
-  `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the
-  `Marian <https://marian-nmt.github.io/>`__ C++ library, which supports fast training and translation.
+- Models were originally trained by `Jörg Tiedemann
+  <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian
+  <https://marian-nmt.github.io/>`__ C++ library, which supports fast training and translation.
 - All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented
   in a model card.
 - The 80 opus models that require BPE preprocessing are not supported.
 - The modeling code is the same as :class:`~transformers.BartForConditionalGeneration` with a few minor modifications:
+
     - static (sinusoid) positional embeddings (:obj:`MarianConfig.static_position_embeddings=True`)
     - a new final_logits_bias (:obj:`MarianConfig.add_bias_logits=True`)
     - no layernorm_embedding (:obj:`MarianConfig.normalize_embedding=False`)
@@ -29,17 +30,17 @@ Implementation Notes
 Naming
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- All  model names use the following format: :obj:`Helsinki-NLP/opus-mt-{src}-{tgt}`
+- All model names use the following format: :obj:`Helsinki-NLP/opus-mt-{src}-{tgt}`
 - The language codes used to name models are inconsistent. Two digit codes can usually be found `here
-  <https://developers.google.com/admin-sdk/directory/v1/languages>`__, three digit codes require googling
-  "language code {code}".
+  <https://developers.google.com/admin-sdk/directory/v1/languages>`__, three digit codes require googling "language
+  code {code}".
 - Codes formatted like :obj:`es_AR` are usually :obj:`code_{region}`. That one is Spanish from Argentina.
 
 
 Multilingual Models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All  model names use the following format: :obj:`Helsinki-NLP/opus-mt-{src}-{tgt}`:
+All model names use the following format: :obj:`Helsinki-NLP/opus-mt-{src}-{tgt}`:
 
     - If :obj:`src` is in all caps, the model supports multiple input languages, you can figure out which ones by
       looking at the model card, or the Group Members `mapping
@@ -112,6 +113,7 @@ Code to see available pretrained models:
 
 MarianConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 .. autoclass:: transformers.MarianConfig
     :members:
 

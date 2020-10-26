@@ -487,8 +487,9 @@ class LayoutLMOnlyMLMHead(nn.Module):
 
 
 class LayoutLMPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = LayoutLMConfig
@@ -508,18 +509,19 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-LAYOUTLM_START_DOCSTRING = r"""    The LayoutLM model was proposed in
-    `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
+LAYOUTLM_START_DOCSTRING = r"""
+    The LayoutLM model was proposed in `LayoutLM: Pre-training of Text and Layout for Document Image Understanding
     <https://arxiv.org/abs/1912.13318>`__ by....
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.LayoutLMConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 LAYOUTLM_INPUTS_DOCSTRING = r"""
@@ -527,45 +529,44 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.LayoutLMTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.LayoutLMTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         bbox (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Bounding Boxes of each input sequence tokens.
-            Selected in the range ``[0, config.max_2d_position_embeddings - 1]``.
+            Bounding Boxes of each input sequence tokens. Selected in the range ``[0, config.max_2d_position_embeddings
+            - 1]``.
 
             `What are bboxes? <../glossary.html#position-ids>`_
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: ``1`` for
+            tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``: ``0`` corresponds to a `sentence A` token, ``1`` corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``: :obj:`1`
+            indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under
+            returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned
+            tensors for more detail.
         return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
@@ -599,9 +600,9 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -632,20 +633,21 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         input_ids (torch.LongTensor of shape (batch_size, sequence_length)):
             Indices of input sequence tokens in the vocabulary.
         attention_mask (torch.FloatTensor of shape (batch_size, sequence_length), optional):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in [0, 1]: 1 for tokens that are NOT MASKED, 0 for MASKED tokens.
+            Mask to avoid performing attention on padding token indices. Mask values selected in [0, 1]: 1 for tokens
+            that are NOT MASKED, 0 for MASKED tokens.
         token_type_ids (torch.LongTensor of shape (batch_size, sequence_length), optional):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in [0, 1]: 0 corresponds to a sentence A token, 1 corresponds to a sentence B token
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in [0, 1]:
+            0 corresponds to a sentence A token, 1 corresponds to a sentence B token
         position_ids (torch.LongTensor of shape (batch_size, sequence_length), optional):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range [0, config.max_position_embeddings - 1].
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range [0,
+            config.max_position_embeddings - 1].
         head_mask (torch.FloatTensor of shape (num_heads,) or (num_layers, num_heads), optional):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in [0, 1]: 1 indicates the head is not masked, 0 indicates the head is masked.
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in [0, 1]: 1 indicates
+            the head is not masked, 0 indicates the head is masked.
         inputs_embeds (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size), optional):
-            Optionally, instead of passing input_ids you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert input_ids indices into associated vectors than the model’s internal embedding lookup matrix.
+            Optionally, instead of passing input_ids you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert input_ids indices into associated vectors than the
+            model’s internal embedding lookup matrix.
         output_attentions (bool, optional):
             If set to True, the attentions tensors of all attention layers are returned.
         output_hidden_states (bool, optional):
@@ -807,8 +809,10 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
 
 
 @add_start_docstrings(
-    """LayoutLM Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    LayoutLM Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     LAYOUTLM_START_DOCSTRING,
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
