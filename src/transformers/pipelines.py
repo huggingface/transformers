@@ -707,8 +707,8 @@ class Pipeline(_ScikitCompat):
         Returns:
             Numpy array
         """
-        # Encode for forward
-        if self.model.config.max_position_embeddings:
+        # Check the input is not too long relative for the model.
+        if getattr(self.model.config, "max_position_embeddings", None):
             max_length = self.model.config.max_position_embeddings
             length = inputs.data["input_ids"].shape[1]
             if length > max_length:
@@ -721,6 +721,8 @@ class Pipeline(_ScikitCompat):
                 for key in inputs.data:
                     tensor = inputs.data[key]
                     inputs.data[key] = tensor[:, :max_length]
+
+        # Encode for forward
         with self.device_placement():
             if self.framework == "tf":
                 # TODO trace model
