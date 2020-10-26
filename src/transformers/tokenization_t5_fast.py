@@ -126,6 +126,18 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens=None,
         **kwargs
     ):
+        # Add extra_ids to the special token list
+        if extra_ids > 0 and additional_special_tokens is None:
+            additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
+        elif extra_ids > 0 and additional_special_tokens is not None:
+            # Check that we have the right number of extra special tokens
+            extra_tokens = len(set(filter(lambda x: bool("extra_id_" in x), additional_special_tokens)))
+            if extra_tokens != extra_ids:
+                raise ValueError(
+                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are provided to T5Tokenizer. "
+                    "In this case the additional_special_tokens must include the extra_ids tokens"
+                )
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -136,13 +148,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        if extra_ids > 0:
-            all_extra_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
-            if all(tok not in self.additional_special_tokens for tok in all_extra_tokens):
-                self.additional_special_tokens = self.additional_special_tokens + [
-                    "<extra_id_{}>".format(i) for i in range(extra_ids)
-                ]
 
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids

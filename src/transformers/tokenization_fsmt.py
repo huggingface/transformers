@@ -194,6 +194,9 @@ class FSMTTokenizer(PreTrainedTokenizer):
     ):
         super().__init__(
             langs=langs,
+            src_vocab_file=src_vocab_file,
+            tgt_vocab_file=tgt_vocab_file,
+            merges_file=merges_file,
             unk_token=unk_token,
             bos_token=bos_token,
             sep_token=sep_token,

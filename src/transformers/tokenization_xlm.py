@@ -621,6 +621,9 @@ class XLMTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
             **kwargs,
         )
 

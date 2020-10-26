@@ -164,7 +164,14 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)

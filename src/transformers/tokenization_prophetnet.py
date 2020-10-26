@@ -119,11 +119,16 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
             unk_token=unk_token,
             sep_token=sep_token,
+            x_sep_token=x_sep_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            x_sep_token=x_sep_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
             **kwargs,
         )
         self.unique_no_split_tokens.append(x_sep_token)

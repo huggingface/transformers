@@ -128,6 +128,9 @@ class XLNetTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
