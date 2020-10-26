@@ -162,25 +162,24 @@ class NoRepeatNGramSampler(Sampler):
 class NoBadWordsSampler(Sampler):
     """Sampler that enforces that specified sequences will never be sampled."""
 
-    def __init__(self, bad_words_ids: Iterable[Iterable[int]]):
-        self.bad_words_ids = list(bad_words_ids)
+    def __init__(self, bad_words_ids: Iterable[Iterable[int]], eos_token_id: int):
+        self.bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
         for banned_token_seq in self.bad_words_ids:
             assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
                 bad_words_ids
             )
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)
         scores = self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
 
-    def _tokens_match(self, prev_input_ids, prev_tokens, tokens) -> bool:
+    def _tokens_match(self, prev_tokens, tokens) -> bool:
         if len(tokens) == 0:
             # if bad word tokens is just one token always ban it
             return True
-        if len(tokens) > len(prev_input_ids):
+        if len(tokens) > len(prev_tokens):
             # if bad word tokens are longer then prev input_ids they can't be equal
             return False
 
@@ -195,7 +194,7 @@ class NoBadWordsSampler(Sampler):
         for prev_input_ids_slice in prev_input_ids:
             banned_tokens_slice = []
             for banned_token_seq in self.bad_words_ids:
-                if self._tokens_match(prev_input_ids, prev_input_ids_slice.tolist(), banned_token_seq[:-1]) is False:
+                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1]) is False:
                     # if tokens do not match continue
                     continue
 
@@ -217,7 +216,7 @@ class NoBadWordsSampler(Sampler):
             for token in batch_banned_tokens:
                 banned_mask_list.append([idx, token])
         if not banned_mask_list:
-            return
+            return scores
         banned_mask = torch.LongTensor(banned_mask_list)
         indices = torch.ones(len(banned_mask))
         # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:

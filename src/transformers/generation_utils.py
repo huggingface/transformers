@@ -241,7 +241,7 @@ class GenerationMixin:
         if no_repeat_ngram_size is not None:
             processors.append(NoRepeatNGramSampler(no_repeat_ngram_size))
         if bad_words_ids is not None:
-            processors.append(NoBadWordsSampler(bad_words_ids))
+            processors.append(NoBadWordsSampler(bad_words_ids, eos_token_id))
         if min_length is not None and eos_token_id is not None:
             processors.append(MinLengthSampler(min_length, eos_token_id))
         return processors
