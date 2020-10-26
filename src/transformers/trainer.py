@@ -1466,7 +1466,11 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
-            outputs = model(**inputs)
+            if self.args.fp16 and _use_native_amp:
+                with autocast():
+                    outputs = model(**inputs)
+            else:
+                outputs = model(**inputs)
             if has_labels:
                 loss = outputs[0].mean().detach()
                 logits = outputs[1:]
