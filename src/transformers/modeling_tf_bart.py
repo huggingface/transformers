@@ -22,7 +22,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
-from tensorflow.keras.layers import Dense, Dropout, Layer, LayerNormalization
+from tensorflow.keras.layers import Dense, Layer, LayerNormalization
 
 from .activations_tf import ACT2FN
 from .configuration_bart import BartConfig
@@ -217,7 +217,7 @@ PAST_KV_DEPRECATION_WARNING = (
 )
 
 
-class TFEncoderLayer(tf.keras.layers.Layer):
+class TFEncoderLayer(Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -226,9 +226,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         )
         self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = Dropout(config.dropout)
+        self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = Dropout(config.activation_dropout)
+        self.activation_dropout = config.activation_dropout
         self.fc1 = Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = LayerNormalization(epsilon=1e-5, name="final_layer_norm")
@@ -259,7 +259,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
-        x = self.activation_dropout(x, training=training)
+        x = tf.nn.dropout(x, rate=self.self.activation_dropout if training else 0)
         x = self.fc2(x)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
@@ -269,7 +269,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         return x, self_attn_weights
 
 
-class TFBartEncoder(tf.keras.layers.Layer):
+class TFBartEncoder(Layer):
     # config_class = BartConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
@@ -386,7 +386,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
-class TFDecoderLayer(tf.keras.layers.Layer):
+class TFDecoderLayer(Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -487,7 +487,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-class TFBartDecoder(tf.keras.layers.Layer):
+class TFBartDecoder(Layer):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
     is a :class:`TFDecoderLayer`.
@@ -523,7 +523,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         )
         self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = config.dropout
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.use_cache = config.use_cache
@@ -566,7 +566,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             x = self.layernorm_embedding(x) + positions
         else:
             x = self.layernorm_embedding(x + positions)
-        x = self.dropout(x)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
@@ -636,7 +636,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class TFAttention(tf.keras.layers.Layer):
+class TFAttention(Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(

@@ -30,7 +30,7 @@ START_DOCSTRING = BART_START_DOCSTRING.replace(
 logger = logging.get_logger(__name__)
 
 
-@add_start_docstrings("Marian model for machine translation", START_DOCSTRING)
+@add_start_docstrings("Blenderbot model for open domain dialogue", START_DOCSTRING)
 class TFBlenderbotForConditionalGeneration(TFBartForConditionalGeneration):
     config_class = BlenderbotConfig
 
