@@ -1035,17 +1035,20 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         table_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Mask for the table. Indicates which tokens belong to the table (1). Question tokens, table headers and padding are 0.
         label_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
-            Labels per token.
+            Labels per token. This encodes the positions of the answer appearing in the table. Can be obtained using :class:`~transformers.TapasTokenizer`.
         aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Aggregation function id for every example in the batch for computing the aggregation loss.
+            Aggregation function index for every example in the batch for computing the aggregation loss.
             Indices should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`.
-            Note: this is called "aggregation_function_id" in the original implementation. 
+            Only required in case of strong supervision (WikiSQL-SUPERVISED). 
         answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Answer for every example in the batch. Nan if there is no scalar answer.
+            Answer for every example in the batch. NaN if there is no scalar answer. 
+            Only required in case of weak supervision (WTQ, WikiSQL). 
         numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
-            Numeric values of every token. Nan for tokens which are not numeric values.
+            Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using :class:`~transformers.TapasTokenizer`. 
+            Only required in case of weak supervision (WTQ, WikiSQL). 
         numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
-            Scale of the numeric values of every token.
+            Scale of the numeric values of every token. Can be obtained using :class:`~transformers.TapasTokenizer`. 
+            Only required in case of weak supervision (WTQ, WikiSQL). 
 
         Returns:
         
@@ -1166,9 +1169,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         # Total loss calculation
         total_loss = 0.0
         calculate_loss = False
-        if label_ids is not None and answer is not None:
+        if label_ids is not None:
             calculate_loss = True
-            assert label_ids.shape[0] == answer.shape[0]
             is_supervised = not self.config.num_aggregation_labels > 0 or not self.config.use_answer_as_supervision
 
             ### Semi-supervised cell selection in case of no aggregation
@@ -1183,15 +1185,19 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             if is_supervised:
                 aggregate_mask = None
             else:
-                # <float32>[batch_size]
-                aggregate_mask = utils._calculate_aggregate_mask(
-                    answer,
-                    pooled_output,
-                    self.config.cell_select_pref,
-                    label_ids,
-                    self.output_weights_agg,
-                    self.output_bias_agg,
-                )
+                if answer is not None:
+                    assert label_ids.shape[0] == answer.shape[0]
+                    # <float32>[batch_size]
+                    aggregate_mask = utils._calculate_aggregate_mask(
+                        answer,
+                        pooled_output,
+                        self.config.cell_select_pref,
+                        label_ids,
+                        self.output_weights_agg,
+                        self.output_bias_agg,
+                    )
+                else:
+                    raise ValueError("You have to specify answers in order to calculate the aggregate mask")
 
             ### Cell selection log-likelihood
             #################################
@@ -1234,17 +1240,25 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             ### Semi-supervised regression loss and supervised loss for aggregations
             ######################f###################################################
             if self.config.num_aggregation_labels > 0:
-                # Note that `aggregate_mask` is None if the setting is supervised.
-                if aggregation_labels is not None:
-                    assert label_ids.shape[0] == aggregation_labels.shape[0]
-                    per_example_additional_loss = utils._calculate_aggregation_loss(
-                        logits_aggregation, aggregate_mask, aggregation_labels, self.config
-                    )
+                if is_supervised:
+                    # Note that `aggregate_mask` is None if the setting is supervised.
+                    if aggregation_labels is not None:
+                        assert label_ids.shape[0] == aggregation_labels.shape[0]
+                        per_example_additional_loss = utils._calculate_aggregation_loss(
+                            logits_aggregation, aggregate_mask, aggregation_labels, self.config
+                        )
+                    else:
+                        raise ValueError("You have to specify aggregation labels in order to calculate the aggregation loss")
                 else:
-                    raise ValueError("You have to specify aggregation function ids")
+                    # Set aggregation labels to zeros
+                    aggregation_labels = torch.zeros(label_ids.shape[0], dtype=torch.long, device=label_ids.device)
+                    per_example_additional_loss = utils._calculate_aggregation_loss(
+                            logits_aggregation, aggregate_mask, aggregation_labels, self.config
+                        )
 
                 if self.config.use_answer_as_supervision:
                     if numeric_values is not None and numeric_values_scale is not None:
+                        assert numeric_values.shape == numeric_values_scale.shape
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = utils._calculate_regression_loss(
                             answer,
@@ -1260,12 +1274,12 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                         # Zero loss for examples with answer_loss > cutoff.
                         per_example_additional_loss *= large_answer_loss_mask
                     else:
-                        raise ValueError("You have to specify numeric values and numeric values scale")
+                        raise ValueError("You have to specify numeric values and numeric values scale in order to calculate the regression loss")
 
                 total_loss += torch.mean(per_example_additional_loss)
 
         else:
-            # if no label ids provided, set them to zeros in order to properly compute logits
+            # if no label ids are provided, set them to zeros in order to properly compute logits
             label_ids = torch.zeros_like(logits)
             _, logits = utils._single_column_cell_selection_loss(
                 logits, column_logits, label_ids, cell_index, col_index, cell_mask
