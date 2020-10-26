@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+import warnings
 
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
@@ -110,6 +111,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
+        warnings.simplefilter('error')
         model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
         assert isinstance(model, TFMarianMTModel)
         c = model.config
@@ -140,7 +142,7 @@ class TestMarian_en_zh(AbstractMarianIntegrationTest):
     src = "en"
     tgt = "zh"
     src_text = ["My name is Wolfgang and I live in Berlin"]
-    expected_text = ["我的名字是沃尔夫冈 我住在柏林"]
+    expected_text = ["我叫沃尔夫冈 我住在柏林"]
 
     @slow
     def test_batch_generation_en_zh(self):
@@ -156,12 +158,14 @@ class TestMarian_en_ROMANCE(AbstractMarianIntegrationTest):
     src = "en"
     tgt = "ROMANCE"
     src_text = [
+        ">>fr<< Don't spend so much time watching TV.",
         ">>pt<< Your message has been sent.",
         ">>es<< He's two years older than me.",
     ]
     expected_text = [
+        "Ne passez pas autant de temps à regarder la télé.",
         "A sua mensagem foi enviada.",
-        "Tiene dos años más que yo.",
+        "Es dos años más viejo que yo.",
     ]
 
     @slow

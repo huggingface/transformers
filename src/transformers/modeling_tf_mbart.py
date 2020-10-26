@@ -33,3 +33,8 @@ logger = logging.get_logger(__name__)
 @add_start_docstrings("Marian model for machine translation", START_DOCSTRING)
 class TFMBartForConditionalGeneration(TFBartForConditionalGeneration):
     config_class = MBartConfig
+    authorized_missing_keys = [
+        r"final_logits_bias",
+        "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.weight",
+    ]

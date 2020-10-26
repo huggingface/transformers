@@ -1013,8 +1013,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
     authorized_missing_keys = [
         r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
         "model.encoder.embed_tokens.weight",
         "model.decoder.embed_tokens.weight",
     ]
