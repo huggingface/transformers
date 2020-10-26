@@ -42,8 +42,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
     Construct a Blenderbot tokenizer.
 
     :class:`~transformers.Blenderbot` is nearly identical to :class:`~transformers.RobertaTokenizer` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesnt add BOS
-    token to the beginning of sequences.
+    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesnt add BOS token
+    to the beginning of sequences.
 
     Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
     parameters.
@@ -62,9 +62,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A Blenderbot sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A Blenderbot sequence has the following format:
 
         - single sequence: `` X </s>``
 
@@ -81,7 +80,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
 
 
 def get_pairs(word):
-    """Return set of symbol pairs in a word.
+    """
+    Return set of symbol pairs in a word.
 
     Word is represented as tuple of symbols (symbols being variable-length strings).
     """
@@ -99,8 +99,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to the superclass for more information regarding methods.
 
     Args:
         vocab_file (:obj:`str`):
@@ -112,11 +112,12 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
             The end of sentence token.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this token instead.
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
             The token used for padding, for example when batching sequences of different lengths.
         **kwargs
-            Additional keyword arguments passed along to  :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
 
     vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}

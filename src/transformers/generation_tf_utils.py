@@ -84,8 +84,8 @@ class TFGenerationMixin:
         Parameters:
 
             input_ids (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
-                it as an empty :obj:`tf.Tensor` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`tf.Tensor` of shape :obj:`(1,)`.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (:obj:`int`, `optional`, defaults to 10):
@@ -141,9 +141,9 @@ class TFGenerationMixin:
 
         Return:
 
-            :obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
-            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
-            shorter if all batches finished early due to the :obj:`eos_token_id`.
+            :obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size * num_return_sequences,
+            sequence_length)`: The generated sequences. The second dimension (sequence_length) is either equal to
+            :obj:`max_length` or shorter if all batches finished early due to the :obj:`eos_token_id`.
 
         Examples::
 
@@ -428,8 +428,9 @@ class TFGenerationMixin:
         attention_mask,
         use_cache,
     ):
-        """Generate sequences for each example without beam search (num_beams == 1).
-        All returned sequence are generated independantly.
+        """
+        Generate sequences for each example without beam search (num_beams == 1). All returned sequence are generated
+        independantly.
         """
 
         # length of generated sentences / unfinished sentences
@@ -976,7 +977,9 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
 
 
 def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
-    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    """
+    Filter a distribution of logits using top-k and/or nucleus (top-p) filterin
+
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
         if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
@@ -1044,9 +1047,8 @@ def set_tensor_by_indices_to_value(tensor, indices, value):
 
 def sample_without_replacement(logits, num_samples):
     """
-    categorical sampling witouth replacement is currently not implemented
-    the gumbel-max trick will do for now
-    see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    categorical sampling witouth replacement is currently not implemented the gumbel-max trick will do for now see
+    https://github.com/tensorflow/tensorflow/issues/9260 for more info
     """
     z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
     _, indices = tf.nn.top_k(logits + z, num_samples)
@@ -1094,8 +1096,8 @@ class BeamHypotheses(object):
 
     def is_done(self, best_sum_logprobs, cur_len):
         """
-        If there are enough hypotheses and that none of the hypotheses being generated
-        can become better than the worst one in the heap, then we are done with this sentence.
+        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
+        one in the heap, then we are done with this sentence.
         """
 
         if len(self) < self.num_beams:

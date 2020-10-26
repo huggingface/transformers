@@ -4,13 +4,12 @@ DistilBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The DistilBERT model was proposed in the blog post
-`Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT
-<https://medium.com/huggingface/distilbert-8cf3380435b5>`__, and the paper `DistilBERT, a distilled version of BERT:
-smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`__.
-DistilBERT is a small, fast, cheap and light Transformer model trained by distilling BERT base. It has 40% less
-parameters than `bert-base-uncased`, runs 60% faster while preserving over 95% of BERT's performances as measured on
-the GLUE language understanding benchmark.
+The DistilBERT model was proposed in the blog post `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a
+distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`__, and the paper `DistilBERT, a
+distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`__. DistilBERT is a
+small, fast, cheap and light Transformer model trained by distilling BERT base. It has 40% less parameters than
+`bert-base-uncased`, runs 60% faster while preserving over 95% of BERT's performances as measured on the GLUE language
+understanding benchmark.
 
 The abstract from the paper is the following:
 
@@ -18,13 +17,13 @@ The abstract from the paper is the following:
 operating these large models in on-the-edge and/or under constrained computational training or inference budgets
 remains challenging. In this work, we propose a method to pre-train a smaller general-purpose language representation
 model, called DistilBERT, which can then be fine-tuned with good performances on a wide range of tasks like its larger
-counterparts. While most prior work investigated the use of distillation for building task-specific models, we
-leverage knowledge distillation during the pre-training phase and show that it is possible to reduce the size of a
-BERT model by 40%, while retaining 97% of its language understanding capabilities and being 60% faster. To leverage
-the inductive biases learned by larger models during pre-training, we introduce a triple loss combining language
-modeling, distillation and cosine-distance losses. Our smaller, faster and lighter model is cheaper to pre-train
-and we demonstrate its capabilities for on-device computations in a proof-of-concept experiment and a comparative
-on-device study.*
+counterparts. While most prior work investigated the use of distillation for building task-specific models, we leverage
+knowledge distillation during the pre-training phase and show that it is possible to reduce the size of a BERT model by
+40%, while retaining 97% of its language understanding capabilities and being 60% faster. To leverage the inductive
+biases learned by larger models during pre-training, we introduce a triple loss combining language modeling,
+distillation and cosine-distance losses. Our smaller, faster and lighter model is cheaper to pre-train and we
+demonstrate its capabilities for on-device computations in a proof-of-concept experiment and a comparative on-device
+study.*
 
 Tips:
 
@@ -33,7 +32,8 @@ Tips:
 - DistilBERT doesn't have options to select the input positions (:obj:`position_ids` input). This could be added if
   necessary though, just let us know if you need this option.
 
-The original code can be found `here <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__.
+The original code can be found `here
+<https://github.com/huggingface/transformers/tree/master/examples/distillation>`__.
 
 
 DistilBertConfig

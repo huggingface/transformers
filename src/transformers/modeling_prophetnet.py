@@ -47,17 +47,19 @@ PROPHETNET_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    Original ProphetNet code can be found at <https://github.com/microsoft/ProphetNet> .
-    Checkpoints were converted from original Fairseq checkpoints. For more information on
-    the checkpoint conversion, please take a look at the file ``convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py``.
+    Original ProphetNet code can be found at <https://github.com/microsoft/ProphetNet> . Checkpoints were converted
+    from original Fairseq checkpoints. For more information on the checkpoint conversion, please take a look at the
+    file ``convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py``.
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matters related to general usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matters related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.ProphetNetConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 PROPHETNET_INPUTS_DOCSTRING = r"""
@@ -66,14 +68,13 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.ProphetNetTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.ProphetNetTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -90,16 +91,16 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
             modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
             information on the default strategy.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a
-            sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
-            the decoder.
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
+            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
+            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+            cross-attention of the decoder.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last
-            ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -119,14 +120,13 @@ PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.ProphetNetTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.ProphetNetTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -222,21 +222,19 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Languaged modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, config.vocab_size)`):
-            Prediction scores of the main stream language modeling head
-            (scores for each vocabulary token before SoftMax).
+            Prediction scores of the main stream language modeling head (scores for each vocabulary token before
+            SoftMax).
         logits_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
-            Prediction scores of the predict stream language modeling head (scores for
-            each vocabulary token before SoftMax).
+            Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
+            SoftMax).
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
-            Contains pre-computed hidden-states (key and values in the attention blocks)
-            of the decoder that can be
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings
-            + one for the output of each layer)
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`.
 
             Hidden-states of main stream of the decoder at the output of each layer plus the initial embedding outputs.
@@ -244,40 +242,37 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
-            Hidden-states of the predict stream of the decoder at the
-            output of each layer plus the initial embedding outputs.
+            Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding
+            outputs.
         decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         decoder_ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the predict stream of the decoder, after the attention softmax,
-            used to compute the weighted average in the self-attention heads.
+            Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
         decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, encoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            encoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the cross-attention layer of the decoder,
-            after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the cross-attention layer of the decoder, after the attention softmax, used to
+            compute the weighted average in the
         encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the
-            encoder of the model.
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`.
 
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, encoder_sequence_length, encoder_sequence_length)`.
-            Attentions weights of the encoder, after the attention softmax, used
-            to compute the weighted average in the
-            self-attention heads.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            encoder_sequence_length, encoder_sequence_length)`. Attentions weights of the encoder, after the attention
+            softmax, used to compute the weighted average in the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -304,16 +299,15 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`):
             Sequence of main stream hidden-states at the output of the last layer of the decoder of the model.
 
-            If :obj:`past_key_values` is used only the last hidden-state of
-            the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
+            1, hidden_size)` is output.
         last_hidden_state_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,ngram * decoder_sequence_length, config.vocab_size)`):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
-            Contains pre-computed hidden-states (key and values in the attention blocks)
-            of the decoder that can be
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
@@ -324,27 +318,26 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
-            Hidden-states of the predict stream of the decoder at the
-            output of each layer plus the initial embedding outputs.
+            Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding
+            outputs.
         decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         decoder_ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the predict stream of the decoder,
-            after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
+            weighted average in the
         decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, encoder_sequence_length,
-            decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            encoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the cross-attention layer of the decoder,
-            after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the cross-attention layer of the decoder, after the attention softmax, used to
+            compute the weighted average in the
         encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -353,8 +346,8 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
             Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, encoder_sequence_length, encoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            encoder_sequence_length, encoder_sequence_length)`.
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
@@ -382,13 +375,13 @@ class ProphetNetDecoderModelOutput(ModelOutput):
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`):
             Sequence of main stream hidden-states at the output of the last layer of the decoder of the model.
 
-            If :obj:`past_key_values` is used only the last hidden-state
-            of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
+            1, hidden_size)` is output.
         last_hidden_state_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
@@ -396,32 +389,31 @@ class ProphetNetDecoderModelOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`.
 
-            Hidden-states of main stream of the decoder at the output
-            of each layer plus the initial embedding outputs.
+            Hidden-states of main stream of the decoder at the output of each layer plus the initial embedding outputs.
         ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
-            Hidden-states of the predict stream of the decoder at the
-            output of each layer plus the initial embedding outputs.
+            Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding
+            outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the decoder, after the attention softmax,
-            used to compute the weighted average in the
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the predict stream of the decoder,
-            after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
+            weighted average in the
         cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, encoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            encoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the cross-attention layer of the decoder, after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the cross-attention layer of the decoder, after the attention softmax, used to
+            compute the weighted average in the
     """
 
     last_hidden_state: torch.FloatTensor
@@ -443,12 +435,14 @@ class ProphetNetDecoderLMOutput(ModelOutput):
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Languaged modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, config.vocab_size)`):
-            Prediction scores of the main stream language modeling head (scores for each vocabulary token before SoftMax).
+            Prediction scores of the main stream language modeling head (scores for each vocabulary token before
+            SoftMax).
         logits_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
-            Prediction scores of the predict stream language modeling head (scores for each vocabulary token before SoftMax).
+            Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
+            SoftMax).
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
             used (see :obj:`past_key_values` input) to speed up sequential decoding.
@@ -461,23 +455,26 @@ class ProphetNetDecoderLMOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
-            Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding outputs.
+            Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding
+            outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, decoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            decoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
+            weighted average in the
         cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_attn_heads, encoder_sequence_length, decoder_sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
+            encoder_sequence_length, decoder_sequence_length)`.
 
-            Attentions weights of the cross-attention layer of the decoder, after the attention softmax, used to compute the weighted average in the
+            Attentions weights of the cross-attention layer of the decoder, after the attention softmax, used to
+            compute the weighted average in the
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -540,10 +537,9 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
 
 class ProhpetNetPositionalEmbeddings(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
     """
 
     def __init__(self, config: ProphetNetConfig):
@@ -701,8 +697,7 @@ class ProphetNetSelfAttention(nn.Module):
 
 class ProhpetNetFeedForward(nn.Module):
     """
-    This is the residual two feed-forward layer block based on the original
-    Transformer implementation.
+    This is the residual two feed-forward layer block based on the original Transformer implementation.
     """
 
     def __init__(self, config: ProphetNetConfig, ffn_dim: int):
@@ -1118,8 +1113,8 @@ class ProphetNetDecoderLayer(nn.Module):
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     r"""
     word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
-        The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with pre-defined
-        word embeddings instead of randomely initialized word embeddings.
+        The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with
+        pre-defined word embeddings instead of randomely initialized word embeddings.
     """
 
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
@@ -1227,8 +1222,8 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
     r"""
     word_embeddings  (:obj:`torch.nn.Embeddings` of shape :obj:`(config.vocab_size, config.hidden_size)`, `optional`):
-        The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with pre-defined
-        word embeddings instead of randomely initialized word embeddings.
+        The word embedding parameters. This can be used to initialize :class:`~transformers.ProphetNetEncoder` with
+        pre-defined word embeddings instead of randomely initialized word embeddings.
     """
 
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
@@ -1276,18 +1271,17 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last
-            ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -1700,10 +1694,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[-100, 0, ...,
+            config.vocab_size - 1]`. All labels set to ``-100`` are ignored (masked), the loss is only computed for
+            labels in ``[0, ..., config.vocab_size]``
 
         Returns:
 
@@ -1890,18 +1883,17 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     ):
         r"""
         encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last
-            ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -1910,10 +1902,9 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             - 0 for tokens that are **masked**.
 
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the left-to-right language modeling loss (next word prediction).
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            n ``[0, ..., config.vocab_size]``
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
+            ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.vocab_size]``
 
         Returns:
 

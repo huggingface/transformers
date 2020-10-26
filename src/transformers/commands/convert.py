@@ -16,9 +16,9 @@ def convert_command_factory(args: Namespace):
     )
 
 
-IMPORT_ERROR_MESSAGE = """transformers can only be used from the commandline to convert TensorFlow models in PyTorch,
-In that case, it requires TensorFlow to be installed. Please see
-https://www.tensorflow.org/install/ for installation instructions.
+IMPORT_ERROR_MESSAGE = """
+transformers can only be used from the commandline to convert TensorFlow models in PyTorch, In that case, it requires
+TensorFlow to be installed. Please see https://www.tensorflow.org/install/ for installation instructions.
 """
 
 

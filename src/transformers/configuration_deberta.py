@@ -45,16 +45,16 @@ class DebertaConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"`, :obj:`"gelu"`, :obj:`"tanh"`, :obj:`"gelu_fast"`,
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"`, :obj:`"gelu"`, :obj:`"tanh"`, :obj:`"gelu_fast"`,
             :obj:`"mish"`, :obj:`"linear"`, :obj:`"sigmoid"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.DebertaModel` or
             :class:`~transformers.TFDebertaModel`.
@@ -65,15 +65,15 @@ class DebertaConfig(PretrainedConfig):
         relative_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether use relative position encoding.
         max_relative_positions (:obj:`int`, `optional`, defaults to 1):
-            The range of relative positions :obj:`[-max_position_embeddings, max_position_embeddings]`.
-            Use the same value as :obj:`max_position_embeddings`.
+            The range of relative positions :obj:`[-max_position_embeddings, max_position_embeddings]`. Use the same
+            value as :obj:`max_position_embeddings`.
         pad_token_id (:obj:`int`, `optional`, defaults to 0):
             The value used to pad input_ids.
         position_biased_input (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (:obj:`List[str]`, `optional`):
-            The type of relative position attention, it can be a combination of :obj:`["p2c", "c2p", "p2p"]`,
-            e.g. :obj:`["p2c"]`, :obj:`["p2c", "c2p"]`, :obj:`["p2c", "c2p", 'p2p"]`.
+            The type of relative position attention, it can be a combination of :obj:`["p2c", "c2p", "p2p"]`, e.g.
+            :obj:`["p2c"]`, :obj:`["p2c", "c2p"]`, :obj:`["p2c", "c2p", 'p2p"]`.
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
     """

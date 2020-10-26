@@ -212,6 +212,7 @@ class CodeStyler:
         self.current_indent = ""
         # If one of those is True, the paragraph should not be touched (code samples, lists...)
         no_style = False
+        no_style_next = False
         self.in_block = self.init_in_block(text)
         # If this is True, we force-break a paragraph, even if there is no new empty line.
         break_paragraph = False
@@ -221,15 +222,12 @@ class CodeStyler:
         for line in lines:
             # New paragraph
             line_is_empty = len(line.strip()) == 0
-            if (
-                line_is_empty
-                or break_paragraph
-                or (
-                    _re_list.search(line) is not None
-                    and last_line is not None
-                    and len(get_indent(line)) > len(get_indent(last_line))
-                )
-            ):
+            list_begins = (
+                _re_list.search(line) is not None
+                and last_line is not None
+                and len(get_indent(line)) > len(get_indent(last_line))
+            )
+            if line_is_empty or break_paragraph or list_begins:
                 if len(paragraph) > 0:
                     if self.in_block != SpecialBlock.NOT_SPECIAL:
                         indent = get_indent(paragraph[0])
@@ -261,9 +259,10 @@ class CodeStyler:
                     new_lines.append("")
 
                 paragraph = []
-                no_style = False
+                no_style = no_style_next
+                no_style_next = False
                 last_line = None
-                if not break_paragraph or line_is_empty:
+                if (not break_paragraph and not list_begins) or line_is_empty:
                     break_paragraph = False
                     continue
                 break_paragraph = False
@@ -277,8 +276,11 @@ class CodeStyler:
             ):
                 line = line[0] * max_len
                 break_paragraph = True
+            # proper doc comment indicates the next paragraph should be no-style.
+            if _re_doc_ignore.search(line) is not None:
+                no_style_next = True
             # Table are in just one paragraph and should be no-style.
-            if _re_table.search(line) is not None or _re_doc_ignore.search(line) is not None:
+            if _re_table.search(line) is not None:
                 no_style = True
             paragraph.append(line)
             last_line = line

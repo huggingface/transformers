@@ -1,9 +1,9 @@
 """
-This script can be used to convert a head-less TF2.x Bert model to PyTorch,
-as published on the official GitHub: https://github.com/tensorflow/models/tree/master/official/nlp/bert
+This script can be used to convert a head-less TF2.x Bert model to PyTorch, as published on the official GitHub:
+https://github.com/tensorflow/models/tree/master/official/nlp/bert
 
-TF2.x uses different variable names from the original BERT (TF 1.4) implementation.
-The script re-maps the TF2.x Bert weight names to the original names, so the model can be imported with Huggingface/transformer.
+TF2.x uses different variable names from the original BERT (TF 1.4) implementation. The script re-maps the TF2.x Bert
+weight names to the original names, so the model can be imported with Huggingface/transformer.
 
 You may adapt this script to include classification/MLM/NSP/etc. heads.
 """

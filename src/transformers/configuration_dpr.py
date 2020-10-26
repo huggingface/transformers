@@ -32,20 +32,19 @@ DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DPRConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
-    `DPRModel`.
+    :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a `DPRModel`.
 
     This is the configuration class to store the configuration of a :class:`~transformers.DPRContextEncoder`,
     :class:`~transformers.DPRQuestionEncoder`, or a :class:`~transformers.DPRReader`. It is used to instantiate the
     components of the DPR model.
 
-    This class is a subclass of :class:`~transformers.BertConfig`. Please check the
-    superclass for the documentation of all kwargs.
+    This class is a subclass of :class:`~transformers.BertConfig`. Please check the superclass for the documentation of
+    all kwargs.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the DPR model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
+            Vocabulary size of the DPR model. Defines the different tokens that can be represented by the `inputs_ids`
+            passed to the forward method of :class:`~transformers.BertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -55,15 +54,15 @@ class DPRConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the `token_type_ids` passed into :class:`~transformers.BertModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
@@ -73,8 +72,8 @@ class DPRConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         projection_dim (:obj:`int`, `optional`, defaults to 0):
-            Dimension of the projection for the context and question encoders.
-            If it is set to zero (default), then no projection is done.
+            Dimension of the projection for the context and question encoders. If it is set to zero (default), then no
+            projection is done.
     """
     model_type = "dpr"
 

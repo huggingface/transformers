@@ -24,11 +24,11 @@ from .modeling_bart import BartForConditionalGeneration
 
 class MarianMTModel(BartForConditionalGeneration):
     r"""
-    Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-    Available models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
+    Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints. Available
+    models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
 
-    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
 
     Examples::
 

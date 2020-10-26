@@ -1,10 +1,10 @@
-""" Very heavily inspired by the official evaluation script for SQuAD version 2.0 which was
-modified by XLNet authors to update `find_best_threshold` scripts for SQuAD V2.0
+"""
+ Very heavily inspired by the official evaluation script for SQuAD version 2.0 which was modified by XLNet authors to
+ update `find_best_threshold` scripts for SQuAD V2.0
 
-In addition to basic functionality, we also compute additional statistics and
-plot precision-recall curves if an additional na_prob.json file is provided.
-This file is expected to map question ID's to the model's predicted probability
-that a question is unanswerable.
+In addition to basic functionality, we also compute additional statistics and plot precision-recall curves if an
+additional na_prob.json file is provided. This file is expected to map question ID's to the model's predicted
+probability that a question is unanswerable.
 """
 
 
@@ -589,8 +589,9 @@ def compute_predictions_log_probs(
     tokenizer,
     verbose_logging,
 ):
-    """XLNet write prediction logic (more complex than Bert's).
-    Write final predictions to the json file and log-odds of null if needed.
+    """
+    XLNet write prediction logic (more complex than Bert's). Write final predictions to the json file and log-odds of
+    null if needed.
 
     Requires utils_squad_evaluate.py
     """

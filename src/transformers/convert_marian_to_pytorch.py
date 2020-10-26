@@ -152,8 +152,9 @@ def convert_opus_name_to_hf_name(x):
 
 
 def convert_hf_name_to_opus_name(hf_model_name):
-    """Relies on the assumption that there are no language codes like pt_br in models that are not in
-    GROUP_TO_OPUS_NAME."""
+    """
+    Relies on the assumption that there are no language codes like pt_br in models that are not in GROUP_TO_OPUS_NAME.
+    """
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     if hf_model_name in GROUP_TO_OPUS_NAME:
         opus_w_prefix = GROUP_TO_OPUS_NAME[hf_model_name]
@@ -173,14 +174,10 @@ def get_system_metadata(repo_root):
     )
 
 
-FRONT_MATTER_TEMPLATE = """---
-language:
-{}
-tags:
-- translation
+FRONT_MATTER_TEMPLATE = """
+--- language: {} tags: - translation
 
-license: apache-2.0
----
+license: apache-2.0 ---
 
 """
 DEFAULT_REPO = "Tatoeba-Challenge"
@@ -194,8 +191,9 @@ def write_model_card(
     dry_run=False,
     extra_metadata={},
 ) -> str:
-    """Copy the most recent model's readme section from opus, and add metadata.
-    upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
+    """
+    Copy the most recent model's readme section from opus, and add metadata. upload command: aws s3 sync model_card_dir
+    s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
     """
     import pandas as pd
 
