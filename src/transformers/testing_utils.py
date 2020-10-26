@@ -486,7 +486,7 @@ class TestCasePlus(unittest.TestCase):
 
     # 1. create a unique temp dir, `tmp_dir` will contain the path to the created temp dir
 
-    .. 
+    ::
 
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir()
@@ -494,7 +494,7 @@ class TestCasePlus(unittest.TestCase):
     # 2. create a temp dir of my choice and delete it at the end - useful for debug when you want to
     # monitor a specific directory
 
-    .. 
+    ::
 
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
@@ -502,7 +502,7 @@ class TestCasePlus(unittest.TestCase):
     # 3. create a temp dir of my choice and do not delete it at the end - useful for when you want
     # to look at the temp results
 
-    .. 
+    ::
 
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
@@ -511,7 +511,7 @@ class TestCasePlus(unittest.TestCase):
     # disabled deletion in the previous test run and want to make sure the that tmp dir is empty
     # before the new test is run
 
-    .. 
+    ::
 
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
