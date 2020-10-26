@@ -60,6 +60,11 @@ class Seq2SeqTrainer(Trainer):
                 self.config.pad_token_id is not None
             ), "Make sure that `config.pad_token_id` is correcly defined when ignoring `pad_token` for loss calculation or doing label smoothing."
 
+        if self.config.pad_token_id is None and self.config.eos_token_id is not None:
+            logger.warn(
+                f"The `config.pad_token_id` is `None`. Use `config.eos_token_id` = {self.config.eos_token_id} for padding."
+            )
+
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
         Setup the optimizer and the learning rate scheduler.
