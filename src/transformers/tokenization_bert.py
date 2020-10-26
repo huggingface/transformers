@@ -178,11 +178,16 @@ class BertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
             **kwargs,
         )
 

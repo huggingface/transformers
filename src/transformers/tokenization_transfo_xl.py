@@ -164,7 +164,19 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            unk_token=unk_token, eos_token=eos_token, additional_special_tokens=additional_special_tokens, **kwargs
+            special=special,
+            min_freq=min_freq,
+            max_size=max_size,
+            lower_case=lower_case,
+            delimiter=delimiter,
+            vocab_file=vocab_file,
+            pretrained_vocab_file=pretrained_vocab_file,
+            never_split=never_split,
+            unk_token=unk_token,
+            eos_token=eos_token,
+            additional_special_tokens=additional_special_tokens,
+            language=language,
+            **kwargs,
         )
 
         if never_split is None:

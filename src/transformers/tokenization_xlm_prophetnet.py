@@ -123,9 +123,10 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
             sep_token=sep_token,
+            unk_token=unk_token,
             pad_token=pad_token,
+            cls_token=cls_token,
             mask_token=mask_token,
             **kwargs,
         )

@@ -16,7 +16,6 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import copy
 import json
 import os
 import warnings
@@ -105,7 +104,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self._tokenizer = fast_tokenizer
 
         if slow_tokenizer is not None:
-            kwargs = copy.deepcopy(slow_tokenizer.init_kwargs)
+            kwargs.update(slow_tokenizer.init_kwargs)
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
