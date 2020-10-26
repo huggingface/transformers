@@ -284,7 +284,7 @@ def _prepare_fsmt_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, causal_mask_dtype=torch.float32
 ):
     """
-Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if
+    Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
     Note: this is not called during generation
     """
@@ -1189,7 +1189,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     @staticmethod
     def get_embedding(num_embeddings, embedding_dim, padding_idx):
         """
-Build sinusoidal embeddings.
+        Build sinusoidal embeddings.
 
         This matches the implementation in tensor2tensor, but differs slightly
         from the description in Section 3.5 of "Attention Is All You Need".
@@ -1209,7 +1209,7 @@ Build sinusoidal embeddings.
     @staticmethod
     def make_positions(tensor, padding_idx: int):
         """
-Replace non-padding symbols with their position numbers.
+        Replace non-padding symbols with their position numbers.
 
         Position numbers begin at padding_idx+1. Padding symbols are ignored.
         """
