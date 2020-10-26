@@ -107,15 +107,15 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         # We test that if we don't specificy framework='tf', it gets detected automatically
         nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
         self._test_pipeline(nlp)
-        
+
     @require_tf
-    def test_tf_ner(self):
+    def test_tf_defaults(self):
         for model_name in self.small_models:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
         self._test_pipeline(nlp)
 
     @require_tf
-    def test_tf_ner_grouped(self):
+    def test_tf_small(self):
         for model_name in self.small_models:
             nlp = pipeline(
                 task="ner",
@@ -136,15 +136,15 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 ignore_subwords=False,
             )
             self._test_pipeline(nlp)
-            
+
     @require_torch
-    def test_torch_ner(self):
+    def test_pt_defaults(self):
         for model_name in self.small_models:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
             self._test_pipeline(nlp)
 
     @require_torch
-    def test_ner_grouped(self):
+    def test_torch_small(self):
         for model_name in self.small_models:
             nlp = pipeline(
                 task="ner", model=model_name, tokenizer=model_name, grouped_entities=True, ignore_subwords=True
@@ -155,5 +155,3 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 task="ner", model=model_name, tokenizer=model_name, grouped_entities=True, ignore_subwords=False
             )
             self._test_pipeline(nlp)
-
-        
