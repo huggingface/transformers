@@ -41,6 +41,7 @@ from .integrations import (
     default_hp_search_backend,
     hp_params,
     is_comet_available,
+    is_mlflow_available,
     is_optuna_available,
     is_ray_available,
     is_tensorboard_available,
@@ -138,6 +139,11 @@ if is_comet_available():
     from .integrations import CometCallback
 
     DEFAULT_CALLBACKS.append(CometCallback)
+
+if is_mlflow_available():
+    from .integrations import MLflowCallback
+
+    DEFAULT_CALLBACKS.append(MLflowCallback)
 
 if is_optuna_available():
     import optuna
