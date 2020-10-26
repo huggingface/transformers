@@ -24,8 +24,6 @@ widget:
 
 This model takes [xlm-roberta-large](https://huggingface.co/xlm-roberta-large) and fine-tunes it on a combination of NLI data in 15 languages. It is intended to be used for zero-shot text classification, such as with the Hugging Face [ZeroShotClassificationPipeline](https://huggingface.co/transformers/master/main_classes/pipelines.html#transformers.ZeroShotClassificationPipeline).
 
-You can play with an interactive demo of this zero-shot technique with this model [here](https://huggingface.co/zero-shot/).
-
 ## Inteded Usage
 
 This model is intended to be used for zero-shot text classification, especially in languages other than English. It is fine-tuned on XNLI, which is a multilingual NLI dataset. The model can therefore be used with any of the languages in the XNLI corpus:
@@ -46,13 +44,14 @@ This model is intended to be used for zero-shot text classification, especially 
 - Swahili
 - Urdu
 
-Since the base model was pre-trained trained on 100 different languages (see the full list in appendix A of the [XLM
-Roberata paper](https://arxiv.org/abs/1911.02116)), the model may have some limited effectiveness in other languages as
-well.
+Since the base model was pre-trained trained on 100 different languages, the
+model has shown some effectiveness in languages beyond those listed above as
+well. See the full list of pre-trained languages in appendix A of the
+[XLM Roberata paper](https://arxiv.org/abs/1911.02116)
 
 For English-only classification, it is recommended to use
 [bart-large-mnli](https://huggingface.co/facebook/bart-large-mnli) or
-[bart-large-mnli-yahoo-answers](https://huggingface.co/joeddav/bart-large-mnli-yahoo-answers).
+[a distilled bart MNLI model](https://huggingface.co/models?filter=pipeline_tag%3Azero-shot-classification&search=valhalla).
 
 #### With the zero-shot classification pipeline
 
