@@ -180,7 +180,7 @@ class Seq2SeqTrainer(Trainer):
         """
         inputs = self._prepare_inputs(inputs)
 
-        pred_kwargs = {
+        gen_kwargs = {
             "max_length": self.data_args.val_max_target_length
             if self.data_args is not None
             else self.config.max_length,
@@ -191,11 +191,11 @@ class Seq2SeqTrainer(Trainer):
             generated_tokens = model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                **pred_kwargs,
+                **gen_kwargs,
             )
             # in case the batch is shorter than max length, the output should be padded
-            if generated_tokens.shape[-1] < pred_kwargs["max_length"]:
-                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, pred_kwargs["max_length"])
+            if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
+                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         labels = inputs.pop("labels")
         with torch.no_grad():
@@ -208,8 +208,8 @@ class Seq2SeqTrainer(Trainer):
 
         logits = generated_tokens if self.args.predict_with_generate else logits
 
-        if labels.shape[-1] < pred_kwargs["max_length"]:
-            labels = self._pad_tensors_to_max_len(labels, pred_kwargs["max_length"])
+        if labels.shape[-1] < gen_kwargs["max_length"]:
+            labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
 
         return (loss, logits, labels)
 
