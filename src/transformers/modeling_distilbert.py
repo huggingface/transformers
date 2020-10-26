@@ -95,10 +95,11 @@ class Embeddings(nn.Module):
 
     def forward(self, input_ids):
         """
-        Parameters ---------- input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
+        Parameters:
+            input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
 
-        Outputs ------- embeddings: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position
-        embeddings, no token_type embeddings)
+        Returns: torch.tensor(bs, max_seq_length, dim)
+            The embedded tokens (plus position embeddings, no token_type embeddings)
         """
         seq_length = input_ids.size(1)
         position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
@@ -147,11 +148,16 @@ class MultiHeadSelfAttention(nn.Module):
 
     def forward(self, query, key, value, mask, head_mask=None, output_attentions=False):
         """
-        Parameters ---------- query: torch.tensor(bs, seq_length, dim) key: torch.tensor(bs, seq_length, dim) value:
-        torch.tensor(bs, seq_length, dim) mask: torch.tensor(bs, seq_length)
+        Parameters:
+            query: torch.tensor(bs, seq_length, dim)
+            key: torch.tensor(bs, seq_length, dim)
+            value: torch.tensor(bs, seq_length, dim)
+            mask: torch.tensor(bs, seq_length)
 
-        Outputs ------- weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context:
-        torch.tensor(bs, seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
+        Returns:
+            weights: torch.tensor(bs, n_heads, seq_length, seq_length)
+            Attention weights context: torch.tensor(bs, seq_length, dim)
+            Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = query.size()
         k_length = key.size(1)
@@ -234,10 +240,13 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x, attn_mask=None, head_mask=None, output_attentions=False):
         """
-        Parameters ---------- x: torch.tensor(bs, seq_length, dim) attn_mask: torch.tensor(bs, seq_length)
+        Parameters:
+            x: torch.tensor(bs, seq_length, dim)
+            attn_mask: torch.tensor(bs, seq_length)
 
-        Outputs ------- sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
-        torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
+        Returns:
+            sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights
+            ffn_output: torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
         # Self-Attention
         sa_output = self.attention(
@@ -275,16 +284,20 @@ class Transformer(nn.Module):
 
     def forward(
         self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=None
-    ):
+    ): # docstyle-ignore
         """
-        Parameters ---------- x: torch.tensor(bs, seq_length, dim) Input sequence embedded. attn_mask: torch.tensor(bs,
-        seq_length) Attention mask on the sequence.
+        Parameters:
+            x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
+            attn_mask: torch.tensor(bs, seq_length) Attention mask on the sequence.
 
-        Outputs ------- hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hiddens states in the last (top)
-        layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)] Tuple of length n_layers with the hidden
-        states from each layer. Optional: only if output_hidden_states=True all_attentions: Tuple[torch.tensor(bs,
-        n_heads, seq_length, seq_length)] Tuple of length n_layers with the attention weights from each layer Optional:
-        only if output_attentions=True
+        Returns:
+            hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hiddens states in the last (top)
+            layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)]
+                Tuple of length n_layers with the hidden states from each layer.
+                Optional: only if output_hidden_states=True
+            all_attentions: Tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
+                Tuple of length n_layers with the attention weights from each layer
+                Optional: only if output_attentions=True
         """
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
