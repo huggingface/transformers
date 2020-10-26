@@ -1324,6 +1324,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 class TapasForSequenceClassification(TapasPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        self.num_labels = config.num_labels
 
         self.tapas = TapasModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
