@@ -127,8 +127,10 @@ class RobertaEmbeddings(nn.Module):
         """We are provided embeddings directly. We cannot infer which are padded so just generate
         sequential position ids.
 
-        :param torch.Tensor inputs_embeds:
-        :return torch.Tensor:
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
         """
         input_shape = inputs_embeds.size()[:-1]
         sequence_length = input_shape[1]
@@ -1326,8 +1328,10 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
     `utils.make_positions`.
 
-    :param torch.Tensor x:
-    :return torch.Tensor:
+    Args:
+        x: torch.Tensor x:
+
+    Returns: torch.Tensor
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()

@@ -630,18 +630,16 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
     Remove entities from text by converting them to their
     corresponding unicode character.
 
-    :param text: a unicode string or a byte string encoded in the given
-    `encoding` (which defaults to 'utf-8').
+    Args:
+        text:
+            A unicode string or a byte string encoded in the given `encoding` (which defaults to 'utf-8').
+        keep (list):
+            List of entity names which should not be replaced. This supports both numeric entities (``&#nnnn;`` and ``&#hhhh;``)
+            and named entities (such as ``&nbsp;`` or ``&gt;``).
+        remove_illegal (bool):
+            If `True`, entities that can't be converted are removed. Otherwise, entities that can't be converted are kept "as is".
 
-    :param list keep:  list of entity names which should not be replaced.\
-    This supports both numeric entities (``&#nnnn;`` and ``&#hhhh;``)
-    and named entities (such as ``&nbsp;`` or ``&gt;``).
-
-    :param bool remove_illegal: If `True`, entities that can't be converted are\
-    removed. Otherwise, entities that can't be converted are kept "as
-    is".
-
-    :returns: A unicode string with the entities removed.
+    Returns: A unicode string with the entities removed.
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py
 
@@ -713,10 +711,11 @@ class TweetTokenizer:
 
     def tokenize(self, text):
         """
-        :param text: str
-        :rtype: list(str)
-        :return: a tokenized list of strings; concatenating this list returns\
-        the original string if `preserve_case=False`
+        Args:
+            text: str
+
+        Returns: list(str)
+            A tokenized list of strings; concatenating this list returns the original string if `preserve_case=False`
         """
         # Fix HTML character entities:
         text = _replace_html_entities(text)
