@@ -25,7 +25,6 @@ SpecialTokensMixin
 
 Enums and namedtuples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 .. autoclass:: transformers.tokenization_utils_base.ExplicitEnum
 
 .. autoclass:: transformers.tokenization_utils_base.PaddingStrategy

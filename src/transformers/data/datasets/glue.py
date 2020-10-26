@@ -23,8 +23,9 @@ class GlueDataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
 
-    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify them on the command
-    line.
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
 
     task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
@@ -54,7 +55,8 @@ class Split(Enum):
 
 class GlueDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach soon.
+    This will be superseded by a framework-agnostic approach
+    soon.
     """
 
     args: GlueDataTrainingArguments
