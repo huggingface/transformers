@@ -28,7 +28,9 @@ Implementation Notes
 Usage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Model Usage:
+Here is an example of model usage:
+
+.. code-block::
 
         >>> from transformers import BlenderbotSmallTokenizer, BlenderbotForConditionalGeneration
         >>> mname = 'facebook/blenderbot-90M'
@@ -40,7 +42,10 @@ Model Usage:
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
 
 
-See Config Values:
+Here is how you can check out config values:
+
+.. code-block::
+
 
         >>> from transformers import BlenderbotConfig
         >>> config_90 = BlenderbotConfig.from_pretrained("facebook/blenderbot-90M")
