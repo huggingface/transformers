@@ -76,7 +76,7 @@ tokenizer:
                         [1, 1, 1, 1, 1],
                         [1, 1, 1, 1, 1, 1, 1, 1]]}
 
-We get back a dictionary once again, this time with values being a list of lists of ints.
+We get back a dictionary once again, this time with values being lists of lists of ints.
 
 If the purpose of sending several sentences at a time to the tokenizer is to build a batch to feed the model, you will
 probably want:
