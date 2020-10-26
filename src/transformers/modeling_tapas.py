@@ -70,9 +70,8 @@ class TableQuestionAnsweringOutput(ModelOutput):
     Output type of :class:`~transformers.TapasForQuestionAnswering`.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` and :obj:`answer` (and possibly :obj:`aggregation_labels`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
-            Total loss as the sum of the hierarchical cell selection log-likelihood loss, (optionally) supervised cell selection
-            loss and (optionally) the semi-supervised regression loss and (optionally) supervised loss for aggregations.
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` (and possibly :obj:`answer`, :obj:`aggregation_labels`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
+            Total loss as the sum of the hierarchical cell selection log-likelihood loss and (optionally) the semi-supervised regression loss and (optionally) supervised loss for aggregations.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the cell selection head, for every token.
         logits_aggregation (:obj:`torch.FloatTensor`, `optional`, of shape :obj:`(batch_size, num_aggregation_labels)`):
@@ -767,7 +766,7 @@ class TapasModel(TapasPreTrainedModel):
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
-            >>> queries = ["How many movies has George Clooney played in?", "How old is he?"]
+            >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
             >>> inputs = tokenizer(table, queries, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1035,20 +1034,22 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         table_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Mask for the table. Indicates which tokens belong to the table (1). Question tokens, table headers and padding are 0.
         label_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
-            Labels per token. This encodes the positions of the answer appearing in the table. Can be obtained using :class:`~transformers.TapasTokenizer`.
+            Labels per token for computing the hierarchical cell selection loss. This encodes the positions of the answer appearing in the table. Can be obtained using :class:`~transformers.TapasTokenizer`.
+            - 1 for tokens that are **part of the answer**,
+            - 0 for tokens that are **not part of the answer**.
         aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
             Aggregation function index for every example in the batch for computing the aggregation loss.
             Indices should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`.
-            Only required in case of strong supervision (WikiSQL-SUPERVISED). 
+            Only required in case of strong supervision for aggregation (WikiSQL-SUPERVISED). 
         answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
             Answer for every example in the batch. NaN if there is no scalar answer. 
-            Only required in case of weak supervision (WTQ, WikiSQL). 
+            Only required in case of weak supervision (WTQ, WikiSQL) to calculate the aggregate mask and regression loss. 
         numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using :class:`~transformers.TapasTokenizer`. 
-            Only required in case of weak supervision (WTQ, WikiSQL). 
+            Only required in case of weak supervision for aggregation (WTQ, WikiSQL) to calculate the regression loss.
         numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Scale of the numeric values of every token. Can be obtained using :class:`~transformers.TapasTokenizer`. 
-            Only required in case of weak supervision (WTQ, WikiSQL). 
+            Only required in case of weak supervision for aggregation (WTQ, WikiSQL) to calculate the regression loss. 
 
         Returns:
         
@@ -1062,7 +1063,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
-            >>> queries = ["How many movies has George Clooney played in?", "How old is he?"]
+            >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
             >>> inputs = tokenizer(table, queries, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1345,6 +1346,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         Examples::
 
             >>> from transformers import TapasTokenizer, TapasForSequenceClassification
+            >>> import torch
             >>> import pandas as pd
 
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-tabfact')
@@ -1352,11 +1354,13 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
-            >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors having more than 60 movies"]
+            >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors which played in more than 60 movies"]
 
             >>> inputs = tokenizer(table, queries, return_tensors="pt")
-            >>> outputs = model(**inputs)
-
+            >>> labels = torch.tensor([1, 0]) # 1 means entailed, 0 means refuted
+            
+            >>> outputs = model(**inputs, labels=labels)
+            >>> loss = outputs.loss
             >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

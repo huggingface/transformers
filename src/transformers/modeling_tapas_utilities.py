@@ -560,12 +560,12 @@ def compute_classification_logits(pooled_output, output_weights_cls, output_bias
     Args:
         pooled_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
             Output of the pooler (BertPooler) on top of the encoder layer.
-        output_weights_cls (:obj:`torch.FloatTensor` of shape :obj:`(num_classification_labels, hidden_size)`):
+        output_weights_cls (:obj:`torch.FloatTensor` of shape :obj:`(num_labels, hidden_size)`):
             Weights of the linear classification head.
-        output_bias_cls (:obj:`torch.FloatTensor` of shape :obj:`(num_classification_labels)`):
+        output_bias_cls (:obj:`torch.FloatTensor` of shape :obj:`(num_labels)`):
             Bias of the linear classification head.
     Returns:
-        logits_cls (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_classification_labels)`):
+        logits_cls (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
             Logits per class.
     """
     logits_cls = torch.matmul(pooled_output, output_weights_cls.T)
