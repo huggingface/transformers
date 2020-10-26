@@ -129,11 +129,12 @@ class BertweetTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            normalization=normalization,
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
             sep_token=sep_token,
             cls_token=cls_token,
+            unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
             **kwargs,

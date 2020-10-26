@@ -308,16 +308,13 @@ class GPT2Tokenizer(object):
 
           - We remapped the token ids in our dictionary with regarding to the new special tokens, `[PAD]` => 0, `[CLS]` => 1, `[SEP]` => 2, `[UNK]` => 3, `[MASK]` => 50264
 
-    do_lower_case (:obj:`bool`, optional):
-      Whether to convert inputs to lower case. **Not used in GPT2 tokenizer**.
-
     special_tokens (:obj:`list`, optional):
       List of special tokens to be added to the end of the vocabulary.
 
 
   """
 
-    def __init__(self, vocab_file=None, do_lower_case=True, special_tokens=None):
+    def __init__(self, vocab_file=None, special_tokens=None):
         self.pad_token = "[PAD]"
         self.sep_token = "[SEP]"
         self.unk_token = "[UNK]"
@@ -523,6 +520,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,

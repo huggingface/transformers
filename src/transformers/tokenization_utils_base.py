@@ -1673,7 +1673,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if (
             "tokenizer_file" not in resolved_vocab_files or resolved_vocab_files["tokenizer_file"] is None
         ) and cls.slow_tokenizer_class is not None:
-            slow_tokenizer = cls.slow_tokenizer_class._from_pretrained(
+            slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
                 copy.deepcopy(init_configuration),
