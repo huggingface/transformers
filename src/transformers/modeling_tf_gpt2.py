@@ -668,11 +668,11 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
 @add_start_docstrings(
     """
-The GPT2 Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
-RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
-input embeddings, the classification head takes as input the input of a specified classification token index in the
-input sequence).
-""",
+    The GPT2 Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+    RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
+    input embeddings, the classification head takes as input the input of a specified classification token index in the
+    input sequence).
+    """,
     GPT2_START_DOCSTRING,
 )
 class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):

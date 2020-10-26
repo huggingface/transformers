@@ -511,11 +511,10 @@ class WordpieceTokenizer(object):
 
     def tokenize(self, text):
         """
-        Tokenizes a piece of text into its word pieces.
+        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
+        tokenization using the given vocabulary.
 
-        This uses a greedy longest-match-first algorithm to perform tokenization using the given vocabulary.
-
-        For example: input = "unaffable" output = ["un", "##aff", "##able"]
+        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
 
         Args:
           text: A single token or whitespace separated tokens. This should have

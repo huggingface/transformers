@@ -593,11 +593,11 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
 
 @add_start_docstrings(
     """
-OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
-RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
-input embeddings, the classification head takes as input the input of a specified classification token index in the
-input sequence).
-""",
+    OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+    RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
+    input embeddings, the classification head takes as input the input of a specified classification token index in the
+    input sequence).
+    """,
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):

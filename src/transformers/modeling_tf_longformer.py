@@ -200,16 +200,16 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         training=False,
     ):
         """
-        Get token embeddings of inputs
+        Get token embeddings of inputs.
 
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear"
+            mode: string, a valid value is one of "embedding" and "linear".
 
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; (2) mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size]
+            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
+            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
+            vocab_size].
 
         Raises:
             ValueError: if mode is not valid.
@@ -261,10 +261,10 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
     def _linear(self, inputs):
         """
-        Computes logits by running inputs through a linear layer
+        Computes logits by running inputs through a linear layer.
 
         Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
 
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
@@ -818,13 +818,19 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
     @staticmethod
     def _pad_and_diagonalize(chunked_hidden_states):
         """
-        shift every row 1 step right, converting columns into diagonals
+        shift every row 1 step right, converting columns into diagonals.
 
-        Example: chunked_hidden_states: [ 0.4983, 2.6918, -0.0071, 1.0492, -1.8348, 0.7672, 0.2986, 0.0285, -0.7584,
-        0.4206, -0.0405, 0.1599, 2.0514, -1.1600, 0.5372, 0.2629 ] window_overlap = num_rows = 4 (pad & diagonilize) =>
-        [ 0.4983, 2.6918, -0.0071, 1.0492, 0.0000, 0.0000, 0.0000 0.0000, -1.8348, 0.7672, 0.2986, 0.0285, 0.0000,
-        0.0000 0.0000, 0.0000, -0.7584, 0.4206, -0.0405, 0.1599, 0.0000 0.0000, 0.0000, 0.0000, 2.0514, -1.1600,
-        0.5372, 0.2629 ]
+        Example::
+              chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
+                                       -1.8348,  0.7672,  0.2986,  0.0285,
+                                       -0.7584,  0.4206, -0.0405,  0.1599,
+                                       2.0514, -1.1600,  0.5372,  0.2629 ]
+              window_overlap = num_rows = 4
+             (pad & diagonilize) =>
+             [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
+               0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
+               0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
+               0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = shape_list(chunked_hidden_states)
         paddings = tf.constant([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])

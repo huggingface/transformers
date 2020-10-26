@@ -574,11 +574,18 @@ REGEXPS = (
     r"""(?:\#+[\w_]+[\w\'_\-]*[\w_]+)""",
     # email addresses
     r"""[\w.+-]+@[\w-]+\.(?:[\w-]\.?)+[\w-]""",
+    # docstyle-ignore
     # Remaining word types:
     r"""
-    (?:[^\W\d_](?:[^\W\d_]|['\-_])+[^\W\d_]) # Words with apostrophes or dashes. | (?:[+\-]?\d+[,/.:-]\d+[+\-]?) #
-    Numbers, including fractions, decimals. | (?:[\w_]+) # Words without apostrophes or dashes. | (?:\.(?:\s*\.){1,}) #
-    Ellipsis dots. | (?:\S) # Everything else that isn't whitespace.
+    (?:[^\W\d_](?:[^\W\d_]|['\-_])+[^\W\d_]) # Words with apostrophes or dashes.
+    |
+    (?:[+\-]?\d+[,/.:-]\d+[+\-]?)  # Numbers, including fractions, decimals.
+    |
+    (?:[\w_]+)                     # Words without apostrophes or dashes.
+    |
+    (?:\.(?:\s*\.){1,})            # Ellipsis dots.
+    |
+    (?:\S)                         # Everything else that isn't whitespace.
     """,
 )
 

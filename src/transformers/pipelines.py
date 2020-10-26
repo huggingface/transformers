@@ -241,7 +241,11 @@ class DefaultArgumentHandler(ArgumentHandler):
 class PipelineDataFormat:
     """
     Base class for all the pipeline supported data format both for reading and writing. Supported data formats
-    currently includes: - JSON - CSV - stdin/stdout (pipe)
+    currently includes:
+
+    - JSON
+    - CSV
+    - stdin/stdout (pipe)
 
     :obj:`PipelineDataFormat` also includes some utilities to work with multi-columns like mapping from datasets
     columns to pipelines keyword arguments through the :obj:`dataset_kwarg_1=dataset_column_1` format.

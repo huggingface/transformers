@@ -26,7 +26,17 @@ TEXTUAL_BLOCKS = ["note", "warning"]
 # List of acceptable characters for titles and sections underline.
 TITLE_SPECIAL_CHARS = """= - ` : ' " ~ ^ _ * + # < >""".split(" ")
 # Special words for docstrings (s? means the s is optional)
-DOC_SPECIAL_WORD = ["Args?", "Params?", "Parameters?", "Arguments?", "Examples?", "Usage", "Returns?", "Raises?"]
+DOC_SPECIAL_WORD = [
+    "Args?",
+    "Params?",
+    "Parameters?",
+    "Arguments?",
+    "Examples?",
+    "Usage",
+    "Returns?",
+    "Raises?",
+    "Attributes?",
+]
 
 # Regexes
 # Matches any declaration of textual block, like `.. note::`. (ignore case to avoid writing all versions in the list)
@@ -48,7 +58,7 @@ _re_doc_ignore = re.compile(r"(\.\.|#)\s*docstyle-ignore")
 # Matches the example introduction in docstrings.
 _re_example = re.compile(r"::\s*$")
 # Matches the parameters introduction in docstrings.
-_re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Params|Arguments?|Environment)\s*:\s*$")
+_re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Params|Arguments?|Environment|Attributes?)\s*:\s*$")
 # Matches the return introduction in docstrings.
 _re_return = re.compile(r"^\s*(Returns?|Raises?|Note)\s*:\s*$")
 # Matches any doc special word without an empty line before.
@@ -304,7 +314,8 @@ class DocstringStyler(CodeStyler):
     def is_no_style_block(self, line):
         if _re_example.search(line) is not None:
             return True
-        return super().is_no_style_block(line) is not None
+        return _re_code_block.search(line) is not None
+        # return super().is_no_style_block(line) is not None
 
     def is_comment_or_textual_block(self, line):
         if _re_return.search(line) is not None:

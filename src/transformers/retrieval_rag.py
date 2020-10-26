@@ -585,16 +585,20 @@ class RagRetriever:
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
 
-        Output: :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+        Returns: :class:`~transformers.BatchEncoding`:
+            A :class:`~transformers.BatchEncoding` with the following fields:
 
             - **context_input_ids** -- List of token ids to be fed to a model.
 
-              `What are input IDs? <../glossary.html#input-ids>`__ - **context_attention_mask** -- List of indices
-              specifying which tokens should be attended to by the model (when :obj:`return_attention_mask=True` or if
-              `"attention_mask"` is in :obj:`self.model_input_names`).
+              `What are input IDs? <../glossary.html#input-ids>`__
 
-              `What are attention masks? <../glossary.html#attention-mask>`__ - **retrieved_doc_embeds** -- List of
-              embeddings of the retrieved documents - **doc_ids** -- List of ids of the retrieved documents
+            - **context_attention_mask** -- List of indices specifying which tokens should be attended to by the model
+            (when :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
+
+              `What are attention masks? <../glossary.html#attention-mask>`__
+
+            - **retrieved_doc_embeds** -- List of embeddings of the retrieved documents
+            - **doc_ids** -- List of ids of the retrieved documents
         """
 
         n_docs = n_docs if n_docs is not None else self.n_docs
