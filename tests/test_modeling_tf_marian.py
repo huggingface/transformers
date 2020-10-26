@@ -111,7 +111,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        warnings.simplefilter('error')
+        warnings.simplefilter("error")
         model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
         assert isinstance(model, TFMarianMTModel)
         c = model.config

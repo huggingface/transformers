@@ -238,6 +238,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     return tf_model
 
+
 #####################
 # TF 2.0 => PyTorch #
 #####################

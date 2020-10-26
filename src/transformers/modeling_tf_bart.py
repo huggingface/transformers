@@ -1013,8 +1013,10 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
     authorized_missing_keys = [
         r"final_logits_bias",
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
+    ]
+    authorized_unexpected_keys = [
+        r"model.encoder.embed_tokens.weight",
+        r"model.decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BartConfig, *args, **kwargs):
@@ -1022,7 +1024,8 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         self.model = TFBartModel(config, name="model")
         self.use_cache = config.use_cache
         self.final_logits_bias = self.add_weight(
-            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=True
+            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+            # final_bias_logits is registered as a buffer in pytorch, so not trainable.
         )
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)

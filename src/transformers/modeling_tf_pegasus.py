@@ -34,12 +34,8 @@ logger = logging.get_logger(__name__)
 class TFPegasusForConditionalGeneration(TFBartForConditionalGeneration):
     authorized_missing_keys = [
         r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
+        r"model.encoder.embed_positions.weight",
+        r"model.decoder.embed_positions.weight",
     ]
     config_class = PegasusConfig
     # All the code is in src/transformers/modeling_tf_bart.py

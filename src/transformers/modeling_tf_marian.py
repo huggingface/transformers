@@ -33,17 +33,16 @@ logger = logging.get_logger(__name__)
 @add_start_docstrings("Marian model for machine translation", START_DOCSTRING)
 class TFMarianMTModel(TFBartForConditionalGeneration):
     authorized_missing_keys = [
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
-    ]
-    authorized_unexpected_keys = [
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
+        r"model.encoder.embed_positions.weight",
+        r"model.decoder.embed_positions.weight",
     ]
     config_class = MarianConfig
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
+        """Never predict pad_token_id. Predict </s> when max_length is reached."""
         self._force_token_id_to_be_generated(logits, self.config.pad_token_id, inverted=True)
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             logits = self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
         return logits
+
+    # All the code is in src/transformers/modeling_tf_bart.py
