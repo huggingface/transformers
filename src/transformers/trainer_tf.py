@@ -10,6 +10,8 @@ import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
+from tensorflow.python.keras.callbacks import EarlyStopping, CSVLogger
+from tensorflow.python.keras import callbacks as callbacks_module
 
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
@@ -71,6 +73,7 @@ class TFTrainer:
         args: TFTrainingArguments,
         train_dataset: Optional[tf.data.Dataset] = None,
         eval_dataset: Optional[tf.data.Dataset] = None,
+        callbacks = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional[tf.summary.SummaryWriter] = None,
         optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (
@@ -88,6 +91,7 @@ class TFTrainer:
         self.args = args
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.callbacks = callbacks
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
         self.gradient_accumulator = GradientAccumulator()
@@ -473,6 +477,9 @@ class TFTrainer:
         """
         train_ds = self.get_train_tfdataset()
 
+        # Set the calbback
+        callbacks = self.callbacks
+
         if self.args.debug:
             tf.summary.trace_on(graph=True, profiler=True)
 
@@ -551,15 +558,29 @@ class TFTrainer:
             self.train_loss = tf.keras.metrics.Sum()
             start_time = datetime.datetime.now()
 
-            # Initialise patience arguments
-            patience_best_eval_loss = None
-            patience_evals_without_improvement = 0
-            patience_should_stop = False
+            # Container that configures and calls `tf.keras.Callback`s.
+            if not isinstance(callbacks, callbacks_module.CallbackList):
+                callbacks = callbacks_module.CallbackList(
+                    callbacks,
+                    add_history=True,
+                    add_progbar=1 != 0,
+                    model=self.model,
+                    verbose=1,
+                    epochs=epochs,
+                    steps=t_total)
+
+            # Set the stop_training flag to false
+            self.model.stop_training = False
+
+            # Initialise callback
+            callbacks.on_train_begin()
 
             for epoch_iter in range(epochs_trained, int(epochs)):
                 # Reset the past mems state at the beginning of each epoch if necessary.
                 if self.args.past_index >= 0:
                     self._past = None
+
+                callbacks.on_epoch_begin(epoch_iter)
 
                 for step, batch in enumerate(train_ds):
 
@@ -568,6 +589,8 @@ class TFTrainer:
                         steps_trained_in_current_epoch -= 1
                         continue
 
+                    callbacks.on_train_batch_begin(step)
+                    
                     self.distributed_training_steps(batch)
 
                     self.global_step = iterations.numpy()
@@ -610,31 +633,21 @@ class TFTrainer:
 
                         logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
 
+                    callbacks.on_train_batch_end(step, logs)
+
                     if self.args.max_steps > 0 and self.global_step >= t_total:
                         break
 
                     if self.global_step % self.steps_per_epoch == 0:
                         break
-
+                
+                callbacks.on_epoch_end(epoch_iter, logs)
                 self.train_loss.reset_states()
 
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                     break
 
-                if self.args.patience > 0:
-                    # Keep track of best loss to determine if we should stop early
-
-                    eval_loss = training_loss.numpy()
-                    if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
-                        patience_evals_without_improvement = 0
-                        patience_best_eval_loss = eval_loss
-                    else:
-                        patience_evals_without_improvement += 1
-                        if patience_evals_without_improvement >= self.args.patience:
-                            patience_should_stop = True
-                            logger.info(f"Patience threshold ({self.args.patience}) exceeded, stopping training")
-
-                if patience_should_stop:
+                if self.model.stop_training:
                     break
 
             end_time = datetime.datetime.now()
@@ -644,6 +657,8 @@ class TFTrainer:
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
+
+        callbacks.on_train_end(logs=logs)
 
     def training_step(self, features, labels, nb_instances_in_global_batch):
         """
