@@ -761,8 +761,8 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Albert Model with two heads on top for pre-training:
-    a `masked language modeling` head and a `sentence order prediction` (classification) head.
+    Albert Model with two heads on top for pre-training: a `masked language modeling` head and a `sentence order
+    prediction` (classification) head.
     """,
     ALBERT_START_DOCSTRING,
 )

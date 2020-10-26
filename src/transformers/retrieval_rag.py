@@ -585,8 +585,8 @@ class RagRetriever:
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
 
-        Returns: :class:`~transformers.BatchEncoding`:
-            A :class:`~transformers.BatchEncoding` with the following fields:
+        Returns: :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following
+        fields:
 
             - **context_input_ids** -- List of token ids to be fed to a model.
 

@@ -98,8 +98,8 @@ class Embeddings(nn.Module):
         Parameters:
             input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
 
-        Returns: torch.tensor(bs, max_seq_length, dim)
-            The embedded tokens (plus position embeddings, no token_type embeddings)
+        Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
+        embeddings)
         """
         seq_length = input_ids.size(1)
         position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
@@ -155,9 +155,8 @@ class MultiHeadSelfAttention(nn.Module):
             mask: torch.tensor(bs, seq_length)
 
         Returns:
-            weights: torch.tensor(bs, n_heads, seq_length, seq_length)
-            Attention weights context: torch.tensor(bs, seq_length, dim)
-            Contextualized layer. Optional: only if `output_attentions=True`
+            weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
+            seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = query.size()
         k_length = key.size(1)
@@ -245,8 +244,8 @@ class TransformerBlock(nn.Module):
             attn_mask: torch.tensor(bs, seq_length)
 
         Returns:
-            sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights
-            ffn_output: torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
+            sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
+            torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
         # Self-Attention
         sa_output = self.attention(

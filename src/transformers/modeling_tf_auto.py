@@ -337,9 +337,9 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 
 TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
-        The model class to instantiate is selected based on the :obj:`model_type` property of the config object
-        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+        The model class to instantiate is selected based on the :obj:`model_type` property of the config object (either
+        passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's missing,
+        by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
 
         List options
 
@@ -393,12 +393,10 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (:obj:`Dict[str, str], `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
-                messages.
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -422,8 +420,8 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
 class TFAutoModel(object):
     r"""
-    This is a generic model class that will be instantiated as one of the base model classes of the library
-    when created with the when created with the :meth:`~transformers.TFAutoModel.from_pretrained` class method or the
+    This is a generic model class that will be instantiated as one of the base model classes of the library when
+    created with the when created with the :meth:`~transformers.TFAutoModel.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModel.from_config` class methods.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
@@ -443,9 +441,8 @@ class TFAutoModel(object):
         Instantiates one of the base model classes of the library from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.TFAutoModel.from_pretrained` to load
-            the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModel.from_pretrained` to load the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -537,9 +534,9 @@ class TFAutoModelForPreTraining(object):
         model---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.TFAutoModelForPreTraining.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForPreTraining.from_pretrained` to load the
+            model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -637,9 +634,9 @@ class TFAutoModelWithLMHead(object):
         Instantiates one of the model classes of the library---with a language modeling head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.TFAutoModelWithLMHead.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelWithLMHead.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -721,8 +718,8 @@ class TFAutoModelWithLMHead(object):
 
 class TFAutoModelForCausalLM:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    causal language modeling head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a causal
+    language modeling head---when created with the when created with the
     :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForCausalLM.from_config` class method.
 
@@ -744,9 +741,9 @@ class TFAutoModelForCausalLM:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -815,8 +812,8 @@ class TFAutoModelForCausalLM:
 
 class TFAutoModelForMaskedLM:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    masked language modeling head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
+    language modeling head---when created with the when created with the
     :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForMasedLM.from_config` class method.
 
@@ -838,9 +835,9 @@ class TFAutoModelForMaskedLM:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -932,9 +929,9 @@ class TFAutoModelForSeq2SeqLM:
         head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1030,9 +1027,9 @@ class TFAutoModelForSequenceClassification(object):
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.TFAutoModelForSequenceClassification.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForSequenceClassification.from_pretrained` to
+            load the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1127,9 +1124,9 @@ class TFAutoModelForQuestionAnswering(object):
         Instantiates one of the model classes of the library---with a question answering head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.TFAutoModelForQuestionAnswering.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForQuestionAnswering.from_pretrained` to load
+            the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1202,8 +1199,8 @@ class TFAutoModelForQuestionAnswering(object):
 
 class TFAutoModelForTokenClassification:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    token classification head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a token
+    classification head---when created with the when created with the
     :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForTokenClassification.from_config` class method.
 
@@ -1224,9 +1221,9 @@ class TFAutoModelForTokenClassification:
         Instantiates one of the model classes of the library---with a token classification head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained` to load
+            the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1322,9 +1319,9 @@ class TFAutoModelForMultipleChoice:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.TFAutoModelForMultipleChoice.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForMultipleChoice.from_pretrained` to load the
+            model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):

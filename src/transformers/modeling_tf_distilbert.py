@@ -208,8 +208,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
             mask: tf.Tensor(bs, seq_length)
 
         Returns:
-            weights: tf.Tensor(bs, n_heads, seq_length, seq_length) Attention weights
-            context: tf.Tensor(bs, seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
+            weights: tf.Tensor(bs, n_heads, seq_length, seq_length) Attention weights context: tf.Tensor(bs,
+            seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
@@ -306,9 +306,8 @@ class TFTransformerBlock(tf.keras.layers.Layer):
             x: tf.Tensor(bs, seq_length, dim)
             attn_mask: tf.Tensor(bs, seq_length)
 
-        Outputs:
-            sa_weights: tf.Tensor(bs, n_heads, seq_length, seq_length) The attention weights
-            ffn_output: tf.Tensor(bs, seq_length, dim) The output of the transformer block contextualization.
+        Outputs: sa_weights: tf.Tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
+        tf.Tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
         # Self-Attention
         sa_output = self.attention(x, x, x, attn_mask, head_mask, output_attentions, training=training)
