@@ -3,6 +3,7 @@ language: en
 license: apache-2.0
 datasets:
 - wiki_dpr
+thumbnail: https://huggingface.co/front/thumbnails/facebook.png
 ---
 ## RAG
 

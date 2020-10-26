@@ -70,7 +70,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
 
         self.padding_idx = 1
         self.vocab_size = config.vocab_size

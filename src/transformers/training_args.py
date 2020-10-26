@@ -67,7 +67,7 @@ class TrainingArguments:
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for evaluation.
-        gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
+        gradient_accumulation_steps (:obj:`int`, `optional`, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
             .. warning::
@@ -75,6 +75,10 @@ class TrainingArguments:
                 When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
                 logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
                 examples.
+        eval_accumulation_steps (:obj:`int`, `optional`):
+            Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
+            left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
+            requires more memory).
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
@@ -187,7 +191,7 @@ class TrainingArguments:
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
-        default=None,
+        default=False,
         metadata={"help": "Run evaluation during training at each logging step."},
     )
     evaluation_strategy: EvaluationStrategy = field(
@@ -224,6 +228,10 @@ class TrainingArguments:
     gradient_accumulation_steps: int = field(
         default=1,
         metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
+    )
+    eval_accumulation_steps: Optional[int] = field(
+        default=None,
+        metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
@@ -342,6 +350,9 @@ class TrainingArguments:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
         if self.run_name is None:
             self.run_name = self.output_dir
+
+        if self.device.type != "cuda" and self.fp16:
+            raise ValueError("AMP (`--fp16`) can only be used on CUDA devices.")
 
     @property
     def train_batch_size(self) -> int:

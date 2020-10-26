@@ -35,12 +35,15 @@ _CONFIG_FOR_DOC = "DPRConfig"
 
 DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-ctx_encoder-single-nq-base",
+    "facebook/dpr-ctx_encoder-multiset-base",
 ]
 DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-question_encoder-single-nq-base",
+    "facebook/dpr-question_encoder-multiset-base",
 ]
 DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-reader-single-nq-base",
+    "facebook/dpr-reader-multiset-base",
 ]
 
 

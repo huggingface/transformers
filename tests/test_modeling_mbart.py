@@ -2,9 +2,10 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_modeling_bart import TOLERANCE, _long_tensor, assert_tensors_close
+from .test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():
@@ -24,6 +25,39 @@ RO_CODE = 250020
 
 
 @require_torch
+class ModelTester:
+    def __init__(self, parent):
+        self.config = MBartConfig(
+            vocab_size=99,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+            add_final_layer_norm=True,
+            return_dict=True,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        return self.config, {}
+
+
+@require_torch
+class SelectiveCommonTest(unittest.TestCase):
+    all_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
+
+    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+
+    def setUp(self):
+        self.model_tester = ModelTester(self)
+
+
+@require_torch
+@require_sentencepiece
+@require_tokenizers
 class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
     maxDiff = 1000  # longer string compare tracebacks
     checkpoint_name = None
@@ -43,6 +77,8 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-en-ro"
     src_text = [
@@ -134,6 +170,8 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-cc25"
     src_text = [

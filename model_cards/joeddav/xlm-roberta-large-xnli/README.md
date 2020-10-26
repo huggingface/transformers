@@ -5,11 +5,17 @@ tags:
 - pytorch
 - tensorflow
 datasets:
-- mnli
+- multi_nli
 - xnli
-widget:
-- text: "За кого вы голосуете в 2020 году? <sep> This text is about politique."
 license: mit
+pipeline_tag: zero-shot-classification
+widget:
+- text: "За кого вы голосуете в 2020 году?"
+  labels: "politique étrangère, Europe, élections, affaires, politique"
+- text: "لمن تصوت في 2020؟"
+  labels: "السياسة الخارجية, أوروبا, الانتخابات, الأعمال, السياسة"
+- text: "2020'de kime oy vereceksiniz?"
+  labels: "dış politika, Avrupa, seçimler, ticaret, siyaset"
 ---
 
 # xlm-roberta-large-xnli
@@ -115,4 +121,3 @@ This model was pre-trained on set of 100 languages, as described in
 MNLI train set and the XNLI validation and test sets. Finally, it was trained for one additional epoch on only XNLI
 data where the translations for the premise and hypothesis are shuffled such that the premise and hypothesis for
 each example come from the same original English example but the premise and hypothesis are of different languages.
-

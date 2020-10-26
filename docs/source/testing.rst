@@ -22,12 +22,12 @@ How transformers are tested
 
    * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__: runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards, notebooks, etc.)
      
-   * `self-hosted runner <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs slow tests on ``tests`` and ``examples``:
+   * `self-hosted runner <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs normal and slow tests on GPU in ``tests`` and ``examples``:
 
    .. code-block:: bash
 
-    RUN_SLOW=1 USE_CUDA=1 pytest tests/
-    RUN_SLOW=1 USE_CUDA=1 pytest examples/
+    RUN_SLOW=1 pytest tests/
+    RUN_SLOW=1 pytest examples/
 
    The results can be observed `here <https://github.com/huggingface/transformers/actions>`__.
 
@@ -393,36 +393,53 @@ On a GPU-enabled setup, to test in CPU-only mode add ``CUDA_VISIBLE_DEVICES=""``
                 
     CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
 
-or if you have multiple gpus, you can tell which one to use in this test session, e.g. to use only the second gpu if you have gpus ``0`` and ``1``, you can run:
+or if you have multiple gpus, you can specify which one is to be used by ``pytest``. For example, to use only the second gpu if you have gpus ``0`` and ``1``, you can run:
 
 .. code-block:: bash
                 
     CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
 
 This is handy when you want to run different tasks on different GPUs.
-    
-And we have these decorators that require the condition described by the marker.
 
-``
-@require_torch
-@require_tf
-@require_multigpu
-@require_non_multigpu
-@require_torch_tpu
-@require_torch_and_cuda
-``
+Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+
+* ``require_torch`` - this test will run only under torch
+* ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
+* ``require_torch_multigpu`` - as ``require_torch`` plus requires at least 2 GPUs
+* ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
+
+For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
+
+.. code-block:: python
+
+    @require_torch_multigpu
+    def test_example_with_multigpu():
+
+If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
+
+.. code-block:: python
+
+    @require_tf
+    def test_tf_thing_with_tensorflow():
+
+These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is how to set it up:
+
+.. code-block:: python
+
+    @require_torch_gpu
+    @slow
+    def test_example_slow_on_gpu():
 
 Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
     @parameterized.expand(...)
-    @require_multigpu
+    @require_torch_multigpu
     def test_integration_foo():
-    
-There is no problem whatsoever with ``@pytest.mark.parametrize`` (but it only works with non-unittests) - can use it in any order.
 
-This section will be expanded soon once our work in progress on those decorators is finished.
+This order problem doesn't exist with ``@pytest.mark.parametrize``, you can put it first or last and it will still work. But it only works with non-unittests.
 
 Inside tests:
 
@@ -748,12 +765,10 @@ or skip the whole module:
 
 More details, example and ways are `here <https://docs.pytest.org/en/latest/skipping.html>`__.
 
-Custom markers
+Slow tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* Slow tests
-
-Tests that are too slow (e.g. once downloading huge model files) are marked with:
+The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be marked as in the example below:
 
 .. code-block:: python
 
@@ -761,19 +776,45 @@ Tests that are too slow (e.g. once downloading huge model files) are marked with
     @slow
     def test_integration_foo():
 
-To run such tests set ``RUN_SLOW=1`` env var, e.g.:
+Once a test is marked as ``@slow``, to run such tests set ``RUN_SLOW=1`` env var, e.g.:
 
 .. code-block:: bash
 
     RUN_SLOW=1 pytest tests
     
-Some decorators like ``@parametrized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
+Some decorators like ``@parameterized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
     @parameterized.expand(...)
     @slow
     def test_integration_foo():
+
+As explained at the beginning of this document, slow tests get to run on a scheduled basis, rather than in PRs CI checks. So it's possible that some problems will be missed during a PR submission and get merged. Such problems will get caught during the next scheduled CI job. But it also means that it's important to run the slow tests on your machine before submitting the PR.
+
+Here is a rough decision making mechanism for choosing which tests should be marked as slow:
+
+If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files, pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library, such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine this approach we should have exceptions:
+
+* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to do a training not specifically optimized to be fast should be set to slow.
+* We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked as ``@slow``.
+* If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
+
+Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast.
+For example, a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc.
+Then the ``@slow`` tests can use large slow models to do qualitative testing. To see the use of these simply look for *tiny* models with:
+
+.. code-block:: bash
+
+    grep tiny tests examples
+
+Here is a an example of a `script <https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your specific model's architecture.
+
+It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
+
+That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast. If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest tests.
+
 
 Testing the stdout/stderr output
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

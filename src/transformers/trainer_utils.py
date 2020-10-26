@@ -16,12 +16,13 @@
 Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
 """
 
+import copy
 import random
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import is_tf_available, is_torch_available
+from .file_utils import is_tf_available, is_torch_available, is_torch_tpu_available
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -110,6 +111,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     Return:
         :obj:`float`: The objective to minimize or maximize
     """
+    metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -150,3 +152,30 @@ default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
 }
+
+
+def is_main_process(local_rank):
+    """
+    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    `local_rank`.
+    """
+    if is_torch_tpu_available():
+        import torch_xla.core.xla_model as xm
+
+        return xm.get_ordinal() == 0
+    return local_rank in [-1, 0]
+
+
+def total_processes_number(local_rank):
+    """
+    Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
+    """
+    if is_torch_tpu_available():
+        import torch_xla.core.xla_model as xm
+
+        return xm.xrt_world_size()
+    elif local_rank != -1 and is_torch_available():
+        import torch
+
+        return torch.distributed.get_world_size()
+    return 1
