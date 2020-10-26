@@ -12,17 +12,26 @@ There are 2 test suites in the repository:
 How transformers are tested
 -----------------------------------------------------------------------------------------------------------------------
 
-1. Once a PR is submitted it gets tested with 9 CircleCi jobs. Every new commit to that PR gets retested. These jobs are defined in this `config file <https://github.com/huggingface/transformers/blob/master/.circleci/config.yml>`__, so that if needed you can reproduce the same environment on your machine.
-   
+1. Once a PR is submitted it gets tested with 9 CircleCi jobs. Every new commit to that PR gets retested. These jobs
+   are defined in this `config file <https://github.com/huggingface/transformers/blob/master/.circleci/config.yml>`__,
+   so that if needed you can reproduce the same environment on your machine.
+
    These CI jobs don't run ``@slow`` tests.
-   
+
 2. There are 3 jobs run by `github actions <https://github.com/huggingface/transformers/actions>`__:
 
-   * `torch hub integration <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__:  checks whether torch hub integration works.
+   * `torch hub integration
+     <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__: checks
+     whether torch hub integration works.
 
-   * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__: runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards, notebooks, etc.)
-     
-   * `self-hosted runner <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs normal and slow tests on GPU in ``tests`` and ``examples``:
+   * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__:
+     runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code
+     in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards,
+     notebooks, etc.)
+
+   * `self-hosted runner
+     <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs normal and
+     slow tests on GPU in ``tests`` and ``examples``:
 
    .. code-block:: bash
 
@@ -43,7 +52,8 @@ Running tests
 Choosing which tests to run
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This document goes into many details of how tests can be run. If after reading everything, you need even more details you will find them `here <https://docs.pytest.org/en/latest/usage.html>`__.
+This document goes into many details of how tests can be run. If after reading everything, you need even more details
+you will find them `here <https://docs.pytest.org/en/latest/usage.html>`__.
 
 Here are some most useful ways of running tests.
 
@@ -90,7 +100,7 @@ All tests of a given test file:
    pytest tests/test_optimization.py --collect-only -q
 
 
-   
+
 Run a specific test module
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -99,12 +109,13 @@ To run an individual test module:
 .. code-block:: bash
 
    pytest tests/test_logging.py
-   
+
 
 Run specific tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Since unittest is used inside most of the tests, to run specific subtests you need to know the name of the unittest class containing those tests. For example, it could be:
+Since unittest is used inside most of the tests, to run specific subtests you need to know the name of the unittest
+class containing those tests. For example, it could be:
 
 .. code-block:: bash
 
@@ -131,7 +142,7 @@ As mentioned earlier you can see what tests are contained inside the ``Optimizat
 
    pytest tests/test_optimization.py::OptimizationTest --collect-only -q
 
-  
+
 You can run tests by keyword expressions.
 
 To run only tests whose name contains ``adam``:
@@ -158,7 +169,9 @@ And you can combine the two patterns in one:
 Run only modified tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can run the tests related to the unstaged files or the current branch (according to Git) by using `pytest-picked <https://github.com/anapaulagomes/pytest-picked>`__. This is a great way of quickly testing your changes didn't break anything, since it won't run the tests related to files you didn't touch.
+You can run the tests related to the unstaged files or the current branch (according to Git) by using `pytest-picked
+<https://github.com/anapaulagomes/pytest-picked>`__. This is a great way of quickly testing your changes didn't break
+anything, since it won't run the tests related to files you didn't touch.
 
 .. code-block:: bash
 
@@ -168,17 +181,14 @@ You can run the tests related to the unstaged files or the current branch (accor
 
     pytest --picked
 
-All tests will be run from files and folders which are modified, but not
-yet committed.
+All tests will be run from files and folders which are modified, but not yet committed.
 
 Automatically rerun failed tests on source modification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`pytest-xdist <https://github.com/pytest-dev/pytest-xdist>`__ provides a
-very useful feature of detecting all failed tests, and then waiting for
-you to modify files and continuously re-rerun those failing tests until
-they pass while you fix them. So that you don't need to re start pytest
-after you made the fix. This is repeated until all tests pass after
+`pytest-xdist <https://github.com/pytest-dev/pytest-xdist>`__ provides a very useful feature of detecting all failed
+tests, and then waiting for you to modify files and continuously re-rerun those failing tests until they pass while you
+fix them. So that you don't need to re start pytest after you made the fix. This is repeated until all tests pass after
 which again a full run is performed.
 
 .. code-block:: bash
@@ -187,10 +197,9 @@ which again a full run is performed.
 
 To enter the mode: ``pytest -f`` or ``pytest --looponfail``
 
-File changes are detected by looking at ``looponfailroots`` root
-directories and all of their contents (recursively). If the default for
-this value does not work for you, you can change it in your project by
-setting a configuration option in ``setup.cfg``:
+File changes are detected by looking at ``looponfailroots`` root directories and all of their contents (recursively).
+If the default for this value does not work for you, you can change it in your project by setting a configuration
+option in ``setup.cfg``:
 
 .. code-block:: ini
 
@@ -204,17 +213,17 @@ or ``pytest.ini``/``tox.ini`` files:
     [pytest]
     looponfailroots = transformers tests
 
-This would lead to only looking for file changes in the respective
-directories, specified relatively to the ini-file’s directory.
+This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file’s
+directory.
 
-`pytest-watch <https://github.com/joeyespo/pytest-watch>`__ is an
-alternative implementation of this functionality.
+`pytest-watch <https://github.com/joeyespo/pytest-watch>`__ is an alternative implementation of this functionality.
 
 
 Skip a test module
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you want to run all test modules, except a few you can exclude them by giving an explicit list of tests to run. For example, to run all except ``test_modeling_*.py`` tests:
+If you want to run all test modules, except a few you can exclude them by giving an explicit list of tests to run. For
+example, to run all except ``test_modeling_*.py`` tests:
 
 .. code-block:: bash
 
@@ -224,8 +233,7 @@ If you want to run all test modules, except a few you can exclude them by giving
 Clearing state
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CI builds and when isolation is important (against speed), cache should
-be cleared:
+CI builds and when isolation is important (against speed), cache should be cleared:
 
 .. code-block:: bash
 
@@ -234,24 +242,23 @@ be cleared:
 Running tests in parallel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As mentioned earlier ``make test`` runs tests in parallel via ``pytest-xdist`` plugin (``-n X`` argument, e.g. ``-n 2`` to run 2 parallel jobs).
+As mentioned earlier ``make test`` runs tests in parallel via ``pytest-xdist`` plugin (``-n X`` argument, e.g. ``-n 2``
+to run 2 parallel jobs).
 
-``pytest-xdist``'s ``--dist=`` option allows one to control how the tests are grouped. ``--dist=loadfile`` puts the tests located in one file onto the same process.
+``pytest-xdist``'s ``--dist=`` option allows one to control how the tests are grouped. ``--dist=loadfile`` puts the
+tests located in one file onto the same process.
 
-Since the order of executed tests is different and unpredictable, if
-running the test suite with ``pytest-xdist`` produces failures (meaning
-we have some undetected coupled tests), use
-`pytest-replay <https://github.com/ESSS/pytest-replay>`__ to replay the
-tests in the same order, which should help with then somehow reducing
-that failing sequence to a minimum.
+Since the order of executed tests is different and unpredictable, if running the test suite with ``pytest-xdist``
+produces failures (meaning we have some undetected coupled tests), use `pytest-replay
+<https://github.com/ESSS/pytest-replay>`__ to replay the tests in the same order, which should help with then somehow
+reducing that failing sequence to a minimum.
 
 Test order and repetition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-It's good to repeat the tests several times, in sequence, randomly, or
-in sets, to detect any potential inter-dependency and state-related bugs
-(tear down). And the straightforward multiple repetition is just good to
-detect some problems that get uncovered by randomness of DL.
+It's good to repeat the tests several times, in sequence, randomly, or in sets, to detect any potential
+inter-dependency and state-related bugs (tear down). And the straightforward multiple repetition is just good to detect
+some problems that get uncovered by randomness of DL.
 
 
 Repeat tests
@@ -268,10 +275,10 @@ And then run every test multiple times (50 by default):
 .. code-block:: bash
 
    pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
-   
+
 .. note::
    This plugin doesn't work with ``-n`` flag from ``pytest-xdist``.
-   
+
 .. note::
    There is another plugin ``pytest-repeat``, but it doesn't work with ``unittest``.
 
@@ -283,14 +290,11 @@ Run tests in a random order
 
     pip install pytest-random-order
 
-Important: the presence of ``pytest-random-order`` will automatically
-randomize tests, no configuration change or command line options is
-required.
+Important: the presence of ``pytest-random-order`` will automatically randomize tests, no configuration change or
+command line options is required.
 
-As explained earlier this allows detection of coupled tests - where one
-test's state affects the state of another. When ``pytest-random-order``
-is installed it will print the random seed it used for that session,
-e.g:
+As explained earlier this allows detection of coupled tests - where one test's state affects the state of another. When
+``pytest-random-order`` is installed it will print the random seed it used for that session, e.g:
 
 .. code-block:: bash
 
@@ -299,8 +303,7 @@ e.g:
    Using --random-order-bucket=module
    Using --random-order-seed=573663
 
-So that if the given particular sequence fails, you can reproduce it by
-adding that exact seed, e.g.:
+So that if the given particular sequence fails, you can reproduce it by adding that exact seed, e.g.:
 
 .. code-block:: bash
 
@@ -309,11 +312,9 @@ adding that exact seed, e.g.:
    Using --random-order-bucket=module
    Using --random-order-seed=573663
 
-It will only reproduce the exact order if you use the exact same list of
-tests (or no list at all). Once you start to manually narrowing
-down the list you can no longer rely on the seed, but have to list them
-manually in the exact order they failed and tell pytest to not randomize
-them instead using ``--random-order-bucket=none``, e.g.:
+It will only reproduce the exact order if you use the exact same list of tests (or no list at all). Once you start to
+manually narrowing down the list you can no longer rely on the seed, but have to list them manually in the exact order
+they failed and tell pytest to not randomize them instead using ``--random-order-bucket=none``, e.g.:
 
 .. code-block:: bash
 
@@ -325,12 +326,13 @@ To disable the shuffling for all tests:
 
     pytest --random-order-bucket=none
 
-By default ``--random-order-bucket=module`` is implied, which will
-shuffle the files on the module levels. It can also shuffle on
-``class``, ``package``, ``global`` and ``none`` levels. For the complete
-details please see its `documentation <https://github.com/jbasko/pytest-random-order>`__.
+By default ``--random-order-bucket=module`` is implied, which will shuffle the files on the module levels. It can also
+shuffle on ``class``, ``package``, ``global`` and ``none`` levels. For the complete details please see its
+`documentation <https://github.com/jbasko/pytest-random-order>`__.
 
-Another randomization alternative is: ``pytest-randomly`` <https://github.com/pytest-dev/pytest-randomly>`__. This module has a very similar functionality/interface, but it doesn't have the bucket modes available in ``pytest-random-order``. It has the same problem of imposing itself once installed.
+Another randomization alternative is: ``pytest-randomly`` <https://github.com/pytest-dev/pytest-randomly>`__. This
+module has a very similar functionality/interface, but it doesn't have the bucket modes available in
+``pytest-random-order``. It has the same problem of imposing itself once installed.
 
 Look and feel variations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -338,13 +340,11 @@ Look and feel variations
 pytest-sugar
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-`pytest-sugar <https://github.com/Frozenball/pytest-sugar>`__ is a
-plugin that improves the look-n-feel, adds a progressbar, and show tests
-that fail and the assert instantly. It gets activated automatically upon
-installation.
+`pytest-sugar <https://github.com/Frozenball/pytest-sugar>`__ is a plugin that improves the look-n-feel, adds a
+progressbar, and show tests that fail and the assert instantly. It gets activated automatically upon installation.
 
 .. code-block:: bash
-                
+
    pip install pytest-sugar
 
 To run tests without it, run:
@@ -360,8 +360,7 @@ or uninstall it.
 Report each sub-test name and its progress
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For a single or a group of tests via ``pytest`` (after
-``pip install pytest-pspec``):
+For a single or a group of tests via ``pytest`` (after ``pip install pytest-pspec``):
 
 .. code-block:: bash
 
@@ -372,9 +371,8 @@ For a single or a group of tests via ``pytest`` (after
 Instantly shows failed tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-`pytest-instafail <https://github.com/pytest-dev/pytest-instafail>`__
-shows failures and errors instantly instead of waiting until the end of
-test session.
+`pytest-instafail <https://github.com/pytest-dev/pytest-instafail>`__ shows failures and errors instantly instead of
+waiting until the end of test session.
 
 .. code-block:: bash
 
@@ -390,18 +388,20 @@ To GPU or not to GPU
 On a GPU-enabled setup, to test in CPU-only mode add ``CUDA_VISIBLE_DEVICES=""``:
 
 .. code-block:: bash
-                
+
     CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
 
-or if you have multiple gpus, you can specify which one is to be used by ``pytest``. For example, to use only the second gpu if you have gpus ``0`` and ``1``, you can run:
+or if you have multiple gpus, you can specify which one is to be used by ``pytest``. For example, to use only the
+second gpu if you have gpus ``0`` and ``1``, you can run:
 
 .. code-block:: bash
-                
+
     CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
 
 This is handy when you want to run different tasks on different GPUs.
 
-Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip
+decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 
 * ``require_torch`` - this test will run only under torch
 * ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
@@ -423,7 +423,8 @@ If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
     @require_tf
     def test_tf_thing_with_tensorflow():
 
-These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is how to set it up:
+These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
+how to set it up:
 
 .. code-block:: python
 
@@ -431,7 +432,8 @@ These decorators can be stacked. For example, if a test is slow and requires at 
     @slow
     def test_example_slow_on_gpu():
 
-Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed last for them to work correctly. Here is an example of the correct usage:
+Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_*`` skip decorators have to be listed
+last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
@@ -439,7 +441,8 @@ Some decorators like ``@parametrized`` rewrite test names, therefore ``@require_
     @require_torch_multigpu
     def test_integration_foo():
 
-This order problem doesn't exist with ``@pytest.mark.parametrize``, you can put it first or last and it will still work. But it only works with non-unittests.
+This order problem doesn't exist with ``@pytest.mark.parametrize``, you can put it first or last and it will still
+work. But it only works with non-unittests.
 
 Inside tests:
 
@@ -450,16 +453,22 @@ Inside tests:
    torch.cuda.device_count()
 
 
-   
+
 Distributed training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``pytest`` can't deal with distributed training directly. If this is attempted - the sub-processes don't do the right thing and end up thinking they are ``pytest`` and start running the test suite in loops. It works, however, if one spawns a normal process that then spawns off multiple workers and manages the IO pipes.
+``pytest`` can't deal with distributed training directly. If this is attempted - the sub-processes don't do the right
+thing and end up thinking they are ``pytest`` and start running the test suite in loops. It works, however, if one
+spawns a normal process that then spawns off multiple workers and manages the IO pipes.
 
 This is still under development but you can study 2 different tests that perform this successfully:
 
-* `test_seq2seq_examples_multi_gpu.py <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_seq2seq_examples_multi_gpu.py>`__ - a ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default) 
-* `test_finetune_trainer.py <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal (non-PL) test
+* `test_seq2seq_examples_multi_gpu.py
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_seq2seq_examples_multi_gpu.py>`__ - a
+  ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default)
+* `test_finetune_trainer.py
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal
+  (non-PL) test
 
 To jump right into the execution point, search for the ``execute_async_std`` function in those tests.
 
@@ -474,12 +483,10 @@ You will need at least 2 GPUs to see these tests in action:
 Output capture
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-During test execution any output sent to ``stdout`` and ``stderr`` is
-captured. If a test or a setup method fails, its according captured
-output will usually be shown along with the failure traceback.
+During test execution any output sent to ``stdout`` and ``stderr`` is captured. If a test or a setup method fails, its
+according captured output will usually be shown along with the failure traceback.
 
-To disable output capturing and to get the ``stdout`` and ``stderr``
-normally, use ``-s`` or ``--capture=no``:
+To disable output capturing and to get the ``stdout`` and ``stderr`` normally, use ``-s`` or ``--capture=no``:
 
 .. code-block:: bash
 
@@ -512,9 +519,8 @@ Creating a URL for each test failure:
 
    pytest --pastebin=failed tests/test_logging.py
 
-This will submit test run information to a remote Paste service and
-provide a URL for each failure. You may select tests as usual or add for
-example -x if you only want to send one particular failure.
+This will submit test run information to a remote Paste service and provide a URL for each failure. You may select
+tests as usual or add for example -x if you only want to send one particular failure.
 
 Creating a URL for a whole test session log:
 
@@ -527,18 +533,22 @@ Creating a URL for a whole test session log:
 Writing tests
 -----------------------------------------------------------------------------------------------------------------------
 
-🤗 transformers tests are based on ``unittest``, but run by ``pytest``, so most of the time features from both systems can be used.
+🤗 transformers tests are based on ``unittest``, but run by ``pytest``, so most of the time features from both systems
+can be used.
 
-You can read `here <https://docs.pytest.org/en/stable/unittest.html>`__ which features are supported, but the important thing to remember is that most ``pytest`` fixtures don't work. Neither parametrization, but we use the module ``parameterized`` that works in a similar way.
+You can read `here <https://docs.pytest.org/en/stable/unittest.html>`__ which features are supported, but the important
+thing to remember is that most ``pytest`` fixtures don't work. Neither parametrization, but we use the module
+``parameterized`` that works in a similar way.
 
 
 Parametrization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Often, there is a need to run the same test multiple times, but with different arguments. It could be done from within the test, but then there is no way of running that test for just one set of arguments.
+Often, there is a need to run the same test multiple times, but with different arguments. It could be done from within
+the test, but then there is no way of running that test for just one set of arguments.
 
 .. code-block:: python
-                
+
     # test_this1.py
     import unittest
     from parameterized import parameterized
@@ -551,7 +561,8 @@ Often, there is a need to run the same test multiple times, but with different a
         def test_floor(self, name, input, expected):
             assert_equal(math.floor(input), expected)
 
-Now, by default this test will be run 3 times, each time with the last 3 arguments of ``test_floor`` being assigned the corresponding arguments in the parameter list.
+Now, by default this test will be run 3 times, each time with the last 3 arguments of ``test_floor`` being assigned the
+corresponding arguments in the parameter list.
 
 and you could run just the ``negative`` and ``integer`` sets of params with:
 
@@ -565,14 +576,15 @@ or all but ``negative`` sub-tests, with:
 
    pytest -k "not negative" tests/test_mytest.py
 
-Besides using the ``-k`` filter that was just mentioned, you can find out the exact name of each sub-test and run any or all of them using their exact names. 
-        
+Besides using the ``-k`` filter that was just mentioned, you can find out the exact name of each sub-test and run any
+or all of them using their exact names.
+
 .. code-block:: bash
-                
+
     pytest test_this1.py --collect-only -q
 
 and it will list:
-                
+
 .. code-block:: bash
 
     test_this1.py::TestMathUnitTest::test_floor_0_negative
@@ -584,10 +596,12 @@ So now you can run just 2 specific sub-tests:
 .. code-block:: bash
 
     pytest test_this1.py::TestMathUnitTest::test_floor_0_negative  test_this1.py::TestMathUnitTest::test_floor_1_integer
-   
-The module `parameterized <https://pypi.org/project/parameterized/>`__ which is already in the developer dependencies of ``transformers`` works for both: ``unittests`` and ``pytest`` tests.
 
-If, however, the test is not a ``unittest``, you may use ``pytest.mark.parametrize`` (or you may see it being used in some existing tests, mostly under ``examples``).
+The module `parameterized <https://pypi.org/project/parameterized/>`__ which is already in the developer dependencies
+of ``transformers`` works for both: ``unittests`` and ``pytest`` tests.
+
+If, however, the test is not a ``unittest``, you may use ``pytest.mark.parametrize`` (or you may see it being used in
+some existing tests, mostly under ``examples``).
 
 Here is the same example, this time using ``pytest``'s ``parametrize`` marker:
 
@@ -606,14 +620,16 @@ Here is the same example, this time using ``pytest``'s ``parametrize`` marker:
     def test_floor(name, input, expected):
         assert_equal(math.floor(input), expected)
 
-Same as with ``parameterized``, with ``pytest.mark.parametrize`` you can have a fine control over which sub-tests are run, if the ``-k`` filter doesn't do the job. Except, this parametrization function creates a slightly different set of names for the sub-tests. Here is what they look like:
-        
+Same as with ``parameterized``, with ``pytest.mark.parametrize`` you can have a fine control over which sub-tests are
+run, if the ``-k`` filter doesn't do the job. Except, this parametrization function creates a slightly different set of
+names for the sub-tests. Here is what they look like:
+
 .. code-block:: bash
-                
+
     pytest test_this2.py --collect-only -q
 
 and it will list:
-                
+
 .. code-block:: bash
 
     test_this2.py::test_floor[integer-1-1.0]
@@ -628,16 +644,20 @@ So now you can run just the specific test:
 
 as in the previous example.
 
-    
+
 
 Temporary files and directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite each other's data. Also we want to get the temp files and directories removed at the end of each test that created them. Therefore, using packages like ``tempfile``, which address these needs is essential.
+Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite
+each other's data. Also we want to get the temp files and directories removed at the end of each test that created
+them. Therefore, using packages like ``tempfile``, which address these needs is essential.
 
-However, when debugging tests, you need to be able to see what goes into the temp file or directory and you want to know it's exact path and not having it randomized on every test re-run.
+However, when debugging tests, you need to be able to see what goes into the temp file or directory and you want to
+know it's exact path and not having it randomized on every test re-run.
 
-A helper class :obj:`transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of :obj:`unittest.TestCase`, so we can easily inherit from it in the test modules.
+A helper class :obj:`transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of
+:obj:`unittest.TestCase`, so we can easily inherit from it in the test modules.
 
 Here is an example of its usage:
 
@@ -650,23 +670,27 @@ Here is an example of its usage:
 
 This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
-In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless ``after=False`` is passed to the helper function.
+In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless
+``after=False`` is passed to the helper function.
 
-* Create a temporary directory of my choice and delete it at the end - useful for debugging when you want to monitor a specific directory:
+* Create a temporary directory of my choice and delete it at the end - useful for debugging when you want to monitor a
+  specific directory:
 
 .. code-block:: python
 
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
 
-* Create a temporary directory of my choice and do not delete it at the end---useful for when you want to look at the temp results:
+* Create a temporary directory of my choice and do not delete it at the end---useful for when you want to look at the
+  temp results:
 
 .. code-block:: python
 
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
 
-* Create a temporary directory of my choice and ensure to delete it right away---useful for when you disabled deletion in the previous test run and want to make sure the that temporary directory is empty before the new test is run:
+* Create a temporary directory of my choice and ensure to delete it right away---useful for when you disabled deletion
+  in the previous test run and want to make sure the that temporary directory is empty before the new test is run:
 
 .. code-block:: python
 
@@ -674,38 +698,33 @@ In this and all the following scenarios the temporary directory will be auto-rem
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
 
 .. note::
-   In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are allowed if an explicit obj:`tmp_dir` is used, so that by mistake no ``/tmp`` or similar important part of the filesystem will get nuked. i.e. please always pass paths that start with ``./``.
+   In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are allowed if
+   an explicit obj:`tmp_dir` is used, so that by mistake no ``/tmp`` or similar important part of the filesystem will
+   get nuked. i.e. please always pass paths that start with ``./``.
 
 .. note::
-   Each test can register multiple temporary directories and they all will get auto-removed, unless requested otherwise.
+   Each test can register multiple temporary directories and they all will get auto-removed, unless requested
+   otherwise.
 
 
 Skipping tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is useful when a bug is found and a new test is written, yet the
-bug is not fixed yet. In order to be able to commit it to the main
-repository we need make sure it's skipped during ``make test``.
+This is useful when a bug is found and a new test is written, yet the bug is not fixed yet. In order to be able to
+commit it to the main repository we need make sure it's skipped during ``make test``.
 
 Methods:
 
--  A **skip** means that you expect your test to pass only if some
-   conditions are met, otherwise pytest should skip running the test
-   altogether. Common examples are skipping windows-only tests on
-   non-windows platforms, or skipping tests that depend on an external
-   resource which is not available at the moment (for example a
-   database).
+-  A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
+   running the test altogether. Common examples are skipping windows-only tests on non-windows platforms, or skipping
+   tests that depend on an external resource which is not available at the moment (for example a database).
 
--  A **xfail** means that you expect a test to fail for some reason. A
-   common example is a test for a feature not yet implemented, or a bug
-   not yet fixed. When a test passes despite being expected to fail
-   (marked with pytest.mark.xfail), it’s an xpass and will be reported
-   in the test summary.
+-  A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
+   implemented, or a bug not yet fixed. When a test passes despite being expected to fail (marked with
+   pytest.mark.xfail), it’s an xpass and will be reported in the test summary.
 
-One of the important differences between the two is that ``skip``
-doesn't run the test, and ``xfail`` does. So if the code that's buggy
-causes some bad state that will affect other tests, do not use
-``xfail``.
+One of the important differences between the two is that ``skip`` doesn't run the test, and ``xfail`` does. So if the
+code that's buggy causes some bad state that will affect other tests, do not use ``xfail``.
 
 Implementation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -772,7 +791,7 @@ or:
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_feature_x():
-   
+
 or skip the whole module:
 
 .. code-block:: python
@@ -786,7 +805,9 @@ More details, example and ways are `here <https://docs.pytest.org/en/latest/skip
 Slow tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be marked as in the example below:
+The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for
+an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be
+marked as in the example below:
 
 .. code-block:: python
 
@@ -799,8 +820,9 @@ Once a test is marked as ``@slow``, to run such tests set ``RUN_SLOW=1`` env var
 .. code-block:: bash
 
     RUN_SLOW=1 pytest tests
-    
-Some decorators like ``@parameterized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators ``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
+
+Some decorators like ``@parameterized`` rewrite test names, therefore ``@slow`` and the rest of the skip decorators
+``@require_*`` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 .. code-block:: python
 
@@ -808,39 +830,55 @@ Some decorators like ``@parameterized`` rewrite test names, therefore ``@slow`` 
     @slow
     def test_integration_foo():
 
-As explained at the beginning of this document, slow tests get to run on a scheduled basis, rather than in PRs CI checks. So it's possible that some problems will be missed during a PR submission and get merged. Such problems will get caught during the next scheduled CI job. But it also means that it's important to run the slow tests on your machine before submitting the PR.
+As explained at the beginning of this document, slow tests get to run on a scheduled basis, rather than in PRs CI
+checks. So it's possible that some problems will be missed during a PR submission and get merged. Such problems will
+get caught during the next scheduled CI job. But it also means that it's important to run the slow tests on your
+machine before submitting the PR.
 
 Here is a rough decision making mechanism for choosing which tests should be marked as slow:
 
-If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files, pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library, such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine this approach we should have exceptions:
+If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files,
+pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library,
+such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
+this approach we should have exceptions:
 
-* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline
+  integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a
+  tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
 * All tests that need to do a training not specifically optimized to be fast should be set to slow.
-* We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked as ``@slow``.
+* We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
+  ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked
+  as ``@slow``.
 * If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
 
-Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast.
-For example, a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc.
-Then the ``@slow`` tests can use large slow models to do qualitative testing. To see the use of these simply look for *tiny* models with:
+Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast. For example,
+a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models
+have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc. Then the ``@slow`` tests can use large
+slow models to do qualitative testing. To see the use of these simply look for *tiny* models with:
 
 .. code-block:: bash
 
     grep tiny tests examples
 
-Here is a an example of a `script <https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your specific model's architecture.
+Here is a an example of a `script
+<https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny
+model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your
+specific model's architecture.
 
-It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
+It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if
+you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the
+execution speed report in CI logs instead (the output of ``pytest --durations=0 tests``).
 
-That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast. If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest tests.
+That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast.
+If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest
+tests.
 
 
 Testing the stdout/stderr output
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In order to test functions that write to ``stdout`` and/or ``stderr``,
-the test can access those streams using the ``pytest``'s `capsys
-system <https://docs.pytest.org/en/latest/capture.html>`__. Here is how
-this is accomplished:
+In order to test functions that write to ``stdout`` and/or ``stderr``, the test can access those streams using the
+``pytest``'s `capsys system <https://docs.pytest.org/en/latest/capture.html>`__. Here is how this is accomplished:
 
 .. code-block:: python
 
@@ -859,8 +897,8 @@ this is accomplished:
         assert msg in out
         assert msg in err
 
-And, of course, most of the time, ``stderr`` will come as a part of an
-exception, so try/except has to be used in such a case:
+And, of course, most of the time, ``stderr`` will come as a part of an exception, so try/except has to be used in such
+a case:
 
 .. code-block:: python
 
@@ -892,16 +930,13 @@ Another approach to capturing stdout is via ``contextlib.redirect_stdout``:
         # test:
         assert msg in out
 
-An important potential issue with capturing stdout is that it may
-contain ``\r`` characters that in normal ``print`` reset everything that
-has been printed so far. There is no problem with ``pytest``, but with
-``pytest -s`` these characters get included in the buffer, so to be able
-to have the test run with and without ``-s``, you have to make an extra
-cleanup to the captured output, using ``re.sub(r'~.*\r', '', buf, 0, re.M)``.
+An important potential issue with capturing stdout is that it may contain ``\r`` characters that in normal ``print``
+reset everything that has been printed so far. There is no problem with ``pytest``, but with ``pytest -s`` these
+characters get included in the buffer, so to be able to have the test run with and without ``-s``, you have to make an
+extra cleanup to the captured output, using ``re.sub(r'~.*\r', '', buf, 0, re.M)``.
 
-But, then we have a helper context manager wrapper to automatically take
-care of it all, regardless of whether it has some ``\r``'s in it or
-not, so it's a simple:
+But, then we have a helper context manager wrapper to automatically take care of it all, regardless of whether it has
+some ``\r``'s in it or not, so it's a simple:
 
 .. code-block:: python
 
@@ -921,8 +956,7 @@ Here is a full test example:
         print(msg + final)
     assert cs.out == final+"\n", f"captured: {cs.out}, expecting {final}"
 
-If you'd like to capture ``stderr`` use the :obj:`CaptureStderr` class
-instead:
+If you'd like to capture ``stderr`` use the :obj:`CaptureStderr` class instead:
 
 .. code-block:: python
 
@@ -931,8 +965,7 @@ instead:
         function_that_writes_to_stderr()
     print(cs.err)
 
-If you need to capture both streams at once, use the parent
-:obj:`CaptureStd` class:
+If you need to capture both streams at once, use the parent :obj:`CaptureStd` class:
 
 .. code-block:: python
 
@@ -964,7 +997,8 @@ If you need to validate the output of a logger, you can use :obj:`CaptureLogger`
 Testing with environment variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you want to test the impact of environment variables for a specific test you can use a helper decorator ``transformers.testing_utils.mockenv``
+If you want to test the impact of environment variables for a specific test you can use a helper decorator
+``transformers.testing_utils.mockenv``
 
 .. code-block:: python
 
@@ -978,8 +1012,8 @@ If you want to test the impact of environment variables for a specific test you 
 Getting reproducible results
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In some situations you may want to remove randomness for your tests. To
-get identical reproducable results set, you will need to fix the seed:
+In some situations you may want to remove randomness for your tests. To get identical reproducable results set, you
+will need to fix the seed:
 
 .. code-block:: python
 

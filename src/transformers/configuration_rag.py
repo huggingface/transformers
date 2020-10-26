@@ -21,16 +21,17 @@ from .file_utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
-    :class:`~transformers.RagConfig` stores the configuration of a `RagModel`.
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    :class:`~transformers.RagConfig` stores the configuration of a `RagModel`. Configuration objects inherit from
+    :class:`~transformers.PretrainedConfig` and can be used to control the model outputs. Read the documentation from
+    :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         title_sep (:obj:`str`, `optional`, defaults to  ``" / "``):
-            Separator inserted between the title and the text of the retrieved document when calling :class:`~transformers.RagRetriever`.
+            Separator inserted between the title and the text of the retrieved document when calling
+            :class:`~transformers.RagRetriever`.
         doc_sep (:obj:`str`, `optional`, defaults to  ``" // "``):
-            Separator inserted between the the text of the retrieved document and the original input when calliang :class:`~transformers.RagRetriever`.
+            Separator inserted between the the text of the retrieved document and the original input when calliang
+            :class:`~transformers.RagRetriever`.
         n_docs (:obj:`int`, `optional`, defaults to 5):
             Number of documents to retrieve.
         max_combined_length (:obj:`int`, `optional`, defaults to 300):
@@ -41,8 +42,8 @@ RAG_CONFIG_DOC = r"""
             Retrieval batch size, defined as the number of queries issues concurrently to the faiss index excapsulated
             :class:`~transformers.RagRetriever`.
         dataset (:obj:`str`, `optional`, defaults to :obj:`"wiki_dpr"`):
-            A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and
-            ids using :obj:`datasets.list_datasets()`).
+            A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and ids
+            using :obj:`datasets.list_datasets()`).
         dataset_split (:obj:`str`, `optional`, defaults to :obj:`"train"`)
             Which split of the :obj:`dataset` to load.
         index_name (:obj:`str`, `optional`, defaults to :obj:`"compressed"`)
@@ -59,13 +60,13 @@ RAG_CONFIG_DOC = r"""
             Only relevant if ``return_loss`` is set to :obj:`True`. Controls the ``epsilon`` parameter value for label
             smoothing in the loss calculation. If set to 0, no label smoothing is performed.
         do_marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, the logits are marginalized over all documents
-            by making use of ``torch.nn.functional.log_softmax``.
+            If :obj:`True`, the logits are marginalized over all documents by making use of
+            ``torch.nn.functional.log_softmax``.
         reduce_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to reduce the NLL loss using the ``torch.Tensor.sum`` operation.
         do_deduplication (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to deduplicate the generations from different context documents for a given input.
-            Has to be set to :obj:`False` if used while training with distributed backend.
+            Whether or not to deduplicate the generations from different context documents for a given input. Has to be
+            set to :obj:`False` if used while training with distributed backend.
         exclude_bos_score (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to disregard the BOS token when computing the loss.
         output_retrieved(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -160,7 +161,8 @@ class RagConfig(PretrainedConfig):
         cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model configuration and decoder model configuration.
+        Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model
+        configuration and decoder model configuration.
 
         Returns:
             :class:`EncoderDecoderConfig`: An instance of a configuration object
@@ -169,7 +171,8 @@ class RagConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default :meth:`~transformers.PretrainedConfig.to_dict`.
+        Serializes this instance to a Python dictionary. Override the default
+        :meth:`~transformers.PretrainedConfig.to_dict`.
 
         Returns:
             :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

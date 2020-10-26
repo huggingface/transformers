@@ -56,14 +56,15 @@ FLAUBERT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.FlaubertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 FLAUBERT_INPUTS_DOCSTRING = r"""
@@ -71,44 +72,42 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.FlaubertTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.FlaubertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         lengths (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Length of each sentence that can be used to avoid performing attention on padding token indices.
-            You can also use :obj:`attention_mask` for the same result (see above), kept here for compatbility.
-            Indices selected in ``[0, ..., input_ids.size(-1)]``:
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use :obj:`attention_mask` for the same result (see above), kept here for compatbility. Indices
+            selected in ``[0, ..., input_ids.size(-1)]``:
         cache (:obj:`Dict[str, torch.FloatTensor]`, `optional`):
-            Dictionary strings to ``torch.FloatTensor`` that contains precomputed
-            hidden-states (key and values in the attention blocks) as computed by the model
-            (see :obj:`cache` output below). Can be used to speed up sequential decoding.
-            The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
+            Dictionary strings to ``torch.FloatTensor`` that contains precomputed hidden-states (key and values in the
+            attention blocks) as computed by the model (see :obj:`cache` output below). Can be used to speed up
+            sequential decoding. The dictionary object will be modified in-place during the forward pass to add newly
+            computed hidden-states.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -308,14 +307,16 @@ class FlaubertModel(XLMModel):
 
 
 @add_start_docstrings(
-    """The Flaubert Model transformer with a language modeling head on top
-    (linear layer with weights tied to the input embeddings). """,
+    """
+    The Flaubert Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
     """
-    This class overrides :class:`~transformers.XLMWithLMHeadModel`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.XLMWithLMHeadModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -327,14 +328,16 @@ class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
 
 
 @add_start_docstrings(
-    """Flaubert Model with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    Flaubert Model with a sequence classification/regression head on top (a linear layer on top of the pooled output)
+    e.g. for GLUE tasks.
+    """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertForSequenceClassification(XLMForSequenceClassification):
     """
-    This class overrides :class:`~transformers.XLMForSequenceClassification`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.XLMForSequenceClassification`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -346,14 +349,16 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
 
 
 @add_start_docstrings(
-    """Flaubert Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    Flaubert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertForTokenClassification(XLMForTokenClassification):
     """
-    This class overrides :class:`~transformers.XLMForTokenClassification`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.XLMForTokenClassification`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -365,14 +370,16 @@ class FlaubertForTokenClassification(XLMForTokenClassification):
 
 
 @add_start_docstrings(
-    """Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
     """
-    This class overrides :class:`~transformers.XLMForQuestionAnsweringSimple`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.XLMForQuestionAnsweringSimple`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -384,14 +391,16 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
 
 
 @add_start_docstrings(
-    """Flaubert Model with a beam-search span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    Flaubert Model with a beam-search span classification head on top for extractive question-answering tasks like
+    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     """
-    This class overrides :class:`~transformers.XLMForQuestionAnswering`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.XLMForQuestionAnswering`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -403,14 +412,16 @@ class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
 
 
 @add_start_docstrings(
-    """Flaubert Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    Flaubert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertForMultipleChoice(XLMForMultipleChoice):
     """
-    This class overrides :class:`~transformers.XLMForMultipleChoice`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.XLMForMultipleChoice`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig

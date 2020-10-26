@@ -64,11 +64,11 @@ class TrainerState:
             Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
             several machines) main process.
         is_world_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not this process is the global main process (when training in a distributed fashion on
-            several machines, this is only going to be :obj:`True` for one process).
+            Whether or not this process is the global main process (when training in a distributed fashion on several
+            machines, this is only going to be :obj:`True` for one process).
         is_hyper_param_search (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search.
-            This will impact the way data will be logged in TensorBoard.
+            Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
+            impact the way data will be logged in TensorBoard.
     """
 
     epoch: Optional[float] = None

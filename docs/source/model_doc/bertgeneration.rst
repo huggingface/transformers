@@ -25,14 +25,14 @@ Usage:
   BERT checkpoints for subsequent fine-tuning.
 
 :: code-block
-  
+
   # leverage checkpoints for Bert2Bert model...
-  # use BERT's cls token as BOS token and sep token as EOS token
-  encoder = BertGenerationEncoder.from_pretrained("bert-large-uncased", bos_token_id=101, eos_token_id=102)
-  # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
-  decoder = BertGenerationDecoder.from_pretrained("bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102)
-  bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
-  
+  # use BERT's cls token as BOS token and sep token as EOS token encoder =
+  BertGenerationEncoder.from_pretrained("bert-large-uncased", bos_token_id=101, eos_token_id=102) # add cross attention
+  layers and use BERT's cls token as BOS token and sep token as EOS token decoder =
+  BertGenerationDecoder.from_pretrained("bert-large-uncased", add_cross_attention=True, is_decoder=True,
+  bos_token_id=101, eos_token_id=102) bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+
   # create tokenizer...
   tokenizer = BertTokenizer.from_pretrained("bert-large-uncased")
 
@@ -40,8 +40,7 @@ Usage:
   labels = tokenizer('This is a short summary', return_tensors="pt").input_ids
 
   # train...
-  loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels, return_dict=True).loss
-  loss.backward()
+  loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels, return_dict=True).loss loss.backward()
 
 
 - Pretrained :class:`~transformers.EncoderDecoderModel` are also directly available in the model hub, e.g.,

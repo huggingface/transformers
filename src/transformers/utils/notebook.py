@@ -32,20 +32,10 @@ def format_time(t):
 def html_progress_bar(value, total, prefix, label, width=300):
     "Html code for a progress bar `value`/`total` with `label` on the right, `prefix` on the left."
     return f"""
-    <div>
-        <style>
-            /* Turns off some styling */
-            progress {{
-                /* gets rid of default border in Firefox and Opera. */
-                border: none;
-                /* Needs to be in here for Safari polyfill so background images work as expected. */
-                background-size: auto;
-            }}
-        </style>
-      {prefix}
-      <progress value='{value}' max='{total}' style='width:{width}px; height:20px; vertical-align: middle;'></progress>
-      {label}
-    </div>
+    <div> <style> /* Turns off some styling */ progress {{ /* gets rid of default border in Firefox and Opera. */
+    border: none; /* Needs to be in here for Safari polyfill so background images work as expected. */ background-size:
+    auto; }} </style> {prefix} <progress value='{value}' max='{total}' style='width:{width}px; height:20px;
+    vertical-align: middle;'></progress> {label} </div>
     """
 
 
@@ -71,11 +61,10 @@ class NotebookProgressBar:
     A progress par for display in a notebook.
 
     Class attributes (overridden by derived classes)
-        - **warmup** (:obj:`int`) -- The number of iterations to do at the beginning while ignoring
-          :obj:`update_every`.
-        - **update_every** (:obj:`float`) -- Since calling the time takes some time, we only do it
-          every presumed :obj:`update_every` seconds. The progress bar uses the average time passed
-          up until now to guess the  next value for which it will call the update.
+
+          :obj:`update_every`. - **update_every** (:obj:`float`) -- Since calling the time takes some time, we only do
+          it every presumed :obj:`update_every` seconds. The progress bar uses the average time passed up until now to
+          guess the next value for which it will call the update.
 
     Args:
         total (:obj:`int`):
@@ -245,8 +234,8 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
     def add_child(self, total, prefix=None, width=300):
         """
-        Add a child progress bar disaplyed under the table of metrics. The child progress bar is returned (so it can
-        be easily updated).
+        Add a child progress bar disaplyed under the table of metrics. The child progress bar is returned (so it can be
+        easily updated).
 
         Args:
             total (:obj:`int`): The number of iterations for the child progress bar.

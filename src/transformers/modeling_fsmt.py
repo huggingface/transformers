@@ -110,31 +110,22 @@ Here is how to compare BLEU scores against fairseq implementation:
 
 # en-ru
 
-export PAIR=en-ru
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=8
-export NUM_BEAMS=50
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+export PAIR=en-ru export DATA_DIR=data/$PAIR export SAVE_DIR=data/$PAIR export BS=8 export NUM_BEAMS=50 mkdir -p
+$DATA_DIR sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source sacrebleu -t wmt19 -l $PAIR --echo ref >
+$DATA_DIR/val.target echo $PAIR PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py
+facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target
+--score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 # (fairseq BLEU: 36.4 http://matrix.statmt.org/matrix/output/1914?score_id=37605)
 
 
 # ru-en
 
-export PAIR=ru-en
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=8
-export NUM_BEAMS=50
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+export PAIR=ru-en export DATA_DIR=data/$PAIR export SAVE_DIR=data/$PAIR export BS=8 export NUM_BEAMS=50 mkdir -p
+$DATA_DIR sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source sacrebleu -t wmt19 -l $PAIR --echo ref >
+$DATA_DIR/val.target PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR
+$DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path
+$SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 
 # (fairseq BLEU: 41.3 http://matrix.statmt.org/matrix/output/1907?run_id=6937)
@@ -142,16 +133,11 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/w
 
 # de-en
 
-export PAIR=de-en
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=8
-export NUM_BEAMS=50
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+export PAIR=de-en export DATA_DIR=data/$PAIR export SAVE_DIR=data/$PAIR export BS=8 export NUM_BEAMS=50 mkdir -p
+$DATA_DIR sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source sacrebleu -t wmt19 -l $PAIR --echo ref >
+$DATA_DIR/val.target echo $PAIR PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py
+facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target
+--score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
 
 # (fairseq BLEU: 42.3 http://matrix.statmt.org/matrix/output/1902?run_id=6750)
 
@@ -159,15 +145,11 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/w
 
 # en-de
 
-export PAIR=en-de
-export DATA_DIR=data/$PAIR
-export SAVE_DIR=data/$PAIR
-export BS=8
-mkdir -p $DATA_DIR
-sacrebleu -t wmt19 -l $PAIR --echo src > $DATA_DIR/val.source
-sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target
-echo $PAIR
-PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source $SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS --task translation --num_beams $NUM_BEAMS
+export PAIR=en-de export DATA_DIR=data/$PAIR export SAVE_DIR=data/$PAIR export BS=8 mkdir -p $DATA_DIR sacrebleu -t
+wmt19 -l $PAIR --echo src > $DATA_DIR/val.source sacrebleu -t wmt19 -l $PAIR --echo ref > $DATA_DIR/val.target echo
+$PAIR PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/wmt19-$PAIR $DATA_DIR/val.source
+$SAVE_DIR/test_translations.txt --reference_path $DATA_DIR/val.target --score_path $SAVE_DIR/test_bleu.json --bs $BS
+--task translation --num_beams $NUM_BEAMS
 
 # (fairseq BLEU: 43.1 http://matrix.statmt.org/matrix/output/1909?run_id=6862)
 
@@ -180,14 +162,15 @@ FSMT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.FSMTConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 
 """
 FSMT_GENERATION_EXAMPLE = r"""
@@ -195,17 +178,13 @@ FSMT_GENERATION_EXAMPLE = r"""
 
         from transformers import FSMTTokenizer, FSMTForConditionalGeneration
 
-        mname = "facebook/wmt19-ru-en"
-        model = FSMTForConditionalGeneration.from_pretrained(mname)
-        tokenizer = FSMTTokenizer.from_pretrained(mname)
+        mname = "facebook/wmt19-ru-en" model = FSMTForConditionalGeneration.from_pretrained(mname) tokenizer =
+        FSMTTokenizer.from_pretrained(mname)
 
-        src_text = "Машинное обучение - это здорово, не так ли?"
-        input_ids = tokenizer.encode(src_text, return_tensors='pt')
-        outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
-        for i, output in enumerate(outputs):
-            decoded = tokenizer.decode(output, skip_special_tokens=True)
-            print(f"{i}: {decoded})
-         # 1: Machine learning is great, isn't it? ...
+        src_text = "Машинное обучение - это здорово, не так ли?" input_ids = tokenizer.encode(src_text,
+        return_tensors='pt') outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3) for i, output in
+        enumerate(outputs): decoded = tokenizer.decode(output, skip_special_tokens=True) print(f"{i}: {decoded}) # 1:
+        Machine learning is great, isn't it? ...
 
 """
 
@@ -214,14 +193,13 @@ FSMT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            IIndices can be obtained using :class:`~transformers.FSTMTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            IIndices can be obtained using :class:`~transformers.FSTMTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -232,21 +210,19 @@ FSMT_INPUTS_DOCSTRING = r"""
             shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
-            If you want to change padding behavior, you should read
-            :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify.
-            See diagram 1 in the paper for more info on the default strategy
+            also be used by default. If you want to change padding behavior, you should read
+            :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify. See diagram 1 in the paper for more info on
+            the default strategy
         encoder_outputs (:obj:`Tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
+            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
+            sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
+            the decoder.
         past_key_values (:obj:`Tuple(torch.FloatTensor)` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks.
-            Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last
-            :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids` of shape
-            :obj:`(batch_size, sequence_length)`.
+            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -282,9 +258,10 @@ def invert_mask(attention_mask):
 def _prepare_fsmt_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, causal_mask_dtype=torch.float32
 ):
-    """Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if
-    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
-    Note: this is not called during generation
+    """
+    Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if none are provided.
+    This mimics the default behavior in fairseq. To override it pass in masks. Note: this is not called during
+    generation
     """
     pad_token_id = config.pad_token_id
     if decoder_input_ids is None:
@@ -406,8 +383,8 @@ class EncoderLayer(nn.Module):
 
 class FSMTEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
-    is a :class:`EncoderLayer`.
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    :class:`EncoderLayer`.
 
     Args:
         config: FSMTConfig
@@ -435,16 +412,15 @@ class FSMTEncoder(nn.Module):
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (torch.LongTensor): indicating which indices are padding tokens.
+            attention_mask (torch.LongTensor): indicating which indices are padding tokens
+
         Returns:
             BaseModelOutput or Tuple comprised of:
-                - **x** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate
-                  hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (tuple(torch.FloatTensor)): Attention weights for each layer.
-                During training might not be of length n_layers because of layer dropout.
+
+                  shape `(src_len, batch, embed_dim)` - **encoder_states** (tuple(torch.FloatTensor)): all intermediate
+                  hidden states of shape `(src_len, batch, embed_dim)`. Only populated if *output_hidden_states:* is
+                  True. - **all_attentions** (tuple(torch.FloatTensor)): Attention weights for each layer. During
+                  training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
         if attention_mask is not None:
@@ -570,8 +546,8 @@ class DecoderLayer(nn.Module):
 
 class FSMTDecoder(nn.Module):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer
-    is a :class:`DecoderLayer`.
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DecoderLayer`
+
     Args:
         config: FSMTConfig
         embed_tokens (torch.nn.Embedding): output embedding
@@ -614,8 +590,8 @@ class FSMTDecoder(nn.Module):
         **unused,
     ):
         """
-        Includes several features from "Jointly Learning to Align and
-        Translate with Transformer Models" (Garg et al., EMNLP 2019).
+        Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
+        EMNLP 2019).
 
         Args:
             input_ids (LongTensor): previous decoder outputs of shape
@@ -627,7 +603,7 @@ class FSMTDecoder(nn.Module):
 
         Returns:
             BaseModelOutputWithPast or tuple:
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
+
                 - the cache
                 - hidden states
                 - attentions
@@ -1058,10 +1034,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-            with labels in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
 
@@ -1157,8 +1132,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     """
     This module produces sinusoidal positional embeddings of any length.
 
-    We don't want to save the weight of this embedding since it's not trained
-    (deterministic) and it can be huge.
+    We don't want to save the weight of this embedding since it's not trained (deterministic) and it can be huge.
 
     Padding symbols are ignored.
 
@@ -1182,10 +1156,11 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     @staticmethod
     def get_embedding(num_embeddings, embedding_dim, padding_idx):
-        """Build sinusoidal embeddings.
+        """
+        Build sinusoidal embeddings.
 
-        This matches the implementation in tensor2tensor, but differs slightly
-        from the description in Section 3.5 of "Attention Is All You Need".
+        This matches the implementation in tensor2tensor, but differs slightly from the description in Section 3.5 of
+        "Attention Is All You Need".
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
@@ -1201,7 +1176,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     @staticmethod
     def make_positions(tensor, padding_idx: int):
-        """Replace non-padding symbols with their position numbers.
+        """
+        Replace non-padding symbols with their position numbers.
 
         Position numbers begin at padding_idx+1. Padding symbols are ignored.
         """

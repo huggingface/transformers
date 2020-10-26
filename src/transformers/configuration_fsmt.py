@@ -28,8 +28,7 @@ FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class DecoderConfig(PretrainedConfig):
     r"""
-    Configuration class for FSMT's decoder specific things.
-    note: this is a private helper class
+    Configuration class for FSMT's decoder specific things. note: this is a private helper class
     """
     model_type = "fsmt_decoder"
 
@@ -44,9 +43,8 @@ class FSMTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.FSMTModel`. It is used to
     instantiate a FSMT model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         langs (:obj:`List[str]`):
@@ -72,8 +70,8 @@ class FSMTConfig(PretrainedConfig):
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -81,8 +79,8 @@ class FSMTConfig(PretrainedConfig):
         activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -104,14 +102,13 @@ class FSMTConfig(PretrainedConfig):
         tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
         num_beams (:obj:`int`, `optional`, defaults to 5)
-            Number of beams for beam search that will be used by default in the :obj:`generate` method
-            of the model. 1 means no beam search.
+            Number of beams for beam search that will be used by default in the :obj:`generate` method of the model. 1
+            means no beam search.
         length_penalty (:obj:`float`, `optional`, defaults to 1)
-            Exponential penalty to the length that will be used by default in the :obj:`generate` method
-            of the model.
+            Exponential penalty to the length that will be used by default in the :obj:`generate` method of the model.
         early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`)
-            Flag that will be used by default in the :obj:`generate` method of the model. Whether to stop
-            the beam search when at least ``num_beams`` sentences are finished per batch or not.
+            Flag that will be used by default in the :obj:`generate` method of the model. Whether to stop the beam
+            search when at least ``num_beams`` sentences are finished per batch or not.
 
         Examples::
 

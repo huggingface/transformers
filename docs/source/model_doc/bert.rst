@@ -25,8 +25,8 @@ improvement) and SQuAD v2.0 Test F1 to 83.1 (5.1 point absolute improvement).*
 
 Tips:
 
-- BERT is a model with absolute position embeddings so it's usually advised to pad the inputs on
-  the right rather than the left.
+- BERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
 - BERT was trained with the masked language modeling (MLM) and next sentence prediction (NSP) objectives. It is
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation.
 

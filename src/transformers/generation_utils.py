@@ -150,8 +150,8 @@ class GenerationMixin:
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
-                it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
             decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 initial input_ids for the decoder of encoder-decoder type models. If :obj:`None` then only
                 decoder_start_token_id is passed as the first token to the decoder.
@@ -210,9 +210,9 @@ class GenerationMixin:
 
         Return:
 
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
-            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
-            shorter if all batches finished early due to the :obj:`eos_token_id`.
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
 
         Examples::
 
@@ -531,8 +531,9 @@ class GenerationMixin:
         use_cache,
         model_kwargs,
     ):
-        """Generate sequences for each example without beam search (num_beams == 1).
-        All returned sequence are generated independantly.
+        """
+        Generate sequences for each example without beam search (num_beams == 1). All returned sequence are generated
+        independantly.
         """
         # length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
@@ -935,8 +936,10 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
 
 
 def set_scores_to_inf_for_banned_tokens(scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
-    """Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be
-    a list of list of banned tokens to ban in the format [[batch index, vocabulary position],...]
+    """
+    Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a list
+    of list of banned tokens to ban in the format [[batch index, vocabulary position],...
+
         Args:
             scores: logits distribution of shape (batch size, vocabulary size)
             banned_tokens: list of list of tokens to ban of length (batch_size)
@@ -965,7 +968,9 @@ def top_k_top_p_filtering(
     filter_value: float = -float("Inf"),
     min_tokens_to_keep: int = 1,
 ) -> Tensor:
-    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    """
+    Filter a distribution of logits using top-k and/or nucleus (top-p) filterin
+
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
         if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
@@ -1033,8 +1038,8 @@ class BeamHypotheses(object):
 
     def is_done(self, best_sum_logprobs, cur_len):
         """
-        If there are enough hypotheses and that none of the hypotheses being generated
-        can become better than the worst one in the heap, then we are done with this sentence.
+        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
+        one in the heap, then we are done with this sentence.
         """
 
         if len(self) < self.num_beams:
