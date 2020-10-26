@@ -371,6 +371,20 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
+    def test_handling_too_long_sequences_for_position_ids(self):
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        model = RobertaEmbeddings(config=config)
+
+        input_ids = torch.zeros((1, config.max_position_embeddings + 1)).long()
+        expected_positions = torch.as_tensor([list(range(config.max_position_embeddings + 1))]) + model.padding_idx + 1
+
+        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
+        self.assertEqual(position_ids.shape, expected_positions.shape)
+        self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+        with self.assertRaises(ValueError):
+            model.forward(input_ids)
+
     def test_create_position_ids_from_inputs_embeds(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761

@@ -115,6 +115,11 @@ class RobertaEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        max_position_embeddings = self.position_embeddings.num_embeddings
+        if position_ids.max() > max_position_embeddings:
+            raise ValueError("Position ids are too large, the max is {}.".format(max_position_embeddings))
+
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
