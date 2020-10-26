@@ -1,7 +1,9 @@
 import unittest
+from unittest import mock
 from typing import List, Optional
 
 from transformers import is_tf_available, is_torch_available, pipeline
+from transformers.tokenization_utils_base import to_py_obj
 from transformers.pipelines import DefaultArgumentHandler, Pipeline
 from transformers.testing_utils import _run_slow_tests, is_pipeline_test, require_tf, require_torch, slow
 
@@ -83,7 +85,7 @@ class CustomInputPipelineCommonMixin:
         raise NotImplementedError
 
 
-@is_pipeline_test
+# @is_pipeline_test
 class MonoInputPipelineCommonMixin:
     pipeline_task = None
     pipeline_loading_kwargs = {}  # Additional kwargs to load the pipeline with
@@ -138,6 +140,69 @@ class MonoInputPipelineCommonMixin:
                 **self.pipeline_loading_kwargs,
             )
             self._test_pipeline(nlp)
+
+    @require_torch
+    def test_compare_slow_fast_torch(self):
+        for model_name in self.small_models:
+            nlp_slow = pipeline(
+                task=self.pipeline_task,
+                model=model_name,
+                tokenizer=model_name,
+                framework="pt",
+                use_fast=False,
+                **self.pipeline_loading_kwargs,
+            )
+            nlp_fast = pipeline(
+                task=self.pipeline_task,
+                model=model_name,
+                tokenizer=model_name,
+                framework="pt",
+                use_fast=True,
+                **self.pipeline_loading_kwargs,
+            )
+            self._compare_slow_fast_pipelines(nlp_slow, nlp_fast)
+
+    @require_tf
+    def test_compare_slow_fast_tf(self):
+        for model_name in self.small_models:
+            nlp_slow = pipeline(
+                task=self.pipeline_task,
+                model=model_name,
+                tokenizer=model_name,
+                framework="tf",
+                use_fast=False,
+                **self.pipeline_loading_kwargs,
+            )
+            nlp_fast = pipeline(
+                task=self.pipeline_task,
+                model=model_name,
+                tokenizer=model_name,
+                framework="tf",
+                use_fast=True,
+                **self.pipeline_loading_kwargs,
+            )
+            self._compare_slow_fast_pipelines(nlp_slow, nlp_fast)
+
+    def _compare_slow_fast_pipelines(self, nlp_slow: Pipeline, nlp_fast: Pipeline):
+        with mock.patch.object(nlp_slow.model, 'forward', wraps=nlp_slow.model.forward) as mock_slow,\
+                mock.patch.object(nlp_fast.model, 'forward', wraps=nlp_fast.model.forward) as mock_fast:
+            for inputs in self.valid_inputs:
+                outputs_slow = nlp_slow(inputs, **self.pipeline_running_kwargs)
+                outputs_fast = nlp_fast(inputs, **self.pipeline_running_kwargs)
+
+                mock_slow.assert_called()
+                mock_fast.assert_called()
+
+                slow_call_args, slow_call_kwargs = mock_slow.call_args
+                fast_call_args, fast_call_kwargs = mock_fast.call_args
+
+                slow_call_args, slow_call_kwargs = to_py_obj(slow_call_args), to_py_obj(slow_call_kwargs)
+                fast_call_args, fast_call_kwargs = to_py_obj(fast_call_args), to_py_obj(fast_call_kwargs)
+
+                self.assertEqual(slow_call_args, fast_call_args)
+                self.assertDictEqual(slow_call_kwargs, fast_call_kwargs)
+
+                self.assertEqual(outputs_slow, outputs_fast)
 
     @require_torch
     @slow
