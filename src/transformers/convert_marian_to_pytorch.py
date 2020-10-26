@@ -175,8 +175,7 @@ def get_system_metadata(repo_root):
 
 
 # docstyle-ignore
-FRONT_MATTER_TEMPLATE = """
----
+FRONT_MATTER_TEMPLATE = """---
 language:
 {}
 tags:
