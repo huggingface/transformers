@@ -218,9 +218,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         self._vocab_size = config.vocab_size
         self._hidden_size = config.hidden_size
-        self.word_embeddings = WordEmbeddings(config)
-        self.position_embeddings = PositionEmbeddings(config)
-        self.token_type_embeddings = TokenTypeEmbeddings(config)
+        self.word_embeddings = WordEmbeddings(config, name="word_embeddings")
+        self.position_embeddings = PositionEmbeddings(config, name="position_embeddings")
+        self.token_type_embeddings = TokenTypeEmbeddings(config, name="token_type_embeddings")
         self.embeddings = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
@@ -302,7 +302,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         batch_size = shape_list(tensor=input_ids)[0]
         length = shape_list(tensor=input_ids)[1]
         x = tf.reshape(tensor=input_ids, shape=(-1, self._hidden_size))
-        logits = tf.matmul(a=x, b=self.word_embeddings(input_ids), transpose_b=True)
+        logits = tf.matmul(a=x, b=self.word_embeddings.word_embeddings, transpose_b=True)
 
         return tf.reshape(tensor=logits, shape=(batch_size, length, self._vocab_size))
 
@@ -699,8 +699,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.word_embeddings.word_embeddings = value
+        self.embeddings._vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """

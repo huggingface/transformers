@@ -642,14 +642,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         return base_model.get_input_embeddings()
 
     def _get_word_embeddings(self, embeddings):
-        if hasattr(embeddings, "word_embeddings"):
-            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
-            return embeddings.word_embeddings
-        elif hasattr(embeddings, "weight"):
-            # TFSharedEmbeddings
-            return embeddings.weight
+        if self.base_model_prefix in ["bert"]:
+            return embeddings.word_embeddings.word_embeddings
         else:
-            raise ValueError("word embedding is not defined.")
+            if hasattr(embeddings, "word_embeddings"):
+                # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+                return embeddings.word_embeddings
+            elif hasattr(embeddings, "weight"):
+                # TFSharedEmbeddings
+                return embeddings.weight
+            else:
+                raise ValueError("word embedding is not defined.")
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None) -> tf.Variable:
         """

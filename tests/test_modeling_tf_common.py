@@ -468,17 +468,22 @@ class TFModelTesterMixin:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
         for model_class in self.all_model_classes:
+            max_input = 512
+
+            if model_class.base_model_prefix == "longformer":
+                max_input = 2000
+
             if self.is_encoder_decoder:
                 input_ids = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"
                     ),
-                    "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
             elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
-                input_ids = tf.keras.Input(batch_shape=(4, 2, 2000), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)
@@ -759,13 +764,13 @@ class TFModelTesterMixin:
                 # Temporary fix in order to detect if the loaded model adopts the new TF code design or not.
                 # This will be removed once all the TF models will be updated to the new design
                 if model.base_model_prefix in ["bert"]:
-                    old_embd.build([])
+                    old_embd.word_embeddings.build([])
 
-                    old_size, _ = old_embd.word_embeddings.shape
+                    old_size, _ = old_embd.word_embeddings.word_embeddings.shape
 
                     model.resize_token_embeddings(size)
 
-                    new_size, _ = old_embd.word_embeddings.shape
+                    new_size, _ = old_embd.word_embeddings.word_embeddings.shape
 
                     if size is None:
                         self.assertEqual(new_size, old_size)
