@@ -1,17 +1,14 @@
 ---
 language: da
 tags:
-- pytorch
 - bert
 - masked-lm
 - lm-head
-- da
 license: cc-by-4.0
 datasets:
 - common_crawl
 - wikipedia
-pipeline_tag:
-- fill-mask
+pipeline_tag: fill-mask
 widget:
 - text: "København er <mask> i Danmark."
 ---
