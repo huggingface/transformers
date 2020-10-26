@@ -3,6 +3,7 @@ import unittest
 import pytest
 
 from transformers import pipeline
+from transformers.pipelines import PipelineWarning
 from transformers.testing_utils import is_pipeline_test, require_torch, slow
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
@@ -44,7 +45,7 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
     @require_torch
     def test_translation_default_language_selection(self):
         model = "patrickvonplaten/t5-tiny-random"
-        with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
+        with pytest.warns(PipelineWarning, match=r".*translation_en_to_de.*"):
             nlp = pipeline(task="translation", model=model)
         self.assertEqual(nlp.task, "translation_en_to_de")
 

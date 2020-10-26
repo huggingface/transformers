@@ -177,6 +177,12 @@ class PipelineException(Exception):
         self.model = model
 
 
+class PipelineWarning(UserWarning):
+    """
+    Raised by a :class:`~transformers.Pipeline` when handling __call__.
+    """
+
+
 class ArgumentHandler(ABC):
     """
     Base interface for handling arguments for each :class:`~transformers.pipelines.Pipeline`.
@@ -702,6 +708,19 @@ class Pipeline(_ScikitCompat):
             Numpy array
         """
         # Encode for forward
+        if self.model.config.max_position_embeddings:
+            max_length = self.model.config.max_position_embeddings
+            length = inputs.data["input_ids"].shape[1]
+            if length > max_length:
+                warnings.warn(
+                    "You input length was too long for this model {} > {}, and was automatically truncated to fit the model.".format(
+                        length, max_length
+                    ),
+                    PipelineWarning,
+                )
+                for key in inputs.data:
+                    tensor = inputs.data[key]
+                    inputs.data[key] = tensor[:, :max_length]
         with self.device_placement():
             if self.framework == "tf":
                 # TODO trace model
@@ -2830,7 +2849,7 @@ def pipeline(
                         '"translation" task was used, instead of "translation_XX_to_YY", defaulting to "{}"'.format(
                             task
                         ),
-                        UserWarning,
+                        PipelineWarning,
                     )
                     break
 
