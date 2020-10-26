@@ -1078,14 +1078,12 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return sequence_pairs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
-@add_end_docstrings(
-    """\
-            entailment_dim (:obj:`int`, `optional`, defaults to :obj:`None`):
-                The output dimension of the model that corresponds to "entailment". If :obj:`None` (default), the
-                pipeline will attempt to look up the entailment dimension in the model config's id2label mapping.
-                If the config does not specify the entailment dimension, the value will be set to -1, indicating
-                the last dimension of the model output.
+@add_end_docstrings(PIPELINE_INIT_ARGS, """\
+        entailment_id (:obj:`int`, `optional`, defaults to :obj:`None`):
+            The label id of the model's `entailment` class. If :obj:`None` (default), the pipeline will attempt
+            to look up the entailment id in the model config's :attr:`~transformers.PretrainedConfig.label2id`
+            mapping. If the config does not specify the entailment id, the value will be set to -1, indicating the
+            last dimension of the model output.
 """
 )
 class ZeroShotClassificationPipeline(Pipeline):
@@ -1095,8 +1093,10 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
     pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the
-    candidate label being valid. Any NLI model can be used as long as the first output logit corresponds to
-    `contradiction` and the last to `entailment`.
+    candidate label being valid. Any NLI model can be used, but the id of the `entailment` label must be included
+    in the model config's :attr:`~transformers.PretrainedConfig.label2id` mapping or else must be passed to the
+    constructor as :obj:`entailment_id` (see :func:`~transformers.ZeroShotClassificationPipeline.__init__`
+    documentation for more information).
 
     This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
     task identifier: :obj:`"zero-shot-classification"`.
@@ -1106,16 +1106,16 @@ class ZeroShotClassificationPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
     """
 
-    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), entailment_dim=None, *args, **kwargs):
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), entailment_id=None, *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
 
-        if entailment_dim is None:
-            entailment_dim = -1  # if not found in config, we set to last dimension
+        if entailment_id is None:
+            entailment_id = -1  # if not found in config, we set to last dimension
             for label, ind in self.model.config.label2id.items():
                 if "entail" in label.lower():
-                    entailment_dim = ind
+                    entailment_id = ind
 
-        self.entailment_dim = entailment_dim
+        self.entailment_id = entailment_id
 
     def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
@@ -1134,7 +1134,8 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
         """
-        Classify the sequence(s) given as inputs.
+        Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
+        documentation for more information.
 
         Args:
             sequences (:obj:`str` or :obj:`List[str]`):
@@ -1173,12 +1174,12 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         if not multi_class:
             # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., self.entailment_dim]
+            entail_logits = reshaped_outputs[..., self.entailment_id]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
-            contr_dim = -1 if self.entailment_dim == 0 else 0
-            entail_contr_logits = reshaped_outputs[..., [contr_dim, self.entailment_dim]]
+            contr_id = -1 if self.entailment_id == 0 else 0
+            entail_contr_logits = reshaped_outputs[..., [contr_dim, self.entailment_id]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[..., 1]
 
