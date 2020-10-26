@@ -72,10 +72,12 @@ class FlaxAutoModel(object):
                 - isInstance of `roberta` configuration class: :class:`~transformers.FlaxRobertaModel` (RoBERTa model)
                 - isInstance of `bert` configuration class: :class:`~transformers.FlaxBertModel` (Bert model
 
-        Examples:
+        Examples::
 
-            config = BertConfig.from_pretrained('bert-base-uncased') # Download configuration from S3 and cache. model
-            = FlaxAutoModel.from_config(config) # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            config = BertConfig.from_pretrained('bert-base-uncased')
+            # Download configuration from S3 and cache.
+            model = FlaxAutoModel.from_config(config)
+            # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_MAPPING.items():
             if isinstance(config, config_class):
