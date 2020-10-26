@@ -15,8 +15,6 @@
 import tempfile
 import unittest
 
-
-
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_tf_bart import TFBartModelTester
 from tests.test_modeling_tf_common import TFModelTesterMixin
@@ -27,6 +25,7 @@ from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration
 
 
