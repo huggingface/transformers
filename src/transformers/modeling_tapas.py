@@ -140,6 +140,19 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
         ):
             logger.info("Skipping {}".format("/".join(name)))
             continue
+        # in case the model is TapasForSequenceClassification, we skip output_bias and output_weights 
+        # since these are not used for classification
+        if isinstance(model, TapasForSequenceClassification):
+            if any(
+              n
+              in [
+                  "output_bias",
+                  "output_weights",
+              ]
+              for n in name
+            ):
+              logger.info("Skipping {}".format("/".join(name)))
+              continue
         # if first scope name starts with "bert", change it to "tapas"
         if name[0] == "bert":
             name[0] = "tapas"
