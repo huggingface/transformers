@@ -51,3 +51,14 @@ class AutoConfigTest(unittest.TestCase):
         keys = list(CONFIG_MAPPING.keys())
         for i, key in enumerate(keys):
             self.assertFalse(any(key in later_key for later_key in keys[i + 1 :]))
+
+    def test_pretrained_config_to_diff_dict(self):
+        """Test that PretrainedConfig.to_diff_dict() supports a default_config_dct argument."""
+        bart_base = AutoConfig.from_pretrained("facebook/bart-base")
+        bert_uncased = AutoConfig.from_pretrained("bert-base-uncased", vocab_size=bart_base.vocab_size)
+        bart_diff = bart_base.to_diff_dict()
+        assert "vocab_size" in bart_diff
+        bart_vs_bert = bart_base.to_diff_dict(bert_uncased)
+        assert "vocab_size" not in bart_vs_bert
+        # Check dict support
+        assert bart_vs_bert == bart_base.to_diff_dict(bert_uncased.to_dict())

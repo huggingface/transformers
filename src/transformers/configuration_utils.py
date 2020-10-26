@@ -467,19 +467,26 @@ class PretrainedConfig(object):
     def __repr__(self):
         return "{} {}".format(self.__class__.__name__, self.to_json_string())
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self, default_config_dict=None) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default
         config attributes for better readability and serializes to a Python
         dictionary.
+        Args:
+            default_config_dict: (:obj:`Union[PretrainedConfig, Dict]`, `optional`):
+                The config (or dictionary) that this object should should be compared to.
+                By default the instance is compared to :obj:`PretrainedConfig` defaults
 
         Returns:
-            :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            :obj:`Dict[str, Any]`: Dictionary of all configuration values that differ from the default.
+
         """
         config_dict = self.to_dict()
-
-        # get the default config dict
-        default_config_dict = PretrainedConfig().to_dict()
+        if default_config_dict is None:
+            # get the default config dict
+            default_config_dict = PretrainedConfig().to_dict()
+        elif isinstance(default_config_dict, PretrainedConfig):
+            default_config_dict = default_config_dict.to_dict()
 
         # get class specific config dict
         class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
