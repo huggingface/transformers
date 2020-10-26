@@ -628,13 +628,16 @@ class DebertaTokenizer(PreTrainedTokenizer):
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A BERT sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A DeBERTa sequence pair mask has the following format:
 
-        if token_ids_1 is None, only returns the first portion of the mask (0's).
-        ~
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs.
