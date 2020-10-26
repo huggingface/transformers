@@ -81,7 +81,7 @@ this:
     ['i', 'have', 'a', 'new', 'gp', '##u', '!']
 
 Since we are considering the uncased model, the sentence was lowercased first. Then all the words were present in the
-vocabulary of the tokenizer, except for "gpu", so the tokenizer split it in subwords it knows: "gp" and "##u". The "##"
+vocabulary of the tokenizer, except for "gpu", so the tokenizer splits it in subwords it knows: "gp" and "##u". The "##"
 means that the rest of the token should be attached to the previous one, without space (for when we need to decode
 predictions and reverse the tokenization).
 
@@ -112,7 +112,7 @@ splitting the training data into words, which can be a simple space tokenization
 
 :doc:`GPT <model_doc/gpt>` uses Spacy and ftfy, and counts the frequency of each word in the training corpus.
 
-It then begins from the list of all characters, and will learn merge rules to form a new token from two symbols in the
+It then begins from the list of all characters and will learn merge rules to form a new token from two symbols in the
 vocabulary until it has learned a vocabulary of the desired size (this is a hyperparameter to pick).
 
 Let's say that after the pre-tokenization we have the following words (the number indicating the frequency of each
@@ -197,8 +197,8 @@ progressively. It's not used directly for any of the pretrained models in the li
 with :ref:`SentencePiece <sentencepiece>`.
 
 More specifically, at a given step, unigram computes a loss from the corpus we have and the current vocabulary, then,
-for each subword, evaluate how much the loss would augment if the subword was removed from the vocabulary. It then
-sorts the subwords by this quantity (that represents how worse the loss becomes if the token is removed) and removes
+for each subword, evaluate how much the loss would increase if the subword was removed from the vocabulary. It then
+sorts the subwords by this quantity (that represents how much worse the loss becomes if the token is removed) and removes
 all the worst p tokens (for instance p could be 10% or 20%). It then repeats the process until the vocabulary has
 reached the desired size, always keeping the base characters (to be able to tokenize any word written with them, like
 BPE or WordPiece).
