@@ -50,7 +50,7 @@ _re_example = re.compile(r"^\s*(Examples?|Usage)\s*::\s*$")
 # Matches the parameters introduction in docstrings.
 _re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Params|Arguments?|Environment)\s*:\s*$")
 # Matches the return introduction in docstrings.
-_re_return = re.compile(r"^\s*(Returns?|Raises?)\s*:\s*$")
+_re_return = re.compile(r"^\s*(Returns?|Raises?|Note)\s*:\s*$")
 # Matches any doc special word without an empty line before.
 _re_any_doc_special_word = re.compile(r"[^\n]\n([ \t]*)(" + "|".join(DOC_SPECIAL_WORD) + r")(::?\s*)\n")
 

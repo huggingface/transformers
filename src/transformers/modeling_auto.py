@@ -564,8 +564,9 @@ class AutoModel:
         r"""
         Instantiates one of the base model classes of the library from a configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModel.from_pretrained` to load the model weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModel.from_pretrained` to load the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -656,9 +657,10 @@ class AutoModelForPreTraining:
         Instantiates one of the model classes of the library---with the architecture used for pretraining this
         model---from a configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForPreTraining.from_pretrained` to load the model
-        weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForPreTraining.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -755,8 +757,10 @@ class AutoModelWithLMHead:
         r"""
         Instantiates one of the model classes of the library---with a language modeling head---from a configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelWithLMHead.from_pretrained` to load the model weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelWithLMHead.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -859,9 +863,10 @@ class AutoModelForCausalLM:
         Instantiates one of the model classes of the library---with a causal language modeling head---from a
         configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForCausalLM.from_pretrained` to load the model
-        weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForCausalLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -952,9 +957,10 @@ class AutoModelForMaskedLM:
         Instantiates one of the model classes of the library---with a masked language modeling head---from a
         configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` to load the model
-        weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1045,9 +1051,10 @@ class AutoModelForSeq2SeqLM:
         Instantiates one of the model classes of the library---with a sequence-to-sequence language modeling
         head---from a configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForSeq2SeqLM.from_pretrained` to load the model
-        weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForSeq2SeqLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1142,9 +1149,10 @@ class AutoModelForSequenceClassification:
         Instantiates one of the model classes of the library---with a sequence classification head---from a
         configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForSequenceClassification.from_pretrained` to load the
-        model weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForSequenceClassification.from_pretrained` to load
+            the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1238,9 +1246,10 @@ class AutoModelForQuestionAnswering:
         r"""
         Instantiates one of the model classes of the library---with a question answering head---from a configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForQuestionAnswering.from_pretrained` to load the
-        model weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForQuestionAnswering.from_pretrained` to load the
+            model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1336,9 +1345,10 @@ class AutoModelForTokenClassification:
         r"""
         Instantiates one of the model classes of the library---with a token classification head---from a configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` to load the
-        model weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` to load
+            the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1435,9 +1445,10 @@ class AutoModelForMultipleChoice:
         Instantiates one of the model classes of the library---with a multiple choice classification head---from a
         configuration.
 
-        Note: Loading a model from its configuration file does **not** load the model weights. It only affects the
-        model's configuration. Use :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` to load the model
-        weights.
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` to load the
+            model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
