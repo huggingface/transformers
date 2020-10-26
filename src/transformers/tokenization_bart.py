@@ -44,8 +44,8 @@ class BartTokenizer(RobertaTokenizer):
     :class:`~transformers.BartTokenizer` is identical to :class:`~transformers.RobertaTokenizer` and adds a new
     :meth:`~transformers.BartTokenizer.prepare_seq2seq_batch`
 
-    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
-    the initialization parameters and other methods.
+    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning the
+    initialization parameters and other methods.
     """
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
@@ -75,13 +75,13 @@ class BartTokenizer(RobertaTokenizer):
             tgt_texts: (:obj:`List[str]`, `optional`):
                 List of summaries or target language texts.
             max_length (:obj:`int`, `optional`):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts).
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                Controls the maximum length for encoder inputs (documents to summarize or source language texts). If
+                left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             max_target_length (:obj:`int`, `optional`):
-                Controls the maximum length of decoder inputs (target language texts or summaries).
-                If left unset or set to :obj:`None`, this will use the max_length value.
+                Controls the maximum length of decoder inputs (target language texts or summaries). If left unset or
+                set to :obj:`None`, this will use the max_length value.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
@@ -122,8 +122,8 @@ class BartTokenizer(RobertaTokenizer):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
             - **labels** -- List of token ids for tgt_texts
 
-            The full set of keys ``[input_ids, attention_mask, labels]``,
-            will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
+            The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
+            Otherwise, input_ids, attention_mask will be the only keys.
         """
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)

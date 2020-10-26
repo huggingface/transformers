@@ -39,14 +39,15 @@ ROBERTA_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
-            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            model. Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 ROBERTA_INPUTS_DOCSTRING = r"""
@@ -54,35 +55,33 @@ ROBERTA_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.RobertaTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.RobertaTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -104,8 +103,8 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
 # Copied from transformers.modeling_flax_bert.FlaxBertLayerNorm with Bert->Roberta
 class FlaxRobertaLayerNorm(nn.Module):
-    """Layer normalization (https://arxiv.org/abs/1607.06450).
-    Operates on the last axis of the input data.
+    """
+    Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
     """
 
     epsilon: float = 1e-6
@@ -117,21 +116,21 @@ class FlaxRobertaLayerNorm(nn.Module):
 
     @compact
     def __call__(self, x):
-        """Applies layer normalization on the input.
-        It normalizes the activations of the layer for each given example in a
-        batch independently, rather than across a batch like Batch Normalization.
-        i.e. applies a transformation that maintains the mean activation within
-        each example close to 0 and the activation standard deviation close to 1.
+        """
+        Applies layer normalization on the input. It normalizes the activations of the layer for each given example in
+        a batch independently, rather than across a batch like Batch Normalization. i.e. applies a transformation that
+        maintains the mean activation within each example close to 0 and the activation standard deviation close to 1
+
         Args:
           x: the inputs
           epsilon: A small float added to variance to avoid dividing by zero.
           dtype: the dtype of the computation (default: float32).
           bias:  If True, bias (beta) is added.
           scale: If True, multiply by scale (gamma). When the next layer is linear
-            (also e.g. nn.relu), this can be disabled since the scaling will be done
-            by the next layer.
+            (also e.g. nn.relu), this can be disabled since the scaling will be done by the next layer.
           bias_init: Initializer for bias, by default, zero.
-          scale_init: Initializer for scale, by default, one.
+          scale_init: Initializer for scale, by default, one
+
         Returns:
           Normalized inputs (the same shape as inputs).
         """
@@ -151,9 +150,8 @@ class FlaxRobertaLayerNorm(nn.Module):
 # Copied from transformers.modeling_flax_bert.FlaxBertEmbedding with Bert->Roberta
 class FlaxRobertaEmbedding(nn.Module):
     """
-    Specify a new class for doing the embedding stuff
-    as Flax's one use 'embedding' for the parameter name
-    and PyTorch use 'weight'
+    Specify a new class for doing the embedding stuff as Flax's one use 'embedding' for the parameter name and PyTorch
+    use 'weight'
     """
 
     vocab_size: int
@@ -332,10 +330,10 @@ class FlaxRobertaModule(nn.Module):
 )
 class FlaxRobertaModel(FlaxPreTrainedModel):
     """
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need`_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
+    Kaiser and Illia Polosukhin.
     """
 
     model_class = FlaxRobertaModule

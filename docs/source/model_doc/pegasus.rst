@@ -9,9 +9,8 @@ and assign @sshleifer.
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Pegasus model was proposed in `PEGASUS: Pre-training with Extracted Gap-sentences for
-Abstractive Summarization <https://arxiv.org/pdf/1912.08777.pdf>`__ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and
-Peter J. Liu on Dec 18, 2019.
+The Pegasus model was proposed in `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
+<https://arxiv.org/pdf/1912.08777.pdf>`__ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 
 According to the abstract,
 
@@ -26,7 +25,7 @@ The Authors' code can be found `here <https://github.com/google-research/pegasus
 Checkpoints
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-tuned for summarization, besides 
+All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-tuned for summarization, besides
 `pegasus-large`, whence the other checkpoints are fine-tuned:
 
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
@@ -44,6 +43,7 @@ Implementation Notes
 - All models are transformer encoder-decoders with 16 layers in each component.
 - The implementation is completely inherited from :class:`~transformers.BartForConditionalGeneration`
 - Some key configuration differences:
+
     - static, sinusoidal position embeddings
     - no :obj:`layernorm_embedding` (:obj`PegasusConfig.normalize_embedding=False`)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
@@ -84,6 +84,7 @@ PegasusConfig
 
 PegasusTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer

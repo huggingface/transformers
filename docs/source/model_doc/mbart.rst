@@ -7,9 +7,10 @@ MBart
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 The MBart model was presented in `Multilingual Denoising Pre-training for Neural Machine Translation
-<https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov
-Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
+<https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov Marjan
+Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
 According to the abstract, MBART is a sequence-to-sequence denoising auto-encoder pretrained on large-scale monolingual
 corpora in many languages using the BART objective. mBART is one of the first methods for pre-training a complete
@@ -21,12 +22,13 @@ The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/ma
 
 Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-MBart is a multilingual encoder-decoder (seq-to-seq) model primarily intended for translation task. 
-As the model is multilingual it expects the sequences in a different format. A special language id token 
-is added in both the source and target text. The source text format is :obj:`X [eos, src_lang_code]`
-where :obj:`X` is the source text. The target text format is :obj:`[tgt_lang_code] X [eos]`. :obj:`bos` is never used.
 
-The :meth:`~transformers.MBartTokenizer.prepare_seq2seq_batch` handles this automatically and should be used to encode 
+MBart is a multilingual encoder-decoder (seq-to-seq) model primarily intended for translation task. As the model is
+multilingual it expects the sequences in a different format. A special language id token is added in both the source
+and target text. The source text format is :obj:`X [eos, src_lang_code]` where :obj:`X` is the source text. The target
+text format is :obj:`[tgt_lang_code] X [eos]`. :obj:`bos` is never used.
+
+The :meth:`~transformers.MBartTokenizer.prepare_seq2seq_batch` handles this automatically and should be used to encode
 the sequences for sequence-to-sequence fine-tuning.
 
 - Supervised training
@@ -44,8 +46,8 @@ the sequences for sequence-to-sequence fine-tuning.
 
 - Generation
 
-    While generating the target text set the :obj:`decoder_start_token_id` to the target language id. 
-    The following example shows how to translate English to Romanian using the `facebook/mbart-large-en-ro` model.
+    While generating the target text set the :obj:`decoder_start_token_id` to the target language id. The following
+    example shows how to translate English to Romanian using the `facebook/mbart-large-en-ro` model.
 
 .. code-block::
 

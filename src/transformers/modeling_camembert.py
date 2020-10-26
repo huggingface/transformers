@@ -46,15 +46,15 @@ CAMEMBERT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.CamembertConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 
@@ -64,8 +64,8 @@ CAMEMBERT_START_DOCSTRING = r"""
 )
 class CamembertModel(RobertaModel):
     """
-    This class overrides :class:`~transformers.RobertaModel`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
@@ -77,64 +77,72 @@ class CamembertModel(RobertaModel):
 )
 class CamembertForMaskedLM(RobertaForMaskedLM):
     """
-    This class overrides :class:`~transformers.RobertaForMaskedLM`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaForMaskedLM`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
 
 
 @add_start_docstrings(
-    """CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer
-    on top of the pooled output) e.g. for GLUE tasks. """,
+    """
+    CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForSequenceClassification(RobertaForSequenceClassification):
     """
-    This class overrides :class:`~transformers.RobertaForSequenceClassification`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaForSequenceClassification`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    CamemBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForMultipleChoice(RobertaForMultipleChoice):
     """
-    This class overrides :class:`~transformers.RobertaForMultipleChoice`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaForMultipleChoice`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    CamemBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
+    """,
     CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForTokenClassification(RobertaForTokenClassification):
     """
-    This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD
-    (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits` """,
+    """
+    CamemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`
+    """,
     CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     """
-    This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
@@ -145,8 +153,8 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
 )
 class CamembertForCausalLM(RobertaForCausalLM):
     """
-    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = CamembertConfig

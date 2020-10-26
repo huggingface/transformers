@@ -29,13 +29,12 @@ Tips:
   each task is converted into a text-to-text format. T5 works well on a variety of tasks out-of-the-box by prepending a
   different prefix to the input corresponding to each task, e.g., for translation: *translate English to German: ...*,
   for summarization: *summarize: ...*.
-  
+
   For more information about which prefix to use, it is easiest to look into Appendix D of the `paper
-  <https://arxiv.org/pdf/1910.10683.pdf>`__.
-- For sequence-to-sequence generation, it is recommended to use :obj:`T5ForConditionalGeneration.generate()``. This
-  method takes care of feeding the encoded input via cross-attention layers to the decoder and auto-regressively
-  generates the decoder output.
-- T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
+  <https://arxiv.org/pdf/1910.10683.pdf>`__. - For sequence-to-sequence generation, it is recommended to use
+  :obj:`T5ForConditionalGeneration.generate()``. This method takes care of feeding the encoded input via
+  cross-attention layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar
+  embeddings. Encoder input padding can be done on the left and on the right.
 
 The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`__.
 
@@ -51,14 +50,14 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
 
 - Unsupervised denoising training
 
-  In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) 
-  and the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. 
-  Each sentinel token represents a unique mask token for this sentence and should start with :obj:`<extra_id_0>`, 
+  In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) and
+  the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. Each
+  sentinel token represents a unique mask token for this sentence and should start with :obj:`<extra_id_0>`,
   :obj:`<extra_id_1>`, ... up to :obj:`<extra_id_99>`. As a default, 100 sentinel tokens are available in
   :class:`~transformers.T5Tokenizer`.
-  
+
   For instance, the sentence "The cute dog walks in the park" with the masks put on "cute dog" and "the" should be
-  processed as follows: 
+  processed as follows:
 
 .. code-block::
 
@@ -69,10 +68,10 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
 
 - Supervised training
 
-  In this setup the input sequence and output sequence are standard sequence-to-sequence input output mapping.
-  In translation, for instance with the input sequence "The house is wonderful." and output sequence "Das Haus ist
+  In this setup the input sequence and output sequence are standard sequence-to-sequence input output mapping. In
+  translation, for instance with the input sequence "The house is wonderful." and output sequence "Das Haus ist
   wunderbar.", the sentences should be processed as follows:
-  
+
 .. code-block::
 
   input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids

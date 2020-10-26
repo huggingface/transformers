@@ -14,8 +14,8 @@ MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class MBartForConditionalGeneration(BartForConditionalGeneration):
     r"""
-    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
 
     Examples::
         >>> from transformers import MBartForConditionalGeneration, MBartTokenizer

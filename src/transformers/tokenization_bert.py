@@ -135,15 +135,14 @@ class BertTokenizer(PreTrainedTokenizer):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
@@ -250,9 +249,8 @@ class BertTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A BERT sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A BERT sequence has the following format:
 
         - single sequence: ``[CLS] X [SEP]``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``
@@ -307,8 +305,8 @@ class BertTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A BERT sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
+        pair mask has the following format:
 
         ::
 
@@ -383,14 +381,14 @@ class BasicTokenizer(object):
         self.strip_accents = strip_accents
 
     def tokenize(self, text, never_split=None):
-        """Basic Tokenization of a piece of text.
-            Split on "white spaces" only, for sub-word tokenization, see WordPieceTokenizer.
+        """
+        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
+        WordPieceTokenizer.
 
         Args:
             **never_split**: (`optional`) list of str
-                Kept for backward compatibility purposes.
-                Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
-                List of token not to split.
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
@@ -512,14 +510,11 @@ class WordpieceTokenizer(object):
         self.max_input_chars_per_word = max_input_chars_per_word
 
     def tokenize(self, text):
-        """Tokenizes a piece of text into its word pieces.
+        """
+        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
+        tokenization using the given vocabulary.
 
-        This uses a greedy longest-match-first algorithm to perform tokenization
-        using the given vocabulary.
-
-        For example:
-          input = "unaffable"
-          output = ["un", "##aff", "##able"]
+        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
 
         Args:
           text: A single token or whitespace separated tokens. This should have

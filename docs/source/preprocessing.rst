@@ -17,7 +17,7 @@ work properly.
     the text you give it in tokens the same way for the pretraining corpus, and it will use the same correspondence
     token to index (that we usually call a `vocab`) as during pretraining.
 
-To automatically download the vocab used during pretraining or fine-tuning a given model, you can use the 
+To automatically download the vocab used during pretraining or fine-tuning a given model, you can use the
 :func:`~transformers.AutoTokenizer.from_pretrained` method:
 
 .. code-block::
@@ -39,10 +39,10 @@ is its ``__call__``: you just need to feed your sentence to your tokenizer objec
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
-This returns a dictionary string to list of ints.
-The `input_ids <glossary.html#input-ids>`__ are the indices corresponding to each token in our sentence. We will see
-below what the `attention_mask <glossary.html#attention-mask>`__ is used for and in
-:ref:`the next section <sentence-pairs>` the goal of `token_type_ids <glossary.html#token-type-ids>`__.
+This returns a dictionary string to list of ints. The `input_ids <glossary.html#input-ids>`__ are the indices
+corresponding to each token in our sentence. We will see below what the `attention_mask
+<glossary.html#attention-mask>`__ is used for and in :ref:`the next section <sentence-pairs>` the goal of
+`token_type_ids <glossary.html#token-type-ids>`__.
 
 The tokenizer can decode a list of token ids in a proper sentence:
 
@@ -51,10 +51,10 @@ The tokenizer can decode a list of token ids in a proper sentence:
     >>> tokenizer.decode(encoded_input["input_ids"])
     "[CLS] Hello, I'm a single sentence! [SEP]"
 
-As you can see, the tokenizer automatically added some special tokens that the model expects. Not all models need special
-tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we would have
-seen the same sentence as the original one here. You can disable this behavior (which is only advised if you have added
-those special tokens yourself) by passing ``add_special_tokens=False``.
+As you can see, the tokenizer automatically added some special tokens that the model expects. Not all models need
+special tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we
+would have seen the same sentence as the original one here. You can disable this behavior (which is only advised if you
+have added those special tokens yourself) by passing ``add_special_tokens=False``.
 
 If you have several sentences you want to process, you can do this efficiently by sending them as a list to the
 tokenizer:
@@ -114,9 +114,9 @@ You can do all of this by using the following options when feeding your list of 
                                [1, 1, 1, 1, 1, 0, 0, 0, 0],
                                [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 
-It returns a dictionary with string keys and tensor values. We can now see what the `attention_mask <glossary.html#attention-mask>`__ is
-all about: it points out which tokens the model should pay attention to and which ones it should not (because they
-represent padding in this case).
+It returns a dictionary with string keys and tensor values. We can now see what the `attention_mask
+<glossary.html#attention-mask>`__ is all about: it points out which tokens the model should pay attention to and which
+ones it should not (because they represent padding in this case).
 
 
 Note that if your model does not have a maximum length associated to it, the command above will throw a warning. You
@@ -127,9 +127,9 @@ can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer 
 Preprocessing pairs of sentences
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Sometimes you need to feed a pair of sentences to your model. For instance, if you want to classify if two sentences in a
-pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input is
-then represented like this: :obj:`[CLS] Sequence A [SEP] Sequence B [SEP]`
+Sometimes you need to feed a pair of sentences to your model. For instance, if you want to classify if two sentences in
+a pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input
+is then represented like this: :obj:`[CLS] Sequence A [SEP] Sequence B [SEP]`
 
 You can encode a pair of sentences in the format expected by your model by supplying the two sentences as two arguments
 (not a list since a list of two sentences will be interpreted as a batch of two single sentences, as we saw before).
@@ -146,8 +146,8 @@ This will once again return a dict string to list of ints:
 This shows us what the `token_type_ids <glossary.html#token-type-ids>`__ are for: they indicate to the model which part
 of the inputs correspond to the first sentence and which part corresponds to the second sentence. Note that
 `token_type_ids` are not required or handled by all models. By default, a tokenizer will only return the inputs that
-its associated model expects. You can force the return (or the non-return) of any of those special arguments by
-using ``return_input_ids`` or ``return_token_type_ids``.
+its associated model expects. You can force the return (or the non-return) of any of those special arguments by using
+``return_input_ids`` or ``return_token_type_ids``.
 
 If we decode the token ids we obtained, we will see that the special tokens have been properly added.
 
@@ -215,7 +215,7 @@ three arguments you need to know for this are :obj:`padding`, :obj:`truncation` 
       a single sequence).
     - :obj:`'max_length'` to pad to a length specified by the :obj:`max_length` argument or the maximum length accepted
       by the model if no :obj:`max_length` is provided (``max_length=None``). If you only provide a single sequence,
-      padding will still be applied to it. 
+      padding will still be applied to it.
     - :obj:`False` or :obj:`'do_not_pad'` to not pad the sequences. As we have seen before, this is the default
       behavior.
 
@@ -238,9 +238,9 @@ three arguments you need to know for this are :obj:`padding`, :obj:`truncation` 
   truncation/padding to :obj:`max_length` is deactivated.
 
 Here is a table summarizing the recommend way to setup padding and truncation. If you use pair of inputs sequence in
-any of the following examples, you can replace :obj:`truncation=True` by a :obj:`STRATEGY` selected in 
-:obj:`['only_first', 'only_second', 'longest_first']`, i.e. :obj:`truncation='only_second'` or
-:obj:`truncation= 'longest_first'` to control how both sequence in the pair are truncated as detailed before.
+any of the following examples, you can replace :obj:`truncation=True` by a :obj:`STRATEGY` selected in
+:obj:`['only_first', 'only_second', 'longest_first']`, i.e. :obj:`truncation='only_second'` or :obj:`truncation=
+'longest_first'` to control how both sequence in the pair are truncated as detailed before.
 
 +--------------------------------------+-----------------------------------+---------------------------------------------------------------------------------------------+
 | Truncation                           | Padding                           | Instruction                                                                                 |

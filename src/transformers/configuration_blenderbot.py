@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # LICENSE file in the root directory of this source tree.
-"""BlenderbotConfig has the same signature as BartConfig. We only rewrite the signature in order to document blenderbot-90M defaults."""
+"""
+BlenderbotConfig has the same signature as BartConfig. We only rewrite the signature in order to document
+blenderbot-90M defaults.
+"""
 from .configuration_bart import BartConfig
 
 
@@ -26,12 +29,12 @@ BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BlenderbotConfig(BartConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotForConditionalGeneration`.
-    It inherits from :class:`~transformers.BartConfig` and has the same signature with different defaults.
+    This is the configuration class to store the configuration of a
+    :class:`~transformers.BlenderbotForConditionalGeneration`. It inherits from :class:`~transformers.BartConfig` and
+    has the same signature with different defaults.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 54944):
@@ -52,8 +55,8 @@ class BlenderbotConfig(BartConfig):
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -63,8 +66,8 @@ class BlenderbotConfig(BartConfig):
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         add_bias_logits (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -88,11 +91,11 @@ class BlenderbotConfig(BartConfig):
         bos_token_id (:obj:`int`, `optional`, defaults to 0)
             Beginning of stream token id.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the `LayerDrop paper
-            <see https://arxiv.org/abs/1909.11556>`__ for more details.
+            The LayerDrop probability for the encoder. See the `LayerDrop paper <see
+            https://arxiv.org/abs/1909.11556>`__ for more details.
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the `LayerDrop paper
-            <see https://arxiv.org/abs/1909.11556>`__ for more details.
+            The LayerDrop probability for the decoder. See the `LayerDrop paper <see
+            https://arxiv.org/abs/1909.11556>`__ for more details.
         extra_pos_embeddings: (:obj:`int`, `optional`, defaults to 2):
             How many extra learned positional embeddings to use. Should be set to :obj:`pad_token_id+1`.
         is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`True`):
