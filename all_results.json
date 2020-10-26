@@ -1,9 +1,0 @@
-{
-    "eval_loss": 4568.46875,
-    "eval_bleu": 0.3241,
-    "eval_gen_len": 74.1,
-    "epoch": 10.0,
-    "test_loss": 4455.72705078125,
-    "test_bleu": 0.0588,
-    "test_gen_len": 80.1
-}
