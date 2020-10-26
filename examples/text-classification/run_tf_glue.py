@@ -26,7 +26,11 @@ from transformers import (
     glue_output_modes,
     glue_processors,
     glue_tasks_num_labels,
+    logging,
 )
+
+logging.enable_default_handler()
+logging.set_verbosity_info()
 
 
 class Split(Enum):
@@ -62,7 +66,7 @@ def get_tfds(
     return ds
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger()
 
 
 @dataclass
@@ -131,13 +135,14 @@ def main():
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
-
+    """
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
+    """
     logger.info(
         "n_replicas: %s, distributed training: %s, 16-bits training: %s",
         training_args.n_replicas,
