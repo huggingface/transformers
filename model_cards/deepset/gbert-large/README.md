@@ -1,3 +1,13 @@
+---
+language: de
+license: mit
+datasets:
+- wikipedia
+- OPUS
+- OpenLegalData
+- OSCAR
+---
+
 # German BERT large
 
 Released, Oct 2020, this is a German BERT language model trained collaboratively by the makers of the original German BERT (aka "bert-base-german-cased") and the dbmdz BERT (aka bert-base-german-dbmdz-cased). In our [paper](https://arxiv.org/pdf/2010.10906.pdf), we outline the steps taken to train our model and show that it outperforms its predecessors.  
