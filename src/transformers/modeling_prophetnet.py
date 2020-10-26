@@ -1986,6 +1986,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 hidden_states_ngram=outputs.hidden_states_ngram,
                 attentions=outputs.attentions,
                 ngram_attentions=outputs.ngram_attentions,
+                cross_attentions=outputs.cross_attentions,
             )
 
     def _compute_loss(self, logits, labels):
