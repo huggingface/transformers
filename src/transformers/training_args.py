@@ -268,10 +268,6 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit"},
     )
-    fp16_eval: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision in evaluation"},
-    )
     fp16_opt_level: str = field(
         default="O1",
         metadata={

@@ -1466,7 +1466,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
-            if self.args.fp16_eval and _use_native_amp:
+            if self.args.fp16 and _use_native_amp:
                 with autocast():
                     outputs = model(**inputs)
             else:
