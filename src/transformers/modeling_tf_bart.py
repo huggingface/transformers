@@ -903,7 +903,7 @@ class TFBartModel(TFPretrainedBartModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
-                training=training
+                training=training,
             )
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -916,7 +916,7 @@ class TFBartModel(TFPretrainedBartModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
         if not return_dict:
             # Attention and hidden_states will be [] or None if they aren't needed
