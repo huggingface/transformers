@@ -66,30 +66,31 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
-    vocab_file (:obj:`str`): `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm`
-    extension) that contains the vocabulary necessary to instantiate a tokenizer. bos_token (:obj:`str`, `optional`,
-    defaults to :obj:`"<s>"`): The beginning of sequence token that was used during pretraining. Can be used a sequence
-    classifier token.
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the end
-                of sequence. The token used is the :obj:`sep_token`.
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
