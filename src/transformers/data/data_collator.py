@@ -11,21 +11,22 @@ from ..tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTrained
 InputDataClass = NewType("InputDataClass", Any)
 
 """
-A DataCollator is a function that takes a list of samples from a Dataset
-and collate them into a batch, as a dictionary of Tensors.
+A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
+of Tensors.
 """
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, torch.Tensor]])
 
 
 def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Tensor]:
     """
-    Very simple data collator that simply collates batches of dict-like objects and erforms special handling for potential keys named:
+    Very simple data collator that simply collates batches of dict-like objects and erforms special handling for
+    potential keys named:
 
         - ``label``: handles a single value (int or float) per object
         - ``label_ids``: handles a list of values per object
 
-    Des not do any additional preprocessing: property names of the input object will be used as corresponding inputs to the model.
-    See glue and ner for example of how it's useful.
+    Des not do any additional preprocessing: property names of the input object will be used as corresponding inputs to
+    the model. See glue and ner for example of how it's useful.
     """
 
     # In this function we'll make the assumption that all `features` in the batch
@@ -73,11 +74,11 @@ class DataCollatorWithPadding:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding
-            index) among:
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
+            among:
 
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-              single sequence if provided).
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+              sequence if provided).
             * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
               maximum acceptable input length for the model if that argument is not provided.
             * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
@@ -87,8 +88,8 @@ class DataCollatorWithPadding:
         pad_to_multiple_of (:obj:`int`, `optional`):
             If set will pad the sequence to a multiple of the provided value.
 
-            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-            >= 7.5 (Volta).
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
+            7.5 (Volta).
     """
 
     tokenizer: PreTrainedTokenizerBase
@@ -117,6 +118,7 @@ class DataCollatorWithPadding:
 class DataCollatorForLanguageModeling:
     """
     Data collator used for language modeling.
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
     """
@@ -198,6 +200,7 @@ class DataCollatorForLanguageModeling:
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
     Data collator used for language modeling.
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
     """
@@ -275,8 +278,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
     def mask_tokens(self, inputs: torch.Tensor, mask_labels: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
-        Set 'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. Set
+        'mask_labels' means we use whole word mask (wwm), we directly mask idxs according to it's ref.
         """
 
         if self.tokenizer.mask_token is None:
@@ -316,6 +319,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 class DataCollatorForSOP(DataCollatorForLanguageModeling):
     """
     Data collator used for sentence order prediction task.
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for both masked language modeling and sentence order prediction
     """
@@ -342,8 +346,8 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Prepare masked tokens inputs/labels/attention_mask for masked language modeling: 80% MASK, 10% random, 10% original.
-        N-gram not applied yet.
+        Prepare masked tokens inputs/labels/attention_mask for masked language modeling: 80% MASK, 10% random, 10%
+        original. N-gram not applied yet.
         """
         if self.tokenizer.mask_token is None:
             raise ValueError(
@@ -385,6 +389,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 class DataCollatorForPermutationLanguageModeling:
     """
     Data collator used for permutation language modeling.
+
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for permutation language modeling with procedures specific to XLNet
     """
@@ -425,10 +430,14 @@ class DataCollatorForPermutationLanguageModeling:
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
             0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
-            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be masked)
-            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be masked
-            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length - span_length]`` and mask tokens ``start_index:start_index + span_length``
-            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in the sequence to be processed), repeat from Step 1.
+            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be
+               masked)
+            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be
+               masked
+            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length -
+               span_length]`` and mask tokens ``start_index:start_index + span_length``
+            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
+               the sequence to be processed), repeat from Step 1.
         """
 
         if self.tokenizer.mask_token is None:
@@ -517,8 +526,7 @@ class DataCollatorForPermutationLanguageModeling:
 @dataclass
 class DataCollatorForNextSentencePrediction:
     """
-    Data collator used for next sentence prediction.
-    - collates examples which contains pre-generated negative examples
+    Data collator used for next sentence prediction. - collates examples which contains pre-generated negative examples
     - preprocesses batches for masked language modeling
     """
 
@@ -531,9 +539,12 @@ class DataCollatorForNextSentencePrediction:
 
     def __call__(self, examples: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
         """
-        The input should contain negative examples, :class:`~transformers.DataCollatorForNextSentencePrediction` will not generate any negative examples.
+        The input should contain negative examples, :class:`~transformers.DataCollatorForNextSentencePrediction` will
+        not generate any negative examples
+
         Args:
             examples (:obj:`List[Dict]`): Each dictionary should have the following keys:
+
                   - ``tokens_a``: A sequence of tokens, which should appear before ``tokens_b`` in the text.
                   - ``tokens_b``: A sequence of tokens, which should appear after ``tokens_a`` in the text.
                   - ``is_random_next``: 1 if this pair is generated randomly, else 0.

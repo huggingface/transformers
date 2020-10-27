@@ -6,12 +6,18 @@ import os
 import warnings
 from typing import Callable, Dict, Optional, Tuple
 
+
+# Integrations must be imported before ML frameworks:
+from .integrations import (  # isort: split
+    is_comet_available,
+    is_wandb_available,
+)
+
 import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 
-from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
@@ -30,8 +36,7 @@ logger = logging.get_logger(__name__)
 
 class TFTrainer:
     """
-    TFTrainer is a simple but feature-complete training and eval loop for TensorFlow,
-    optimized for 🤗 Transformers.
+    TFTrainer is a simple but feature-complete training and eval loop for TensorFlow, optimized for 🤗 Transformers.
 
     Args:
         model (:class:`~transformers.TFPreTrainedModel`):
@@ -40,15 +45,15 @@ class TFTrainer:
             The arguments to tweak training.
         train_dataset (:class:`~tf.data.Dataset`, `optional`):
             The dataset to use for training. The dataset should yield tuples of ``(features, labels)`` where
-            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
-            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
-            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss
+            is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as
+            when using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
             ``model(features, **labels)``.
         eval_dataset (:class:`~tf.data.Dataset`, `optional`):
             The dataset to use for evaluation. The dataset should yield tuples of ``(features, labels)`` where
-            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
-            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
-            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss
+            is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as
+            when using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
             ``model(features, **labels)``.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
@@ -59,8 +64,8 @@ class TFTrainer:
             A tuple containing the optimizer and the scheduler to use. The optimizer default to an instance of
             :class:`tf.keras.optimizers.Adam` if :obj:`args.weight_decay_rate` is 0 else an instance of
             :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
-            :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else
-            an instance of :class:`~transformers.WarmUp`.
+            :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else an
+            instance of :class:`~transformers.WarmUp`.
         kwargs:
             Deprecated keyword arguments.
     """
@@ -155,10 +160,10 @@ class TFTrainer:
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
                 If provided, will override `self.eval_dataset`. The dataset should yield tuples of ``(features,
-                labels)`` where ``features`` is a dict of input features and ``labels`` is the labels. If ``labels``
-                is a tensor, the loss is calculated by the model by calling ``model(features, labels=labels)``. If
-                ``labels`` is a dict, such as when using a QuestionAnswering head model with multiple targets, the
-                loss is instead calculated by calling ``model(features, **labels)``.
+                labels)`` where ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is
+                a tensor, the loss is calculated by the model by calling ``model(features, labels=labels)``. If
+                ``labels`` is a dict, such as when using a QuestionAnswering head model with multiple targets, the loss
+                is instead calculated by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -187,11 +192,11 @@ class TFTrainer:
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
-                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is
-                a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
-                calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such
-                as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
-                by calling ``model(features, **labels)``.
+                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is a
+                dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is calculated
+                by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when using
+                a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+                ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -234,14 +239,15 @@ class TFTrainer:
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information
-        `here <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information `here
+        <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
             WANDB_PROJECT:
-                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project
+                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different
+                project.
             WANDB_DISABLED:
-                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
+                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely.
         """
         if hasattr(self, "_setup_wandb"):
             warnings.warn(
@@ -266,8 +272,8 @@ class TFTrainer:
             COMET_OFFLINE_DIRECTORY:
                 (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
 
-        For a number of configurable items in the environment,
-        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
+        For a number of configurable items in the environment, see `here
+        <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
         """
         comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
         args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
@@ -419,14 +425,14 @@ class TFTrainer:
         """
         Run evaluation and returns metrics.
 
-        The calling script will be responsible for providing a method to compute metrics, as they are
-        task-dependent (pass it to the init :obj:`compute_metrics` argument).
+        The calling script will be responsible for providing a method to compute metrics, as they are task-dependent
+        (pass it to the init :obj:`compute_metrics` argument).
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. The dataset should yield tuples of
-                ``(features, labels)`` where ``features`` is a dict of input features and ``labels`` is the labels.
-                If ``labels`` is a tensor, the loss is calculated by the model by calling ``model(features,
+                ``(features, labels)`` where ``features`` is a dict of input features and ``labels`` is the labels. If
+                ``labels`` is a tensor, the loss is calculated by the model by calling ``model(features,
                 labels=labels)``. If ``labels`` is a dict, such as when using a QuestionAnswering head model with
                 multiple targets, the loss is instead calculated by calling ``model(features, **labels)``.
 
@@ -753,24 +759,23 @@ class TFTrainer:
         """
         Run prediction and returns predictions and potential metrics.
 
-        Depending on the dataset and your use case, your test dataset may contain labels.
-        In that case, this method will also return metrics, like in :obj:`evaluate()`.
+        Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
+        will also return metrics, like in :obj:`evaluate()`.
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
                 Dataset to run the predictions on. The dataset should yield tuples of ``(features, labels)`` where
-                ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor,
-                the loss is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is
-                a dict, such as when using a QuestionAnswering head model with multiple targets, the loss is instead
-                calculated by calling ``model(features, **labels)``.
-        Returns:
-            `NamedTuple`:
-            predictions (:obj:`np.ndarray`):
-                The predictions on :obj:`test_dataset`.
-            label_ids (:obj:`np.ndarray`, `optional`):
-                The labels (if the dataset contained some).
-            metrics (:obj:`Dict[str, float]`, `optional`):
-                The potential dictionary of metrics (if the dataset contained labels).
+                ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the
+                loss is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict,
+                such as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
+                by calling ``model(features, **labels)``
+
+        Returns: `NamedTuple` A namedtuple with the following keys:
+
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
+            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+              contained labels).
         """
         test_ds, steps, num_examples = self.get_test_tfdataset(test_dataset)
 

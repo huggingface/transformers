@@ -26,9 +26,11 @@ jobs:
           which python
           python --version
           pip --version
+          
       - name: Current dir
         run: pwd
       - run: nvidia-smi
+        
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -37,6 +39,7 @@ jobs:
           which python
           python --version
           pip --version
+          
       - name: Install dependencies
         run: |
           source .env/bin/activate
@@ -51,7 +54,6 @@ jobs:
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
-
       - name: Run all tests on GPU
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
@@ -59,7 +61,7 @@ jobs:
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s ./tests/ --durations=50
+          python -m pytest -n 1 --dist=loadfile -s --make_reports=tests tests
 
       - name: Run examples tests on GPU
         env:
@@ -69,7 +71,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install -r examples/requirements.txt
-          python -m pytest -n 1 --dist=loadfile -s examples --durations=50
+          python -m pytest -n 1 --dist=loadfile -s --make_reports=examples examples
 
       - name: Run all pipeline tests on GPU
         env:
@@ -79,7 +81,13 @@ jobs:
           RUN_PIPELINE_TESTS: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s ./tests/ -m is_pipeline_test --durations=50
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make_reports=tests_pipeline tests 
+
+      - name: test suite reports artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_reports
+          path: reports
 
 
   run_all_tests_torch_and_tf_multiple_gpu:

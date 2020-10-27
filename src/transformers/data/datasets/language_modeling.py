@@ -19,8 +19,7 @@ logger = logging.get_logger(__name__)
 
 class TextDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(
@@ -91,8 +90,7 @@ class TextDataset(Dataset):
 
 class LineByLineTextDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
@@ -118,8 +116,7 @@ class LineByLineTextDataset(Dataset):
 
 class LineByLineWithRefDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
@@ -294,8 +291,7 @@ class LineByLineWithSOPTextDataset(Dataset):
 
 class TextDatasetForNextSentencePrediction(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(

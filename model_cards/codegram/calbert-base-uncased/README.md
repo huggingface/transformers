@@ -87,5 +87,5 @@ embeddings.detach()
 CALBERT was trained and evaluated by [Txus Bach](https://twitter.com/txustice), as part of [Codegram](https://www.codegram.com)'s applied research.
 
 <a href="https://huggingface.co/exbert/?model=codegram/calbert-base-uncased&modelKind=bidirectional&sentence=M%27agradaria%20força%20saber-ne%20més">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>

@@ -50,10 +50,10 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class LayoutLMTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" LayoutLMTokenizer.
+    Constructs a "Fast" LayoutLMTokenizer.
 
-    :class:`~transformers.LayoutLMTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    :class:`~transformers.LayoutLMTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.

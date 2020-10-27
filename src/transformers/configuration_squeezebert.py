@@ -29,19 +29,17 @@ SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SqueezeBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.SqueezeBertModel`.
-    It is used to instantiate a SqueezeBERT model according to the specified arguments, defining the model
-    architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.SqueezeBertModel`. It is used
+    to instantiate a SqueezeBERT model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the SqueezeBERT model. Defines the number of different tokens that can be
-            represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.SqueezeBertModel`.
+            Vocabulary size of the SqueezeBERT model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.SqueezeBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -51,15 +49,15 @@ class SqueezeBertConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.BertModel` or
             :class:`~transformers.TFBertModel`.
@@ -85,7 +83,7 @@ class SqueezeBertConfig(PretrainedConfig):
         output_groups (:obj:`int`, `optional`, defaults to 4):
             The number of groups in the third feed forward network layer.
 
-    Example:
+    Examples::
 
         >>> from transformers import SqueezeBertModel, SqueezeBertConfig
 
@@ -98,9 +96,8 @@ class SqueezeBertConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
 
-    Attributes:
-        pretrained_config_archive_map (Dict[str, str]):
-            A dictionary containing all the available pre-trained checkpoints.
+    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
+    checkpoints.
     """
     pretrained_config_archive_map = SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "squeezebert"

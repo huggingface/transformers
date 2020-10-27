@@ -77,23 +77,23 @@ class ModalEmbeddings(nn.Module):
 
 
 MMBT_START_DOCSTRING = r"""
-    MMBT model was proposed in
-    `Supervised Multimodal Bitransformers for Classifying Images and Text <https://github.com/facebookresearch/mmbt>`__
-    by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
-    It's a supervised multimodal bitransformer model that fuses information from text and other image encoders,
-    and obtain state-of-the-art performance on various multimodal classification benchmark tasks.
+    MMBT model was proposed in `Supervised Multimodal Bitransformers for Classifying Images and Text
+    <https://github.com/facebookresearch/mmbt>`__ by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
+    It's a supervised multimodal bitransformer model that fuses information from text and other image encoders, and
+    obtain state-of-the-art performance on various multimodal classification benchmark tasks.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.MMBTConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration.
         transformer (:class: `~nn.Module`): A text transformer that is used by MMBT.
             It should have embeddings, encoder, and pooler attributes.
         encoder (:class: `~nn.Module`): Encoder for the second modality.
@@ -103,13 +103,12 @@ MMBT_START_DOCSTRING = r"""
 MMBT_INPUTS_DOCSTRING = r"""
     Args:
         input_modal (``torch.FloatTensor`` of shape ``(batch_size, ***)``):
-            The other modality data. It will be the shape that the encoder for that type expects.
-            e.g. With an Image Encoder, the shape would be (batch_size, channels, height, width)
+            The other modality data. It will be the shape that the encoder for that type expects. e.g. With an Image
+            Encoder, the shape would be (batch_size, channels, height, width)
         input_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``):
-            Indices of input sequence tokens in the vocabulary.
-            It does not expect [CLS] token to be added as it's appended to the end of other modality embeddings.
-            Indices can be obtained using :class:`~transformers.BertTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
+            Indices of input sequence tokens in the vocabulary. It does not expect [CLS] token to be added as it's
+            appended to the end of other modality embeddings. Indices can be obtained using
+            :class:`~transformers.BertTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
             :meth:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
@@ -119,27 +118,26 @@ MMBT_INPUTS_DOCSTRING = r"""
         modal_end_tokens (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Optional end token to be added to Other Modality Embedding. [SEP] Most commonly used.
         attention_mask (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         modal_token_type_ids (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
-            Segment token indices to indicate different portions of the non-text modality.
-            The embeddings from these tokens will be summed with the respective token embeddings for the non-text modality.
+            Segment token indices to indicate different portions of the non-text modality. The embeddings from these
+            tokens will be summed with the respective token embeddings for the non-text modality.
         position_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`__
         modal_position_ids (``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``, `optional`):
@@ -148,8 +146,7 @@ MMBT_INPUTS_DOCSTRING = r"""
 
             `What are position IDs? <../glossary.html#position-ids>`__
         head_mask (``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -162,9 +159,8 @@ MMBT_INPUTS_DOCSTRING = r"""
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
         encoder_attention_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -309,31 +305,29 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
 
 
 @add_start_docstrings(
-    """MMBT Model with a sequence classification/regression head on top (a linear layer on top of
-                      the pooled output)""",
+    """
+    MMBT Model with a sequence classification/regression head on top (a linear layer on top of the pooled output)
+    """,
     MMBT_START_DOCSTRING,
     MMBT_INPUTS_DOCSTRING,
 )
 class MMBTForClassification(nn.Module):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
+            config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification (or regression if config.num_labels==1) loss.
-        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+    Returns: `Tuple` comprising various elements depending on the configuration (config) and inputs: **loss**:
+    (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``: Classification (or
+    regression if config.num_labels==1) loss. **logits**: ``torch.FloatTensor`` of shape ``(batch_size,
+    config.num_labels)`` Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    **hidden_states**: (`optional`, returned when ``output_hidden_states=True``) list of ``torch.FloatTensor`` (one for
+    the output of each layer + the output of the embeddings) of shape ``(batch_size, sequence_length, hidden_size)``:
+    Hidden-states of the model at the output of each layer plus the initial embedding outputs. **attentions**:
+    (`optional`, returned when ``output_attentions=True``) list of ``torch.FloatTensor`` (one for each layer) of shape
+    ``(batch_size, num_heads, sequence_length, sequence_length)``: Attentions weights after the attention softmax, used
+    to compute the weighted average in the self-attention heads.
 
     Examples::
 

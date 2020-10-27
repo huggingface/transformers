@@ -13,8 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for Transformer XL model.
-    Adapted from https://github.com/kimiyoung/transformer-xl.
+"""
+ Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
 """
 
 
@@ -67,12 +67,15 @@ DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
 
 def tokenize_numbers(text_array: List[str]) -> List[str]:
     """
-    Splits large comma-separated numbers and floating point values.
-    This is done by replacing commas with ' @,@ ' and dots with ' @.@ '.
+    Splits large comma-separated numbers and floating point values. This is done by replacing commas with ' @,@ ' and
+    dots with ' @.@ '.
+
     Args:
-        text_array: An already tokenized text as list
+        text_array: An already tokenized text as list.
+
     Returns:
-        A list of strings with tokenized numbers
+        A list of strings with tokenized numbers.
+
     Example::
         >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
         ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
@@ -88,12 +91,14 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
 def detokenize_numbers(text: str) -> str:
     """
-    Inverts the operation of `tokenize_numbers`.
-    This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Inverts the operation of `tokenize_numbers`. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+
     Args:
-        text: A string where the number should be detokenized
+        text: A string where the number should be detokenized.
+
     Returns:
-        A detokenized string
+        A detokenized string.
+
     Example::
         >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
         "$ 5,000 1.73 m"
@@ -106,7 +111,8 @@ def detokenize_numbers(text: str) -> str:
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
     Construct a Transformer-XL tokenizer adapted from Vocab class in `the original code
-    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
+    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no
+    sub-word tokenization).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
@@ -129,8 +135,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         pretrained_vocab_file (:obj:`str`, `optional`):
             File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
         never_split (:obj:`List[str]`, `optional`):
-            List of tokens that should never be split. If no list is specified, will simply use the existing
-            special tokens.
+            List of tokens that should never be split. If no list is specified, will simply use the existing special
+            tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -366,9 +372,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def move_added_token(self, token: str, target_idx: int):
         """
-        Moves an added token to a specific position in the vocab.
-        This method should be used when resizing an embedding layer other than the last one in the `AdaptiveEmbedding`
-        in order to move the token in the tokenizer from the default position (at the very end) to the desired one.
+        Moves an added token to a specific position in the vocab. This method should be used when resizing an embedding
+        layer other than the last one in the `AdaptiveEmbedding` in order to move the token in the tokenizer from the
+        default position (at the very end) to the desired one.
 
         Args:
             token: The token to move to a specific position in the vocab.
@@ -402,13 +408,16 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def moses_pipeline(self, text: str) -> List[str]:
         """
         Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
-        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`).
-        Additionally, large comma-separated numbers and floating point values are split.
-        E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000 people are 1 @.@ 80m tall".
+        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`). Additionally,
+        large comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23
+        @,@ 000 people are 1 @.@ 80m tall"
+
         Args:
-            text: Text to be tokenized
+            text: Text to be tokenize
+
         Returns:
-            A list of tokenized strings
+            A list of tokenized string
+
         Example::
             >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
             >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
@@ -443,8 +452,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """
-        Converts a sequence of tokens (string) in a single string.
-        Additionally, the split numbers are converted back into it's original form.
+        Converts a sequence of tokens (string) in a single string. Additionally, the split numbers are converted back
+        into it's original form.
         """
         out_string = self.moses_detokenizer.detokenize(tokens)
         return detokenize_numbers(out_string).strip()

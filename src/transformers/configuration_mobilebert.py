@@ -29,9 +29,8 @@ class MobileBertConfig(PretrainedConfig):
     :class:`~transformers.TFMobileBertModel`. It is used to instantiate a MobileBERT model according to the specified
     arguments, defining the model architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
@@ -48,15 +47,15 @@ class MobileBertConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.MobileBertModel`
             or :class:`~transformers.TFMobileBertModel`.
@@ -84,7 +83,7 @@ class MobileBertConfig(PretrainedConfig):
         normalization_type (:obj:`str`, `optional`, defaults to :obj:`"no_norm"`):
             The normalization type in MobileBERT.
 
-    Examples:
+    Examples::
 
         >>> from transformers import MobileBertModel, MobileBertConfig
 
@@ -97,9 +96,8 @@ class MobileBertConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
 
-    Attributes:
-        pretrained_config_archive_map (Dict[str, str]):
-            A dictionary containing all the available pre-trained checkpoints.
+    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
+    checkpoints.
     """
     pretrained_config_archive_map = MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "mobilebert"

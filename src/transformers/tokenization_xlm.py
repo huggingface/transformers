@@ -429,8 +429,8 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 def get_pairs(word):
     """
-    Return set of symbol pairs in a word.
-    word is represented as tuple of symbols (symbols being variable-length strings)
+    Return set of symbol pairs in a word. word is represented as tuple of symbols (symbols being variable-length
+    strings)
     """
     pairs = set()
     prev_char = word[0]
@@ -556,18 +556,17 @@ class XLMTokenizer(PreTrainedTokenizer):
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"<special1>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
@@ -750,35 +749,44 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, lang="en", bypass_tokenizer=False):
         """
-        Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific tokenizerself. Otherwise, we use Moses.
+        Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific
+        tokenizerself. Otherwise, we use Moses.
 
         Details of tokenization:
-        - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
+
+            - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
-        - [pythainlp](https://github.com/PyThaiNLP/pythainlp): Thai tokenizer
+            - [pythainlp](https://github.com/PyThaiNLP/pythainlp): Thai tokenizer
             - Install with `pip install pythainlp`
-        - [kytea](https://github.com/chezou/Mykytea-python): Japanese tokenizer, wrapper of [KyTea](https://github.com/neubig/kytea)
+            - [kytea](https://github.com/chezou/Mykytea-python): Japanese tokenizer, wrapper of
+              [KyTea](https://github.com/neubig/kytea)
             - Install with the following steps:
-            ```
-            git clone git@github.com:neubig/kytea.git && cd kytea
-            autoreconf -i
-            ./configure --prefix=$HOME/local
-            make && make install
-            pip install kytea
-            ```
-        - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
+
+            ::
+
+                git clone git@github.com:neubig/kytea.git && cd kytea
+                autoreconf -i
+                ./configure --prefix=$HOME/local
+                make && make install
+                pip install kytea
+
+            - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
             - Install with `pip install jieba`
 
-        (*) The original XLM used [Stanford Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip).
-        However, the wrapper (`nltk.tokenize.stanford_segmenter`) is slow due to JVM overhead, and it will be deprecated.
-        Jieba is a lot faster and pip-installable. Note there is some mismatch with the Stanford Segmenter. It should be fine
-        if you fine-tune the model with Chinese supervisionself. If you want the same exact behaviour, use the original XLM
-        [preprocessing script](https://github.com/facebookresearch/XLM/tree/master/tools) to tokenize the sentence externally,
-        and set `bypass_tokenizer=True` to bypass the tokenizer.
+        (*) The original XLM used [Stanford
+        Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip). However, the wrapper
+        (`nltk.tokenize.stanford_segmenter`) is slow due to JVM overhead, and it will be deprecated. Jieba is a lot
+        faster and pip-installable. Note there is some mismatch with the Stanford Segmenter. It should be fine if you
+        fine-tune the model with Chinese supervisionself. If you want the same exact behaviour, use the original XLM
+        [preprocessing script](https://github.com/facebookresearch/XLM/tree/master/tools) to tokenize the sentence
+        externally, and set `bypass_tokenizer=True` to bypass the tokenizer.
 
         Args:
-            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported languages. However, we don't enforce it.
-            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)  (bool). If True, we only apply BPE.
+
+            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
+              languages. However, we don't enforce it.
+            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
+              (bool). If True, we only apply BPE.
 
         Returns:
             List of tokens.
@@ -855,9 +863,8 @@ class XLMTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        An XLM sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An XLM sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s> B </s>``
@@ -919,8 +926,8 @@ class XLMTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        An XLM sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLM sequence
+        pair mask has the following format:
 
         ::
 

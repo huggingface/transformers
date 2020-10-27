@@ -27,14 +27,16 @@ LANG_CODE_PATH = "lang_code_data/language-codes-3b2.csv"
 
 
 class TatoebaConverter:
-    """Convert Tatoeba-Challenge models to huggingface format.
+    """
+    Convert Tatoeba-Challenge models to huggingface format.
 
     Steps:
 
         1. convert numpy state dict to hf format (same code as OPUS-MT-Train conversion).
-        2. rename opus model to huggingface format. This means replace each alpha3 code with an alpha2 code if a unique one existes.
-           e.g. aav-eng -> aav-en, heb-eng -> he-en
-        3. write a model card containing the original Tatoeba-Challenge/README.md and extra info about alpha3 group members.
+        2. rename opus model to huggingface format. This means replace each alpha3 code with an alpha2 code if a unique
+           one existes. e.g. aav-eng -> aav-en, heb-eng -> he-en
+        3. write a model card containing the original Tatoeba-Challenge/README.md and extra info about alpha3 group
+           members.
     """
 
     def __init__(self, save_dir="marian_converted"):
@@ -148,8 +150,9 @@ class TatoebaConverter:
         repo_root=DEFAULT_REPO,
         dry_run=False,
     ) -> str:
-        """Copy the most recent model's readme section from opus, and add metadata.
-        upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
+        """
+        Copy the most recent model's readme section from opus, and add metadata. upload command: aws s3 sync
+        model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
         """
         short_pair = remove_prefix(hf_model_id, "opus-mt-")
         extra_metadata = self.metadata.loc[short_pair].drop("2m")
