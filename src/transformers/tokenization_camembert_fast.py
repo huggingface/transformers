@@ -66,10 +66,12 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
-    vocab_file (:obj:`str`): `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm`
-    extension) that contains the vocabulary necessary to instantiate a tokenizer. bos_token (:obj:`str`, `optional`,
-    defaults to :obj:`"<s>"`): The beginning of sequence token that was used during pretraining. Can be used a sequence
-    classifier token.
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             .. note::
 
