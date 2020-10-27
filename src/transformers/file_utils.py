@@ -651,7 +651,7 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> input_ids = inputs["input_ids"]
@@ -669,7 +669,7 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         >>> input_dict = tokenizer(question, text, return_tensors='tf')
@@ -688,7 +688,7 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
@@ -705,7 +705,7 @@ TF_MASKED_LM_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
         >>> inputs["labels"] = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
@@ -722,7 +722,7 @@ TF_BASE_MODEL_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
@@ -737,7 +737,7 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -758,7 +758,7 @@ TF_CAUSAL_LM_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True))
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
