@@ -478,9 +478,10 @@ class TestCasePlus(unittest.TestCase):
 
     Feature 1: A set of fully resolved important file and dir path accessors.
 
-    In tests often we need to know where things are relative to the current test file, and it's not trivial since the
-    test could be invoked from more than one directory or could resides in different sub-directories. This class solves
-    this problem by sorting out all the basic paths and provides easy accessors to them:
+    In tests often we need to know where things are relative to the current test file, and it's not
+    trivial since the test could be invoked from more than one directory or could reside in
+    sub-directories with different depths. This class solves this problem by sorting out all the
+    basic paths and provides easy accessors to them:
 
     * ``pathlib`` objects (all fully resolved):
 
