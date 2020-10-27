@@ -28,8 +28,14 @@ DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DebertaConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.DebertaConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.DebertaModel`.
+    This is the configuration class to store the configuration of a :class:`~transformers.DebertaModel` or a
+    :class:`~transformers.TFDebertaModel`. It is used to instantiate a DeBERTa model according to the specified
+    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
+    configuration to that of the DeBERTa `microsoft/deberta-base <https://huggingface.co/microsoft/deberta-base>`__
+    architecture.
+
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Arguments:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
