@@ -7,14 +7,13 @@ import pytest
 
 from transformers import BertTokenizer, EncoderDecoderModel, is_torch_available
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, slow
+from transformers.testing_utils import TestCasePlus, execute_async_std, slow
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import Seq2SeqTrainingArguments, main
 from .seq2seq_trainer import Seq2SeqTrainer
 from .test_seq2seq_examples import MBART_TINY
-from .utils import execute_async_std
 
 
 if is_torch_available():
