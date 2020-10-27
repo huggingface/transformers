@@ -54,7 +54,7 @@ except ImportError:
         _has_tensorboard = False
 
 try:
-    from azureml.core.run import Run
+    from azureml.core.run import Run  # noqa: F401
     _has_azureml = True
 except ImportError:
     _has_azureml = False
