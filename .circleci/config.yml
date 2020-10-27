@@ -290,7 +290,7 @@ jobs:
                   path: ~/transformers/report_examples_passes.txt
             - store_artifacts:
                   path: ~/transformers/report_examples_stats.txt
-        build_doc:
+    build_doc:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
