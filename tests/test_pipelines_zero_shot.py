@@ -1,7 +1,7 @@
 import unittest
 from copy import deepcopy
 
-from transformers.pipelines import Pipeline, pipeline
+from transformers.pipelines import Pipeline
 
 from .test_pipelines_common import CustomInputPipelineCommonMixin
 
