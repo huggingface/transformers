@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 import random
@@ -18,8 +19,7 @@ logger = logging.get_logger(__name__)
 
 class TextDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(
@@ -90,8 +90,7 @@ class TextDataset(Dataset):
 
 class LineByLineTextDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
@@ -106,12 +105,47 @@ class LineByLineTextDataset(Dataset):
 
         batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
         self.examples = batch_encoding["input_ids"]
+        self.examples = [{"input_ids": torch.tensor(e, dtype=torch.long)} for e in self.examples]
 
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> torch.Tensor:
-        return torch.tensor(self.examples[i], dtype=torch.long)
+    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+        return self.examples[i]
+
+
+class LineByLineWithRefDataset(Dataset):
+    """
+    This will be superseded by a framework-agnostic approach soon.
+    """
+
+    def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
+        assert os.path.isfile(file_path), f"Input file path {file_path} not found"
+        assert os.path.isfile(ref_path), f"Ref file path {file_path} not found"
+        # Here, we do not cache the features, operating under the assumption
+        # that we will soon use fast multithreaded tokenizers from the
+        # `tokenizers` repo everywhere =)
+        logger.info("Creating features from dataset file at %s", file_path)
+        logger.info("Use ref segment results at %s", ref_path)
+        with open(file_path, encoding="utf-8") as f:
+            data = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+        batch_encoding = tokenizer(data, add_special_tokens=True, truncation=True, max_length=block_size)
+        self.examples = batch_encoding["input_ids"]
+        self.examples = [{"input_ids": torch.tensor(e, dtype=torch.long)} for e in self.examples]
+
+        # Get ref inf from file
+        with open(ref_path, encoding="utf-8") as f:
+            ref = [json.loads(line) for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+        assert len(data) == len(ref)
+        n = len(self.examples)
+        for i in range(n):
+            self.examples[i]["chinese_ref"] = torch.tensor(ref[i], dtype=torch.long)
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+        return self.examples[i]
 
 
 class LineByLineWithSOPTextDataset(Dataset):
@@ -257,8 +291,7 @@ class LineByLineWithSOPTextDataset(Dataset):
 
 class TextDatasetForNextSentencePrediction(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     def __init__(

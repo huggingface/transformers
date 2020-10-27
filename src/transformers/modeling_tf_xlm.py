@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 XLM model.
+"""
+ TF 2.0 XLM model.
 """
 
 
@@ -336,9 +337,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -530,8 +531,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
 
 class TFXLMPreTrainedModel(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = XLMConfig
@@ -559,13 +561,13 @@ class TFXLMWithLMHeadModelOutput(ModelOutput):
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -582,9 +584,9 @@ XLM_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     .. note::
 
@@ -593,11 +595,11 @@ XLM_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -607,8 +609,9 @@ XLM_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.XLMConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 XLM_INPUTS_DOCSTRING = r"""
@@ -616,45 +619,43 @@ XLM_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` and
-            :func:`transformers.PreTrainedTokenizer.encode` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         langs (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`({0})`, `optional`):
-            A parallel sequence of tokens to be used to indicate the language of each token in the input.
-            Indices are languages ids which can be obtained from the language names by using two conversion mappings
-            provided in the configuration of the model (only provided for multilingual models).
-            More precisely, the `language name to language id` mapping is in :obj:`model.config.lang2id` (which is a
-            dictionary strring to int) and the `language id to language name` mapping is in :obj:`model.config.id2lang`
-            (dictionary int to string).
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the `language name
+            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary strring to int) and the
+            `language id to language name` mapping is in :obj:`model.config.id2lang` (dictionary int to string).
 
             See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
         ttoken_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
         position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`__
         lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`):
-            Length of each sentence that can be used to avoid performing attention on padding token indices.
-            You can also use `attention_mask` for the same result (see above), kept here for compatbility.
-            Indices selected in ``[0, ..., input_ids.size(-1)]``.
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use `attention_mask` for the same result (see above), kept here for compatbility. Indices selected in
+            ``[0, ..., input_ids.size(-1)]``.
         cache (:obj:`Dict[str, tf.Tensor]`, `optional`):
             Dictionary string to ``torch.FloatTensor`` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see :obj:`cache` output below). Can be used to speed up
@@ -663,8 +664,7 @@ XLM_INPUTS_DOCSTRING = r"""
             The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -746,8 +746,10 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """The XLM Model transformer with a language modeling head on top
-    (linear layer with weights tied to the input embeddings). """,
+    """
+    The XLM Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
     XLM_START_DOCSTRING,
 )
 class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
@@ -797,8 +799,10 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM Model with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    XLM Model with a sequence classification/regression head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
+    """,
     XLM_START_DOCSTRING,
 )
 class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificationLoss):
@@ -835,9 +839,8 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
+            config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
@@ -882,8 +885,10 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
 
 
 @add_start_docstrings(
-    """XLM Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    XLM Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     XLM_START_DOCSTRING,
 )
 class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
@@ -898,7 +903,8 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -934,9 +940,9 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1033,8 +1039,10 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
 
 
 @add_start_docstrings(
-    """XLM Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    XLM Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     XLM_START_DOCSTRING,
 )
 class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLoss):
@@ -1074,8 +1082,8 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
@@ -1121,8 +1129,10 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
 
 
 @add_start_docstrings(
-    """XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer
+    on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     XLM_START_DOCSTRING,
 )
 class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringLoss):
@@ -1161,12 +1171,12 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):

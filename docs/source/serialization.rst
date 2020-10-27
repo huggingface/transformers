@@ -5,16 +5,18 @@ Exporting transformers models
 ONNX / ONNXRuntime
 =======================================================================================================================
 
-Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntime (ORT) <https://microsoft.github.io/onnxruntime/>`_ are part of an effort from leading industries in the AI field
-to provide a unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
+Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntime (ORT)
+<https://microsoft.github.io/onnxruntime/>`_ are part of an effort from leading industries in the AI field to provide a
+unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
 of hardware and dedicated optimizations.
 
 Starting from transformers v2.10.0 we partnered with ONNX Runtime to provide an easy export of transformers models to
-the ONNX format. You can have a look at the effort by looking at our joint blog post `Accelerate your NLP pipelines using
-Hugging Face Transformers and ONNX Runtime <https://medium.com/microsoftazure/accelerate-your-nlp-pipelines-using-hugging-face-transformers-and-onnx-runtime-2443578f4333>`_.
+the ONNX format. You can have a look at the effort by looking at our joint blog post `Accelerate your NLP pipelines
+using Hugging Face Transformers and ONNX Runtime
+<https://medium.com/microsoftazure/accelerate-your-nlp-pipelines-using-hugging-face-transformers-and-onnx-runtime-2443578f4333>`_.
 
-Exporting a model is done through the script `convert_graph_to_onnx.py` at the root of the transformers sources.
-The following command shows how easy it is to export a BERT model from the library, simply run:
+Exporting a model is done through the script `convert_graph_to_onnx.py` at the root of the transformers sources. The
+following command shows how easy it is to export a BERT model from the library, simply run:
 
 .. code-block:: bash
 
@@ -27,62 +29,66 @@ The conversion tool works for both PyTorch and Tensorflow models and ensures:
 * The generated model can be correctly loaded through onnxruntime.
 
 .. note::
-    Currently, inputs and outputs are always exported with dynamic sequence axes preventing some optimizations
-    on the ONNX Runtime. If you would like to see such support for fixed-length inputs/outputs, please
-    open up an issue on transformers.
+    Currently, inputs and outputs are always exported with dynamic sequence axes preventing some optimizations on the
+    ONNX Runtime. If you would like to see such support for fixed-length inputs/outputs, please open up an issue on
+    transformers.
 
 
 Also, the conversion tool supports different options which let you tune the behavior of the generated model:
 
-* **Change the target opset version of the generated model.**  (More recent opset generally supports more operators and enables faster inference)
+* **Change the target opset version of the generated model.** (More recent opset generally supports more operators and
+  enables faster inference)
 
-* **Export pipeline-specific prediction heads.**  (Allow to export model along with its task-specific prediction head(s))
+* **Export pipeline-specific prediction heads.** (Allow to export model along with its task-specific prediction
+  head(s))
 
-* **Use the external data format (PyTorch only).**  (Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_))
+* **Use the external data format (PyTorch only).** (Lets you export model which size is above 2Gb (`More info
+  <https://github.com/pytorch/pytorch/pull/33062>`_))
 
 
 Optimizations
 -----------------------------------------------------------------------------------------------------------------------
 
-ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph.
-Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (*see note below*):
+ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph. Below
+are some of the operators which can be enabled to speed up inference through ONNXRuntime (*see note below*):
 
 * Constant folding
 * Attention Layer fusing
 * Skip connection LayerNormalization fusing
 * FastGeLU approximation
 
-Some of the optimizations performed by ONNX runtime can be hardware specific and thus lead to different performances
-if used on another machine with a different hardware configuration than the one used for exporting the model.
-For this reason, when using ``convert_graph_to_onnx.py`` optimizations are not enabled,
-ensuring the model can be easily exported to various hardware.
-Optimizations can then be enabled when loading the model through ONNX runtime for inference.
+Some of the optimizations performed by ONNX runtime can be hardware specific and thus lead to different performances if
+used on another machine with a different hardware configuration than the one used for exporting the model. For this
+reason, when using ``convert_graph_to_onnx.py`` optimizations are not enabled, ensuring the model can be easily
+exported to various hardware. Optimizations can then be enabled when loading the model through ONNX runtime for
+inference.
 
 
 .. note::
-    When quantization is enabled (see below), ``convert_graph_to_onnx.py`` script will enable optimizations on the model
-    because quantization would modify the underlying graph making it impossible for ONNX runtime to do the optimizations
-    afterwards.
+    When quantization is enabled (see below), ``convert_graph_to_onnx.py`` script will enable optimizations on the
+    model because quantization would modify the underlying graph making it impossible for ONNX runtime to do the
+    optimizations afterwards.
 
 .. note::
-    For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
+    For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github
+    <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
 
 Quantization
 -----------------------------------------------------------------------------------------------------------------------
 
 ONNX exporter supports generating a quantized version of the model to allow efficient inference.
 
-Quantization works by converting the memory representation of the parameters in the neural network
-to a compact integer format. By default, weights of a neural network are stored as single-precision float (`float32`)
-which can express a wide-range of floating-point numbers with decent precision.
-These properties are especially interesting at training where you want fine-grained representation.
+Quantization works by converting the memory representation of the parameters in the neural network to a compact integer
+format. By default, weights of a neural network are stored as single-precision float (`float32`) which can express a
+wide-range of floating-point numbers with decent precision. These properties are especially interesting at training
+where you want fine-grained representation.
 
-On the other hand, after the training phase, it has been shown one can greatly reduce the range and the precision of `float32` numbers
-without changing the performances of the neural network.
+On the other hand, after the training phase, it has been shown one can greatly reduce the range and the precision of
+`float32` numbers without changing the performances of the neural network.
 
-More technically, `float32` parameters are converted to a type requiring fewer bits to represent each number, thus reducing
-the overall size of the model. Here, we are enabling `float32` mapping to `int8` values (a non-floating, single byte, number representation)
-according to the following formula:
+More technically, `float32` parameters are converted to a type requiring fewer bits to represent each number, thus
+reducing the overall size of the model. Here, we are enabling `float32` mapping to `int8` values (a non-floating,
+single byte, number representation) according to the following formula:
 
 .. math::
     y_{float32} = scale * x_{int8} - zero\_point
@@ -96,9 +102,9 @@ Leveraging tiny-integers has numerous advantages when it comes to inference:
 * Integer operations execute a magnitude faster on modern hardware
 * Integer operations require less power to do the computations
 
-In order to convert a transformers model to ONNX IR with quantized weights you just need to specify ``--quantize``
-when using ``convert_graph_to_onnx.py``. Also, you can have a look at the ``quantize()`` utility-method in this
-same script file.
+In order to convert a transformers model to ONNX IR with quantized weights you just need to specify ``--quantize`` when
+using ``convert_graph_to_onnx.py``. Also, you can have a look at the ``quantize()`` utility-method in this same script
+file.
 
 Example of quantized BERT model export:
 
@@ -111,26 +117,27 @@ Example of quantized BERT model export:
 
 .. note::
     When exporting quantized model you will end up with two different ONNX files. The one specified at the end of the
-    above command will contain the original ONNX model storing `float32` weights.
-    The second one, with ``-quantized`` suffix, will hold the quantized parameters.
+    above command will contain the original ONNX model storing `float32` weights. The second one, with ``-quantized``
+    suffix, will hold the quantized parameters.
 
 
 TorchScript
 =======================================================================================================================
 
 .. note::
-    This is the very beginning of our experiments with TorchScript and we are still exploring its capabilities
-    with variable-input-size models. It is a focus of interest to us and we will deepen our analysis in upcoming
-    releases, with more code examples, a more flexible implementation, and benchmarks comparing python-based codes
-    with compiled TorchScript.
+    This is the very beginning of our experiments with TorchScript and we are still exploring its capabilities with
+    variable-input-size models. It is a focus of interest to us and we will deepen our analysis in upcoming releases,
+    with more code examples, a more flexible implementation, and benchmarks comparing python-based codes with compiled
+    TorchScript.
 
 
-According to Pytorch's documentation: "TorchScript is a way to create serializable and optimizable models from PyTorch code".
-Pytorch's two modules `JIT and TRACE <https://pytorch.org/docs/stable/jit.html>`_ allow the developer to export
+According to Pytorch's documentation: "TorchScript is a way to create serializable and optimizable models from PyTorch
+code". Pytorch's two modules `JIT and TRACE <https://pytorch.org/docs/stable/jit.html>`_ allow the developer to export
 their model to be re-used in other programs, such as efficiency-oriented C++ programs.
 
-We have provided an interface that allows the export of 🤗 Transformers models to TorchScript so that they can
-be reused in a different environment than a Pytorch-based python program. Here we explain how to export and use our models using TorchScript.
+We have provided an interface that allows the export of 🤗 Transformers models to TorchScript so that they can be reused
+in a different environment than a Pytorch-based python program. Here we explain how to export and use our models using
+TorchScript.
 
 Exporting a model requires two things:
 
@@ -145,13 +152,14 @@ Implications
 
 TorchScript flag and tied weights
 -----------------------------------------------------------------------------------------------------------------------
-This flag is necessary because most of the language models in this repository have tied weights between their
-``Embedding`` layer and their ``Decoding`` layer. TorchScript does not allow the export of models that have tied weights, therefore
-it is necessary to untie and clone the weights beforehand.
 
-This implies that models instantiated with the ``torchscript`` flag have their ``Embedding`` layer and ``Decoding`` layer
-separate, which means that they should not be trained down the line. Training would de-synchronize the two layers,
-leading to unexpected results.
+This flag is necessary because most of the language models in this repository have tied weights between their
+``Embedding`` layer and their ``Decoding`` layer. TorchScript does not allow the export of models that have tied
+weights, therefore it is necessary to untie and clone the weights beforehand.
+
+This implies that models instantiated with the ``torchscript`` flag have their ``Embedding`` layer and ``Decoding``
+layer separate, which means that they should not be trained down the line. Training would de-synchronize the two
+layers, leading to unexpected results.
 
 This is not the case for models that do not have a Language Model head, as those do not have tied weights. These models
 can be safely exported without the ``torchscript`` flag.
@@ -160,8 +168,8 @@ Dummy inputs and standard lengths
 -----------------------------------------------------------------------------------------------------------------------
 
 The dummy inputs are used to do a model forward pass. While the inputs' values are propagating through the layers,
-Pytorch keeps track of the different operations executed on each tensor. These recorded operations are then used
-to create the "trace" of the model.
+Pytorch keeps track of the different operations executed on each tensor. These recorded operations are then used to
+create the "trace" of the model.
 
 The trace is created relatively to the inputs' dimensions. It is therefore constrained by the dimensions of the dummy
 input, and will not work for any other sequence length or batch size. When trying with a different size, an error such
@@ -185,8 +193,8 @@ Below is an example, showing how to save, load models as well as how to use the 
 Saving a model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This snippet shows how to use TorchScript to export a ``BertModel``. Here the ``BertModel`` is instantiated
-according to a ``BertConfig`` class and then saved to disk under the filename ``traced_bert.pt``
+This snippet shows how to use TorchScript to export a ``BertModel``. Here the ``BertModel`` is instantiated according
+to a ``BertConfig`` class and then saved to disk under the filename ``traced_bert.pt``
 
 .. code-block:: python
 

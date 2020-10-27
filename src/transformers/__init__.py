@@ -284,6 +284,7 @@ if is_torch_available():
         DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSOP,
+        DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
         default_data_collator,
     )
@@ -291,6 +292,7 @@ if is_torch_available():
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
+        LineByLineWithRefDataset,
         LineByLineWithSOPTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
@@ -652,6 +654,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
+    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,

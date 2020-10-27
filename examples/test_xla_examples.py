@@ -44,8 +44,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
             transformers/examples/text-classification/run_glue.py
             --do_train
             --do_eval
-            --task_name=MRPC
-            --data_dir=/datasets/glue_data/MRPC
+            --task_name=mrpc
             --cache_dir=./cache_dir
             --num_train_epochs=1
             --max_seq_length=128

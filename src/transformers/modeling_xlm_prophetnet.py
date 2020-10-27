@@ -37,8 +37,8 @@ XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class XLMProphetNetEncoder(ProphetNetEncoder):
     r"""
-    This class overrides :class:`~transformers.ProphetNetEncoder`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetEncoder`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -59,8 +59,8 @@ class XLMProphetNetEncoder(ProphetNetEncoder):
 
 class XLMProphetNetDecoder(ProphetNetDecoder):
     r"""
-    This class overrides :class:`~transformers.ProphetNetDecoder`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetDecoder`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -81,8 +81,8 @@ class XLMProphetNetDecoder(ProphetNetDecoder):
 
 class XLMProphetNetModel(ProphetNetModel):
     r"""
-    This class overrides :class:`~transformers.ProphetNetModel`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -104,8 +104,8 @@ class XLMProphetNetModel(ProphetNetModel):
 
 class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
     r"""
-    This class overrides :class:`~transformers.ProphetNetForConditionalGeneration`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetForConditionalGeneration`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
 
     Example::
 
@@ -127,8 +127,8 @@ class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
 
 class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
     r"""
-    This class overrides :class:`~transformers.ProphetNetForCausalLM`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.ProphetNetForCausalLM`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example::
 
@@ -144,14 +144,21 @@ class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
         >>> logits = outputs.logits
 
         >>> # Model can also be used with EncoderDecoder framework
-        >>> from transformers import BertTokenizer, EncoderDecoderModel
+        >>> from transformers import EncoderDecoderModel, XLMProphetNetTokenizer, XLMRobertaTokenizer
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-uncased-large')
-        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-uncased-large", "patrickvonplaten/xprophetnet-decoder-clm-large-uncased")
+        >>> tokenizer_enc = XLMRobertaTokenizer.from_pretrained('xlm-roberta-large')
+        >>> tokenizer_dec = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
+        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("xlm-roberta-large", "patrickvonplaten/xprophetnet-decoder-clm-large-uncased")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(input_ids=inputs["input_ids"], labels=inputs["input_ids"])
+        >>> ARTICLE = (
+        ... "the us state department said wednesday it had received no "
+        ... "formal word from bolivia that it was expelling the us ambassador there "
+        ... "but said the charges made against him are `` baseless ."
+        ... )
+        >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
+        >>> labels = tokenizer_dec("us rejects charges against its ambassador in bolivia", return_tensors="pt").input_ids
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:], return_dict=True)
 
         >>> loss = outputs.loss
     """

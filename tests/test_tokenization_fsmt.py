@@ -25,6 +25,10 @@ from transformers.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+# using a different tiny model than the one used for default params defined in init to ensure proper testing
+FSMT_TINY2 = "stas/tiny-wmt19-en-ru"
+
+
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = FSMTTokenizer
 
@@ -86,6 +90,15 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def tokenizer_en_ru(self):
         return FSMTTokenizer.from_pretrained("facebook/wmt19-en-ru")
 
+    def test_online_tokenizer_config(self):
+        """this just tests that the online tokenizer files get correctly fetched and
+        loaded via its tokenizer_config.json and it's not slow so it's run by normal CI
+        """
+        tokenizer = FSMTTokenizer.from_pretrained(FSMT_TINY2)
+        self.assertListEqual([tokenizer.src_lang, tokenizer.tgt_lang], ["en", "ru"])
+        self.assertEqual(tokenizer.src_vocab_size, 21)
+        self.assertEqual(tokenizer.tgt_vocab_size, 21)
+
     def test_full_tokenizer(self):
         """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
         tokenizer = FSMTTokenizer(self.langs, self.src_vocab_file, self.tgt_vocab_file, self.merges_file)
@@ -131,11 +144,11 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # for src_text, _ in targets: print(f"""[\n"{src_text}",\n {model.encode(src_text).tolist()}\n],""")
 
         for src_text, tgt_input_ids in targets:
-            input_ids = tokenizer_enc.encode(src_text, return_tensors="pt")[0].tolist()
-            self.assertListEqual(input_ids, tgt_input_ids)
+            encoded_ids = tokenizer_enc.encode(src_text, return_tensors=None)
+            self.assertListEqual(encoded_ids, tgt_input_ids)
 
             # and decode backward, using the reversed languages model
-            decoded_text = tokenizer_dec.decode(input_ids, skip_special_tokens=True)
+            decoded_text = tokenizer_dec.decode(encoded_ids, skip_special_tokens=True)
             self.assertEqual(decoded_text, src_text)
 
     @unittest.skip("FSMTConfig.__init__  requires non-optional args")

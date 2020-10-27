@@ -129,20 +129,20 @@ DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "en
 
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
-    Return a dictionary with the token ids of the input strings and other information to give to
-    :obj:`.decode_best_spans`.
-    It converts the strings of a question and different passages (title and text) in a sequence of IDs (integers),
-    using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of size
-    :obj:`(n_passages, sequence_length)` with the format:
+        Return a dictionary with the token ids of the input strings and other information to give to
+        :obj:`.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
+        sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of
+        size :obj:`(n_passages, sequence_length)` with the format:
+
+    ::
 
         [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
         questions (:obj:`str` or :obj:`List[str]`):
-            The questions to be encoded.
-            You can specify one question for many passages. In this case, the question will be duplicated like
-            :obj:`[questions] * n_passages`.
-            Otherwise you have to specify as many questions as in :obj:`titles` or :obj:`texts`.
+            The questions to be encoded. You can specify one question for many passages. In this case, the question
+            will be duplicated like :obj:`[questions] * n_passages`. Otherwise you have to specify as many questions as
+            in :obj:`titles` or :obj:`texts`.
         titles (:obj:`str` or :obj:`List[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (:obj:`str` or :obj:`List[str]`):
@@ -150,8 +150,8 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
             Activates and controls padding. Accepts the following values:
 
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-              single sequence if provided).
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+              sequence if provided).
             * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
               maximum acceptable input length for the model if that argument is not provided.
             * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
@@ -161,16 +161,16 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
             * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
               :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
-              provided. This will truncate token by token, removing a token from the longest sequence in the pair
-              if a pair of sequences (or a batch of pairs) is provided.
-            * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+              provided. This will truncate token by token, removing a token from the longest sequence in the pair if a
+              pair of sequences (or a batch of pairs) is provided.
+            * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided. This will only truncate
+              the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+            * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
               the maximum acceptable input length for the model if that argument is not provided. This will only
-              truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-            * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
-              to the maximum acceptable input length for the model if that argument is not provided. This will only
               truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-            * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
-              sequence lengths greater than the model maximum admissible input size).
+            * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence
+              lengths greater than the model maximum admissible input size).
         max_length (:obj:`int`, `optional`):
                 Controls the maximum length to use by one of the truncation/padding parameters.
 
@@ -265,15 +265,17 @@ class CustomDPRReaderTokenizerMixin:
     ) -> List[DPRSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
-        Outputs: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`.
-            Each `DPRReaderOutput` is a `Tuple` with:
-            **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to other spans
-                in the same passage. It corresponds to the sum of the start and end logits of the span.
-            **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
-                compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
-            **doc_id**: ``int``` the id of the passage.
-            **start_index**: ``int`` the start index of the span (inclusive).
-            **end_index**: ``int`` the end index of the span (inclusive).
+
+        Returns: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`. Each
+        `DPRReaderOutput` is a `Tuple` with:
+
+            - **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to
+              other spans in the same passage. It corresponds to the sum of the start and end logits of the span.
+            - **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
+              compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
+            - **doc_id**: ``int``` the id of the passage.
+            - **start_index**: ``int`` the start index of the span (inclusive).
+            - **end_index**: ``int`` the end index of the span (inclusive).
 
         Examples::
 
@@ -336,9 +338,8 @@ class CustomDPRReaderTokenizerMixin:
         top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
-        Finds the best answer span for the extractive Q&A model for one passage.
-        It returns the best span by descending `span_score` order and keeping max `top_spans` spans.
-        Spans longer that `max_answer_length` are ignored.
+        Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending
+        `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
         """
         scores = []
         for (start_index, start_score) in enumerate(start_logits):

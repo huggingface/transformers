@@ -28,9 +28,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+from .integrations import (
     default_hp_search_backend,
+    hp_params,
     is_comet_available,
+    is_mlflow_available,
     is_optuna_available,
     is_ray_available,
     is_tensorboard_available,
@@ -141,6 +143,11 @@ if is_comet_available():
 
     DEFAULT_CALLBACKS.append(CometCallback)
 
+if is_mlflow_available():
+    from .integrations import MLflowCallback
+
+    DEFAULT_CALLBACKS.append(MLflowCallback)
+
 if is_optuna_available():
     import optuna
 
@@ -152,8 +159,7 @@ logger = logging.get_logger(__name__)
 
 class Trainer:
     """
-    Trainer is a simple but feature-complete training and eval loop for PyTorch,
-    optimized for 🤗 Transformers.
+    Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
 
     Args:
         model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
@@ -165,18 +171,19 @@ class Trainer:
                 provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
                 they work the same way as the 🤗 Transformers models.
         args (:class:`~transformers.TrainingArguments`, `optional`):
-            The arguments to tweak for training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
-            with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.
+            The arguments to tweak for training. Will default to a basic instance of
+            :class:`~transformers.TrainingArguments` with the ``output_dir`` set to a directory named `tmp_trainer` in
+            the current directory if not provided.
         data_collator (:obj:`DataCollator`, `optional`):
-            The function to use to form a batch from a list of elements of :obj:`train_dataset` or
-            :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
-            provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
+            The function to use to form a batch from a list of elements of :obj:`train_dataset` or :obj:`eval_dataset`.
+            Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is provided, an instance of
+            :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-            ``model.forward()`` method are automatically removed.
+             ``model.forward()`` method are automatically removed.
         tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
@@ -185,22 +192,20 @@ class Trainer:
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be able to choose
-            different architectures according to hyper parameters (such as layer count, sizes of inner layers, dropout probabilities etc).
-        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
+            able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
+            layers, dropout probabilities etc). compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
-            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
-            A list of callbacks to customize the training loop. Will add those to the list of default callbacks
-            detailed in :doc:`here <callback>`.
+            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values. callbacks (List of
+            :obj:`~transformers.TrainerCallback`, `optional`): A list of callbacks to customize the training loop. Will
+            add those to the list of default callbacks detailed in :doc:`here <callback>`.
 
             If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
-            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+            optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+            containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
-            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
-        kwargs:
-            Deprecated keyword arguments.
+            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`. kwargs: Deprecated keyword
+            arguments.
     """
 
     def __init__(
@@ -227,6 +232,7 @@ class Trainer:
             model is not None or model_init is not None
         ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
         self.model_init = model_init
+        self.hp_name = None
         if model is None and model_init is not None:
             model = self.call_model_init()
         self.model = model.to(args.device) if model is not None else None
@@ -390,8 +396,8 @@ class Trainer:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler
-        (adapted to distributed training if necessary) otherwise.
+        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler (adapted
+        to distributed training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -511,8 +517,11 @@ class Trainer:
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """ HP search setup code """
+        self._trial = trial
+
         if self.hp_search_backend is None or trial is None:
             return
+
         params = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -561,7 +570,10 @@ class Trainer:
         elif model_init_argcount == 1:
             model = self.model_init(trial)
         else:
-            raise Exception("model_init should have 0 or 1 argument.")
+            raise RuntimeError("model_init should have 0 or 1 argument.")
+
+        if model is None:
+            raise RuntimeError("model_init should not return None.")
 
         return model
 
@@ -620,20 +632,10 @@ class Trainer:
 
         self.create_optimizer_and_scheduler(num_training_steps=max_steps)
         self.state = TrainerState()
+        self.state.is_hyper_param_search = trial is not None
 
         # Check if saved optimizer or scheduler states exist
-        if (
-            model_path is not None
-            and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
-            and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
-        ):
-            # Load in optimizer and scheduler states
-            self.optimizer.load_state_dict(
-                torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
-            )
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
-            reissue_pt_warnings(caught_warnings)
+        self._load_optimizer_and_scheduler(model_path)
 
         # Mixed precision training with apex (torch < 1.6)
         model = self.model
@@ -705,6 +707,8 @@ class Trainer:
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
+        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
+        self.state.trial_params = hp_params(trial) if trial is not None else None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -786,13 +790,13 @@ class Trainer:
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
 
-                    self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
+                    self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
-            self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
+            self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -822,11 +826,15 @@ class Trainer:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
 
+        if self._total_flos is not None:
+            self.store_flos()
+            self.log({"total_flos": self.state.total_flos})
+
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
-    def _maybe_log_save_evalute(self, tr_loss, model, trial, epoch):
+    def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
@@ -845,7 +853,6 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self.evaluate()
             self._report_to_hp_search(trial, epoch, metrics)
-            self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -860,12 +867,15 @@ class Trainer:
             assert model is self.model, f"Model {model} should be a reference to self.model"
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+
         if self.hp_search_backend is not None and trial is not None:
             run_id = trial.number if self.hp_search_backend == HPSearchBackend.OPTUNA else tune.get_trial_id()
-            checkpoint_folder += f"-run-{run_id}"
-        output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
+            run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
+            output_dir = os.path.join(self.args.output_dir, run_name, checkpoint_folder)
+        else:
+            output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
-        self.store_flos()
+            self.store_flos()
         self.save_model(output_dir)
 
         # Save optimizer and scheduler
@@ -905,6 +915,34 @@ class Trainer:
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True)
 
+    def _load_optimizer_and_scheduler(self, model_path):
+        """If optimizer and scheduler states exist, load them."""
+        if (
+            model_path is not None
+            and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
+            and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
+        ):
+            # Load in optimizer and scheduler states
+            if is_torch_tpu_available():
+                # On TPU we have to take some extra precautions to properly load the states on the right device.
+                optimizer_state = torch.load(os.path.join(model_path, "optimizer.pt"), map_location="cpu")
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    lr_scheduler_state = torch.load(os.path.join(model_path, "scheduler.pt"), map_location="cpu")
+                reissue_pt_warnings(caught_warnings)
+
+                xm.send_cpu_data_to_device(optimizer_state, self.args.device)
+                xm.send_cpu_data_to_device(lr_scheduler_state, self.args.device)
+
+                self.optimizer.load_state_dict(optimizer_state)
+                self.lr_scheduler.load_state_dict(lr_scheduler_state)
+            else:
+                self.optimizer.load_state_dict(
+                    torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
+                )
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
+                reissue_pt_warnings(caught_warnings)
+
     def hyperparameter_search(
         self,
         hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
@@ -912,6 +950,7 @@ class Trainer:
         n_trials: int = 20,
         direction: str = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
+        hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
         **kwargs
     ) -> BestRun:
         """
@@ -947,8 +986,10 @@ class Trainer:
                 Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
                 more information see:
 
-                - the documentation of `optuna.create_study <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
-                - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
+                - the documentation of `optuna.create_study
+                  <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                - the documentation of `tune.run
+                  <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
@@ -969,13 +1010,13 @@ class Trainer:
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
         self.hp_search_backend = backend
-
         if self.model_init is None:
             raise RuntimeError(
                 "To use hyperparameter search, you need to pass your model through a model_init function."
             )
 
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
+        self.hp_name = hp_name
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
         run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
@@ -1000,12 +1041,9 @@ class Trainer:
                 FutureWarning,
             )
             return self._log(logs)
-
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
-        if self._total_flos is not None:
-            self.store_flos()
-            logs["total_flos"] = self.state.total_flos
+
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
@@ -1089,8 +1127,8 @@ class Trainer:
 
     def is_local_master(self) -> bool:
         """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
-        several machines) main process.
+        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
+        machines) main process.
 
         .. warning::
 
@@ -1101,8 +1139,8 @@ class Trainer:
 
     def is_local_process_zero(self) -> bool:
         """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
-        several machines) main process.
+        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
+        machines) main process.
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
@@ -1111,8 +1149,8 @@ class Trainer:
 
     def is_world_master(self) -> bool:
         """
-        Whether or not this process is the global main process (when training in a distributed fashion on
-        several machines, this is only going to be :obj:`True` for one process).
+        Whether or not this process is the global main process (when training in a distributed fashion on several
+        machines, this is only going to be :obj:`True` for one process).
 
         .. warning::
 
@@ -1123,8 +1161,8 @@ class Trainer:
 
     def is_world_process_zero(self) -> bool:
         """
-        Whether or not this process is the global main process (when training in a distributed fashion on
-        several machines, this is only going to be :obj:`True` for one process).
+        Whether or not this process is the global main process (when training in a distributed fashion on several
+        machines, this is only going to be :obj:`True` for one process).
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
@@ -1160,7 +1198,7 @@ class Trainer:
             xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None:
+        if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
@@ -1175,7 +1213,7 @@ class Trainer:
             torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None:
+        if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
@@ -1206,7 +1244,7 @@ class Trainer:
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
         # Make sure we don't delete the best model.
         if self.state.best_model_checkpoint is not None:
-            best_model_index = checkpoints_sorted.index(self.state.best_model_checkpoint)
+            best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
             checkpoints_sorted[best_model_index], checkpoints_sorted[-1] = (
                 checkpoints_sorted[-1],
                 checkpoints_sorted[best_model_index],
@@ -1232,16 +1270,16 @@ class Trainer:
         """
         Run evaluation and returns metrics.
 
-        The calling script will be responsible for providing a method to compute metrics, as they are
-        task-dependent (pass it to the init :obj:`compute_metrics` argument).
+        The calling script will be responsible for providing a method to compute metrics, as they are task-dependent
+        (pass it to the init :obj:`compute_metrics` argument).
 
         You can also subclass and override this method to inject custom behavior.
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
-                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement
-                the :obj:`__len__` method.
+                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement the
+                :obj:`__len__` method.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
@@ -1259,28 +1297,27 @@ class Trainer:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
+        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
 
-        Depending on the dataset and your use case, your test dataset may contain labels.
-        In that case, this method will also return metrics, like in :obj:`evaluate()`.
+        Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
+        will also return metrics, like in :obj:`evaluate()`.
 
         Args:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
-        Returns:
-            `NamedTuple`:
-            predictions (:obj:`np.ndarray`):
-                The predictions on :obj:`test_dataset`.
-            label_ids (:obj:`np.ndarray`, `optional`):
-                The labels (if the dataset contained some).
-            metrics (:obj:`Dict[str, float]`, `optional`):
-                The potential dictionary of metrics (if the dataset contained labels).
+        Returns: `NamedTuple` A namedtuple with the following keys:
+
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
+            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+              contained labels).
         """
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
@@ -1429,14 +1466,18 @@ class Trainer:
                 Whether or not to return the loss only.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
-            A tuple with the loss, logits and labels (each being optional).
+            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
+            labels (each being optional).
         """
         has_labels = all(inputs.get(k) is not None for k in self.label_names)
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
-            outputs = model(**inputs)
+            if self.args.fp16 and _use_native_amp:
+                with autocast():
+                    outputs = model(**inputs)
+            else:
+                outputs = model(**inputs)
             if has_labels:
                 loss = outputs[0].mean().detach()
                 logits = outputs[1:]
@@ -1467,9 +1508,9 @@ class Trainer:
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
-        For models that inherit from :class:`~transformers.PreTrainedModel`, uses
-        that method to compute the number of floating point operations for every backward + forward pass. If using
-        another model, either implement such a method in the model or subclass and override this method.
+        For models that inherit from :class:`~transformers.PreTrainedModel`, uses that method to compute the number of
+        floating point operations for every backward + forward pass. If using another model, either implement such a
+        method in the model or subclass and override this method.
 
         Args:
             model (:obj:`nn.Module`):
