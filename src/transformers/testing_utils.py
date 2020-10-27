@@ -540,7 +540,7 @@ class TestCasePlus(unittest.TestCase):
 
     Note 2: Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
 
-    Feature 3: Get a copy of the ``os.environ`` object that sets up ``PYTHONPATH`` for the requested test suite type.
+    Feature 3: Get a copy of the ``os.environ`` object that sets up ``PYTHONPATH`` specific to the current test suite.
     This is useful for invoking external programs from the test suite - e.g. distributed training.
 
 
@@ -619,8 +619,9 @@ class TestCasePlus(unittest.TestCase):
 
     def get_env(self):
         """
-        Return a copy of the ``os.environ`` object that sets up ``PYTHONPATH`` for the requested test suite type. This
-        is useful for invoking external programs from the test suite - e.g. distributed training.
+        Return a copy of the ``os.environ`` object that sets up ``PYTHONPATH`` correctly, depending on the test suite
+        it's invoked from. This is useful for invoking external programs from the test suite - e.g. distributed
+        training.
 
         It always inserts ``./src`` first, then ``./tests`` or ``./examples`` depending on the test suite type and
         finally the preset ``PYTHONPATH`` if any (all full resolved paths).
