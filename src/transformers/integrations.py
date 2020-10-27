@@ -55,12 +55,14 @@ except ImportError:
 
 try:
     from azureml.core.run import Run  # noqa: F401
+
     _has_azureml = True
 except ImportError:
     _has_azureml = False
 
 try:
     import mlflow  # noqa: F401
+
     _has_mlflow = True
 except ImportError:
     _has_mlflow = False
@@ -96,11 +98,11 @@ def is_optuna_available():
 def is_ray_available():
     return _has_ray
 
-  
+
 def is_azureml_available():
     return _has_azureml
 
-  
+
 def is_mlflow_available():
     return _has_mlflow
 
@@ -429,11 +431,8 @@ class CometCallback(TrainerCallback):
 
 
 class AzureMLCallback(TrainerCallback):
-
     def __init__(self, azureml_run=None):
-        assert (
-            _has_azureml
-        ), "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        assert _has_azureml, "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
         self.azureml_run = azureml_run
 
     def on_init_end(self, args, state, control, **kwargs):
@@ -446,7 +445,7 @@ class AzureMLCallback(TrainerCallback):
                 if isinstance(v, (int, float)):
                     self.azureml_run.log(k, v, description=k)
 
-                    
+
 class MLflowCallback(TrainerCallback):
     """
     A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
