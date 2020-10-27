@@ -432,7 +432,7 @@ class MLflowCallback(TrainerCallback):
     MAX_LOG_SIZE = 100
 
     def __init__(self):
-        assert _has_mlflow, "MLflow requires mlflow to be installed. Run `pip install mlflow`."
+        assert _has_mlflow, "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
         self._initialized = False
         self._log_artifacts = False
 
