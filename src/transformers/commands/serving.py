@@ -31,7 +31,8 @@ logger = logging.get_logger("transformers-cli/serving")
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
-    :return: ServeCommand
+
+    Returns: ServeCommand
     """
     nlp = pipeline(
         task=args.task,
@@ -81,8 +82,9 @@ class ServeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-        :param parser: Root parser to register command-specific arguments
-        :return:
+
+        Args:
+            parser: Root parser to register command-specific arguments
         """
         serve_parser = parser.add_parser(
             "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
@@ -162,9 +164,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def tokenize(self, text_input: str = Body(None, embed=True), return_ids: bool = Body(False, embed=True)):
         """
-        Tokenize the provided input and eventually returns corresponding tokens id:
-        - **text_input**: String to tokenize
-        - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer mapping.
+        Tokenize the provided input and eventually returns corresponding tokens id: - **text_input**: String to
+        tokenize - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer
+        mapping.
         """
         try:
             tokens_txt = self._pipeline.tokenizer.tokenize(text_input)
@@ -185,10 +187,9 @@ class ServeCommand(BaseTransformersCLICommand):
         cleanup_tokenization_spaces: bool = Body(True, embed=True),
     ):
         """
-        Detokenize the provided tokens ids to readable text:
-        - **tokens_ids**: List of tokens ids
-        - **skip_special_tokens**: Flag indicating to not try to decode special tokens
-        - **cleanup_tokenization_spaces**: Flag indicating to remove all leading/trailing spaces and intermediate ones.
+        Detokenize the provided tokens ids to readable text: - **tokens_ids**: List of tokens ids -
+        **skip_special_tokens**: Flag indicating to not try to decode special tokens - **cleanup_tokenization_spaces**:
+        Flag indicating to remove all leading/trailing spaces and intermediate ones.
         """
         try:
             decoded_str = self._pipeline.tokenizer.decode(tokens_ids, skip_special_tokens, cleanup_tokenization_spaces)

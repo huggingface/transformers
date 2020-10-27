@@ -17,8 +17,8 @@
 import os
 import unittest
 
-from transformers.testing_utils import _torch_available
-from transformers.tokenization_camembert import CamembertTokenizer, CamembertTokenizerFast
+from transformers import CamembertTokenizer, CamembertTokenizerFast
+from transformers.testing_utils import _torch_available, require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -28,6 +28,8 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 FRAMEWORK = "pt" if _torch_available else "tf"
 
 
+@require_sentencepiece
+@require_tokenizers
 class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CamembertTokenizer

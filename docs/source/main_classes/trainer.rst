@@ -4,7 +4,7 @@ Trainer
 The :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` classes provide an API for feature-complete
 training in most standard use cases. It's used in most of the :doc:`example scripts <../examples>`.
 
-Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`, create a 
+Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`, create a
 :class:`~transformers.TrainingArguments`/:class:`~transformers.TFTrainingArguments` to access all the points of
 customization during training.
 
@@ -15,7 +15,7 @@ Both :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` contain
 previous features. To inject custom behavior you can subclass them and override the following methods:
 
 - **get_train_dataloader**/**get_train_tfdataset** -- Creates the training DataLoader (PyTorch) or TF Dataset.
-- **get_eval_dataloader**/**get_eval_tfdataset** -- Creates the evaulation DataLoader (PyTorch) or TF Dataset.
+- **get_eval_dataloader**/**get_eval_tfdataset** -- Creates the evaluation DataLoader (PyTorch) or TF Dataset.
 - **get_test_dataloader**/**get_test_tfdataset** -- Creates the test DataLoader (PyTorch) or TF Dataset.
 - **log** -- Logs information on the various objects watching training.
 - **create_optimizer_and_scheduler** -- Setups the optimizer and learning rate scheduler if they were not passed at

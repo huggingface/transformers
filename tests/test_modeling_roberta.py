@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -394,6 +394,8 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
 
+@require_sentencepiece
+@require_tokenizers
 class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):

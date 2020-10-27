@@ -32,16 +32,15 @@ class ReformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.ReformerModel`. It is used to
     instantiate a Reformer model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         attention_head_size (:obj:`int`, `optional`, defaults to 64):
             Dimensionality of the projected key, query and value vectors
         attn_layers (:obj:`List[str]`, `optional`, defaults to :obj:`["local", "lsh", "local", "lsh", "local", "lsh"]`):
-            List of attention layer types in ascending order. It can be chosen between a
-            LSHSelfAttention layer (:obj:`"lsh"`) and a LocalSelfAttention layer (:obj:`"local"`).
+            List of attention layer types in ascending order. It can be chosen between a LSHSelfAttention layer
+            (:obj:`"lsh"`) and a LocalSelfAttention layer (:obj:`"local"`).
 
             For more information on LSHSelfAttention layer, see `LSH Self Attention
             <reformer.html#lsh-self-attention>`__. For more information on LocalSelfAttention layer, see `Local Self
@@ -65,9 +64,9 @@ class ReformerConfig(PretrainedConfig):
             For more information on how axial position embeddings work, see `Axial Position Encodings
             <reformer.html#axial-positional-encodings>`__.
         chunk_size_lm_head (:obj:`int`, `optional`, defaults to 0):
-            The chunk size of the final language model feed forward head layer.
-            A chunk size of 0 means that the feed forward layer is not chunked.
-            A chunk size of n means that the feed forward layer processes n < sequence_length embeddings at a time.
+            The chunk size of the final language model feed forward head layer. A chunk size of 0 means that the feed
+            forward layer is not chunked. A chunk size of n means that the feed forward layer processes n <
+            sequence_length embeddings at a time.
 
             For more information on feed forward chunking, see `How does Feed Forward Chunking work?
             <../glossary.html#feed-forward-chunking>`__.
@@ -81,8 +80,7 @@ class ReformerConfig(PretrainedConfig):
             :obj:`None` to ensure fully random rotations in local sensitive hashing scheme.
         hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"relu"`):
             The non-linear activation function (function or string) in the feed forward layer in the residual attention
-            block.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            block. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.05):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         hidden_size (:obj:`int`, `optional`, defaults to 256):
@@ -97,8 +95,8 @@ class ReformerConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         local_chunk_length (:obj:`int`, `optional`, defaults to 64):
             Length of chunk which attends to itself in :obj:`LocalSelfAttention`. Chunking reduces memory complexity
-            from sequence length x sequence length (self attention) to
-            chunk length x chunk length x sequence length / chunk length (chunked self attention).
+            from sequence length x sequence length (self attention) to chunk length x chunk length x sequence length /
+            chunk length (chunked self attention).
         local_num_chunks_before (:obj:`int`, `optional`, defaults to 1):
             Number of previous neighbouring chunks to attend to in :obj:`LocalSelfAttention` layer to itself.
         local_num_chunks_after (:obj:`int`, `optional`, defaults to 0):
@@ -108,8 +106,8 @@ class ReformerConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities in :obj:`LocalSelfAttention`.
         lsh_attn_chunk_length (:obj:`int`, `optional`, defaults to 64):
             Length of chunk which attends to itself in :obj:`LSHSelfAttention`. Chunking reduces memory complexity from
-            sequence length x sequence length (self attention) to
-            chunk length x chunk length x sequence length / chunk length (chunked self attention).
+            sequence length x sequence length (self attention) to chunk length x chunk length x sequence length / chunk
+            length (chunked self attention).
         lsh_num_chunks_before (:obj:`int`, `optional`, defaults to 1):
             Number of previous neighbouring chunks to attend to in :obj:`LSHSelfAttention` layer to itself.
         lsh_num_chunks_after (:obj:`int`, `optional`, defaults to 0):
@@ -117,23 +115,22 @@ class ReformerConfig(PretrainedConfig):
         lsh_attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities in :obj:`LSHSelfAttention`.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 4096):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_buckets (:obj:`int` or :obj:`List[int]`, `optional`):
             Number of buckets, the key query vectors can be "hashed into" using the locality sensitive hashing scheme.
-            Each query key vector is hashed into a hash in :obj:`1, ..., num_buckets`.
-            The number of buckets can also be factorized into a list for improved memory complexity. In this case, each
-            query key vector is hashed into a hash in
-            :obj:`1-1, 1-2, ..., num_buckets[0]-1, ..., num_buckets[0]-num_buckets[1]` if :obj:`num_buckets` is
-            factorized into two factors.
-            The number of buckets (or the product the factors) should approximately equal
-            sequence length / lsh_chunk_length. If :obj:`num_buckets` not set, a good value is calculated on the fly.
+            Each query key vector is hashed into a hash in :obj:`1, ..., num_buckets`. The number of buckets can also
+            be factorized into a list for improved memory complexity. In this case, each query key vector is hashed
+            into a hash in :obj:`1-1, 1-2, ..., num_buckets[0]-1, ..., num_buckets[0]-num_buckets[1]` if
+            :obj:`num_buckets` is factorized into two factors. The number of buckets (or the product the factors)
+            should approximately equal sequence length / lsh_chunk_length. If :obj:`num_buckets` not set, a good value
+            is calculated on the fly.
         num_hashes (:obj:`int`, `optional`, defaults to 1):
-            Number of hashing rounds (e.g., number of random rotations) in Local Sensitive Hashing scheme.
-            The higher :obj:`num_hashes`, the more accurate the :obj:`LSHSelfAttention` becomes, but also the more
-            memory and time intensive the hashing becomes.
+            Number of hashing rounds (e.g., number of random rotations) in Local Sensitive Hashing scheme. The higher
+            :obj:`num_hashes`, the more accurate the :obj:`LSHSelfAttention` becomes, but also the more memory and time
+            intensive the hashing becomes.
         pad_token_id (:obj:`int`, `optional`, defaults to 0):
             The token id for the padding token.
         vocab_size (:obj:`int`, `optional`, defaults to 320):\

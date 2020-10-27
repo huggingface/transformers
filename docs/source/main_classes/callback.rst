@@ -12,7 +12,7 @@ subclass :class:`~transformers.Trainer` and override the methods you need (see :
 
 By default a :class:`~transformers.Trainer` will use the following callbacks:
 
-- :class:`~transformers.DefaultFlowCallback` which handles the default beahvior for logging, saving and evaluation.
+- :class:`~transformers.DefaultFlowCallback` which handles the default behavior for logging, saving and evaluation.
 - :class:`~transformers.PrinterCallback` or :class:`~transformers.ProrgressCallback` to display progress and print the
   logs (the first one is used if you deactivate tqdm through the :class:`~transformers.TrainingArguments`, otherwise
   it's the second one).
@@ -20,6 +20,7 @@ By default a :class:`~transformers.Trainer` will use the following callbacks:
   or tensorboardX).
 - :class:`~transformers.integrations.WandbCallback` if `wandb <https://www.wandb.com/>`__ is installed.
 - :class:`~transformers.integrations.CometCallback` if `comet_ml <https://www.comet.ml/site/>`__ is installed.
+- :class:`~transformers.integrations.MLflowCallback` if `mlflow <https://www.mlflow.org/>`__ is installed.
 
 The main class that implements callbacks is :class:`~transformers.TrainerCallback`. It gets the
 :class:`~transformers.TrainingArguments` used to instantiate the :class:`~transformers.Trainer`, can access that
@@ -44,6 +45,9 @@ Here is the list of the available :class:`~transformers.TrainerCallback` in the 
 .. autoclass:: transformers.integrations.TensorBoardCallback
 
 .. autoclass:: transformers.integrations.WandbCallback
+    :members: setup
+
+.. autoclass:: transformers.integrations.MLflowCallback
     :members: setup
 
 

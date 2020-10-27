@@ -1,3 +1,7 @@
+---
+license: apache-2.0
+thumbnail: https://huggingface.co/front/thumbnails/facebook.png
+---
 ## RAG
 
 This is a non-finetuned version of the RAG-Sequence model of the the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/pdf/2005.11401.pdf) 

@@ -18,11 +18,14 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from transformers.testing_utils import require_tokenizers
+from transformers.tokenization_openai import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = OpenAIGPTTokenizer
@@ -80,3 +83,47 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+
+    def test_padding(self, max_length=15):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                # Simple input
+                s = "This is a simple input"
+                s2 = ["This is a simple input 1", "This is a simple input 2"]
+                p = ("This is a simple input", "This is a pair")
+                p2 = [
+                    ("This is a simple input 1", "This is a simple input 2"),
+                    ("This is a simple pair 1", "This is a simple pair 2"),
+                ]
+
+                # Simple input tests
+                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+
+                # Simple input
+                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+
+                # Simple input
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    s2,
+                    max_length=max_length,
+                    padding="max_length",
+                )
+
+                # Pair input
+                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+
+                # Pair input
+                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+
+                # Pair input
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    p2,
+                    max_length=max_length,
+                    padding="max_length",
+                )
