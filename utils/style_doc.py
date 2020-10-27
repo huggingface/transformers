@@ -312,10 +312,11 @@ class DocstringStyler(CodeStyler):
     """Class to style docstrings that take the main method from `CodeStyler`."""
 
     def is_no_style_block(self, line):
+        if _re_textual_blocks.search(line) is not None:
+            return False
         if _re_example.search(line) is not None:
             return True
         return _re_code_block.search(line) is not None
-        # return super().is_no_style_block(line) is not None
 
     def is_comment_or_textual_block(self, line):
         if _re_return.search(line) is not None:
