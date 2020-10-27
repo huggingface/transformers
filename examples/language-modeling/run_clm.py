@@ -23,11 +23,9 @@ import math
 import os
 import sys
 from dataclasses import dataclass, field
-from glob import glob
 from typing import Optional
 
-import numpy as np
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 
 import transformers
 from transformers import (
@@ -37,7 +35,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     HfArgumentParser,
-    PreTrainedTokenizer,
     Trainer,
     TrainingArguments,
     default_data_collator,
