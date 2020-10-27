@@ -227,4 +227,4 @@ class TrainerCallbackTest(unittest.TestCase):
             trainer = self.get_trainer(
                 callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
             )
-            assert str(MyTestTrainerCallback) in warn_mock.call_args.args[0]
+            assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]
