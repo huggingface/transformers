@@ -161,7 +161,7 @@ Larger batch size may improve the performance while costing more memory.
 
 #### Fine-tuning BERT on SQuAD1.0 with relative position embeddings
 
-The following examples show how to fine-tune BERT models with different relatve position embeddings. The default BERT model `bert-base-uncased` was pre-trained with absolute position embeddings. We provide the following pre-trained models which were pre-trained on the same training data (BooksCorpus and English Wikipedia) as in the BERT model training, but with different relative position embeddings. 
+The following examples show how to fine-tune BERT models with different relative position embeddings. The default BERT model `bert-base-uncased` was pre-trained with absolute position embeddings. We provide the following pre-trained models which were pre-trained on the same training data (BooksCorpus and English Wikipedia) as in the BERT model training, but with different relative position embeddings. 
 
 * `zhiheng-huang/bert-base-uncased-shaw`, training from scratch with relative embedding proposed by Shaw et al., [Self-Attention with Relative Position Representations](https://arxiv.org/abs/1803.02155)
 * `zhiheng-huang/bert-base-uncased-embedding-method-4`, training from scratch with relative embedding method 4 in Huang et al. [Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
