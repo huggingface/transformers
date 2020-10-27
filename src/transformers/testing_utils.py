@@ -577,3 +577,103 @@ def mockenv(**kwargs):
     os.getenv("USE_TF", False)
     """
     return unittest.mock.patch.dict(os.environ, kwargs)
+
+
+def pytest_terminal_summary_main(tr, id):
+    """
+    Generate multiple reports at the end of test suite run - each report goes into a dedicated file
+    in the current directory. The report files are prefixed with the test suite name.
+
+    This function emulates --duration and -rA pytest arguments.
+
+    This function is to be called from `conftest.py` via `pytest_terminal_summary` wrapper that has
+    to be defined there.
+
+    Args:
+    - tr: `terminalreporter` passed from `conftest.py`
+    - id: unique id like `tests` or `examples` that will be incorporated into the final reports
+      filenames - this is needed as some jobs have multiple runs of pytest, so we can't have them
+      overwrite each other.
+
+    NB: this functions taps into a private _pytest API and while unlikely, it could break should
+    pytest do internal changes - also it calls default internal methods of terminalreporter which
+    can be hijacked by various `pytest-` plugins and interfere.
+
+    """
+    from _pytest.config import create_terminal_writer
+
+    if not len(id):
+        id = "tests"
+
+    config = tr.config
+    orig_writer = config.get_terminal_writer()
+    orig_tbstyle = config.option.tbstyle
+    orig_reportchars = tr.reportchars
+
+    report_files = dict(
+        durations="durations",
+        short_summary="short_summary",
+        summary_errors="errors",
+        summary_failures="failures",
+        summary_warnings="warnings",
+        summary_passes="passes",
+        summary_stats="stats",
+    )
+    dir = "reports"
+    Path(dir).mkdir(parents=True, exist_ok=True)
+    report_files.update((k, f"{dir}/report_{id}_{v}.txt") for k, v in report_files.items())
+
+    # custom durations report
+    # note: there is no need to call pytest --durations=XX to get this separate report
+    # adapted from https://github.com/pytest-dev/pytest/blob/897f151e/src/_pytest/runner.py#L66
+    dlist = []
+    for replist in tr.stats.values():
+        for rep in replist:
+            if hasattr(rep, "duration"):
+                dlist.append(rep)
+    if dlist:
+        dlist.sort(key=lambda x: x.duration, reverse=True)
+        with open(report_files["durations"], "w") as f:
+            durations_min = 0.05  # sec
+            f.write("slowest durations\n")
+            for i, rep in enumerate(dlist):
+                if rep.duration < durations_min:
+                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    break
+                f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
+
+    # use ready-made report funcs, we are just hijacking the filehandle to log to a dedicated file each
+    # adapted from https://github.com/pytest-dev/pytest/blob/897f151e/src/_pytest/terminal.py#L814
+    # note: some pytest plugins may interfere by hijacking the default `terminalreporter` (e.g.
+    # pytest-instafail does that)
+    tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
+    config.option.tbstyle = "auto"
+    with open(report_files["summary_failures"], "w") as f:
+        tr._tw = create_terminal_writer(config, f)
+        tr.summary_failures()
+
+    with open(report_files["summary_errors"], "w") as f:
+        tr._tw = create_terminal_writer(config, f)
+        tr.summary_errors()
+
+    with open(report_files["summary_warnings"], "w") as f:
+        tr._tw = create_terminal_writer(config, f)
+        tr.summary_warnings()  # normal warnings
+        tr.summary_warnings()  # final warnings
+
+    with open(report_files["summary_passes"], "w") as f:
+        tr._tw = create_terminal_writer(config, f)
+        tr.summary_passes()
+
+    with open(report_files["short_summary"], "w") as f:
+        tr._tw = create_terminal_writer(config, f)
+        tr.short_test_summary()
+
+    with open(report_files["summary_stats"], "w") as f:
+        tr._tw = create_terminal_writer(config, f)
+        tr.summary_stats()
+
+    # restore:
+    tr._tw = orig_writer
+    tr.reportchars = orig_reportchars
+    config.option.tbstyle = orig_tbstyle

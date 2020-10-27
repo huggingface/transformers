@@ -110,10 +110,12 @@ jobs:
                   key: v0.3-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=tests ./tests/ | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+                  
     run_tests_tf:
         working_directory: ~/transformers
         docker:
@@ -258,10 +260,11 @@ jobs:
                   key: v0.3-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./examples/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=examples ./examples/ | tee examples_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
     build_doc:
         working_directory: ~/transformers
         docker:
