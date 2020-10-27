@@ -148,8 +148,6 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         src_text = ["Sam"]
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
 
-        # model does not have "token_type_ids"
-        model_inputs.pop("token_type_ids")
         generated_utterances = model.generate(**model_inputs, **FASTER_GEN_KWARGS)
         tgt_text = 'Sam is a great name. It means "sun" in Gaelic.'
 
@@ -160,8 +158,6 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
 
         model_inputs = self.tokenizer([src_text], return_tensors="pt").to(torch_device)
 
-        # model does not have "token_type_ids"
-        model_inputs.pop("token_type_ids")
         generated_ids = model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
         reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
 
