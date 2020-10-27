@@ -2,16 +2,24 @@
 import math
 import os
 
+from .utils import logging
 
-# Import 3rd-party integrations first:
+
+logger = logging.get_logger(__name__)
+
+
+# Import 3rd-party integrations before ML frameworks:
 
 try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
-    # XXX: there should be comet_ml.ensure_configured(), like `wandb`, for now emulate it
-    comet_ml.Experiment(project_name="ensure_configured")
-    _has_comet = True
+    if comet_ml.config.get_config("comet.api_key"):
+        _has_comet = True
+    else:
+        if os.getenv("COMET_MODE", "").upper() != "DISABLED":
+            logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+        _has_comet = False
 except (ImportError, ValueError):
     _has_comet = False
 
@@ -63,13 +71,9 @@ except ImportError:
 
 # No transformer imports above this point
 
-from .file_utils import is_torch_tpu_available
-from .trainer_callback import TrainerCallback
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
+from .file_utils import is_torch_tpu_available  # noqa: E402
+from .trainer_callback import TrainerCallback  # noqa: E402
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # noqa: E402
 
 
 # Integration functions:
