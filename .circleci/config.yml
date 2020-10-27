@@ -110,25 +110,23 @@ jobs:
                   key: v0.3-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=tests ./tests/ | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
+                  path: ~/transformers/tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/tests_failures.txt
+                  path: ~/transformers/report_tests_durations.txt
             - store_artifacts:
-                  path: ~/transformers/tests_durations.txt
+                  path: ~/transformers/report_tests_short_summary.txt
             - store_artifacts:
-                  path: ~/transformers/tests_short_summary.txt
+                  path: ~/transformers/report_tests_errors.txt
             - store_artifacts:
-                  path: ~/transformers/tests_errors.txt
+                  path: ~/transformers/report_tests_failures.txt
             - store_artifacts:
-                  path: ~/transformers/tests_failures.txt
+                  path: ~/transformers/report_tests_warnings.txt
             - store_artifacts:
-                  path: ~/transformers/tests_warnings.txt
+                  path: ~/transformers/report_tests_passes.txt
             - store_artifacts:
-                  path: ~/transformers/tests_passes.txt
-            - store_artifacts:
-                  path: ~/transformers/tests_stats.txt
+                  path: ~/transformers/report_tests_stats.txt
     
                   
     run_tests_tf:
@@ -275,11 +273,24 @@ jobs:
                   key: v0.3-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./examples/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=examples ./examples/ | tee examples_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
-    build_doc:
+                  path: ~/transformers/examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_durations.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_short_summary.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_errors.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_failures.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_warnings.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_passes.txt
+            - store_artifacts:
+                  path: ~/transformers/report_examples_stats.txt
+        build_doc:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6

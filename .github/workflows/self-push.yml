@@ -22,6 +22,7 @@ jobs:
           which python
           python --version
           pip --version
+          
       - name: Current dir
         run: pwd
       - run: nvidia-smi
@@ -40,6 +41,7 @@ jobs:
           which python
           python --version
           pip --version
+          
       - name: Install dependencies
         run: |
           source .env/bin/activate
@@ -61,13 +63,7 @@ jobs:
           OMP_NUM_THREADS: 1
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s ./tests/
-
-    - name: test suite reports artifacts
-      uses: actions/upload-artifact@v2
-      with:
-        name: tests_results
-        path: tests_*
+          python -m pytest -n 2 --dist=loadfile -s tests
 
 
   run_tests_torch_and_tf_multiple_gpu:
