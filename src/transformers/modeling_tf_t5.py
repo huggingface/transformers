@@ -1103,7 +1103,9 @@ class TFT5Model(TFT5PreTrainedModel):
             training=training,
         )
 
-        past = (encoder_outputs, decoder_outputs[1]) if (use_cache) else None
+        past = (
+            (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
+        )
         if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
