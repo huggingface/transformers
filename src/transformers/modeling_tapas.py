@@ -1101,8 +1101,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         sequence_output = outputs[0]
         pooled_output = outputs[1]
 
-        # if config.is_training:
-        #     sequence_output = self.dropout(sequence_output)
+        sequence_output = self.dropout(sequence_output)
 
         if input_ids is not None:
             input_shape = input_ids.size()
