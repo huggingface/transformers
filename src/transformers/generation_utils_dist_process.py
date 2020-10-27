@@ -20,7 +20,20 @@ import torch
 from torch.nn import functional as F
 
 
-class Sampler(ABC):
+class DistProcessorList(list):
+    """
+    This class inherits from list and adds a special `__call__`
+    method that call each distribution processing function one by one
+    and returns the processed scores
+    """
+
+    def __call__(self, input_ids, scores):
+        for processor in self:
+            scores = processor(input_ids, scores)
+        return scores
+
+
+class DistProcessor(ABC):
     """Abstract base class for all samplers which are probability distribution warps performed during generation."""
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -30,8 +43,8 @@ class Sampler(ABC):
         )
 
 
-class MinLengthSampler(Sampler):
-    """Sampler enforcing a min-length by setting EOS probability to 0."""
+class MinLengthDistProcessor(DistProcessor):
+    """DistProcessor enforcing a min-length by setting EOS probability to 0."""
 
     def __init__(self, min_length: int, eos_token_id: int):
         self.min_length = min_length
@@ -44,18 +57,19 @@ class MinLengthSampler(Sampler):
         return scores
 
 
-class TemperatureSampler(Sampler):
-    """Sampler for temperature (exponential scaling output probability distribution)."""
+class TemperatureDistWarper(DistProcessor):
+    """DistProcessor for temperature (exponential scaling output probability distribution)."""
 
     def __init__(self, temperature: float):
         self.temperature = temperature
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
-        return scores / self.temperature
+        scores = scores / self.temperature
+        return scores
 
 
-class RepetitionPenaltySampler(Sampler):
-    """Sampler enforcing an exponential penalty on repeated sequences."""
+class RepetitionPenaltyDistProcessor(DistProcessor):
+    """DistProcessor enforcing an exponential penalty on repeated sequences."""
 
     def __init__(self, penalty: float):
         self.penalty = penalty
@@ -63,7 +77,7 @@ class RepetitionPenaltySampler(Sampler):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         for i in range(scores.shape[0]):
             for previous_token in set(input_ids[i].tolist()):
-                # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
+                # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
                 if scores[i, previous_token] < 0:
                     scores[i, previous_token] *= self.penalty
                 else:
@@ -71,12 +85,12 @@ class RepetitionPenaltySampler(Sampler):
         return scores
 
 
-class TopPSampler(Sampler):
-    """Sampler that performs top-p, i.e. restricting to top tokens summing to probability <= probability."""
+class TopPDistWarper(DistProcessor):
+    """DistProcessor that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off."""
 
-    def __init__(self, probability: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        assert 0 <= probability <= 1.0, "P must be a probability between 0 and 1"
-        self.probability = probability
+    def __init__(self, prob_cut_off: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        assert 0 <= prob_cut_off <= 1.0, "P must be a prob_cut_off between 0 and 1"
+        self.prob_cut_off = prob_cut_off
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
@@ -84,11 +98,11 @@ class TopPSampler(Sampler):
         sorted_logits, sorted_indices = torch.sort(scores, descending=True)
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
-        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
-        sorted_indices_to_remove = cumulative_probs > self.probability
+        # Remove tokens with cumulative prob_cut_off above the threshold (token with 0 are kept)
+        sorted_indices_to_remove = cumulative_probs > self.prob_cut_off
         if self.min_tokens_to_keep > 1:
             # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
+            sorted_indices_to_remove[..., : self.min_tokens_to_keep - 1] = 0
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
@@ -99,11 +113,11 @@ class TopPSampler(Sampler):
         return scores
 
 
-class TopKSampler(Sampler):
-    """Sampler that performs top-k, i.e. restricting to the k highest probability elements."""
+class TopKDistWarper(DistProcessor):
+    """DistProcessor that performs top-k, i.e. restricting to the k highest probability elements."""
 
     def __init__(self, k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        assert k > 0, "Must specify a positive Top-K value"
+        assert k > 0, f"Must specify a positive value k, but is {k}"
 
         self.k = k
         self.filter_value = filter_value
@@ -117,8 +131,8 @@ class TopKSampler(Sampler):
         return scores
 
 
-class NoRepeatNGramSampler(Sampler):
-    """Sampler that enforces no repetition of n-grams.
+class NoRepeatNGramDistProcessor(DistProcessor):
+    """DistProcessor that enforces no repetition of n-grams.
     See Fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345."""
 
     def __init__(self, ngram_size: int):
@@ -159,11 +173,12 @@ class NoRepeatNGramSampler(Sampler):
         return banned_tokens
 
 
-class NoBadWordsSampler(Sampler):
-    """Sampler that enforces that specified sequences will never be sampled."""
+class NoBadWordsDistProcessor(DistProcessor):
+    """DistProcessor that enforces that specified sequences will never be sampled."""
 
     def __init__(self, bad_words_ids: Iterable[Iterable[int]], eos_token_id: int):
         self.bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
+
         for banned_token_seq in self.bad_words_ids:
             assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
                 bad_words_ids
@@ -171,7 +186,7 @@ class NoBadWordsSampler(Sampler):
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)
-        self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
+        scores = self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
 
@@ -182,8 +197,7 @@ class NoBadWordsSampler(Sampler):
         elif len(tokens) > len(prev_tokens):
             # if bad word tokens are longer then prev input_ids they can't be equal
             return False
-
-        elif prev_tokens[-len(tokens) :] == tokens:
+        elif prev_tokens[-len(tokens) :].tolist() == tokens:
             # if tokens match
             return True
         else:
@@ -216,7 +230,8 @@ class NoBadWordsSampler(Sampler):
             for token in batch_banned_tokens:
                 banned_mask_list.append([idx, token])
         if not banned_mask_list:
-            return
+            return scores
+
         banned_mask = torch.LongTensor(banned_mask_list)
         indices = torch.ones(len(banned_mask))
         # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
@@ -227,4 +242,5 @@ class NoBadWordsSampler(Sampler):
         banned_mask = (
             torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
         )
-        scores.masked_fill_(banned_mask, -float("inf"))
+        scores = scores.masked_fill(banned_mask, -float("inf"))
+        return scores
