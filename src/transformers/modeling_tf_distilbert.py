@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 DistilBERT model
+"""
+ TF 2.0 DistilBERT model
 """
 
 
@@ -96,19 +97,23 @@ class TFEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, input_ids=None, position_ids=None, inputs_embeds=None, mode="embedding", training=False):
-        """Get token embeddings of inputs.
+        """
+        Get token embeddings of inputs.
+
         Args:
             inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
             mode: string, a valid value is one of "embedding" and "linear".
+
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
-                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
-                linear tensor, float32 with shape [batch_size, length, vocab_size].
+            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
+            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
+            vocab_size].
+
         Raises:
             ValueError: if mode is not valid.
 
         Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
             return self._embedding(input_ids, position_ids, inputs_embeds, training=training)
@@ -119,15 +124,11 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
     def _embedding(self, input_ids, position_ids, inputs_embeds, training=False):
         """
-        Parameters
-        ----------
-        input_ids: tf.Tensor(bs, max_seq_length)
-            The token ids to embed.
+        Parameters:
+            input_ids: tf.Tensor(bs, max_seq_length) The token ids to embed.
 
-        Outputs
-        -------
-        embeddings: tf.Tensor(bs, max_seq_length, dim)
-            The embedded tokens (plus position embeddings, no token_type embeddings)
+        Returns:
+            tf.Tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type embeddings)
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -151,9 +152,12 @@ class TFEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
     def _linear(self, inputs):
-        """Computes logits by running inputs through a linear layer.
+        """
+        Computes logits by running inputs through a linear layer
+
         Args:
             inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
         """
@@ -197,19 +201,15 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
     def call(self, query, key, value, mask, head_mask, output_attentions, training=False):
         """
-        Parameters
-        ----------
-        query: tf.Tensor(bs, seq_length, dim)
-        key: tf.Tensor(bs, seq_length, dim)
-        value: tf.Tensor(bs, seq_length, dim)
-        mask: tf.Tensor(bs, seq_length)
+        Parameters:
+            query: tf.Tensor(bs, seq_length, dim)
+            key: tf.Tensor(bs, seq_length, dim)
+            value: tf.Tensor(bs, seq_length, dim)
+            mask: tf.Tensor(bs, seq_length)
 
-        Outputs
-        -------
-        weights: tf.Tensor(bs, n_heads, seq_length, seq_length)
-            Attention weights
-        context: tf.Tensor(bs, seq_length, dim)
-            Contextualized layer. Optional: only if `output_attentions=True`
+        Returns:
+            weights: tf.Tensor(bs, n_heads, seq_length, seq_length) Attention weights context: tf.Tensor(bs,
+            seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
@@ -302,17 +302,12 @@ class TFTransformerBlock(tf.keras.layers.Layer):
 
     def call(self, x, attn_mask, head_mask, output_attentions, training=False):  # removed: src_enc=None, src_len=None
         """
-        Parameters
-        ----------
-        x: tf.Tensor(bs, seq_length, dim)
-        attn_mask: tf.Tensor(bs, seq_length)
+        Parameters:
+            x: tf.Tensor(bs, seq_length, dim)
+            attn_mask: tf.Tensor(bs, seq_length)
 
-        Outputs
-        -------
-        sa_weights: tf.Tensor(bs, n_heads, seq_length, seq_length)
-            The attention weights
-        ffn_output: tf.Tensor(bs, seq_length, dim)
-            The output of the transformer block contextualization.
+        Outputs: sa_weights: tf.Tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
+        tf.Tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
         # Self-Attention
         sa_output = self.attention(x, x, x, attn_mask, head_mask, output_attentions, training=training)
@@ -343,24 +338,21 @@ class TFTransformer(tf.keras.layers.Layer):
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
     def call(self, x, attn_mask, head_mask, output_attentions, output_hidden_states, return_dict, training=False):
+        # docstyle-ignore
         """
-        Parameters
-        ----------
-        x: tf.Tensor(bs, seq_length, dim)
-            Input sequence embedded.
-        attn_mask: tf.Tensor(bs, seq_length)
-            Attention mask on the sequence.
+        Parameters:
+            x: tf.Tensor(bs, seq_length, dim) Input sequence embedded.
+            attn_mask: tf.Tensor(bs, seq_length) Attention mask on the sequence.
 
-        Outputs
-        -------
-        hidden_state: tf.Tensor(bs, seq_length, dim)
-            Sequence of hiddens states in the last (top) layer
-        all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
-            Tuple of length n_layers with the hidden states from each layer.
-            Optional: only if output_hidden_states=True
-        all_attentions: Tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
-            Tuple of length n_layers with the attention weights from each layer
-            Optional: only if output_attentions=True
+        Returns:
+            hidden_state: tf.Tensor(bs, seq_length, dim)
+                Sequence of hiddens states in the last (top) layer
+            all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
+                Tuple of length n_layers with the hidden states from each layer.
+                Optional: only if output_hidden_states=True
+            all_attentions: Tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
+                Tuple of length n_layers with the attention weights from each layer
+                Optional: only if output_attentions=True
         """
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -492,8 +484,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class TFDistilBertPreTrainedModel(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = DistilBertConfig
@@ -506,9 +499,9 @@ DISTILBERT_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     .. note::
 
@@ -517,11 +510,11 @@ DISTILBERT_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -531,8 +524,9 @@ DISTILBERT_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
@@ -540,22 +534,20 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.DistilBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` and
-            :func:`transformers.PreTrainedTokenizer.encode` for details.
+            Indices can be obtained using :class:`~transformers.DistilBertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -659,10 +651,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.distilbert.return_dict
         if isinstance(inputs, (tuple, list)):
@@ -704,8 +695,10 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
 
 
 @add_start_docstrings(
-    """DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSequenceClassificationLoss):
@@ -746,9 +739,8 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
+            config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.distilbert.return_dict
@@ -791,8 +783,10 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
 
 
 @add_start_docstrings(
-    """DistilBert Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    DistilBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
+    """,
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenClassificationLoss):
@@ -827,8 +821,8 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.distilbert.return_dict
         if isinstance(inputs, (tuple, list)):
@@ -869,8 +863,10 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
 
 
 @add_start_docstrings(
-    """DistilBert Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    DistilBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for RocStories/SWAG tasks.
+    """,
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoiceLoss):
@@ -891,7 +887,8 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -919,9 +916,9 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -993,8 +990,10 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
 
 @add_start_docstrings(
-    """DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
-    linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
@@ -1031,12 +1030,12 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.distilbert.return_dict
         if isinstance(inputs, (tuple, list)):

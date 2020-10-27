@@ -34,20 +34,19 @@ class FlaubertConfig(XLMConfig):
     :class:`~transformers.TFFlaubertModel`. It is used to instantiate a FlauBERT model according to the specified
     arguments, defining the model architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         pre_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to apply the layer normalization before or after the feed forward layer following the
-            attention in each layer (Vaswani et al., Tensor2Tensor for Neural Machine Translation. 2018)
+            Whether to apply the layer normalization before or after the feed forward layer following the attention in
+            each layer (Vaswani et al., Tensor2Tensor for Neural Machine Translation. 2018)
         layerdrop (:obj:`float`, `optional`, defaults to 0.0):
-            Probability to drop layers during training (Fan et al., Reducing Transformer Depth on Demand
-            with Structured Dropout. ICLR 2020)
+            Probability to drop layers during training (Fan et al., Reducing Transformer Depth on Demand with
+            Structured Dropout. ICLR 2020)
         vocab_size (:obj:`int`, `optional`, defaults to 30145):
-            Vocabulary size of the FlauBERT model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.FlaubertModel` or
+            Vocabulary size of the FlauBERT model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.FlaubertModel` or
             :class:`~transformers.TFFlaubertModel`.
         emb_dim (:obj:`int`, `optional`, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
@@ -56,8 +55,7 @@ class FlaubertConfig(XLMConfig):
         n_head (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probability for all fully connected
-            layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for the attention mechanism
         gelu_activation (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -65,28 +63,25 @@ class FlaubertConfig(XLMConfig):
         sinusoidal_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use sinusoidal positional embeddings instead of absolute positional embeddings.
         causal (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model shoul behave in a causal manner.
-            Causal models use a triangular attention mask in order to only attend to the left-side context instead
-            if a bidirectional context.
+            Whether or not the model shoul behave in a causal manner. Causal models use a triangular attention mask in
+            order to only attend to the left-side context instead if a bidirectional context.
         asm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use an adaptive log softmax projection layer instead of a linear layer for the prediction
             layer.
         n_langs (:obj:`int`, `optional`, defaults to 1):
             The number of languages the model handles. Set to 1 for monolingual models.
         use_lang_emb (:obj:`bool`, `optional`, defaults to :obj:`True`)
-            Whether to use language embeddings. Some models use additional language embeddings, see
-            `the multilingual models page <http://huggingface.co/transformers/multilingual.html#xlm-language-embeddings>`__
-            for information on how to use them.
+            Whether to use language embeddings. Some models use additional language embeddings, see `the multilingual
+            models page <http://huggingface.co/transformers/multilingual.html#xlm-language-embeddings>`__ for
+            information on how to use them.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might
-            ever be used with. Typically set this to something large just in case
-            (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         embed_init_std (:obj:`float`, `optional`, defaults to 2048^-0.5):
-            The standard deviation of the truncated_normal_initializer for
-            initializing the embedding matrices.
+            The standard deviation of the truncated_normal_initializer for initializing the embedding matrices.
         init_std (:obj:`int`, `optional`, defaults to 50257):
-            The standard deviation of the truncated_normal_initializer for
-            initializing all weight matrices except the embedding matrices.
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices except the
+            embedding matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         bos_index (:obj:`int`, `optional`, defaults to 0):
@@ -134,8 +129,7 @@ class FlaubertConfig(XLMConfig):
         mask_token_id (:obj:`int`, `optional`, defaults to 0):
             Model agnostic parameter to identify masked tokens when generating text in an MLM context.
         lang_id (:obj:`int`, `optional`, defaults to 1):
-            The ID of the language used by the model. This parameter is used when generating
-            text in a given language.
+            The ID of the language used by the model. This parameter is used when generating text in a given language.
     """
 
     model_type = "flaubert"

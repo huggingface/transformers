@@ -32,13 +32,12 @@ TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class TransfoXLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a :class:`~transformers.TransfoXLModel` or a
-    :class:`~transformers.TFTransfoXLModel`. It is used to instantiate a Transformer-XL model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the `Transformer XL <https://huggingface.co/transfo-xl-wt103>`__ architecture.
+    :class:`~transformers.TFTransfoXLModel`. It is used to instantiate a Transformer-XL model according to the
+    specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a
+    similar configuration to that of the `Transformer XL <https://huggingface.co/transfo-xl-wt103>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 267735):

@@ -314,8 +314,8 @@ def squad_convert_examples_to_features(
     tqdm_enabled=True,
 ):
     """
-    Converts a list of examples into a list of features that can be directly given as input to a model.
-    It is model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
+    Converts a list of examples into a list of features that can be directly given as input to a model. It is
+    model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
 
     Args:
         examples: list of :class:`~transformers.data.processors.squad.SquadExample`
@@ -326,8 +326,7 @@ def squad_convert_examples_to_features(
         is_training: whether to create features for model evaluation or model training.
         padding_strategy: Default to "max_length". Which padding strategy to use
         return_dataset: Default False. Either 'pt' or 'tf'.
-            if 'pt': returns a torch.data.TensorDataset,
-            if 'tf': returns a tf.data.Dataset
+            if 'pt': returns a torch.data.TensorDataset, if 'tf': returns a tf.data.Dataset
         threads: multiple processing threadsa-smi
 
 
@@ -528,8 +527,8 @@ def squad_convert_examples_to_features(
 
 class SquadProcessor(DataProcessor):
     """
-    Processor for the SQuAD data set.
-    Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and version 2.0 of SQuAD, respectively.
+    Processor for the SQuAD data set. Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
+    version 2.0 of SQuAD, respectively.
     """
 
     train_file = None
@@ -745,9 +744,9 @@ class SquadExample:
 
 class SquadFeatures:
     """
-    Single squad example features to be fed to a model.
-    Those features are model-specific and can be crafted from :class:`~transformers.data.processors.squad.SquadExample`
-    using the :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
+    Single squad example features to be fed to a model. Those features are model-specific and can be crafted from
+    :class:`~transformers.data.processors.squad.SquadExample` using the
+    :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
 
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.

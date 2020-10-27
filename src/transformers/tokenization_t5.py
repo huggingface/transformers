@@ -79,18 +79,18 @@ class T5Tokenizer(PreTrainedTokenizer):
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the end
-                of sequence. The token used is the :obj:`sep_token`.
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         extra_ids (:obj:`int`, `optional`, defaults to 100):
-            Add a number of extra ids added to the end of the vocabulary for use as sentinels.
-            These tokens are accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1.
-            Extra tokens are indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token
-            in the vocabulary like in T5 preprocessing see `here
+            Add a number of extra ids added to the end of the vocabulary for use as sentinels. These tokens are
+            accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. Extra tokens are
+            indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token in the vocabulary
+            like in T5 preprocessing see `here
             <https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117>`__).
         additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
@@ -191,9 +191,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A sequence has the following format:
 
         - single sequence: ``X </s>``
         - pair of sequences: ``A </s> B </s>``
