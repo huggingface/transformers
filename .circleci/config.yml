@@ -79,13 +79,11 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,tf-cpu,torch,testing]
-            - run: pip install codecov pytest-cov
             - save_cache:
                 key: v0.3-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pt_tf_cross_test --cov --durations=0 | tee output.txt
-            - run: codecov
+            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pt_tf_cross_test --durations=0 | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
