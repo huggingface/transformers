@@ -21,6 +21,7 @@ By default a :class:`~transformers.Trainer` will use the following callbacks:
 - :class:`~transformers.integrations.WandbCallback` if `wandb <https://www.wandb.com/>`__ is installed.
 - :class:`~transformers.integrations.CometCallback` if `comet_ml <https://www.comet.ml/site/>`__ is installed.
 - :class:`~transformers.integrations.MLflowCallback` if `mlflow <https://www.mlflow.org/>`__ is installed.
+- :class:`~transformers.integrations.AzureMLCallback` if `azureml-sdk <https://azure.microsoft.com/en-us/services/machine-learning/>`__ is installed.
 
 The main class that implements callbacks is :class:`~transformers.TrainerCallback`. It gets the
 :class:`~transformers.TrainingArguments` used to instantiate the :class:`~transformers.Trainer`, can access that
@@ -50,6 +51,8 @@ Here is the list of the available :class:`~transformers.TrainerCallback` in the 
 .. autoclass:: transformers.integrations.MLflowCallback
     :members: setup
 
+.. autoclass:: transformers.integrations.AzureMLCallback
+    :members: setup
 
 TrainerCallback
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
