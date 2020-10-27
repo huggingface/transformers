@@ -808,9 +808,9 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
         # self.weight = self._init_weight(*self.weight.shape)
 
     def build(self, input_shape):
-        """Build shared token embedding layer
-        Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+        Build shared token embedding layer Shared weights logic adapted from
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         super().build(input_shape)  # Instantiates self.weight so it can be loaded
         weight: np.ndarray = self._init_weight(self.vocab_size, self.hidden_size)
@@ -818,8 +818,9 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
 
     @staticmethod
     def _init_weight(n_pos, dim):
-        """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
-        The cos features are in the 2nd half of the vector. [dim // 2:]
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
         """
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
