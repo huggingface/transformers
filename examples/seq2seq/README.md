@@ -272,9 +272,8 @@ export DATA_DIR=cnn_dm
     --score_path cnn_rouge.json \
     --task summarization \
     --n_obs 100 \
-    --device cuda \
-    --max_source_length 1024 \
-    --max_target_length 56 \
+
+th 56 \
     --fp16 \
     --bs 32
 ```
@@ -357,9 +356,10 @@ If you pass `--info "some experiment-specific info"` it will get printed before 
 
 
 ### DistilBART
+This section describes all code and artifacts from our [Paper](http://arxiv.org/abs/2010.13002)
 ![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
 
-For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
+For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works, which we call "Shrink and Fine-tune".
 you just copy alternating layers from `bart-large-cnn` and finetune more on the same data.
 
 For the XSUM dataset, that didn’t work as well so we used that same initialization strategy followed by a combination of Distillbert’s ce_loss and the hidden states MSE loss used in the tinybert paper.
@@ -383,7 +383,13 @@ runtime: 6H on NVIDIA RTX 24GB GPU
 If you are using `wandb` and comparing the two distillation methods, using this entry point will make your logs consistent,
 because you will have the same hyperparameters logged in every run.
 
-#### With a teacher (Intermediate Supervision)
+### Pseudo-Labeling
+You don't even need `distillation.py`.
+Instructions to generate pseudo-labels and use pre-computed pseudolabels can be found [here](./precomputed_pseudo_labels.md).
+Simply run `finetune.py` with one of those pseudo-label datasets as `--data_dir`.
+
+#### With a teacher (Direct KD)
+You do need `distillation.py`.
 *Note* only BART variants are supported
 
 In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `BartSummarizationDistiller`.
@@ -396,6 +402,26 @@ The command that produced `sshleifer/distilbart-xsum-12-6` is:
 ```
 
 runtime: 13H on V-100 16GB GPU.
+
+### Citation
+
+```bibtex
+@misc{shleifer2020pretrained,
+      title={Pre-trained Summarization Distillation}, 
+      author={Sam Shleifer and Alexander M. Rush},
+      year={2020},
+      eprint={2010.13002},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+@article{Wolf2019HuggingFacesTS,
+  title={HuggingFace's Transformers: State-of-the-art Natural Language Processing},
+  author={Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Joe Davison and Sam Shleifer and Patrick von Platen and Clara Ma and Yacine Jernite and Julien Plu and Canwen Xu and Teven Le Scao and Sylvain Gugger and Mariama Drame and Quentin Lhoest and Alexander M. Rush},
+  journal={ArXiv},
+  year={2019},
+  volume={abs/1910.03771}
+}
+```
 
 ### Contributing
 - follow the standard contributing guidelines and code of conduct.
@@ -444,3 +470,5 @@ uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
 The feature is still experimental, because:
 + we can make it much more robust if we have memory mapped/preprocessed datasets.
 + The speedup over sortish sampler is not that large at the moment.
+
+
