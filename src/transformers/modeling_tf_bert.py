@@ -319,7 +319,6 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query = tf.keras.layers.experimental.EinsumDense(
             equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
@@ -344,6 +343,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def call(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, training=False):
+        """
         query_tensor = self.query(inputs=hidden_states)
 
         # `key_tensor` = [B, S, N, H]
@@ -377,6 +377,37 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         outputs = (attention_output, attention_probs)
 
         return outputs
+        """
+        query = self.query(inputs=hidden_states)
+        key = self.key(inputs=hidden_states)
+        value = self.value(inputs=hidden_states)
+        dk = tf.cast(x=self.attention_head_size, dtype=query.dtype)
+        query = tf.multiply(x=query, y=tf.math.rsqrt(x=dk))
+        attention_scores = tf.einsum("aecd,abcd->acbe", key, query)
+        
+        if attention_mask is not None:
+            # Here we apply the attention mask to the attention_scores for the softmax computation
+            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+                attention_mask = tf.expand_dims(attention_mask, axis=-3)
+        
+            min_negative = -1e9
+        
+            if attention_scores.dtype == tf.float16:
+                min_negative = tf.float16.min
+        
+            adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * min_negative
+        
+            attention_scores += adder
+
+        attention_scores = tf.nn.softmax(logits=attention_scores, axis=3)
+        attention_scores_dropout = self.dropout(attention_scores)
+
+        if head_mask is not None:
+            attention_scores = attention_scores * head_mask
+
+        attention_output = tf.einsum("acbe,aecd->abcd", attention_scores_dropout, value)
+
+        return (attention_output, attention_scores)
 
 
 class TFBertSelfOutput(tf.keras.layers.Layer):

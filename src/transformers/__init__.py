@@ -685,6 +685,7 @@ if is_tf_available():
         TFBertMainLayer,
         TFBertModel,
         TFBertPreTrainedModel,
+        TFBertLayer,
     )
     from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
     from .modeling_tf_camembert import (
