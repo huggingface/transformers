@@ -22,9 +22,8 @@ from torch.nn import functional as F
 
 class DistProcessorList(list):
     """
-    This class inherits from list and adds a special `__call__`
-    method that call each distribution processing function one by one
-    and returns the processed scores
+    This class inherits from list and adds a special `__call__` method that call each distribution processing function
+    one by one and returns the processed scores
     """
 
     def __call__(self, input_ids, scores):
@@ -132,8 +131,10 @@ class TopKDistWarper(DistProcessor):
 
 
 class NoRepeatNGramDistProcessor(DistProcessor):
-    """DistProcessor that enforces no repetition of n-grams.
-    See Fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345."""
+    """
+    DistProcessor that enforces no repetition of n-grams. See Fairseq:
+    https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345.
+    """
 
     def __init__(self, ngram_size: int):
         self.ngram_size = ngram_size
@@ -219,8 +220,10 @@ class NoBadWordsDistProcessor(DistProcessor):
         return banned_tokens
 
     def _set_scores_to_inf_for_banned_tokens(self, scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
-        """Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be
-        a list of list of banned tokens to ban in the format [[batch index, vocabulary position],...]
+        """
+        Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
+        list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
+
             Args:
                 scores: logits distribution of shape (batch size, vocabulary size)
                 banned_tokens: list of list of tokens to ban of length (batch_size)

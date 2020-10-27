@@ -198,8 +198,8 @@ class BeamHypotheses(object):
 
     def is_done(self, best_sum_logprobs, cur_len):
         """
-        If there are enough hypotheses and that none of the hypotheses being generated
-        can become better than the worst one in the heap, then we are done with this sentence.
+        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
+        one in the heap, then we are done with this sentence.
         """
 
         if len(self) < self.num_beams:
