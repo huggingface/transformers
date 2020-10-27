@@ -168,7 +168,7 @@ class DistProcessorTest(unittest.TestCase):
         EXPECTED_FILTERED_DIST = torch.tensor(
             [[0.3, 0.0, 0.0, 0.5], [0.0, 0.3, 0.3, 0.2]], device=torch_device, dtype=torch.float
         )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-6))
+        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
 
         # check edge cases with negative and extreme logits
         ramp_logits = torch.arange(vocab_size, device=torch_device, dtype=torch.float).unsqueeze(0).repeat(
@@ -277,7 +277,7 @@ class DistProcessorTest(unittest.TestCase):
         scores_comp = processor(input_ids, scores_comp)
 
         # scores should be equal
-        self.assertTrue(torch.allclose(scores, scores_comp, atol=1e-6))
+        self.assertTrue(torch.allclose(scores, scores_comp, atol=1e-3))
 
         # input_ids should never be changed
         self.assertListEqual(input_ids.tolist(), input_ids_comp.tolist())

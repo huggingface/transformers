@@ -1109,7 +1109,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                     -3.2012153,
                     2.92777176,
                     1.88171953,
-                    7.35341276,  # 5th highest value; idx. 9
+                    7.35341276,
                     8.43207833,  # 2nd highest value; idx. 10
                     -9.85711836,
                     -5.96209236,
@@ -1130,7 +1130,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                     2.12662941,
                     -9.32562038,
                     2.35652522,
-                ],  # cummulative prob of 5 highest values <= 0.6
+                ],  # cummulative prob of 4 highest values <= 0.6
                 [
                     0.58425518,
                     4.53139238,
@@ -1150,7 +1150,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                     4.82767506,
                     4.30421368,
                     8.8275313,  # 2nd highest value; idx. 17
-                    5.44029958,  # 5th highest value; idx. 18
+                    5.44029958,
                     -4.4735794,
                     7.38579536,  # 3rd highest value; idx. 20
                     -2.91051663,
@@ -1162,14 +1162,14 @@ class UtilsFunctionsTest(unittest.TestCase):
                     9.67702323,  # 1st highest value; idx. 27
                     -5.89478553,
                     1.85370467,
-                ],  # cummulative prob of 5 highest values <= 0.6
+                ],  # cummulative prob of 4 highest values <= 0.6
             ],
             dtype=torch.float,
             device=torch_device,
         )
 
         non_inf_expected_idx = torch.tensor(
-            [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]],
+            [[0, 0], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 20], [1, 27]],
             dtype=torch.long,
             device=torch_device,
         )  # expected non filtered idx as noted above
@@ -1177,13 +1177,11 @@ class UtilsFunctionsTest(unittest.TestCase):
         non_inf_expected_output = torch.tensor(
             [
                 8.2221,
-                7.3534,
                 8.4321,
                 7.4402,
                 9.3845,
                 6.2712,
                 8.8275,
-                5.4403,
                 7.3858,
                 9.6770,
             ],  # expected non filtered values as noted above
