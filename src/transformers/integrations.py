@@ -432,7 +432,8 @@ class CometCallback(TrainerCallback):
 
 class AzureMLCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML <https://pypi.org/project/azureml-sdk/>`__.
+    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML
+    <https://pypi.org/project/azureml-sdk/>`__.
     """
 
     def __init__(self, azureml_run=None):
