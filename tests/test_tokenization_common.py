@@ -576,6 +576,24 @@ class TokenizerTesterMixin:
                     sequences, mask = information["input_ids"], information["token_type_ids"]
                     self.assertEqual(len(sequences), len(mask))
 
+    def test_token_type_ids(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                seq_0 = "Test this method."
+                seq_1 = "With these inputs."
+
+                # We want to have sequence 0 and sequence 1 are tagged
+                # respectively with 0 and 1 token_ids
+                # (regardeless of weither the model use token type ids)
+                # We use this assumption in the QA pipeline among other place
+                output = tokenizer(seq_0, return_token_type_ids=True)
+                self.assertIn(0, output["token_type_ids"])
+
+                output = tokenizer(seq_0, seq_1, return_token_type_ids=True)
+                self.assertIn(0, output["token_type_ids"])
+                self.assertIn(1, output["token_type_ids"])
+
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

@@ -9,7 +9,7 @@ from .test_pipelines_common import MonoInputPipelineCommonMixin
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
-class TextGenerationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
+class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "conversational"
     small_models = []  # Models tested without the @slow decorator
     large_models = ["microsoft/DialoGPT-medium"]  # Models tested with the @slow decorator

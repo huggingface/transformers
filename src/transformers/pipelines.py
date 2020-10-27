@@ -32,7 +32,7 @@ import numpy as np
 
 from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
-from .data import SquadExample, squad_convert_examples_to_features
+from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
@@ -1721,6 +1721,7 @@ class QuestionAnsweringPipeline(Pipeline):
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
+        kwargs.setdefault("padding", "longest")
         kwargs.setdefault("topk", 1)
         kwargs.setdefault("doc_stride", 128)
         kwargs.setdefault("max_answer_len", 15)
@@ -1736,19 +1737,83 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
-        features_list = [
-            squad_convert_examples_to_features(
-                examples=[example],
-                tokenizer=self.tokenizer,
-                max_seq_length=kwargs["max_seq_len"],
-                doc_stride=kwargs["doc_stride"],
-                max_query_length=kwargs["max_question_len"],
-                padding_strategy=PaddingStrategy.MAX_LENGTH.value,
-                is_training=False,
-                tqdm_enabled=False,
-            )
-            for example in examples
-        ]
+        if not self.tokenizer.is_fast:
+            features_list = [
+                squad_convert_examples_to_features(
+                    examples=[example],
+                    tokenizer=self.tokenizer,
+                    max_seq_length=kwargs["max_seq_len"],
+                    doc_stride=kwargs["doc_stride"],
+                    max_query_length=kwargs["max_question_len"],
+                    padding_strategy=PaddingStrategy.MAX_LENGTH.value,
+                    is_training=False,
+                    tqdm_enabled=False,
+                )
+                for example in examples
+            ]
+        else:
+            features_list = []
+            for example in examples:
+                # Define the side we want to truncate / pad and the text/pair sorting
+                question_first = bool(self.tokenizer.padding_side == "right")
+                if question_first:
+                    texts = example.question_text
+                    pairs = example.context_text
+                    truncation = "only_second"
+                else:
+                    texts = example.context_text
+                    pairs = example.question_text
+                    truncation = "only_first"
+
+                encoded_inputs = self.tokenizer(
+                    texts,
+                    pairs,
+                    padding=kwargs["padding"],
+                    truncation=truncation,
+                    max_length=kwargs["max_seq_len"],
+                    stride=kwargs["doc_stride"],
+                    return_tensors="np",
+                    return_token_type_ids=True,
+                    return_overflowing_tokens=True,
+                    return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
+                )
+
+                # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+                p_mask = encoded_inputs["token_type_ids"] == (0 if question_first else 1)  # Mask the question
+                p_mask = p_mask | encoded_inputs["special_tokens_mask"]  # And mask the special tokens
+                cls_index = 0
+                if self.tokenizer.cls_token_id:
+                    # kKep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                    cls_index = np.where(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
+                    p_mask[cls_index] = 0
+
+                features = []
+                num_spans = len(encoded_inputs["input_ids"])
+                for span_idx in range(num_spans):
+                    features.append(
+                        SquadFeatures(
+                            encoded_inputs["input_ids"][span_idx],
+                            encoded_inputs["attention_mask"][span_idx],
+                            encoded_inputs["token_type_ids"][span_idx],
+                            cls_index[span_idx],
+                            p_mask[span_idx].tolist(),
+                            encoding=encoded_inputs[span_idx],
+                            # We don't use the rest of the values
+                            token_to_orig_map={},
+                            example_index=0,
+                            unique_id=0,
+                            paragraph_len=0,
+                            token_is_max_context=0,
+                            tokens=[],
+                            start_position=0,
+                            end_position=0,
+                            is_impossible=False,
+                            qas_id=None,
+                        )
+                    )
+                features_list.append(features)
+
         all_answers = []
         for features, example in zip(features_list, examples):
             model_input_names = self.tokenizer.model_input_names + ["input_ids"]
@@ -1791,20 +1856,34 @@ class QuestionAnsweringPipeline(Pipeline):
                 start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
-                char_to_word = np.array(example.char_to_word_offset)
+                if not self.tokenizer.is_fast:
+                    char_to_word = np.array(example.char_to_word_offset)
 
-                # Convert the answer (tokens) back to the original text
-                answers += [
-                    {
-                        "score": score.item(),
-                        "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                        "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                        "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                        ),
-                    }
-                    for s, e, score in zip(starts, ends, scores)
-                ]
+                    # Convert the answer (tokens) back to the original text
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                            "answer": " ".join(
+                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            ),
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
+                else:
+                    # Convert the answer (tokens) back to the original text
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                            "answer": " ".join(
+                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            ),
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
 
             if kwargs["handle_impossible_answer"]:
                 answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})

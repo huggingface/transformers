@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import logging
 from .utils import DataProcessor
 
@@ -350,24 +350,39 @@ def squad_convert_examples_to_features(
     # Defining helper methods
     features = []
 
-    threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
-        annotate_ = partial(
-            squad_convert_example_to_features,
+    #################
+    squad_convert_example_to_features_init(tokenizer)
+    for example in examples:
+        feature = squad_convert_example_to_features(
+            example,
             max_seq_length=max_seq_length,
             doc_stride=doc_stride,
             max_query_length=max_query_length,
             padding_strategy=padding_strategy,
             is_training=is_training,
         )
-        features = list(
-            tqdm(
-                p.imap(annotate_, examples, chunksize=32),
-                total=len(examples),
-                desc="convert squad examples to features",
-                disable=not tqdm_enabled,
-            )
-        )
+        features.append(feature)
+
+    #################
+    # threads = min(threads, cpu_count())
+    # with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+    #     annotate_ = partial(
+    #         squad_convert_example_to_features,
+    #         max_seq_length=max_seq_length,
+    #         doc_stride=doc_stride,
+    #         max_query_length=max_query_length,
+    #         padding_strategy=padding_strategy,
+    #         is_training=is_training,
+    #     )
+    #     features = list(
+    #         tqdm(
+    #             p.imap(annotate_, examples, chunksize=32),
+    #             total=len(examples),
+    #             desc="convert squad examples to features",
+    #             disable=not tqdm_enabled,
+    #         )
+    #     )
+    #################
 
     new_features = []
     unique_id = 1000000000
@@ -765,6 +780,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
     """
 
     def __init__(
@@ -784,6 +800,7 @@ class SquadFeatures:
         end_position,
         is_impossible,
         qas_id: str = None,
+        encoding: BatchEncoding = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -802,6 +819,8 @@ class SquadFeatures:
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.qas_id = qas_id
+
+        self.encoding = encoding
 
 
 class SquadResult:
