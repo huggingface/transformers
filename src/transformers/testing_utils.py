@@ -614,7 +614,9 @@ def pytest_terminal_summary_main(tr, id):
         summary_passes="passes",
         summary_stats="stats",
     )
-    report_files.update((k, f"report_{id}_{v}.txt") for k, v in report_files.items())
+    dir = "reports"
+    Path(dir).mkdir(parents=True, exist_ok=True)
+    report_files.update((k, f"{dir}/report_{id}_{v}.txt") for k, v in report_files.items())
 
     # custom durations report
     # note: there is no need to call pytest --durations=XX to get this separate report

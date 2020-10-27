@@ -87,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: test_reports
-          path: report_*
+          path: reports
 
 
   run_all_tests_torch_and_tf_multiple_gpu:

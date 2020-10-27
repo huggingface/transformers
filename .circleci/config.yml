@@ -114,20 +114,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/report_tests_durations.txt
-            - store_artifacts:
-                  path: ~/transformers/report_tests_short_summary.txt
-            - store_artifacts:
-                  path: ~/transformers/report_tests_errors.txt
-            - store_artifacts:
-                  path: ~/transformers/report_tests_failures.txt
-            - store_artifacts:
-                  path: ~/transformers/report_tests_warnings.txt
-            - store_artifacts:
-                  path: ~/transformers/report_tests_passes.txt
-            - store_artifacts:
-                  path: ~/transformers/report_tests_stats.txt
-    
+                  path: ~/transformers/reports
                   
     run_tests_tf:
         working_directory: ~/transformers
@@ -277,19 +264,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
-                  path: ~/transformers/report_examples_durations.txt
-            - store_artifacts:
-                  path: ~/transformers/report_examples_short_summary.txt
-            - store_artifacts:
-                  path: ~/transformers/report_examples_errors.txt
-            - store_artifacts:
-                  path: ~/transformers/report_examples_failures.txt
-            - store_artifacts:
-                  path: ~/transformers/report_examples_warnings.txt
-            - store_artifacts:
-                  path: ~/transformers/report_examples_passes.txt
-            - store_artifacts:
-                  path: ~/transformers/report_examples_stats.txt
+                  path: ~/transformers/reports
     build_doc:
         working_directory: ~/transformers
         docker:
