@@ -603,7 +603,7 @@ def pytest_terminal_summary_main(tr, id):
 
     config = tr.config
     orig_writer = config.get_terminal_writer()
-    orig_tbstyle = tr.config.option.tbstyle
+    orig_tbstyle = config.option.tbstyle
     orig_reportchars = tr.reportchars
 
     report_files = dict(
@@ -643,7 +643,7 @@ def pytest_terminal_summary_main(tr, id):
     # note: some pytest plugins may interfere by hijacking the default `terminalreporter` (e.g.
     # pytest-instafail does that)
     tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
-    tr.config.option.tbstyle = "auto"
+    config.option.tbstyle = "auto"
     with open(report_files["summary_failures"], "w") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
@@ -671,5 +671,5 @@ def pytest_terminal_summary_main(tr, id):
 
     # restore:
     tr._tw = orig_writer
-    tr.config.option.tbstyle = orig_tbstyle
     tr.reportchars = orig_reportchars
+    config.option.tbstyle = orig_tbstyle
