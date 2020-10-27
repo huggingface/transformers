@@ -157,7 +157,7 @@ class DistProcessorTest(unittest.TestCase):
 
         # create distribution and take log (inverse to Softmax as taken in TopPDistWarper)
         dist = torch.log(
-            torch.tensor([[0.3, 0.1, 0.1, 0.5], [0.2, 0.3, 0.3, 0.2]], device=torch_device, dtype=torch.float)
+            torch.tensor([[0.3, 0.1, 0.1, 0.5], [0.15, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float)
         )
 
         top_p_warp = TopPDistWarper(0.7)
@@ -166,7 +166,7 @@ class DistProcessorTest(unittest.TestCase):
         # dist should be filtered to keep min num values so that sum is >= 0.7
         # exp (-inf) => 0
         EXPECTED_FILTERED_DIST = torch.tensor(
-            [[0.3, 0.0, 0.0, 0.5], [0.0, 0.3, 0.3, 0.2]], device=torch_device, dtype=torch.float
+            [[0.3, 0.0, 0.0, 0.5], [0.0, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float
         )
         self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
 

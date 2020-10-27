@@ -57,10 +57,16 @@ class GenerationMixin:
         """
         return logits
 
-    def _prepare_input_ids(self, bos_token_id):
+    def _prepare_input_ids(self, bos_token_id: int):
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
         return torch.ones((1, 1), dtype=torch.long, device=next(self.parameters()).device) * bos_token_id
+
+    def _prepare_attention_mask(self, input_ids: torch.Tensor, pad_token_id: int):
+        if (pad_token_id is not None) and (pad_token_id in input_ids):
+            return input_ids.ne(pad_token_id).long()
+        else:
+            return input_ids.new_ones(input_ids.shape)
 
     def _prepare_encoder_decoder_kwargs(self, input_ids, model_kwargs):
         # retrieve encoder hidden states
@@ -272,6 +278,10 @@ class GenerationMixin:
         if input_ids is None:
             # init `input_ids` with bos_token_id
             input_ids = self._prepare_input_ids(bos_token_id)
+
+        if model_kwargs.get("attention_mask", None) is None:
+            # init `attention_mask` depending on `pad_token_id`
+            model_kwargs["attention_mask"] = self._prepare_attention_mask(input_ids, pad_token_id)
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
@@ -567,12 +577,13 @@ class GenerationMixin:
 
             outputs = self(**model_inputs, return_dict=True)
             next_token_logits = outputs.logits[:, -1, :]
-            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             # adjust tokens for Bart, *e.g.*
-            next_token_scores = self.adjust_logits_during_generation(
-                next_token_scores, cur_len=cur_len, max_length=max_length
+            next_token_logits = self.adjust_logits_during_generation(
+                next_token_logits, cur_len=cur_len, max_length=max_length
             )
+
+            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = pre_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
@@ -646,12 +657,13 @@ class GenerationMixin:
 
             outputs = self(**model_inputs, return_dict=True)
             next_token_logits = outputs.logits[:, -1, :]
-            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             # adjust tokens for Bart, *e.g.*
-            next_token_scores = self.adjust_logits_during_generation(
-                next_token_scores, cur_len=cur_len, max_length=max_length
+            next_token_logits = self.adjust_logits_during_generation(
+                next_token_logits, cur_len=cur_len, max_length=max_length
             )
+
+            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = pre_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)

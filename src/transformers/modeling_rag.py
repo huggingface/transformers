@@ -830,7 +830,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         num_return_sequences=None,  # defaults to 1
         num_beams=None,  # defaults to 1
         n_docs=None,
-        **kwargs
+        **model_kwargs
     ):
         """
         Implements RAG sequence "thorough" decoding.
@@ -893,9 +893,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = context_input_ids.to(input_ids)
 
         hypos = []
-        kwargs["num_beams"] = num_beams
-        kwargs["num_return_sequences"] = num_beams
-        kwargs["attention_mask"] = None
+        model_kwargs["num_beams"] = num_beams
+        model_kwargs["num_return_sequences"] = num_beams
+        model_kwargs["attention_mask"] = None
 
         for index in range(len(input_ids)):
             # first, generate beams from documents:
@@ -903,7 +903,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
             output_sequences = self.generator.generate(
                 generator_input_ids,
-                **kwargs,
+                **model_kwargs,
             )  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication, max_output_len
@@ -1396,7 +1396,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         # define start_len & additional parameters
         model_kwargs["doc_scores"] = doc_scores
         model_kwargs["encoder_outputs"] = encoder_outputs
-        model_kwargs["context_attention_mask"] = context_attention_mask
+        model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
 
         pre_processor = self.get_dist_pre_processor(
