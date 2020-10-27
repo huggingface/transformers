@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -165,9 +164,7 @@ class TestFinetuneTrainer(TestCasePlus):
         trainer.train()
 
     def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
-
-        # XXX: remove hardcoded path
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         argv = f"""
             --model_name_or_path {model_name}
@@ -203,23 +200,10 @@ class TestFinetuneTrainer(TestCasePlus):
 
         n_gpu = torch.cuda.device_count()
         if n_gpu > 1:
-
-            path = Path(__file__).resolve()
-            cur_path = path.parents[0]
-
-            path = Path(__file__).resolve()
-            examples_path = path.parents[1]
-            src_path = f"{path.parents[2]}/src"
-            env = os.environ.copy()
-            env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
-
-            distributed_args = (
-                f"-m torch.distributed.launch --nproc_per_node={n_gpu} {cur_path}/finetune_trainer.py".split()
-            )
+            distributed_args = f"-m torch.distributed.launch --nproc_per_node={n_gpu} {self.test_file_dir}/finetune_trainer.py".split()
             cmd = [sys.executable] + distributed_args + argv
 
-            print("\nRunning: ", " ".join(cmd))
-
+            env = self.get_env()
             result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
 
             assert result.stdout, "produced no output"

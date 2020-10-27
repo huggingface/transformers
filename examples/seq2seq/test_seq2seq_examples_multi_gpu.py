@@ -157,19 +157,9 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
                 return f"--{k}"
             return f"--{k}={v}"
 
-        path = Path(__file__).resolve()
-        cur_path = path.parents[0]
-        examples_path = path.parents[1]
-        src_path = f"{path.parents[2]}/src"
-        env = os.environ.copy()
-        env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
-
         cli_args = [x for x in (convert(k, v) for k, v in args_d.items()) if len(x)]
-        cmd = [sys.executable, f"{cur_path}/distillation.py"] + cli_args
-
-        print("\nRunning: ", " ".join(cmd))
-
-        result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
+        cmd = [sys.executable, f"{self.test_file_dir}/distillation.py"] + cli_args
+        result = execute_async_std(cmd, env=self.get_env(), stdin=None, timeout=180, quiet=False, echo=False)
 
         assert result.stdout, "produced no output"
         if result.returncode > 0:

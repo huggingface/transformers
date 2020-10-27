@@ -522,6 +522,101 @@ class TestCasePlus(unittest.TestCase):
     def setUp(self):
         self.teardown_tmp_dirs = []
 
+        # figure out the resolved paths for repo_root, tests, examples, etc.
+        self.test_file_path = inspect.getfile(self.__class__)
+        path = Path(self.test_file_path).resolve()
+        self.test_file_dir = path.parents[0]
+        for up in [1, 2, 3]:
+            tmp_dir = path.parents[up]
+            if (tmp_dir / "src").is_dir() and (tmp_dir / "tests").is_dir():
+                break
+        if tmp_dir:
+            self.repo_root_dir = tmp_dir
+        else:
+            raise ValueError(f"can't figure out the root of the repo from {self.test_file_path}")
+        self.tests_dir = self.repo_root_dir / "tests"
+        self.examples_dir = self.repo_root_dir / "examples"
+        self.src_dir = self.repo_root_dir / "src"
+
+    @property
+    def test_file_path(self):
+        return self._test_file_path
+
+    @test_file_path.setter
+    def test_file_path(self, value):
+        self._test_file_path = value
+
+    @property
+    def test_file_dir(self):
+        return self._test_file_dir
+
+    @test_file_dir.setter
+    def test_file_dir(self, value):
+        self._test_file_dir = value
+
+    @property
+    def tests_dir(self):
+        return self._tests_dir
+
+    @tests_dir.setter
+    def tests_dir(self, value):
+        self._tests_dir = value
+
+    @property
+    def examples_dir(self):
+        return self._examples_dir
+
+    @examples_dir.setter
+    def examples_dir(self, value):
+        self._examples_dir = value
+
+    @property
+    def repo_root_dir(self):
+        return self._repo_root_dir
+
+    @repo_root_dir.setter
+    def repo_root_dir(self, value):
+        self._repo_root_dir = value
+
+    @property
+    def src_dir(self):
+        return self._src_dir
+
+    @src_dir.setter
+    def src_dir(self, value):
+        self._src_dir = value
+
+    def get_env(self):  # , test_suite="tests"):
+        """
+
+        Create a copy of the `os.environ` obj that sets up `PYTHONPATH` for the requested test suite type. This is
+        useful for invoking external programs from the test suite - e.g. distributed training.
+
+        It always inserts `./src` first, then `./tests` or `./examples` depending on the test suite type and finally
+        the preset `PYTHONPATH` if any (all full resolved paths).
+
+        Args:
+        - test_suite: one of `tests` or `examples`
+
+        Returns:
+        - copy of env with preset `PYTHONPATH`
+
+        """
+        # test_suites = ["tests", "examples"]
+        # if test_suite not in test_suites:
+        #     raise ValueError(f"arg {test_suite} should be one of: {test_suites}, but got: {test_suite}")
+
+        env = os.environ.copy()
+        paths = [self.src_dir]
+        if "/examples" in str(self.test_file_dir):
+            paths.append(self.examples_dir)
+        else:
+            paths.append(self.tests_dir)
+        paths.append(env.get("PYTHONPATH", ""))
+
+        env["PYTHONPATH"] = ":".join(map(str, paths))
+        return env
+
     def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
         """
         Args:
@@ -738,6 +833,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
 
 def execute_async_std(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
+    print("\nRunning: ", " ".join(cmd))
+
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
