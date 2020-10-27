@@ -431,6 +431,10 @@ class CometCallback(TrainerCallback):
 
 
 class AzureMLCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML <https://pypi.org/project/azureml-sdk/>`__.
+    """
+
     def __init__(self, azureml_run=None):
         assert _has_azureml, "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
         self.azureml_run = azureml_run
