@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import FunnelTokenizer, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -417,6 +417,8 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class FunnelModelIntegrationTest(unittest.TestCase):
     def test_inference_tiny_model(self):
         batch_size = 13

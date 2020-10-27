@@ -32,13 +32,12 @@ XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class XLNetConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a :class:`~transformers.XLNetModel` or a
-    :class:`~transformers.TFXLNetModel`. It is used to instantiate a XLNet model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the `xlnet-large-cased <https://huggingface.co/xlnet-large-cased>`__ architecture.
+    :class:`~transformers.TFXLNetModel`. It is used to instantiate a XLNet model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the `xlnet-large-cased <https://huggingface.co/xlnet-large-cased>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 32000):
@@ -54,8 +53,8 @@ class XLNetConfig(PretrainedConfig):
         d_inner (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         ff_activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the If string, :obj:`"gelu"`, :obj:`"relu"`,
+            :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         untie_r (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to untie relative position biases
         attn_type (:obj:`str`, `optional`, defaults to :obj:`"bi"`):
@@ -67,18 +66,16 @@ class XLNetConfig(PretrainedConfig):
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         mem_len (:obj:`int` or :obj:`None`, `optional`):
-            The number of tokens to cache. The key/value pairs that have already been pre-computed
-            in a previous forward pass won't be re-computed. See the
-            `quickstart <https://huggingface.co/transformers/quickstart.html#using-the-past>`__
-            for more information.
+            The number of tokens to cache. The key/value pairs that have already been pre-computed in a previous
+            forward pass won't be re-computed. See the `quickstart
+            <https://huggingface.co/transformers/quickstart.html#using-the-past>`__ for more information.
         reuse_len (:obj:`int`, `optional`):
             The number of tokens in the current batch to be cached and reused in the future.
         bi_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use bidirectional input pipeline. Usually set to :obj:`True` during
-            pretraining and :obj:`False` during finetuning.
+            Whether or not to use bidirectional input pipeline. Usually set to :obj:`True` during pretraining and
+            :obj:`False` during finetuning.
         clamp_len (:obj:`int`, `optional`, defaults to -1):
-            Clamp all relative distances larger than clamp_len.
-            Setting this attribute to -1 means no clamping.
+            Clamp all relative distances larger than clamp_len. Setting this attribute to -1 means no clamping.
         same_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the same attention length for each token.
         summary_type (:obj:`str`, `optional`, defaults to "last"):

@@ -32,36 +32,34 @@ T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class T5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.T5Model` or a
-    :class:`~transformers.TFT5Model`. It is used to instantiate a T5 model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the T5 `t5-small <https://huggingface.co/t5-small>`__ architecture.
+    :class:`~transformers.TFT5Model`. It is used to instantiate a T5 model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the T5 `t5-small <https://huggingface.co/t5-small>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Arguments:
         vocab_size (:obj:`int`, `optional`, defaults to 32128):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or
-            :class:`~transformers.TFT5Model`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or :class:`~transformers.TFT5Model`.
         n_positions (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         d_model (:obj:`int`, `optional`, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (:obj:`int`, `optional`, defaults to 64):
-            Size of the key, query, value projections per attention head. :obj:`d_kv` has to be equal to
-            :obj:`d_model // num_heads`.
+            Size of the key, query, value projections per attention head. :obj:`d_kv` has to be equal to :obj:`d_model
+            // num_heads`.
         d_ff (:obj:`int`, `optional`, defaults to 2048):
             Size of the intermediate feed forward layer in each :obj:`T5Block`.
         num_layers (:obj:`int`, `optional`, defaults to 6):
             Number of hidden layers in the Transformer encoder.
         num_decoder_layers (:obj:`int`, `optional`):
-            Number of hidden layers in the Transformer decoder. Will use the same value as :obj:`num_layers` if not set.
+            Number of hidden layers in the Transformer decoder. Will use the same value as :obj:`num_layers` if not
+            set.
         num_heads (:obj:`int`, `optional`, defaults to 8):
-            Number of attention heads for each attention layer in
-            the Transformer encoder.
+            Number of attention heads for each attention layer in the Transformer encoder.
         relative_attention_num_buckets (:obj:`int`, `optional`, defaults to 32):
             The number of buckets to use for each attention layer.
         dropout_rate (:obj:`float`, `optional`, defaults to 0.1):

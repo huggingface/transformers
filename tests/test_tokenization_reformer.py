@@ -17,9 +17,9 @@
 import os
 import unittest
 
+from transformers import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow
-from transformers.tokenization_reformer import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -27,6 +27,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
+@require_sentencepiece
+@require_tokenizers
 class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = ReformerTokenizer
@@ -60,6 +62,50 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
+
+    def test_padding(self, max_length=15):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                # Simple input
+                s = "This is a simple input"
+                s2 = ["This is a simple input 1", "This is a simple input 2"]
+                p = ("This is a simple input", "This is a pair")
+                p2 = [
+                    ("This is a simple input 1", "This is a simple input 2"),
+                    ("This is a simple pair 1", "This is a simple pair 2"),
+                ]
+
+                # Simple input tests
+                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+
+                # Simple input
+                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+
+                # Simple input
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    s2,
+                    max_length=max_length,
+                    padding="max_length",
+                )
+
+                # Pair input
+                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+
+                # Pair input
+                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+
+                # Pair input
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    p2,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
     def test_full_tokenizer(self):
         tokenizer = ReformerTokenizer(SAMPLE_VOCAB, keep_accents=True)

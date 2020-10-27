@@ -1,7 +1,6 @@
 """
-Utilities for working with the local dataset cache.
-This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
-Copyright by the AllenNLP authors.
+Utilities for working with the local dataset cache. This file is adapted from the AllenNLP library at
+https://github.com/allenai/allennlp Copyright by the AllenNLP authors.
 """
 
 import fnmatch
@@ -34,10 +33,13 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES"}
+ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
+
 try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
     USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
-    if USE_TORCH in ("1", "ON", "YES", "AUTO") and USE_TF not in ("1", "ON", "YES"):
+    if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
         import torch
 
         _torch_available = True  # pylint: disable=invalid-name
@@ -52,7 +54,7 @@ try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
     USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 
-    if USE_TF in ("1", "ON", "YES", "AUTO") and USE_TORCH not in ("1", "ON", "YES"):
+    if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
         import tensorflow as tf
 
         assert hasattr(tf, "__version__") and int(tf.__version__[0]) >= 2
@@ -63,6 +65,22 @@ try:
         _tf_available = False
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
+
+
+try:
+    USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
+
+    if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
+        import flax
+        import jax
+
+        logger.info("JAX version {}, Flax: available".format(jax.__version__))
+        logger.info("Flax available: {}".format(flax))
+        _flax_available = True
+    else:
+        _flax_available = False
+except ImportError:
+    _flax_available = False  # pylint: disable=invalid-name
 
 
 try:
@@ -142,6 +160,38 @@ try:
 except (AttributeError, ImportError):
     _has_sklearn = False
 
+try:
+    # Test copied from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
+    get_ipython = sys.modules["IPython"].get_ipython
+    if "IPKernelApp" not in get_ipython().config:
+        raise ImportError("console")
+    if "VSCODE_PID" in os.environ:
+        raise ImportError("vscode")
+
+    import IPython  # noqa: F401
+
+    _in_notebook = True
+except (AttributeError, ImportError, KeyError):
+    _in_notebook = False
+
+
+try:
+    import sentencepiece  # noqa: F401
+
+    _sentencepiece_available = True
+
+except ImportError:
+    _sentencepiece_available = False
+
+
+try:
+    import tokenizers  # noqa: F401
+
+    _tokenizers_available = True
+
+except ImportError:
+    _tokenizers_available = False
+
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
@@ -156,6 +206,8 @@ TF_WEIGHTS_NAME = "model.ckpt"
 CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
+SENTENCEPIECE_UNDERLINE = "▁"
+SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
 
 MULTIPLE_CHOICE_DUMMY_INPUTS = [
     [[0, 1, 0, 1], [1, 0, 0, 1]]
@@ -177,6 +229,10 @@ def is_torch_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_flax_available():
+    return _flax_available
 
 
 def is_torch_tpu_available():
@@ -203,6 +259,22 @@ def is_faiss_available():
     return _faiss_available
 
 
+def is_sklearn_available():
+    return _has_sklearn
+
+
+def is_sentencepiece_available():
+    return _sentencepiece_available
+
+
+def is_tokenizers_available():
+    return _tokenizers_available
+
+
+def is_in_notebook():
+    return _in_notebook
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -216,10 +288,7 @@ def torch_only_method(fn):
     return wrapper
 
 
-def is_sklearn_available():
-    return _has_sklearn
-
-
+# docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
 ```
@@ -237,6 +306,28 @@ that python file if that's the case.
 """
 
 
+# docstyle-ignore
+TOKENIZERS_IMPORT_ERROR = """
+{0} requires the 🤗 Tokenizers library but it was not found in your enviromnent. You can install it with:
+```
+pip install tokenizers
+```
+In a notebook or a colab, you can install it by executing a cell with
+```
+!pip install tokenizers
+```
+"""
+
+
+# docstyle-ignore
+SENTENCEPIECE_IMPORT_ERROR = """
+{0} requires the SentencePiece library but it was not found in your enviromnent. Checkout the instructions on the
+installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
+that match your enviromnent.
+"""
+
+
+# docstyle-ignore
 FAISS_IMPORT_ERROR = """
 {0} requires the faiss library but it was not found in your enviromnent. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
@@ -244,12 +335,14 @@ that match your enviromnent.
 """
 
 
+# docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your enviromnent.
 """
 
 
+# docstyle-ignore
 SKLEARN_IMPORT_ERROR = """
 {0} requires the scikit-learn library but it was not found in your enviromnent. You can install it with:
 ```
@@ -262,9 +355,17 @@ In a notebook or a colab, you can install it by executing a cell with
 """
 
 
+# docstyle-ignore
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
+"""
+
+
+# docstyle-ignore
+FLAX_IMPORT_ERROR = """
+{0} requires the FLAX library but it was not found in your enviromnent. Checkout the instructions on the
+installation page: https://github.com/google/flax and follow the ones that match your enviromnent.
 """
 
 
@@ -298,6 +399,24 @@ def requires_tf(obj):
         raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
 
 
+def requires_flax(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_flax_available():
+        raise ImportError(FLAX_IMPORT_ERROR.format(name))
+
+
+def requires_tokenizers(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_tokenizers_available():
+        raise ImportError(TOKENIZERS_IMPORT_ERROR.format(name))
+
+
+def requires_sentencepiece(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_sentencepiece_available():
+        raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(name))
+
+
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
         fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
@@ -313,10 +432,9 @@ def add_start_docstrings_to_callable(*docstr):
         note = r"""
 
     .. note::
-        Although the recipe for forward pass needs to be defined within
-        this function, one should call the :class:`Module` instance afterwards
-        instead of this since the former takes care of running the
-        pre and post processing steps while the latter silently ignores them.
+        Although the recipe for forward pass needs to be defined within this function, one should call the
+        :class:`Module` instance afterwards instead of this since the former takes care of running the pre and post
+        processing steps while the latter silently ignores them.
         """
         fn.__doc__ = intro + note + "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
         return fn
@@ -334,20 +452,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`:
-        A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
-        tuple of :obj:`torch.FloatTensor` comprising various elements depending on the configuration
-        (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` (if
+        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`torch.FloatTensor`
+        comprising various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`:
-        A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
-        tuple of :obj:`tf.Tensor` comprising various elements depending on the configuration
-        (:class:`~transformers.{config_class}`) and inputs.
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` (if
+        ``return_dict=True`` is passed or when ``config.return_dict=True``) or a tuple of :obj:`tf.Tensor` comprising
+        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
 
 """
 
@@ -711,19 +827,16 @@ def is_remote_url(url_or_filename):
 
 def hf_bucket_url(model_id: str, filename: str, use_cdn=True, mirror=None) -> str:
     """
-    Resolve a model identifier, and a file name, to a HF-hosted url
-    on either S3 or Cloudfront (a Content Delivery Network, or CDN).
+    Resolve a model identifier, and a file name, to a HF-hosted url on either S3 or Cloudfront (a Content Delivery
+    Network, or CDN).
 
-    Cloudfront is replicated over the globe so downloads are way faster
-    for the end user (and it also lowers our bandwidth costs). However, it
-    is more aggressively cached by default, so may not always reflect the
-    latest changes to the underlying file (default TTL is 24 hours).
+    Cloudfront is replicated over the globe so downloads are way faster for the end user (and it also lowers our
+    bandwidth costs). However, it is more aggressively cached by default, so may not always reflect the latest changes
+    to the underlying file (default TTL is 24 hours).
 
-    In terms of client-side caching from this library, even though
-    Cloudfront relays the ETags from S3, using one or the other
-    (or switching from one to the other) will affect caching: cached files
-    are not shared between the two because the cached file's name contains
-    a hash of the url.
+    In terms of client-side caching from this library, even though Cloudfront relays the ETags from S3, using one or
+    the other (or switching from one to the other) will affect caching: cached files are not shared between the two
+    because the cached file's name contains a hash of the url.
     """
     endpoint = (
         PRESET_MIRROR_DICT.get(mirror, mirror)
@@ -741,12 +854,10 @@ def hf_bucket_url(model_id: str, filename: str, use_cdn=True, mirror=None) -> st
 
 def url_to_filename(url, etag=None):
     """
-    Convert `url` into a hashed filename in a repeatable way.
-    If `etag` is specified, append its hash to the url's, delimited
-    by a period.
-    If the url ends with .h5 (Keras HDF5 weights) adds '.h5' to the name
-    so that TF 2.0 can identify it as a HDF5 file
-    (see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1380)
+    Convert `url` into a hashed filename in a repeatable way. If `etag` is specified, append its hash to the url's,
+    delimited by a period. If the url ends with .h5 (Keras HDF5 weights) adds '.h5' to the name so that TF 2.0 can
+    identify it as a HDF5 file (see
+    https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1380)
     """
     url_bytes = url.encode("utf-8")
     url_hash = sha256(url_bytes)
@@ -765,8 +876,8 @@ def url_to_filename(url, etag=None):
 
 def filename_to_url(filename, cache_dir=None):
     """
-    Return the url and etag (which may be ``None``) stored for `filename`.
-    Raise ``EnvironmentError`` if `filename` or its stored metadata do not exist.
+    Return the url and etag (which may be ``None``) stored for `filename`. Raise ``EnvironmentError`` if `filename` or
+    its stored metadata do not exist.
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -801,10 +912,10 @@ def cached_path(
     local_files_only=False,
 ) -> Optional[str]:
     """
-    Given something that might be a URL (or might be a local path),
-    determine which. If it's a URL, download the file and cache it, and
-    return the path to the cached file. If it's already a local path,
-    make sure the file exists and then return the path.
+    Given something that might be a URL (or might be a local path), determine which. If it's a URL, download the file
+    and cache it, and return the path to the cached file. If it's already a local path, make sure the file exists and
+    then return the path
+
     Args:
         cache_dir: specify a cache directory to save the file to (overwrite the default cache dir).
         force_download: if True, re-dowload the file even if it's already cached in the cache dir.
@@ -816,8 +927,8 @@ def cached_path(
             re-extract the archive and overide the folder where it was extracted.
 
     Return:
-        None in case of non-recoverable file (non-existent or inaccessible url + no cache on disk).
-        Local path (string) otherwise
+        None in case of non-recoverable file (non-existent or inaccessible url + no cache on disk). Local path (string)
+        otherwise
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -925,12 +1036,12 @@ def get_from_cache(
     local_files_only=False,
 ) -> Optional[str]:
     """
-    Given a URL, look for the corresponding file in the local cache.
-    If it's not there, download it. Then return the path to the cached file.
+    Given a URL, look for the corresponding file in the local cache. If it's not there, download it. Then return the
+    path to the cached file.
 
     Return:
-        None in case of non-recoverable file (non-existent or inaccessible url + no cache on disk).
-        Local path (string) otherwise
+        None in case of non-recoverable file (non-existent or inaccessible url + no cache on disk). Local path (string)
+        otherwise
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -1093,8 +1204,8 @@ def is_tensor(x):
 class ModelOutput(OrderedDict):
     """
     Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a
-    regular python dictionary.
+    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a regular
+    python dictionary.
 
     .. warning::
         You can't unpack a :obj:`ModelOutput` directly. Use the :meth:`~transformers.file_utils.ModelOutput.to_tuple`

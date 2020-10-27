@@ -23,11 +23,11 @@ from .modeling_bart import BART_START_DOCSTRING, BartForConditionalGeneration
 @add_start_docstrings("The Pegasus Model for summarization ", BART_START_DOCSTRING)
 class PegasusForConditionalGeneration(BartForConditionalGeneration):
     r"""
-    Pytorch version of google's pegasus model for summarization.
-    Available models are listed `here <https://huggingface.co/models?search=pegasus>`__.
+    Pytorch version of google's pegasus model for summarization. Available models are listed `here
+    <https://huggingface.co/models?search=pegasus>`__.
 
-    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
+    This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the superclass for the
+    appropriate documentation alongside usage examples.
 
     Examples::
 
@@ -50,6 +50,10 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",
-        r"model.encoder.embed_positions",
+        "model.encoder.embed_positions",
         "model.decoder.embed_positions",
+    ]
+    keys_to_never_save = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
     ]

@@ -15,8 +15,8 @@ Prepare your model for uploading
 
 We have seen in the :doc:`training tutorial <training>`: how to fine-tune a model on a given task. You have probably
 done something similar on your task, either using the model directly in your own training loop or using the
-:class:`~.transformers.Trainer`/:class:`~.transformers.TFTrainer` class. Let's see how you can share the result on
-the `model hub <https://huggingface.co/models>`__.
+:class:`~.transformers.Trainer`/:class:`~.transformers.TFTrainer` class. Let's see how you can share the result on the
+`model hub <https://huggingface.co/models>`__.
 
 Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -60,22 +60,20 @@ Make your model work on all frameworks
 
 You probably have your favorite framework, but so will other users! That's why it's best to upload your model with both
 PyTorch `and` TensorFlow checkpoints to make it easier to use (if you skip this step, users will still be able to load
-your model in another framework, but it will be slower, as it will have to be converted on the fly). Don't worry, it's super easy to do (and in a future version,
-it will all be automatic). You will need to install both PyTorch and TensorFlow for this step, but you don't need to
-worry about the GPU, so it should be very easy. Check the
-`TensorFlow installation page <https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available>`__ 
-and/or the `PyTorch installation page <https://pytorch.org/get-started/locally/#start-locally>`__ to see how.
+your model in another framework, but it will be slower, as it will have to be converted on the fly). Don't worry, it's
+super easy to do (and in a future version, it will all be automatic). You will need to install both PyTorch and
+TensorFlow for this step, but you don't need to worry about the GPU, so it should be very easy. Check the `TensorFlow
+installation page <https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available>`__ and/or the `PyTorch
+installation page <https://pytorch.org/get-started/locally/#start-locally>`__ to see how.
 
 First check that your model class exists in the other framework, that is try to import the same model by either adding
-or removing TF. For instance, if you trained a :class:`~transformers.DistilBertForSequenceClassification`, try to
-type
+or removing TF. For instance, if you trained a :class:`~transformers.DistilBertForSequenceClassification`, try to type
 
 .. code-block::
 
     from transformers import TFDistilBertForSequenceClassification
 
-and if you trained a :class:`~transformers.TFDistilBertForSequenceClassification`, try to
-type
+and if you trained a :class:`~transformers.TFDistilBertForSequenceClassification`, try to type
 
 .. code-block::
 
@@ -112,7 +110,8 @@ Make sure there are no garbage files in the directory you'll upload. It should o
 - a `tf_model.h5` file, which is the TensorFlow checkpoint (unless you can't have it for some reason) ;
 - a `special_tokens_map.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save;
 - a `tokenizer_config.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save;
-- files named `vocab.json`, `vocab.txt`, `merges.txt`, or similar, which contain the vocabulary of your tokenizer, part of your :doc:`tokenizer <main_classes/tokenizer>` save;
+- files named `vocab.json`, `vocab.txt`, `merges.txt`, or similar, which contain the vocabulary of your tokenizer, part
+  of your :doc:`tokenizer <main_classes/tokenizer>` save;
 - maybe a `added_tokens.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save.
 
 Other files can safely be deleted.
@@ -135,7 +134,8 @@ Then log in using the same credentials as on huggingface.co. To upload your mode
 
 This will upload the folder containing the weights, tokenizer and configuration we prepared in the previous section.
 
-By default you will be prompted to confirm that you want these files to be uploaded. If you are uploading multiple models and need to script that process, you can add `-y` to bypass the prompt. For example:
+By default you will be prompted to confirm that you want these files to be uploaded. If you are uploading multiple
+models and need to script that process, you can add `-y` to bypass the prompt. For example:
 
 .. code-block::
 
@@ -179,15 +179,15 @@ Add a model card
 To make sure everyone knows what your model can do, what its limitations and potential bias or ethetical
 considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should then be
 placed in a subfolder with your username or organization, then another subfolder named like your model
-(`awesome-name-you-picked`). Or just click on the "Create a model card on GitHub" button on the model page, it will
-get you directly to the right location. If you need one, `here <https://github.com/huggingface/model_card>`__ is a
-model card template (meta-suggestions are welcome).
+(`awesome-name-you-picked`). Or just click on the "Create a model card on GitHub" button on the model page, it will get
+you directly to the right location. If you need one, `here <https://github.com/huggingface/model_card>`__ is a model
+card template (meta-suggestions are welcome).
 
 If your model is fine-tuned from another model coming from the model hub (all 🤗 Transformers pretrained models do),
 don't forget to link to its model card so that people can fully trace how your model was built.
 
-If you have never made a pull request to the 🤗 Transformers repo, look at the
-:doc:`contributing guide <contributing>` to see the steps to follow.
+If you have never made a pull request to the 🤗 Transformers repo, look at the :doc:`contributing guide <contributing>`
+to see the steps to follow.
 
 .. Note::
 

@@ -52,9 +52,9 @@ def glue_convert_examples_to_features(
         output_mode: String indicating the output mode. Either ``regression`` or ``classification``
 
     Returns:
-        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset``
-        containing the task-specific features. If the input is a list of ``InputExamples``, will return
-        a list of task-specific ``InputFeatures`` which can be fed to the model.
+        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
+        task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
+        ``InputFeatures`` which can be fed to the model.
 
     """
     if is_tf_available() and isinstance(examples, tf.data.Dataset):

@@ -87,21 +87,23 @@ extras["tf-cpu"] = [
     # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
 ]
 extras["torch"] = ["torch>=1.0"]
+extras["flax"] = ["jaxlib==0.1.55", "jax>=0.2.0", "flax==0.2.2"]
 extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
+extras["sentencepiece"] = ["sentencepiece!=0.1.92"]
 extras["retrieval"] = ["faiss-cpu", "datasets"]
 extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
 extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
-extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch", "sentencepiece!=0.1.92"]
 
 setup(
     name="transformers",
-    version="3.3.1",
+    version="3.4.0",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
@@ -114,7 +116,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.9.0.rc2",
+        "tokenizers == 0.9.2",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # utilities from PyPA to e.g. compare versions

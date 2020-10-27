@@ -13,8 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Utilities for PyTorch Transformer XL model.
-    Directly adapted from https://github.com/kimiyoung/transformer-xl.
+"""
+ Utilities for PyTorch Transformer XL model. Directly adapted from https://github.com/kimiyoung/transformer-xl.
 """
 
 
@@ -87,15 +87,13 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         """
         Params:
             hidden :: [len*bsz x d_proj]
-            labels :: [len*bsz]
+            labels :: [len*bsz
+
         Return:
-            if labels is None:
-                out :: [len*bsz x n_tokens] log probabilities of tokens over the vocabulary
-            else:
-                out :: [(len-1)*bsz] Negative log likelihood
-        We could replace this implementation by the native PyTorch one
-        if their's had an option to set bias on all clusters in the native one.
-        here: https://github.com/pytorch/pytorch/blob/dbe6a7a9ff1a364a8706bf5df58a1ca96d2fd9da/torch/nn/modules/adaptive.py#L138
+            if labels is None: out :: [len*bsz x n_tokens] log probabilities of tokens over the vocabulary else: out ::
+            [(len-1)*bsz] Negative log likelihood We could replace this implementation by the native PyTorch one if
+            their's had an option to set bias on all clusters in the native one. here:
+            https://github.com/pytorch/pytorch/blob/dbe6a7a9ff1a364a8706bf5df58a1ca96d2fd9da/torch/nn/modules/adaptive.py#L138
         """
 
         if labels is not None:
@@ -191,15 +189,17 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         return out
 
     def log_prob(self, hidden):
-        r"""Computes log probabilities for all :math:`n\_classes`
-        From: https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/adaptive.py
+        r"""
+        Computes log probabilities for all :math:`n\_classes` From:
+        https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/adaptive.p
+
         Args:
-            hidden (Tensor): a minibatch of examples
+            hidden (Tensor): a minibatch of example
+
         Returns:
-            log-probabilities of for each class :math:`c`
-            in range :math:`0 <= c <= n\_classes`, where :math:`n\_classes` is a
-            parameter passed to ``AdaptiveLogSoftmaxWithLoss`` constructor.
-        Shape:
+            log-probabilities of for each class :math:`c` in range :math:`0 <= c <= n\_classes`, where
+            :math:`n\_classes` is a parameter passed to ``AdaptiveLogSoftmaxWithLoss`` constructor. Shape:
+
             - Input: :math:`(N, in\_features)`
             - Output: :math:`(N, n\_classes)`
         """
