@@ -99,6 +99,7 @@ See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` 
 
 TFBlenderbotForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 See :obj:`transformers.TFBartForConditionalGeneration` for arguments to `forward` and `generate`
 
 .. autoclass:: transformers.TFBlenderbotForConditionalGeneration
