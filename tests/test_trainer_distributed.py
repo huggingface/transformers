@@ -62,20 +62,9 @@ class TestTrainerDistributed(TestCasePlus):
 
 
 if __name__ == "__main__":
-    # The script below is meant to be run in torch.distributed,
-    # on a machine with multiple GPUs, in the following way:
+    # The script below is meant to be run in torch.distributed, on a machine with multiple GPUs:
     #
-    #   PYTHONPATH="src" python -m torch.distributed.launch --nproc_per_node 2 ./tests/test_trainer_distributed.py
-    #
-    # Replace 2 with the number of GPUs you have.
-    #
-    # You can also run it as a standalone file to test identical behavior in nn.DataParallel:
-    #   python ./tests/test_trainer_distributed.py
-    # and in single-GPU mode:
-    #   CUDA_VISIBLE_DEVICES=0 python ./tests/test_trainer_distributed.py
-    # and in CPU mode:
-    #   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
-    #
+    # PYTHONPATH="src" python -m torch.distributed.launch --nproc_per_node 2 --output_dir output_dir ./tests/test_trainer_distributed.py
 
     parser = HfArgumentParser((TrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
