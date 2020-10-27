@@ -205,9 +205,9 @@ class GenerationMixin:
         # all samplers can be found in `generation_utils_samplers.py`
         if top_k is not None and top_k != 0:
             warpers.append(TopKDistWarper(k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-        if top_p is not None:
+        if top_p is not None and top_p < 1.0:
             warpers.append(TopPDistWarper(prob_cut_off=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-        if temperature is not None:
+        if temperature is not None and temperature != 1.0:
             warpers.append(TemperatureDistWarper(temperature))
         return warpers
 
@@ -229,13 +229,13 @@ class GenerationMixin:
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
-        if repetition_penalty is not None:
+        if repetition_penalty is not None and repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyDistProcessor(penalty=repetition_penalty))
-        if no_repeat_ngram_size is not None:
+        if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramDistProcessor(no_repeat_ngram_size))
         if bad_words_ids is not None:
             processors.append(NoBadWordsDistProcessor(bad_words_ids, eos_token_id))
-        if min_length is not None and eos_token_id is not None:
+        if min_length is not None and eos_token_id is not None and min_length > 0:
             processors.append(MinLengthDistProcessor(min_length, eos_token_id))
         return processors
 
