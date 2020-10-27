@@ -128,7 +128,7 @@ class ExamplesTests(TestCasePlus):
             #     for k, v in result.items():
             #         self.assertGreaterEqual(v, 0.75, f"({k})")
             #
-    
+
     def test_run_clm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -149,7 +149,7 @@ class ExamplesTests(TestCasePlus):
             --overwrite_output_dir
             --prediction_loss_only
             """.split()
-        
+
         if torch.cuda.device_count() > 1:
             # Skipping because there are not enough batches to train the model + would need a drop_last to work.
             return

@@ -43,7 +43,6 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-
 from transformers.trainer_utils import is_main_process
 
 
@@ -90,15 +89,14 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a text file)."}
-    )
+    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
@@ -114,7 +112,7 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-    
+
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
@@ -210,9 +208,13 @@ def main():
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
@@ -243,7 +245,12 @@ def main():
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name])
 
-    tokenized_datasets = datasets.map(tokenize_function, batched=True, remove_columns=[text_column_name], load_from_cache_file=not data_args.overwrite_cache)
+    tokenized_datasets = datasets.map(
+        tokenize_function,
+        batched=True,
+        remove_columns=[text_column_name],
+        load_from_cache_file=not data_args.overwrite_cache,
+    )
 
     if data_args.block_size <= 0:
         block_size = tokenizer.max_len
@@ -257,10 +264,13 @@ def main():
         # We drop the small remainder
         total_length = (total_length // block_size) * block_size
         # Split by chunks of max_len
-        result = {k: [t[i: i+block_size] for i in range(0, total_length, block_size)] for k, t in concatenated_examples.items()}
+        result = {
+            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+            for k, t in concatenated_examples.items()
+        }
         result["labels"] = result["input_ids"].copy()
         return result
-    
+
     lm_datasets = tokenized_datasets.map(group_texts, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     # Initialize our Trainer
