@@ -90,8 +90,6 @@ class GenerationMixin:
         return decoder_input_ids
 
     def _get_pad_token_id(self, pad_token_id, eos_token_id):
-        if pad_token_id is None:
-            pad_token_id = self.config.pad_token_id
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
@@ -384,9 +382,9 @@ class GenerationMixin:
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        pad_token_id = self._get_pad_token_id(pad_token_id, eos_token_id)
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is None:
@@ -396,6 +394,11 @@ class GenerationMixin:
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
             model_kwargs["attention_mask"] = self._prepare_attention_mask(input_ids, pad_token_id)
+
+        # special case if pad_token_id is not defined
+        if pad_token_id is None and eos_token_id is not None:
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            pad_token_id = eos_token_id
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
@@ -487,7 +490,6 @@ class GenerationMixin:
             input_ids, model_kwargs = self._expand_inputs(
                 input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
             )
-
             return self.beam_search(
                 input_ids,
                 beam_scorer,
