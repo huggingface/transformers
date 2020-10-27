@@ -91,7 +91,11 @@ class BertConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-
+        position_embedding_config (:obj:`int`, `optional`, defaults to 0):
+            Position embedding configurations. 0: BERT default absolute position embedding, 1: relative
+            position embedding in Shaw et al. Self-Attention with Relative Position Representations,
+            https://arxiv.org/abs/1803.02155, 2: Method 4 in Huang et al. Improve Transformer Models with Better
+            Relative Position Embeddings, https://arxiv.org/abs/2009.13658
     Examples::
 
         >>> from transformers import BertModel, BertConfig
@@ -123,6 +127,7 @@ class BertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         gradient_checkpointing=False,
+        position_embedding_config=0,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -140,3 +145,4 @@ class BertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.gradient_checkpointing = gradient_checkpointing
+        self.position_embedding_config = position_embedding_config

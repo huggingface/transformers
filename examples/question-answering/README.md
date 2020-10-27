@@ -159,6 +159,70 @@ Larger batch size may improve the performance while costing more memory.
 }
 ```
 
+#### Fine-tuning BERT on SQuAD1.0 with relative position embeddings
+
+The following examples show how to fine-tune BERT models with different relatve position embeddings. The default BERT model `bert-base-uncased` was pre-trained with absolute position embeddings. We provide the following pre-trained models which were pre-trained on the same training data (BooksCorpus and English Wikipedia) as in the BERT model training, but with different relative position embeddings. 
+
+* `zhiheng-huang/bert-base-uncased-shaw`, training from scratch with relative embedding proposed by Shaw et al., [Self-Attention with Relative Position Representations](https://arxiv.org/abs/1803.02155)
+* `zhiheng-huang/bert-base-uncased-embedding-method-4`, training from scratch with relative embedding method 4 in Huang et al. [Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
+* `zhiheng-huang/bert-large-uncased-whole-word-masking-embedding-method-4`, fine-tune model `bert-large-uncased-whole-word-masking` with 3 additional epochs with relative embedding method 4 in Huang et al. [Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
+
+
+##### Base models fine-tuning
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+output_dir=relative_squad
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+    --model_type bert \
+    --model_name_or_path zhiheng-huang/bert-base-uncased-embedding-method-4 \
+    --do_train \
+    --do_eval \
+    --do_lower_case \
+    --train_file $SQUAD_DIR/train-v1.1.json \
+    --predict_file $SQUAD_DIR/dev-v1.1.json \
+    --learning_rate 3e-5 \
+    --num_train_epochs 2 \
+    --max_seq_length 512 \
+    --doc_stride 128 \
+    --output_dir ${output_dir} \
+    --per_gpu_eval_batch_size=60 \
+    --per_gpu_train_batch_size=6
+```
+Training with the above command leads to the following results. It boosts the BERT default from f1 score of 88.52 to 90.38.
+
+```bash
+'exact': 83.55723746452223, 'f1': 90.38849257892616
+```
+
+The change of `max_seq_length` from 512 to 384 in the above command leads to the f1 score of 90.20. Replacing the above model `zhiheng-huang/bert-base-uncased-embedding-method-4` with `zhiheng-huang/bert-base-uncased-shaw` leads to the f1 score of 89.51. The changing of 8 gpus to one gpu training leads to the f1 score of 90.72.
+
+##### Large models fine-tuning
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+output_dir=relative_squad
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+    --model_type bert \
+    --model_name_or_path zhiheng-huang/bert-large-uncased-whole-word-masking-embedding-method-4 \
+    --do_train \
+    --do_eval \
+    --do_lower_case \
+    --train_file $SQUAD_DIR/train-v1.1.json \
+    --predict_file $SQUAD_DIR/dev-v1.1.json \
+    --learning_rate 3e-5 \
+    --num_train_epochs 2 \
+    --max_seq_length 512 \
+    --doc_stride 128 \
+    --output_dir ${output_dir} \
+    --per_gpu_eval_batch_size=6 \
+    --per_gpu_train_batch_size=2 \
+    --gradient_accumulation_steps 3
+```
+Training with the above command leads to the f1 score of 93.50, which is slightly better than the f1 score of 93.15 for `bert-large-uncased-whole-word-masking`.
+
 ## SQuAD with the Tensorflow Trainer
 
 ```bash
