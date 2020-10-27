@@ -41,7 +41,7 @@ git checkout tags/v3.4.0
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
 | [**`distillation`**](https://github.com/huggingface/transformers/tree/master/examples/distillation)                 | All             | - | -  | -
 | [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     | CNN/Daily Mail  | ✅  | - | -
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | | -
+| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | -
 | [**`bertology`**](https://github.com/huggingface/transformers/tree/master/examples/bertology)                       | -               | - | - | -
 | [**`adversarial`**](https://github.com/huggingface/transformers/tree/master/examples/adversarial)                   | HANS            | ✅ | - | -
 
