@@ -40,13 +40,13 @@ from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_
 from .integrations import (
     default_hp_search_backend,
     hp_params,
+    is_azureml_available,
     is_comet_available,
     is_mlflow_available,
     is_optuna_available,
     is_ray_available,
     is_tensorboard_available,
     is_wandb_available,
-    is_azureml_available,
     run_hp_search_optuna,
     run_hp_search_ray,
 )
