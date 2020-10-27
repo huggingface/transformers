@@ -100,15 +100,9 @@ class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
 class TestMBartEnRO(unittest.TestCase):
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
-        # """
- Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no
- military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for
- millions of people.
- """,
     ]
     expected_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",
-        # 'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.',
     ]
     model_name = "facebook/mbart-large-en-ro"
 
