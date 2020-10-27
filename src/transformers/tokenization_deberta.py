@@ -581,7 +581,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A DeBERTa sequence has the following format:
 
         - single sequence: [CLS] X [SEP]
         - pair of sequences: [CLS] A [SEP] B [SEP]
@@ -608,14 +608,15 @@ class DebertaTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
 
         Args:
-            token_ids_0: list of ids (must not contain special tokens)
-            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
-                for sequence pairs
-            already_has_special_tokens: (default False) Set to True if the token list is already formated with
-                special tokens for the model
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
