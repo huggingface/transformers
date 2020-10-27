@@ -43,7 +43,7 @@ class TapasConfig(BertConfig):
             The number of aggregation operators to predict.
         aggregation_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the aggregation loss.
-        use_answer_as_supervision (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_answer_as_supervision (:obj:`bool`, `optional`, defaults to :obj:`None`):
             Whether to use the answer as the only supervision for aggregation examples.
         answer_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the regression loss.
@@ -82,7 +82,7 @@ class TapasConfig(BertConfig):
         disable_per_token_loss: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Disable any (strong or weak) supervision on cells.
         span_prediction: (:obj:`string`, `optional`, defaults to :obj:`"none"`):
-            Span selection mode to use.
+            Span selection mode to use. Currently only "none" is supported. 
 
     Example::
         >>> from transformers import TapasModel, TapasConfig
@@ -103,7 +103,7 @@ class TapasConfig(BertConfig):
         positive_weight=10.0,
         num_aggregation_labels=0,
         aggregation_loss_importance=1.0,
-        use_answer_as_supervision=False,
+        use_answer_as_supervision=None,
         answer_loss_importance=1.0,
         use_normalized_answer_loss=False,
         huber_loss_delta=None,
