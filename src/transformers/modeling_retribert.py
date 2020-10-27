@@ -40,8 +40,9 @@ RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class RetriBertPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = RetriBertConfig
@@ -65,14 +66,15 @@ RETRIBERT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.RetriBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 
@@ -175,14 +177,13 @@ class RetriBertModel(RetriBertPreTrainedModel):
             input_ids_query (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary for the queries in a batch.
 
-                Indices can be obtained using :class:`~transformers.RetriBertTokenizer`.
-                See :meth:`transformers.PreTrainedTokenizer.encode` and
-                :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+                Indices can be obtained using :class:`~transformers.RetriBertTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
 
                 `What are input IDs? <../glossary.html#input-ids>`__
             attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices.
-                Mask values selected in ``[0, 1]``:
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.

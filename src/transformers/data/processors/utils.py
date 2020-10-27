@@ -55,14 +55,13 @@ class InputExample:
 @dataclass(frozen=True)
 class InputFeatures:
     """
-    A single set of features of data.
-    Property names are the same names as the corresponding inputs to a model.
+    A single set of features of data. Property names are the same names as the corresponding inputs to a model.
 
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.
         attention_mask: Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            Usually  ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded) tokens.
+            Mask values selected in ``[0, 1]``: Usually ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded)
+            tokens.
         token_type_ids: (Optional) Segment token indices to indicate first and second
             portions of the inputs. Only some models use them.
         label: (Optional) Label corresponding to the input. Int for classification problems,
@@ -83,7 +82,8 @@ class DataProcessor:
     """Base class for data converters for sequence classification data sets."""
 
     def get_example_from_tensor_dict(self, tensor_dict):
-        """Gets an example from a dict with tensorflow tensors.
+        """
+        Gets an example from a dict with tensorflow tensors.
 
         Args:
             tensor_dict: Keys and values should match the corresponding Glue
@@ -108,8 +108,10 @@ class DataProcessor:
         raise NotImplementedError()
 
     def tfds_map(self, example):
-        """Some tensorflow_datasets datasets are not formatted the same way the GLUE datasets are.
-        This method converts examples to the correct format."""
+        """
+        Some tensorflow_datasets datasets are not formatted the same way the GLUE datasets are. This method converts
+        examples to the correct format.
+        """
         if len(self.get_labels()) > 1:
             example.label = self.get_labels()[int(example.label)]
         return example
@@ -253,9 +255,9 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 actual values)
 
         Returns:
-            If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset``
-            containing the task-specific features. If the input is a list of ``InputExamples``, will return
-            a list of task-specific ``InputFeatures`` which can be fed to the model.
+            If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
+            task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
+            ``InputFeatures`` which can be fed to the model.
 
         """
         if max_length is None:

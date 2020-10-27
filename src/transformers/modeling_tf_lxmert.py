@@ -50,9 +50,9 @@ TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class TFLxmertModelOutput(ModelOutput):
     """
-    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilites for
-    the language, visual, and, cross-modality encoders.
-    (note: the visual encoder in Lxmert is referred to as the "relation-ship" encoder")
+    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilites for the language,
+    visual, and, cross-modality encoders. (note: the visual encoder in Lxmert is referred to as the "relation-ship"
+    encoder")
 
 
     Args:
@@ -61,29 +61,26 @@ class TFLxmertModelOutput(ModelOutput):
         vision_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the visual encoder.
         pooled_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification, CLS, token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
+            Last layer hidden-state of the first token of the sequence (classification, CLS, token) further processed
+            by a Linear layer and a Tanh activation function. The Linear
         language_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
         vision_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
         language_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         vision_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         cross_encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
     """
 
     language_output: Optional[tf.Tensor] = None
@@ -103,7 +100,8 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``tf.Tensor`` of shape :obj:`(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction
+            (classification) loss.
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         cross_relationship_score: (:obj:`tf.Tensor` of shape :obj:`(batch_size, 2)`):
@@ -112,26 +110,23 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
         question_answering_score: (:obj:`tf.Tensor` of shape :obj:`(batch_size, n_qa_answers)`):
             Prediction scores of question answering objective (classification).
         language_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
         vision_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for input features + one for the output of each cross-modality layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
         language_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         vision_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         cross_encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
 
     """
 
@@ -223,19 +218,23 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, inputs, mode="embedding", training=False):
-        """Get token embeddings of inputs.
+        """
+        Get token embeddings of inputs.
+
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
             mode: string, a valid value is one of "embedding" and "linear".
+
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
-                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
-                linear tensor, float32 with shape [batch_size, length, vocab_size].
+            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
+            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
+            vocab_size].
+
         Raises:
             ValueError: if mode is not valid.
 
         Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
             return self._embedding(inputs, training=training)
@@ -269,9 +268,12 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
     def _linear(self, inputs):
-        """Computes logits by running inputs through a linear layer.
+        """
+        Computes logits by running inputs through a linear layer.
+
         Args:
             inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
         """
@@ -667,7 +669,8 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -846,8 +849,9 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
 
 
 class TFLxmertPreTrainedModel(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = LxmertConfig
@@ -860,15 +864,15 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
 
 LXMERT_START_DOCSTRING = r"""
 
-    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers <https://arxiv.org/abs/1908.07490>`__
-    by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
+    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers
+    <https://arxiv.org/abs/1908.07490>`__ by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
-    using a combination of masked language modeling, region of interest feature regression,
-    cross entropy loss for question answering attribute prediction, and object tag predicition.
+    using a combination of masked language modeling, region of interest feature regression, cross entropy loss for
+    question answering attribute prediction, and object tag predicition.
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     .. note::
 
@@ -877,11 +881,11 @@ LXMERT_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -891,8 +895,9 @@ LXMERT_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.LxmertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 LXMERT_INPUTS_DOCSTRING = r"""
@@ -900,9 +905,9 @@ LXMERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.LxmertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` and
-            :func:`transformers.PreTrainedTokenizer.encode` for details.
+            Indices can be obtained using :class:`~transformers.LxmertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         visual_feats: (:obj:`tf.Tensor` of shape :obj:՝(batch_size, num_visual_features, visual_feat_dim)՝):
@@ -911,30 +916,28 @@ LXMERT_INPUTS_DOCSTRING = r"""
 
             These are currently not provided by the transformers library.
         visual_pos: (:obj:`tf.Tensor` of shape :obj:՝(batch_size, num_visual_features, visual_feat_dim)՝):
-            This input represents spacial features corresponding to their relative (via index) visual features.
-            The pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of
-            0 to 1.
+            This input represents spacial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
+            1.
 
             These are currently not provided by the transformers library.
         attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         visual_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            MMask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            MMask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
@@ -1182,7 +1185,8 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -1241,18 +1245,16 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     ):
         r"""
         masked_lm_labels (``tf.Tensor`` of shape ``(batch_size, sequence_length)``, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         obj_labels: (``Dict[Str: Tuple[tf.Tensor, tf.Tensor]]``, `optional`, defaults to :obj: `None`):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
-            ``(batch_size, num_features)`` and ``(batch_size, num_features, visual_feature_dim)``
-            for each the label id and the label score respectively
+            ``(batch_size, num_features)`` and ``(batch_size, num_features, visual_feature_dim)`` for each the label id
+            and the label score respectively
         matched_label (``tf.Tensor`` of shape ``(batch_size,)``, `optional`):
             Labels for computing the whether or not the text input matches the image (classification) loss. Input
-            should be a sequence pair (see :obj:`input_ids` docstring)
-            Indices should be in ``[0, 1]``:
+            should be a sequence pair (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``:
 
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.

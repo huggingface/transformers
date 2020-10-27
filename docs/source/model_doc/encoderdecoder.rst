@@ -13,7 +13,7 @@ any other models (see the examples for more information).
 
 An application of this architecture could be to leverage two pretrained :class:`~transformers.BertModel` as the encoder
 and decoder for a summarization model as was shown in: `Text Summarization with Pretrained Encoders
-<https://arxiv.org/abs/1908.08345>`__ by Yang Liu and Mirella Lapata. 
+<https://arxiv.org/abs/1908.08345>`__ by Yang Liu and Mirella Lapata.
 
 
 EncoderDecoderConfig

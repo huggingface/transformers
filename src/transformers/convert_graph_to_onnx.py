@@ -77,7 +77,8 @@ class OnnxConverterArgumentParser(ArgumentParser):
 
 def generate_identified_filename(filename: Path, identifier: str) -> Path:
     """
-    Append a string-identifier at the end (before the extension,  if any) to the provided filepath.
+    Append a string-identifier at the end (before the extension, if any) to the provided filepath
+
     Args:
         filename: pathlib.Path The actual path object we would like to add an identifier suffix
         identifier: The suffix to add
@@ -89,7 +90,8 @@ def generate_identified_filename(filename: Path, identifier: str) -> Path:
 
 def check_onnxruntime_requirements(minimum_version: Version):
     """
-    Check onnxruntime is installed and if the installed version match is recent enough.
+    Check onnxruntime is installed and if the installed version match is recent enough
+
     Raises:
         ImportError: If onnxruntime is not installed or too old version is found
     """
@@ -117,7 +119,8 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 def ensure_valid_input(model, tokens, input_names):
     """
-    Ensure input are presented in the correct order, without any None
+    Ensure input are presented in the correct order, without any Non
+
     Args:
         model: The model used to forward the input data
         tokens: BatchEncoding holding the input data
@@ -144,12 +147,14 @@ def ensure_valid_input(model, tokens, input_names):
 
 def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
     """
-    Attempt to infer the static vs dynamic axes for each input and output tensors for a specific model.
+    Attempt to infer the static vs dynamic axes for each input and output tensors for a specific model
+
     Args:
         nlp: The pipeline object holding the model to be exported
         framework: The framework identifier to dispatch to the correct inference scheme (pt/tf)
 
     Returns:
+
         - List of the inferred input variable names
         - List of the inferred output variable names
         - Dictionary with input/output variables names as key and shape tensor as value
@@ -206,7 +211,8 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
 def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokenizer: Optional[str] = None) -> Pipeline:
     """
-    Convert the set of arguments provided through the CLI to an actual pipeline reference (tokenizer + model)
+    Convert the set of arguments provided through the CLI to an actual pipeline reference (tokenizer + model
+
     Args:
         pipeline_name: The kind of pipeline to use (ner, question-answering, etc.)
         framework: The actual model to convert the pipeline from ("pt" or "tf")
@@ -234,7 +240,8 @@ def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokeniz
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
     """
-    Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR)
+    Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
+
     Args:
         nlp: The pipeline to be exported
         opset: The actual version of the ONNX operator set to use
@@ -272,7 +279,8 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     """
-    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
+    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR
+
     Args:
         nlp: The pipeline to be exported
         opset: The actual version of the ONNX operator set to use
@@ -316,7 +324,8 @@ def convert(
     pipeline_name: str = "feature-extraction",
 ):
     """
-    Convert the pipeline object to the ONNX Intermediate Representation (IR) format.
+    Convert the pipeline object to the ONNX Intermediate Representation (IR) format
+
     Args:
         framework: The framework the pipeline is backed by ("pt" or "tf")
         model: The name of the model to load for the pipeline
@@ -349,8 +358,9 @@ def convert(
 
 def optimize(onnx_model_path: Path) -> Path:
     """
-    Load the model at the specified path and let onnxruntime look at transformations on the graph
-    to enable all the optimizations possible
+    Load the model at the specified path and let onnxruntime look at transformations on the graph to enable all the
+    optimizations possibl
+
     Args:
         onnx_model_path: filepath where the model binary description is stored
 
@@ -373,7 +383,8 @@ def optimize(onnx_model_path: Path) -> Path:
 
 def quantize(onnx_model_path: Path) -> Path:
     """
-    Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CPU.
+    Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CPU
+
     Args:
         onnx_model_path: Path to location the exported ONNX model is stored
 

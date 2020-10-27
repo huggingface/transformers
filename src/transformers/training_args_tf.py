@@ -16,11 +16,11 @@ if is_tf_available():
 @dataclass
 class TFTrainingArguments(TrainingArguments):
     """
-    TrainingArguments is the subset of the arguments we use in our example scripts
-    **which relate to the training loop itself**.
+    TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
+    itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
+    them on the command line.
 
     Parameters:
         output_dir (:obj:`str`):
