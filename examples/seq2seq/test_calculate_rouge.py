@@ -20,12 +20,11 @@ TGT = [
 ]
 
 
-
 def test_disaggregated_scores_are_determinstic():
     no_aggregation = calculate_rouge(PRED, TGT, aggregate_determinstic=True, rouge_keys=["rouge2", "rougeL"])
     assert isinstance(no_aggregation, dict)
     no_aggregation_just_r2 = calculate_rouge(PRED, TGT, aggregate_determinstic=True, rouge_keys=["rouge2"])
-    assert no_aggregation_just_r2['rouge2'] == no_aggregation['rouge2']
+    assert no_aggregation_just_r2["rouge2"] == no_aggregation["rouge2"]
 
 
 def test_newline_cnn_improvement():
@@ -57,14 +56,21 @@ def test_single_sent_scores_dont_depend_on_newline_sep():
 def test_pegasus_newline():
 
     pred = [
-        """" "a person who has such a video needs to immediately give it to the investigators," prosecutor says .<n> "it is a very disturbing scene," editor-in-chief of bild online tells "erin burnett: outfront" """
+        """\
+" "a person who has such a video needs to immediately give it to the investigators," prosecutor says .<n> "it is a very
+disturbing scene," editor-in-chief of bild online tells "erin burnett: outfront"\
+"""
     ]
     tgt = [
-        """ Marseille prosecutor says "so far no videos were used in the crash investigation" despite media reports . Journalists at Bild and Paris Match are "very confident" the video clip is real, an editor says . Andreas Lubitz had informed his Lufthansa training school of an episode of severe depression, airline says ."""
+        """
+ Marseille prosecutor says "so far no videos were used in the crash investigation" despite media reports . Journalists
+ at Bild and Paris Match are "very confident" the video clip is real, an editor says . Andreas Lubitz had informed his
+ Lufthansa training school of an episode of severe depression, airline says .
+ """
     ]
 
-    prev_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"], newline_sep=False)["rougeLsum"]
-    new_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"])["rougeLsum"]
+    prev_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"], newline_sep=False, aggregate_determinstic=True)["rougeLsum"]
+    new_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"], aggregate_determinstic=True)["rougeLsum"]
     assert new_score > prev_score
 
 
@@ -73,6 +79,7 @@ def test_rouge_cli():
     metrics = calculate_rouge_path(data_dir.joinpath("test.source"), data_dir.joinpath("test.target"))
     assert isinstance(metrics, dict)
     metrics_default_dict = calculate_rouge_path(
-        data_dir.joinpath("test.source"), data_dir.joinpath("test.target"),
+        data_dir.joinpath("test.source"),
+        data_dir.joinpath("test.target"),
     )
     assert isinstance(metrics_default_dict, dict)
