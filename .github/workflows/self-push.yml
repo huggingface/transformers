@@ -1,6 +1,6 @@
 name: Self-hosted runner (push)
 
-on: 
+on:
   push:
     branches:
       - master
@@ -23,17 +23,17 @@ jobs:
           which python
           python --version
           pip --version
-          
+
       - name: Current dir
         run: pwd
       - run: nvidia-smi
 
-    - name: Loading cache.
-      uses: actions/cache@v2
-      id: cache
-      with:
-        path: .env
-        key: v0-tests_torch_gpu-${{ hashFiles('setup.py') }}
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v0-tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -42,13 +42,12 @@ jobs:
           which python
           python --version
           pip --version
-          
+
       - name: Install dependencies
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install torch!=1.6.0
-          pip install .[sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -92,6 +91,7 @@ jobs:
           which python
           python --version
           pip --version
+
       - name: Install dependencies
         run: |
           source .env/bin/activate
@@ -122,6 +122,7 @@ jobs:
           which python
           python --version
           pip --version
+
       - name: Current dir
         run: pwd
       - run: nvidia-smi
@@ -144,8 +145,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install torch!=1.6.0
-          pip install .[sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -170,6 +170,7 @@ jobs:
           which python
           python --version
           pip --version
+
       - name: Current dir
         run: pwd
       - run: nvidia-smi
