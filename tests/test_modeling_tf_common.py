@@ -76,7 +76,7 @@ class TFModelTesterMixin:
     test_resize_embeddings = True
     is_encoder_decoder = False
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():

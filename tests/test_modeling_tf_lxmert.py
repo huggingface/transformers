@@ -733,7 +733,11 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(class_inputs_dict)
 
-                language_attentions, vision_attentions, cross_encoder_attentions = (outputs[-3], outputs[-2], outputs[-1])
+                language_attentions, vision_attentions, cross_encoder_attentions = (
+                    outputs[-3],
+                    outputs[-2],
+                    outputs[-1],
+                )
 
                 self.assertEqual(len(language_attentions), self.model_tester.num_hidden_layers["language"])
                 self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers["vision"])
