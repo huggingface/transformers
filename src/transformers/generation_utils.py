@@ -239,6 +239,7 @@ class GenerationMixin:
             processors.append(MinLengthDistProcessor(min_length, eos_token_id))
         return processors
 
+    @torch.no_grad()
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
