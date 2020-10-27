@@ -577,7 +577,6 @@ def mockenv(**kwargs):
 
 def pytest_terminal_summary_main(tr, id):
     """
-
     Generate multiple reports at the end of test suite run - each report goes into a dedicated file
     in the current directory. The report files are prefixed with the test suite name.
 
@@ -587,8 +586,10 @@ def pytest_terminal_summary_main(tr, id):
     to be defined there.
 
     Args:
-    - tr - `terminalreporter` passed from `conftest`
-    - test_suite - `tests` or `examples` (as we now have 2 tests suites)
+    - tr: `terminalreporter` passed from `conftest.py`
+    - id: unique id like `tests` or `examples` that will be incorporated into the final reports
+      filenames - this is needed as some jobs have multiple runs of pytest, so we can't have them
+      overwrite each other.
 
     NB: this functions taps into a private _pytest API and while unlikely, it could break should
     pytest do internal changes - also it calls default internal methods of terminalreporter which
