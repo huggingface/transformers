@@ -689,6 +689,15 @@ class Pipeline(_ScikitCompat):
             return_tensors=self.framework,
             padding=padding,
         )
+        if "sequence-length-is-longer-than-the-specified-maximum" in self.tokenizer.deprecation_warnings:
+            max_length = self.tokenizer.model_max_length
+            length = inputs["input_ids"].shape[1]
+            warnings.warn(
+                "You input length was too long ({} > {}) for this model and was truncated.".format(length, max_length),
+                PipelineWarning,
+            )
+            for key in inputs:
+                inputs[key] = inputs[key][:, :max_length]
 
         return inputs
 
@@ -707,21 +716,6 @@ class Pipeline(_ScikitCompat):
         Returns:
             Numpy array
         """
-        # Check the input is not too long relative for the model.
-        if getattr(self.model.config, "max_position_embeddings", None):
-            max_length = self.model.config.max_position_embeddings
-            length = inputs.data["input_ids"].shape[1]
-            if length > max_length:
-                warnings.warn(
-                    "You input length was too long for this model {} > {}, and was automatically truncated to fit the model.".format(
-                        length, max_length
-                    ),
-                    PipelineWarning,
-                )
-                for key in inputs.data:
-                    tensor = inputs.data[key]
-                    inputs.data[key] = tensor[:, :max_length]
-
         # Encode for forward
         with self.device_placement():
             if self.framework == "tf":
