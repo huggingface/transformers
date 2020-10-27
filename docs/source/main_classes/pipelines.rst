@@ -1,8 +1,8 @@
 Pipelines
 -----------------------------------------------------------------------------------------------------------------------
 
-The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most
-of the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
+The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most of
+the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
 Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
 :doc:`task summary <../task_summary>` for examples of use.
 
@@ -26,8 +26,8 @@ There are two categories of pipeline abstractions to be aware about:
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any
-other pipeline but requires an additional argument which is the `task`.
+The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any other
+pipeline but requires an additional argument which is the `task`.
 
 .. autofunction:: transformers.pipeline
 

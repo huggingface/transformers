@@ -39,8 +39,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
 
     Peculiarities:
 
-    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation.
-      Each occurence of a punctuation character will be treated separately.
+    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurence of a
+      punctuation character will be treated separately.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -77,9 +77,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        An HerBERT, like BERT sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An HerBERT, like BERT sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s> B </s>``
@@ -135,8 +134,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        HerBERT, like BERT sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. HerBERT, like
+        BERT sequence pair mask has the following format:
 
         ::
 

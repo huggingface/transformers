@@ -33,6 +33,7 @@ from .modeling_tf_utils import (
     DUMMY_INPUTS,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    TFWrappedEmbeddings,
     cast_bool_to_primitive,
     keras_serializable,
     shape_list,
@@ -50,9 +51,9 @@ BART_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     .. note::
 
@@ -61,11 +62,11 @@ BART_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -75,8 +76,9 @@ BART_START_DOCSTRING = r"""
 
     Args:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
 
@@ -85,14 +87,13 @@ BART_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -132,40 +133,10 @@ LARGE_NEGATIVE = -1e8
 logger = logging.get_logger(__name__)
 
 
-class _NoLayerEmbedTokens:
-    """
-    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
-    class to avoid problem with weight restoring. Also it makes sure that the layer is
-    called from the correct scope to avoid problem with saving/storing the correct weights
-    """
-
-    def __init__(self, layer, abs_scope_name=None):
-        self._layer = layer
-        self._abs_scope_name = abs_scope_name
-
-    def call(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer.call(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer.call(inputs, mode)
-
-    def __call__(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer(inputs, mode)
-
-
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
     """
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = tf.cumsum(mask, axis=1).type_as(mask) * mask
@@ -173,8 +144,9 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
 
 
 def causal_attention_mask(nd, ns, dtype):
-    """1's in the lower triangle, counting from the lower right corner.
-    Same as tf.matrix_band_part(tf.ones([nd, ns]), -1, ns-nd), but doesn't produce garbage on TPUs.
+    """
+    1's in the lower triangle, counting from the lower right corner. Same as tf.matrix_band_part(tf.ones([nd, ns]), -1,
+    ns-nd), but doesn't produce garbage on TPUs.
     """
     i = tf.range(nd)[:, None]
     j = tf.range(ns)
@@ -302,8 +274,8 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 class TFBartEncoder(tf.keras.layers.Layer):
     # config_class = BartConfig
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
-    is a :class:`TFEncoderLayer`.
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    :class:`TFEncoderLayer`.
 
     Args:
         config: BartConfig
@@ -352,15 +324,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
         Args:
             input_ids (Tensor): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (Tensor): indicating which indices are padding tokens.
+            attention_mask (Tensor): indicating which indices are padding tokens
+
         Returns:
             namedtuple:
-                - **x** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
 
-                - **encoder_states** (List[Tensor]): all intermediate
-                  hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *return_all_hiddens* is True.
+                - **x** (Tensor): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
+
+                - **encoder_states** (List[Tensor]): all intermediate hidden states of shape `(src_len, batch,
+                  embed_dim)`. Only populated if *return_all_hiddens* is True.
                 - **all_attentions** (List[Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -453,8 +425,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attn_mask (ByteTensor, optional): binary
-                ByteTensor of shape `(batch, src_len)` where padding
-                elements are indicated by ``1``.
+                ByteTensor of shape `(batch, src_len)` where padding elements are indicated by ``1``.
             need_attn_weights (bool, optional): return attention weights
                 for each head (default: return average over heads).
 
@@ -506,8 +477,8 @@ class TFDecoderLayer(tf.keras.layers.Layer):
 
 class TFBartDecoder(tf.keras.layers.Layer):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer
-    is a :class:`TFDecoderLayer`.
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`TFDecoderLayer`
+
     Args:
         config: BartConfig
         embed_tokens: output embedding
@@ -695,16 +666,16 @@ class TFAttention(tf.keras.layers.Layer):
         attn_mask: Optional[Tensor] = None,
         training=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time(SeqLen) x Batch x Channel
+        """
+        Input shape: Time(SeqLen) x Batch x Channel
 
         Args:
 
             key_padding_mask (ByteTensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where
-                padding elements are indicated by 1s.
+                keys that are pads, of shape `(batch, src_len)`, where padding elements are indicated by 1s.
             attn_mask (ByteTensor, optional): typically used to
-                implement causal attention, where the mask prevents the
-                attention from looking forward in time (default: None).
+                implement causal attention, where the mask prevents the attention from looking forward in time
+                (default: None).
         """
         static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
         tgt_len, bsz, embed_dim = query.shape
@@ -784,10 +755,9 @@ class TFAttention(tf.keras.layers.Layer):
 
 class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset, **kwargs):
@@ -826,7 +796,8 @@ class TFBartModel(TFPretrainedBartModel):
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
             pass
 
-        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
 
@@ -840,8 +811,9 @@ class TFBartModel(TFPretrainedBartModel):
         decoder_attn_mask=None,
         mask_dtype=None,
     ):
-        """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
-        none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
+        """
+        Prepare masks that ignore padding tokens decoder and a causal lm mask for the decoder if none are provided.
+        This mimics the default behavior in fairseq. To override it pass in masks.
         """
         pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
@@ -850,7 +822,7 @@ class TFBartModel(TFPretrainedBartModel):
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         else:
-            decoder_padding_mask = invert_mask(tf.Tensor)
+            decoder_padding_mask = invert_mask(decoder_attn_mask)
 
         causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
         return decoder_input_ids, decoder_padding_mask, causal_lm_mask
@@ -931,6 +903,7 @@ class TFBartModel(TFPretrainedBartModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
+                training=training,
             )
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -943,6 +916,7 @@ class TFBartModel(TFPretrainedBartModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         if not return_dict:
             # Attention and hidden_states will be [] or None if they aren't needed

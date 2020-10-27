@@ -39,16 +39,16 @@ class PegasusTokenizer(ReformerTokenizer):
     :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
     :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
 
-    Refer to superclass :class:`~transformers.ReformerTokenizer` for usage examples and documentation concerning
-    the initialization parameters and other methods.
+    Refer to superclass :class:`~transformers.ReformerTokenizer` for usage examples and documentation concerning the
+    initialization parameters and other methods.
     """
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, pad_token="<pad>", **kwargs):
+        super().__init__(*args, **kwargs, pad_token="<pad>")
         # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
         assert len(self.added_tokens_decoder) == 0
@@ -104,15 +104,14 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequences for sequence classification tasks
-        by concatenating and adding special tokens.
-        A Pegasus sequence has the following format, where ``X`` represents the sequence:
+        Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating
+        and adding special tokens. A Pegasus sequence has the following format, where ``X`` represents the sequence:
 
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>`` (not intended use)
 
-        BOS is never used.
-        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
+        separator.
 
         Args:
             token_ids_0 (:obj:`List[int]`):

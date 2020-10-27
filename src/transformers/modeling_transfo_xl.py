@@ -13,9 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Transformer XL model.
-    Adapted from https://github.com/kimiyoung/transformer-xl.
-    In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
+"""
+ PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
+ https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
 import warnings
 from dataclasses import dataclass
@@ -44,8 +44,9 @@ TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def build_tf_to_pytorch_map(model, config):
-    """A map of modules from TF to PyTorch.
-    This time I use a map to keep the PyTorch model as identical to the original PyTorch model as possible.
+    """
+    A map of modules from TF to PyTorch. This time I use a map to keep the PyTorch model as identical to the original
+    PyTorch model as possible.
     """
     tf_to_pt_map = {}
 
@@ -456,8 +457,9 @@ class AdaptiveEmbedding(nn.Module):
 
 
 class TransfoXLPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = TransfoXLConfig
@@ -514,20 +516,22 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
                 self._init_bias(m.r_bias)
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, layer: Optional[int] = -1):
-        """Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
-        Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+        """
+        Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size. Take care of tying
+        weights embeddings afterwards if the model class has a `tie_weights()` method.
 
         Arguments:
 
             new_num_tokens: (`optional`) int:
-                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end.
-                If not provided or None: does nothing and just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
+                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at
+                the end. Reducing the size will remove vectors from the end. If not provided or None: does nothing and
+                just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
             layer: (`optional`) int:
-                Layer of the `AdaptiveEmbedding` where the resizing should be done. Per default the last layer will be resized.
-                Be aware that when resizing other than the last layer, you have to ensure that the new token(s) in the tokenizer are at the corresponding position.
+                Layer of the `AdaptiveEmbedding` where the resizing should be done. Per default the last layer will be
+                resized. Be aware that when resizing other than the last layer, you have to ensure that the new
+                token(s) in the tokenizer are at the corresponding position.
 
-        Return: ``torch.nn.Embeddings``
-            Pointer to the input tokens Embeddings Module of the model
+        Return: ``torch.nn.Embeddings`` Pointer to the input tokens Embeddings Module of the model
         """
         base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
 
@@ -602,17 +606,17 @@ class TransfoXLModelOutput(ModelOutput):
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see :obj:`mems` input) to speed up sequential decoding. The token ids which have their past
-            given to this model should not be passed as input ids as they have already been computed.
+            Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see :obj:`mems`
+            input) to speed up sequential decoding. The token ids which have their past given to this model should not
+            be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -635,17 +639,17 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see :obj:`mems` input) to speed up sequential decoding. The token ids which have their past
-            given to this model should not be passed as input ids as they have already been computed.
+            Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see :obj:`mems`
+            input) to speed up sequential decoding. The token ids which have their past given to this model should not
+            be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -673,14 +677,15 @@ TRANSFO_XL_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 TRANSFO_XL_INPUTS_DOCSTRING = r"""
@@ -688,18 +693,17 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.TransfoXLTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.TransfoXLTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see :obj:`mems` output below). Can be used to speed up sequential decoding. The token ids which have their
-            mems given to this model should not be passed as :obj:`input_ids` as they have already been computed.
+            Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
+            :obj:`mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
+            given to this model should not be passed as :obj:`input_ids` as they have already been computed.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -958,8 +962,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The Transformer-XL Model with a language modeling head on top
-    (adaptive softmax with weights tied to the adaptive input embeddings)""",
+    """
+    The Transformer-XL Model with a language modeling head on top (adaptive softmax with weights tied to the adaptive
+    input embeddings)
+    """,
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
@@ -1032,11 +1038,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
-            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
+            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if input_ids is not None:
