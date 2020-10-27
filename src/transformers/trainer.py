@@ -31,6 +31,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from .integrations import (  # isort: split
     default_hp_search_backend,
     hp_params,
+    is_azureml_available,
     is_comet_available,
     is_mlflow_available,
     is_optuna_available,
@@ -153,6 +154,11 @@ if is_optuna_available():
 
 if is_ray_available():
     from ray import tune
+
+if is_azureml_available():
+    from .integrations import AzureMLCallback
+
+    DEFAULT_CALLBACKS.append(AzureMLCallback)
 
 logger = logging.get_logger(__name__)
 
