@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (
+from .integrations import (  # isort: split
     default_hp_search_backend,
     hp_params,
     is_comet_available,
