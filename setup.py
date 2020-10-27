@@ -98,7 +98,7 @@ extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 
-extras["sentencepiece"] = ["sentencepiece!=0.1.92"]
+extras["sentencepiece"] = ["sentencepiece==0.1.91"]
 extras["retrieval"] = ["faiss-cpu", "datasets"]
 extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -140,7 +140,7 @@ setup(
         # for OpenAI GPT
         "regex != 2019.12.17",
         # for SentencePiece models
-        "sentencepiece != 0.1.92",
+        "sentencepiece == 0.1.91",
         "protobuf",
         # for XLM
         "sacremoses",
