@@ -22,7 +22,12 @@ import torch
 from torch import Tensor, nn
 
 from .configuration_dpr import DPRConfig
-from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from .modeling_bert import BertModel
 from .modeling_outputs import BaseModelOutputWithPooling
 from .modeling_utils import PreTrainedModel
@@ -431,7 +436,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         self.ctx_encoder = DPREncoder(config)
         self.init_weights()
 
-    @add_start_docstrings_to_callable(DPR_ENCODERS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -509,7 +514,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         self.question_encoder = DPREncoder(config)
         self.init_weights()
 
-    @add_start_docstrings_to_callable(DPR_ENCODERS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -586,7 +591,7 @@ class DPRReader(DPRPretrainedReader):
         self.span_predictor = DPRSpanPredictor(config)
         self.init_weights()
 
-    @add_start_docstrings_to_callable(DPR_READER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DPRReaderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

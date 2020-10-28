@@ -28,7 +28,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
@@ -970,7 +970,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.lxmert = TFLxmertMainLayer(config, name="lxmert")
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="unc-nlp/lxmert-base-uncased",
@@ -1224,7 +1224,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,

@@ -25,7 +25,12 @@ from torch import Tensor, nn
 
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
-from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from .modeling_outputs import BaseModelOutput
 from .modeling_utils import PreTrainedModel
 from .utils import logging
@@ -1138,7 +1143,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
-    @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1254,7 +1259,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
-    @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1570,7 +1575,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1674,7 +1679,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
-    @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1865,7 +1870,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

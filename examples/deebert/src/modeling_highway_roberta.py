@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.configuration_roberta import RobertaConfig
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from transformers.modeling_roberta import ROBERTA_INPUTS_DOCSTRING, ROBERTA_START_DOCSTRING, RobertaEmbeddings
 
 from .modeling_highway_bert import BertPreTrainedModel, DeeBertModel, HighwayException, entropy
@@ -45,7 +45,7 @@ class DeeRobertaForSequenceClassification(BertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
