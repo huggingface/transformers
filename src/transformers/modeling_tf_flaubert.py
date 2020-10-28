@@ -25,7 +25,12 @@ import tensorflow as tf
 from transformers.activations_tf import get_tf_activation
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from .modeling_tf_outputs import TFBaseModelOutput
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list
 from .modeling_tf_xlm import (
@@ -217,7 +222,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="jplu/tf-flaubert-small-cased",
@@ -721,7 +726,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
             langs = None
         return {"inputs": inputs, "langs": langs}
 
-    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="jplu/tf-flaubert-small-cased",
