@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import ACT2FN
 from .configuration_squeezebert import SqueezeBertConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -518,7 +518,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="squeezebert/squeezebert-mnli-headless",
@@ -605,7 +605,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="squeezebert/squeezebert-uncased",
@@ -683,7 +683,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="squeezebert/squeezebert-mnli-headless",
@@ -767,7 +767,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(
+    @add_start_docstrings_to_model_forward(
         SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)")
     )
     @add_code_sample_docstrings(
@@ -861,7 +861,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="squeezebert/squeezebert-mnli-headless",
@@ -948,7 +948,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="squeezebert/squeezebert-mnli-headless",

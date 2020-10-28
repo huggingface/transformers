@@ -25,7 +25,7 @@ from tensorflow.keras.layers import Dense, LayerNormalization
 
 from .activations_tf import ACT2FN
 from .configuration_bart import BartConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
 
 # Public API
@@ -827,7 +827,7 @@ class TFBartModel(TFPretrainedBartModel):
         causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
         return decoder_input_ids, decoder_padding_mask, causal_lm_mask
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -961,7 +961,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         self.model = TFBartModel(config, name="model")
         self.use_cache = config.use_cache
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,

@@ -27,7 +27,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
@@ -557,7 +557,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
@@ -591,7 +591,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
@@ -687,7 +687,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.transformer.wte
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,

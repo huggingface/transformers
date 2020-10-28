@@ -21,7 +21,7 @@ import torch
 
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import add_start_docstrings_to_model_forward, replace_return_docstrings
 from .modeling_outputs import ModelOutput
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
@@ -459,7 +459,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings_to_callable(RAG_START_DOCSTRING)
+@add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
@@ -502,7 +502,7 @@ class RagModel(RagPreTrainedModel):
         self.question_encoder = question_encoder
         self.generator = generator
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -658,7 +658,7 @@ class RagModel(RagPreTrainedModel):
         )
 
 
-@add_start_docstrings_to_callable(
+@add_start_docstrings_to_model_forward(
     """
     A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass.
     """,
@@ -687,7 +687,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -984,7 +984,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         return output
 
 
-@add_start_docstrings_to_callable(
+@add_start_docstrings_to_model_forward(
     """
     A RAG-token model impementation. It performs RAG-token specific marginalization in the forward pass.
     """,
@@ -1080,7 +1080,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
         return torch.logsumexp(log_prob_sum, dim=1)
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
