@@ -176,7 +176,6 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
         print(metrics)
         last_step_stats = metrics["val"][-1]
         self.assertGreaterEqual(last_step_stats["val_avg_gen_time"], 0.01)
-        self.assertGreaterEqual(1.0, last_step_stats["val_avg_gen_time"])
         self.assertIsInstance(last_step_stats[f"val_avg_{val_metric}"], float)
         self.assertEqual(len(metrics["test"]), 1)
         desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) / 2 + 1)
