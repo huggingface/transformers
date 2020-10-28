@@ -327,6 +327,8 @@ class WandbCallback(TrainerCallback):
         <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
+            WANDB_LOG_ARTIFACTS (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to log output artifacts from `TrainingArguments.output_dir`.
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
                 Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
                 logging or :obj:`"all"` to log gradients and parameters.
@@ -364,12 +366,19 @@ class WandbCallback(TrainerCallback):
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
+            
+            # log outputs
+            self._log_artifacts = os.getenv("WANDB_ARTIFACTS", False)
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         hp_search = state.is_hyper_param_search
         if not self._initialized or hp_search:
-            print(args.run_name)
             self.setup(args, state, model, reinit=hp_search, **kwargs)
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self._log_artifacts and self._initialized and state.is_world_process_zero:
+            logger.info("Logging artifacts. This may take time.")
+            wandb.Artifact(name=f'run-{wandb.run.name}', type='outputs').add_dir(args.output_dir)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if not self._initialized:
