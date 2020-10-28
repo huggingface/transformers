@@ -19,18 +19,18 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-slow_tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v1-slow_tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
           which python
           python --version
           pip --version
-          
+
       - name: Current dir
         run: pwd
       - run: nvidia-smi
-        
+
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -39,7 +39,7 @@ jobs:
           which python
           python --version
           pip --version
-          
+
       - name: Install dependencies
         run: |
           source .env/bin/activate
@@ -81,7 +81,7 @@ jobs:
           RUN_PIPELINE_TESTS: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make_reports=tests_pipeline tests 
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make_reports=tests_pipeline tests
 
       - name: test suite reports artifacts
         if: ${{ always() }}
@@ -101,7 +101,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-slow_tests_tf_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1-slow_tests_tf_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
