@@ -84,6 +84,7 @@ jobs:
           python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make_reports=tests_pipeline tests 
 
       - name: test suite reports artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: test_reports
