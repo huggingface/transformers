@@ -130,16 +130,6 @@ jobs:
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s --make_reports=tests_tf tests
 
-      - name: Run examples tests on GPU
-        env:
-          OMP_NUM_THREADS: 1
-          RUN_SLOW: yes
-          CUDA_VISIBLE_DEVICES: 0
-        run: |
-          source .env/bin/activate
-          pip install -r examples/requirements.txt
-          python -m pytest -n 1 --dist=loadfile -s --make_reports=examples_tf examples
-
   run_all_tests_torch_multiple_gpu:
     runs-on: [self-hosted, multi-gpu-tests]
     steps:
@@ -175,7 +165,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -252,15 +242,6 @@ jobs:
         run: |
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s ./tests/ --durations=0
-
-      - name: Run examples tests on GPU
-        env:
-          OMP_NUM_THREADS: 1
-          RUN_SLOW: yes
-        run: |
-          source .env/bin/activate
-          pip install -r examples/requirements.txt
-          python -m pytest -n 1 --dist=loadfile -s examples --durations=0
 
       - name: Run all pipeline tests on GPU
         env:
