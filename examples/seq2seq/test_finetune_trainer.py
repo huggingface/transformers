@@ -196,7 +196,9 @@ class TestFinetuneTrainer(TestCasePlus):
         """.split()
         # --eval_beams  2
 
-        n_gpu = torch.cuda.device_count()
+        n_gpu = 0
+        if is_torch_available():
+            n_gpu = torch.cuda.device_count()
         if n_gpu > 1:
             distributed_args = f"""
                 -m torch.distributed.launch
