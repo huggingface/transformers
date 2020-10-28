@@ -1,4 +1,4 @@
-AutoClasses
+Auto Classes
 -----------------------------------------------------------------------------------------------------------------------
 
 In many cases, the architecture you want to use can be guessed from the name or the path of the pretrained model you
@@ -46,10 +46,24 @@ AutoModelForPreTraining
     :members:
 
 
-AutoModelWithLMHead
+AutoModelForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.AutoModelWithLMHead
+.. autoclass:: transformers.AutoModelForCausalLM
+    :members:
+
+
+AutoModelForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForMaskedLM
+    :members:
+
+
+AutoModelForSeq2SeqLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForSeq2SeqLM
     :members:
 
 
@@ -95,10 +109,24 @@ TFAutoModelForPreTraining
     :members:
 
 
-TFAutoModelWithLMHead
+TFAutoModelForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.TFAutoModelWithLMHead
+.. autoclass:: transformers.TFAutoModelForCausalLM
+    :members:
+
+
+TFAutoModelForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAutoModelForMaskedLM
+    :members:
+
+
+TFAutoModelForSeq2SeqLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAutoModelForSeq2SeqLM
     :members:
 
 
