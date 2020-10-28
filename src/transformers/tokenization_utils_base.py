@@ -2916,6 +2916,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = encoded_inputs["labels"] + [-100] * difference
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
@@ -2926,6 +2928,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
                         "token_type_ids"
                     ]
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = [-100] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
