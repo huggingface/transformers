@@ -859,6 +859,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
         mirror = kwargs.pop("mirror", None)
+        kwargs["pretrained_model_name_or_path"] = pretrained_model_name_or_path
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -876,6 +877,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             )
         else:
             model_kwargs = kwargs
+            config.name_or_path = kwargs.pop("pretrained_model_name_or_path")
 
         # Load model
         if pretrained_model_name_or_path is not None:
@@ -939,8 +941,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
         else:
             resolved_archive_file = None
-
-        config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
