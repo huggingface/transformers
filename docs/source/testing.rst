@@ -470,7 +470,7 @@ This is still under development but you can study 2 different tests that perform
   <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal
   (non-PL) test
 
-To jump right into the execution point, search for the ``execute_async_std`` function in those tests.
+To jump right into the execution point, search for the ``execute_subprocess_async`` function in those tests.
 
 You will need at least 2 GPUs to see these tests in action:
 
@@ -646,6 +646,55 @@ as in the previous example.
 
 
 
+Files and directories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In tests often we need to know where things are relative to the current test file, and it's not trivial since the test
+could be invoked from more than one directory or could reside in sub-directories with different depths. A helper class
+:obj:`transformers.test_utils.TestCasePlus` solves this problem by sorting out all the basic paths and provides easy
+accessors to them:
+
+* ``pathlib`` objects (all fully resolved):
+
+   - ``test_file_path`` - the current test file path, i.e. ``__file__``
+   - ``test_file_dir`` - the directory containing the current test file
+   - ``tests_dir`` - the directory of the ``tests`` test suite
+   - ``examples_dir`` - the directory of the ``examples`` test suite
+   - ``repo_root_dir`` - the directory of the repository
+   - ``src_dir`` - the directory of ``src`` (i.e. where the ``transformers`` sub-dir resides)
+
+* stringified paths---same as above but these return paths as strings, rather than ``pathlib`` objects:
+
+   - ``test_file_path_str``
+   - ``test_file_dir_str``
+   - ``tests_dir_str``
+   - ``examples_dir_str``
+   - ``repo_root_dir_str``
+   - ``src_dir_str``
+
+To start using those all you need is to make sure that the test resides in a subclass of
+:obj:`transformers.test_utils.TestCasePlus`. For example:
+
+.. code-block:: python
+
+    from transformers.testing_utils import TestCasePlus
+    class PathExampleTest(TestCasePlus):
+        def test_something_involving_local_locations(self):
+            data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
+
+If you don't need to manipulated paths via ``pathlib`` or you just need a path as a string, you can always invoked
+``str()`` on the ``pathlib`` oboject or use the accessors ending with ``_str``. For example:
+
+.. code-block:: python
+
+    from transformers.testing_utils import TestCasePlus
+    class PathExampleTest(TestCasePlus):
+        def test_something_involving_stringified_locations(self):
+            examples_dir = self.examples_dir_str
+
+
+
+
 Temporary files and directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -665,8 +714,8 @@ Here is an example of its usage:
 
     from transformers.testing_utils import TestCasePlus
     class ExamplesTests(TestCasePlus):
-    def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir()
+        def test_whatever(self):
+            tmp_dir = self.get_auto_remove_tmp_dir()
 
 This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
@@ -1007,6 +1056,24 @@ If you want to test the impact of environment variables for a specific test you 
         @mockenv(TRANSFORMERS_VERBOSITY="error")
         def test_env_override(self):
             env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
+
+At times an external program needs to be called, which requires setting ``PYTHONPATH`` in ``os.environ`` to include
+multiple local paths. A helper class :obj:`transformers.test_utils.TestCasePlus` comes to help:
+
+.. code-block:: python
+
+    from transformers.testing_utils import TestCasePlus
+    class EnvExampleTest(TestCasePlus):
+        def test_external_prog(self):
+            env = self.get_env()
+            # now call the external program, passing ``env`` to it
+
+Depending on whether the test file was under the ``tests`` test suite or ``examples`` it'll correctly set up
+``env[PYTHONPATH]`` to include one of these two directories, and also the ``src`` directory to ensure the testing is
+done against the current repo, and finally with whatever ``env[PYTHONPATH]`` was already set to before the test was
+called if anything.
+
+This helper method creates a copy of the ``os.environ`` object, so the original remains intact.
 
 
 Getting reproducible results
