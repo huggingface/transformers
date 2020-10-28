@@ -90,8 +90,8 @@ extras["tf-cpu"] = [
 extras["torch"] = ["torch>=1.0"]
 
 if os.name == "nt":  # windows
-    extras["retrieval"] = ["datasets"] # faiss is not supported on windows
-    extras["flax"] = [] # jax is not supported on windows
+    extras["retrieval"] = ["datasets"]  # faiss is not supported on windows
+    extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = ["faiss-cpu", "datasets"]
     extras["flax"] = ["jaxlib==0.1.55", "jax>=0.2.0", "flax==0.2.2"]
@@ -111,7 +111,9 @@ extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 
 extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
 
-extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["docs"] + extras["sklearn"]
+extras["dev"] = (
+    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["docs"] + extras["sklearn"]
+)
 
 
 setup(

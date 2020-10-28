@@ -144,12 +144,7 @@ class TatoebaConverter:
 
         return dedup(src_tags + tgt_tags), src_multilingual, tgt_multilingual
 
-    def write_model_card(
-        self,
-        hf_model_id: str,
-        repo_root=DEFAULT_REPO,
-        dry_run=False,
-    ) -> str:
+    def write_model_card(self, hf_model_id: str, repo_root=DEFAULT_REPO, dry_run=False,) -> str:
         """
         Copy the most recent model's readme section from opus, and add metadata. upload command: aws s3 sync
         model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun

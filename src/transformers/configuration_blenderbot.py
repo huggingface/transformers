@@ -136,7 +136,7 @@ class BlenderbotConfig(BartConfig):
         static_position_embeddings=False,
         add_bias_logits=False,
         force_bos_token_to_be_generated=False,
-        **common_kwargs
+        **common_kwargs,
     ):
         r"""
         Examples::

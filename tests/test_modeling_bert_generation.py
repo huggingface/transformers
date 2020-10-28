@@ -94,12 +94,7 @@ class BertGenerationEncoderTester:
         return config, input_ids, input_mask, token_labels
 
     def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = self.prepare_config_and_inputs()
+        (config, input_ids, input_mask, token_labels,) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
@@ -115,12 +110,7 @@ class BertGenerationEncoderTester:
         )
 
     def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_labels,
-        **kwargs,
+        self, config, input_ids, input_mask, token_labels, **kwargs,
     ):
         model = BertGenerationEncoder(config=config)
         model.to(torch_device)
@@ -130,14 +120,7 @@ class BertGenerationEncoderTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-        **kwargs,
+        self, config, input_ids, input_mask, token_labels, encoder_hidden_states, encoder_attention_mask, **kwargs,
     ):
         config.add_cross_attention = True
         model = BertGenerationEncoder(config=config)
@@ -149,20 +132,11 @@ class BertGenerationEncoderTester:
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
+        result = model(input_ids, attention_mask=input_mask, encoder_hidden_states=encoder_hidden_states,)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_labels,
-        *args,
+        self, config, input_ids, input_mask, token_labels, *args,
     ):
         model = BertGenerationDecoder(config)
         model.to(torch_device)
@@ -172,12 +146,7 @@ class BertGenerationEncoderTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = config_and_inputs
+        (config, input_ids, input_mask, token_labels,) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -216,12 +185,7 @@ class BertGenerationEncoderTest(ModelTesterMixin, unittest.TestCase):
         input_mask = None
 
         self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+            config, input_ids, input_mask, token_labels, encoder_hidden_states, encoder_attention_mask,
         )
 
     def test_for_causal_lm(self):

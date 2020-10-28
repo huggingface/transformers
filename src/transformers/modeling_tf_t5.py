@@ -144,9 +144,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = tf.keras.layers.Embedding(
-                self.relative_attention_num_buckets,
-                self.n_heads,
-                name="relative_attention_bias",
+                self.relative_attention_num_buckets, self.n_heads, name="relative_attention_bias",
             )
         self.pruned_heads = set()
 
@@ -202,9 +200,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         memory_position = tf.range(klen)[None, :]
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
-            relative_position,
-            bidirectional=self.is_bidirectional,
-            num_buckets=self.relative_attention_num_buckets,
+            relative_position, bidirectional=self.is_bidirectional, num_buckets=self.relative_attention_num_buckets,
         )
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
         values = tf.expand_dims(tf.transpose(values, [2, 0, 1]), axis=0)  # shape (1, num_heads, qlen, klen)
@@ -406,18 +402,12 @@ class TFT5Block(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.layer = []
         self.layer.append(
-            TFT5LayerSelfAttention(
-                config,
-                has_relative_attention_bias=has_relative_attention_bias,
-                name="layer_._0",
-            )
+            TFT5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._0",)
         )
         if self.is_decoder:
             self.layer.append(
                 TFT5LayerCrossAttention(
-                    config,
-                    has_relative_attention_bias=has_relative_attention_bias,
-                    name="layer_._1",
+                    config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._1",
                 )
             )
 
@@ -525,11 +515,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.num_hidden_layers = config.num_layers
 
         self.block = [
-            TFT5Block(
-                config,
-                has_relative_attention_bias=bool(i == 0),
-                name="block_._{}".format(i),
-            )
+            TFT5Block(config, has_relative_attention_bias=bool(i == 0), name="block_._{}".format(i),)
             for i in range(config.num_layers)
         ]
         self.final_layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="final_layer_norm")
@@ -657,8 +643,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if self.is_decoder:
                 seq_ids = tf.range(mask_seq_length)
                 causal_mask = tf.less_equal(
-                    tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
-                    seq_ids[None, :, None],
+                    tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)), seq_ids[None, :, None],
                 )
                 causal_mask = tf.cast(causal_mask, dtype=tf.float32)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]

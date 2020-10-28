@@ -69,7 +69,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -104,7 +104,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -152,7 +152,7 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         return_dict,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -182,7 +182,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -222,7 +222,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -267,7 +267,7 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -313,7 +313,7 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
         torch.manual_seed(0)
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
@@ -429,11 +429,7 @@ class EncoderDecoderMixin:
         decoder_input_ids = ids_tensor([13, 1], model_2.config.encoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
         with torch.no_grad():
-            outputs = model_2(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-            )
+            outputs = model_2(input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
@@ -443,9 +439,7 @@ class EncoderDecoderMixin:
                 model_1.to(torch_device)
 
                 after_outputs = model_1(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
+                    input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
                 )
                 out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
@@ -538,12 +532,7 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
         model_tester = BertGenerationEncoderTester(self)
         encoder_config_and_inputs = model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester.prepare_config_and_inputs_for_decoder()
-        (
-            config,
-            input_ids,
-            input_mask,
-            token_labels,
-        ) = encoder_config_and_inputs
+        (config, input_ids, input_mask, token_labels,) = encoder_config_and_inputs
         (
             decoder_config,
             decoder_input_ids,

@@ -93,7 +93,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         model_max_length=512,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id

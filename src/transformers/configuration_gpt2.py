@@ -144,7 +144,7 @@ class GPT2Config(PretrainedConfig):
         bos_token_id=50256,
         eos_token_id=50256,
         gradient_checkpointing=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

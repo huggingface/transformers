@@ -439,11 +439,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         residual = x  # Make a copy of the input tensor to add later.
         # next line mutates layer state and we need a copy of it
         x, self_attn_weights = self.self_attn(
-            query=x,
-            key=x,
-            layer_state=layer_state,
-            attn_mask=causal_mask,
-            key_padding_mask=decoder_padding_mask,
+            query=x, key=x, layer_state=layer_state, attn_mask=causal_mask, key_padding_mask=decoder_padding_mask,
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
@@ -784,8 +780,7 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
 
 
 @add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
+    "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
 )
 @keras_serializable
 class TFBartModel(TFPretrainedBartModel):
@@ -805,11 +800,7 @@ class TFBartModel(TFPretrainedBartModel):
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
     def _prepare_bart_decoder_inputs(
-        self,
-        inputs,
-        decoder_input_ids=None,
-        decoder_attn_mask=None,
-        mask_dtype=None,
+        self, inputs, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
     ):
         """
         Prepare masks that ignore padding tokens decoder and a causal lm mask for the decoder if none are provided.
@@ -842,7 +833,7 @@ class TFBartModel(TFPretrainedBartModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
         """
         Returns:
@@ -943,8 +934,7 @@ class TFBartModel(TFPretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.",
-    BART_START_DOCSTRING,
+    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
@@ -1154,8 +1144,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True,
-            reduction=tf.keras.losses.Reduction.NONE,
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE,
         )
         melted_labels = tf.reshape(labels, (-1,))
         active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)

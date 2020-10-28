@@ -821,12 +821,7 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         print("\nRunning: ", " ".join(cmd))
 
     p = await asyncio.create_subprocess_exec(
-        cmd[0],
-        *cmd[1:],
-        stdin=stdin,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
+        cmd[0], *cmd[1:], stdin=stdin, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env,
     )
 
     # note: there is a warning for a possible deadlock when using `wait` with huge amounts of data in the pipe

@@ -323,12 +323,7 @@ class ElectraAttention(nn.Module):
         output_attentions=False,
     ):
         self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
+            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -391,10 +386,7 @@ class ElectraLayer(nn.Module):
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
+            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -990,7 +982,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs
+        **kwargs,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1216,10 +1208,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-            ) + discriminator_hidden_states[1:]
+            output = (start_logits, end_logits,) + discriminator_hidden_states[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(

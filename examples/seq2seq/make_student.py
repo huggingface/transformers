@@ -83,7 +83,7 @@ def create_student_by_copying_alternating_layers(
     copy_first_teacher_layers=False,
     e_layers_to_copy=None,
     d_layers_to_copy=None,
-    **extra_config_kwargs
+    **extra_config_kwargs,
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
     """Make a student by copying alternating layers from a teacher, save it to save_path.
     Args:

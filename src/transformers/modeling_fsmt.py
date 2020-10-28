@@ -492,9 +492,7 @@ class DecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         self.self_attn = Attention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
+            embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -593,9 +591,7 @@ class FSMTDecoder(nn.Module):
         )  # type: List[DecoderLayer]
 
         self.output_projection = nn.Linear(
-            self.embed_tokens.weight.shape[1],
-            self.embed_tokens.weight.shape[0],
-            bias=False,
+            self.embed_tokens.weight.shape[1], self.embed_tokens.weight.shape[0], bias=False,
         )
         self.output_projection.weight = self.embed_tokens.weight
 
@@ -812,10 +808,7 @@ class Attention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (
-            bsz,
-            src_len,
-        )
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len,)
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -823,11 +816,7 @@ class Attention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
         attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_probs = F.dropout(
-            attn_weights,
-            p=self.dropout,
-            training=self.training,
-        )
+        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training,)
 
         assert v is not None
         attn_output = torch.bmm(attn_probs, v)
@@ -883,8 +872,7 @@ def _get_shape(t):
 
 
 @add_start_docstrings(
-    "The bare FSMT Model outputting raw hidden-states without any specific head on top.",
-    FSMT_START_DOCSTRING,
+    "The bare FSMT Model outputting raw hidden-states without any specific head on top.", FSMT_START_DOCSTRING,
 )
 class FSMTModel(PretrainedFSMTModel):
     def __init__(self, config: FSMTConfig):
@@ -1214,10 +1202,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
     def forward(
-        self,
-        input,
-        incremental_state: Optional[Any] = None,
-        timestep: Optional[Tensor] = None,
+        self, input, incremental_state: Optional[Any] = None, timestep: Optional[Tensor] = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]

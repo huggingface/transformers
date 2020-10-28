@@ -123,12 +123,7 @@ MODEL_CLASSES = {
         BartForConditionalGeneration,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
-    "bert": (
-        BertConfig,
-        TFBertForPreTraining,
-        BertForPreTraining,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
@@ -147,24 +142,9 @@ MODEL_CLASSES = {
         BertForSequenceClassification,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "gpt2": (
-        GPT2Config,
-        TFGPT2LMHeadModel,
-        GPT2LMHeadModel,
-        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlnet": (
-        XLNetConfig,
-        TFXLNetLMHeadModel,
-        XLNetLMHeadModel,
-        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlm": (
-        XLMConfig,
-        TFXLMWithLMHeadModel,
-        XLMWithLMHeadModel,
-        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "gpt2": (GPT2Config, TFGPT2LMHeadModel, GPT2LMHeadModel, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "xlnet": (XLNetConfig, TFXLNetLMHeadModel, XLNetLMHeadModel, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "xlm": (XLMConfig, TFXLMWithLMHeadModel, XLMWithLMHeadModel, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "xlm-roberta": (
         XLMRobertaConfig,
         TFXLMRobertaForMaskedLM,
@@ -183,12 +163,7 @@ MODEL_CLASSES = {
         OpenAIGPTLMHeadModel,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "roberta": (
-        RobertaConfig,
-        TFRobertaForMaskedLM,
-        RobertaForMaskedLM,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "roberta": (RobertaConfig, TFRobertaForMaskedLM, RobertaForMaskedLM, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
@@ -219,42 +194,17 @@ MODEL_CLASSES = {
         DistilBertForQuestionAnswering,
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "lxmert": (
-        LxmertConfig,
-        TFLxmertForPreTraining,
-        LxmertForPreTraining,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "lxmert": (LxmertConfig, TFLxmertForPreTraining, LxmertForPreTraining, LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "lxmert-visual-feature-encoder": (
         LxmertConfig,
         TFLxmertVisualFeatureEncoder,
         LxmertVisualFeatureEncoder,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "ctrl": (
-        CTRLConfig,
-        TFCTRLLMHeadModel,
-        CTRLLMHeadModel,
-        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "albert": (
-        AlbertConfig,
-        TFAlbertForPreTraining,
-        AlbertForPreTraining,
-        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "t5": (
-        T5Config,
-        TFT5ForConditionalGeneration,
-        T5ForConditionalGeneration,
-        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "electra": (
-        ElectraConfig,
-        TFElectraForPreTraining,
-        ElectraForPreTraining,
-        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "ctrl": (CTRLConfig, TFCTRLLMHeadModel, CTRLLMHeadModel, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "albert": (AlbertConfig, TFAlbertForPreTraining, AlbertForPreTraining, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "t5": (T5Config, TFT5ForConditionalGeneration, T5ForConditionalGeneration, T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "electra": (ElectraConfig, TFElectraForPreTraining, ElectraForPreTraining, ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
 }
 
 

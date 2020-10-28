@@ -124,7 +124,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             do_lower_case=do_lower_case,

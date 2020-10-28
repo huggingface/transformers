@@ -107,7 +107,7 @@ class RagConfig(PretrainedConfig):
         exclude_bos_score=False,
         do_marginalize=False,
         output_retrieved=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             bos_token_id=bos_token_id,

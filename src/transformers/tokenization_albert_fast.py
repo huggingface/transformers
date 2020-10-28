@@ -131,7 +131,7 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

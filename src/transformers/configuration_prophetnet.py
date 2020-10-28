@@ -120,7 +120,7 @@ class ProphetNetConfig(PretrainedConfig):
         relative_max_distance=128,
         disable_ngram_loss=False,
         eps=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,

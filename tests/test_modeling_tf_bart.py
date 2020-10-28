@@ -82,9 +82,7 @@ class ModelTester:
 
 
 def prepare_bart_inputs_dict(
-    config,
-    input_ids,
-    attention_mask=None,
+    config, input_ids, attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -242,9 +240,7 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         output = model(**inputs_dict)[0]
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = tf.Tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-        )
+        expected_slice = tf.Tensor([[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],)
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_cnn_summarization_same_as_fairseq_hard(self):
@@ -273,10 +269,7 @@ class TFBartModelIntegrationTest(unittest.TestCase):
             return_tensors="tf",
         )
         self.assertEqual(1024, dct["input_ids"].shape[1])
-        hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-        )
+        hypotheses_batch = hf.generate(input_ids=dct["input_ids"], attention_mask=dct["attention_mask"],)
 
         assert hypotheses_batch[:, 1].numpy().tolist() == [0, 0, 0, 0]  # test force_bos_token_to_be_generated
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)

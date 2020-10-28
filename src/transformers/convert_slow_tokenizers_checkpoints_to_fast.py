@@ -121,9 +121,7 @@ if __name__ == "__main__":
         help="Optional checkpoint name. If not given, will download and convert the canonical checkpoints from AWS.",
     )
     parser.add_argument(
-        "--force_download",
-        action="store_true",
-        help="Re-dowload checkpoints.",
+        "--force_download", action="store_true", help="Re-dowload checkpoints.",
     )
     args = parser.parse_args()
 

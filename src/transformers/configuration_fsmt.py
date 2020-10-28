@@ -152,7 +152,7 @@ class FSMTConfig(PretrainedConfig):
         num_beams=5,
         length_penalty=1.0,
         early_stopping=False,
-        **common_kwargs
+        **common_kwargs,
     ):
         if "hidden_size" in common_kwargs:
             raise ValueError("hidden size is called d_model")

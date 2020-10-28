@@ -137,7 +137,7 @@ class TransfoXLConfig(PretrainedConfig):
         init_std=0.02,
         layer_norm_epsilon=1e-5,
         eos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         if "tie_weight" in kwargs:
             warnings.warn(

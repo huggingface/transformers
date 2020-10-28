@@ -104,8 +104,7 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     chinese_ref_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input ref data file for whole word mask in Chinees."},
+        default=None, metadata={"help": "An optional input ref data file for whole word mask in Chinees."},
     )
     line_by_line: bool = field(
         default=False,
@@ -281,9 +280,7 @@ def main():
     )
     if config.model_type == "xlnet":
         data_collator = DataCollatorForPermutationLanguageModeling(
-            tokenizer=tokenizer,
-            plm_probability=data_args.plm_probability,
-            max_span_length=data_args.max_span_length,
+            tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_span_length=data_args.max_span_length,
         )
     else:
         if data_args.mlm and data_args.whole_word_mask:

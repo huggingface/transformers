@@ -127,7 +127,7 @@ class FunnelConfig(PretrainedConfig):
         separate_cls=True,
         truncate_seq=True,
         pool_q_only=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

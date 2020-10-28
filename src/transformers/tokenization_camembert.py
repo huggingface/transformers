@@ -113,7 +113,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             bos_token=bos_token,

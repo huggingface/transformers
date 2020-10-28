@@ -67,12 +67,7 @@ class LayoutLMEmbeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
     def forward(
-        self,
-        input_ids=None,
-        bbox=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
+        self, input_ids=None, bbox=None, token_type_ids=None, position_ids=None, inputs_embeds=None,
     ):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -252,12 +247,7 @@ class LayoutLMAttention(nn.Module):
         output_attentions=False,
     ):
         self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
+            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -320,10 +310,7 @@ class LayoutLMLayer(nn.Module):
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
+            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -791,10 +778,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size),
-                labels.view(-1),
-            )
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1),)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -890,8 +874,5 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )

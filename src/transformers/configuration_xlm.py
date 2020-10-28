@@ -182,7 +182,7 @@ class XLMConfig(PretrainedConfig):
         lang_id=0,
         pad_token_id=2,
         bos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         """Constructs XLMConfig."""
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)

@@ -119,10 +119,7 @@ class BertConverter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:0 $A:0 {sep}:0",
             pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
-            special_tokens=[
-                (cls, cls_token_id),
-                (sep, sep_token_id),
-            ],
+            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -170,10 +167,7 @@ class FunnelConverter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:2 $A:0 {sep}:0",  # token_type_id is 2 for Funnel transformer
             pair=f"{cls}:2 $A:0 {sep}:0 $B:1 {sep}:1",
-            special_tokens=[
-                (cls, cls_token_id),
-                (sep, sep_token_id),
-            ],
+            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -310,14 +304,7 @@ class SpmConverter(Converter):
             tokenizer = Tokenizer(Unigram(vocab, unk_id))
         elif model_type == 2:
             vocab, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
-            tokenizer = Tokenizer(
-                BPE(
-                    vocab,
-                    merges,
-                    unk_token=proto.trainer_spec.unk_piece,
-                    fuse_unk=True,
-                )
-            )
+            tokenizer = Tokenizer(BPE(vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True,))
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
@@ -546,11 +533,7 @@ class PegasusConverter(SpmConverter):
     def post_processor(self):
         eos = self.original_tokenizer.eos_token
         return processors.TemplateProcessing(
-            single=["$A", eos],
-            pair=["$A", "$B", eos],
-            special_tokens=[
-                (eos, self.original_tokenizer.eos_token_id),
-            ],
+            single=["$A", eos], pair=["$A", "$B", eos], special_tokens=[(eos, self.original_tokenizer.eos_token_id),],
         )
 
 
@@ -565,9 +548,7 @@ class T5Converter(SpmConverter):
         return processors.TemplateProcessing(
             single=["$A", "</s>"],
             pair=["$A", "</s>", "$B", "</s>"],
-            special_tokens=[
-                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
-            ],
+            special_tokens=[("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),],
         )
 
 

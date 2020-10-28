@@ -164,22 +164,13 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--bertabs_checkpoint_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path the official PyTorch dump.",
+        "--bertabs_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path to the output PyTorch model.",
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
 
     convert_bertabs_checkpoints(
-        args.bertabs_checkpoint_path,
-        args.pytorch_dump_folder_path,
+        args.bertabs_checkpoint_path, args.pytorch_dump_folder_path,
     )

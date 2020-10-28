@@ -126,7 +126,7 @@ class MobileBertConfig(PretrainedConfig):
         num_feedforward_networks=4,
         normalization_type="no_norm",
         classifier_activation=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

@@ -50,7 +50,7 @@ class MaskedBertConfig(PretrainedConfig):
         pruning_method="topK",
         mask_init="constant",
         mask_scale=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

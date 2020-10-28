@@ -133,7 +133,7 @@ class ElectraConfig(PretrainedConfig):
         summary_activation="gelu",
         summary_last_dropout=0.1,
         pad_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

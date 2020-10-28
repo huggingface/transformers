@@ -136,7 +136,7 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<cls>",
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file=vocab_file,

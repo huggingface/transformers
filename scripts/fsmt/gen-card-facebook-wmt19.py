@@ -6,6 +6,7 @@
 import os
 from pathlib import Path
 
+
 def write_model_card(model_card_dir, src_lang, tgt_lang):
 
     texts = {
@@ -141,6 +142,7 @@ note: fairseq reports using a beam of 50, so you should get a slightly higher sc
     print(f"Generating {path}")
     with open(path, "w", encoding="utf-8") as f:
         f.write(readme)
+
 
 # make sure we are under the root of the project
 repo_dir = Path(__file__).resolve().parent.parent.parent

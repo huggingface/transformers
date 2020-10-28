@@ -107,7 +107,7 @@ class DistilBertConfig(PretrainedConfig):
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id)
         self.vocab_size = vocab_size

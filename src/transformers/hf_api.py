@@ -58,7 +58,7 @@ class S3Object:
         lastModified: str,
         size: int,
         rfilename: str,  # filename relative to config.json
-        **kwargs
+        **kwargs,
     ):
         self.key = key
         self.etag = etag
@@ -83,7 +83,7 @@ class ModelInfo:
         tags: List[str] = [],
         pipeline_tag: Optional[str] = None,
         siblings: Optional[List[Dict]] = None,  # list of files that constitute the model
-        **kwargs
+        **kwargs,
     ):
         self.modelId = modelId
         self.key = key

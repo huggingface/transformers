@@ -93,9 +93,7 @@ def build_compute_metrics_fn(task_name: str, tokenizer: PreTrainedTokenizer) -> 
 
 
 def trim_batch(
-    input_ids,
-    pad_token_id,
-    attention_mask=None,
+    input_ids, pad_token_id, attention_mask=None,
 ):
     """Remove columns that are populated exclusively by pad_token_id"""
     keep_column_mask = input_ids.ne(pad_token_id).any(dim=0)
@@ -115,7 +113,7 @@ class AbstractSeq2SeqDataset(Dataset):
         type_path="train",
         n_obs=None,
         prefix="",
-        **dataset_kwargs
+        **dataset_kwargs,
     ):
         super().__init__()
         self.src_file = Path(data_dir).joinpath(type_path + ".source")

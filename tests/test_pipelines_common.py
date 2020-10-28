@@ -186,8 +186,7 @@ class MonoInputPipelineCommonMixin:
             for result, expect in zip(multi_result, self.expected_multi_result):
                 for key in self.expected_check_keys or []:
                     self.assertEqual(
-                        set([o[key] for o in result]),
-                        set([o[key] for o in expect]),
+                        set([o[key] for o in result]), set([o[key] for o in expect]),
                     )
 
         if isinstance(multi_result[0], list):

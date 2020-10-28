@@ -109,7 +109,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        **kwargs
+        **kwargs,
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:

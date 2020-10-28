@@ -209,7 +209,7 @@ class CustomDPRReaderTokenizerMixin:
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
             return super().__call__(
@@ -331,11 +331,7 @@ class CustomDPRReaderTokenizerMixin:
         return nbest_spans_predictions[:num_spans]
 
     def _get_best_spans(
-        self,
-        start_logits: List[int],
-        end_logits: List[int],
-        max_answer_length: int,
-        top_spans: int,
+        self, start_logits: List[int], end_logits: List[int], max_answer_length: int, top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending

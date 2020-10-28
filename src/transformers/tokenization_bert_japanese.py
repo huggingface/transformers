@@ -92,7 +92,7 @@ class BertJapaneseTokenizer(BertTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         mecab_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Constructs a MecabBertTokenizer.

@@ -128,7 +128,7 @@ class XxxTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,

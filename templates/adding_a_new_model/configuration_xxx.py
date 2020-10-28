@@ -91,7 +91,7 @@ class XxxConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_epsilon: float = 1e-5,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size

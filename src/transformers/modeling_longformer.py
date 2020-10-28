@@ -226,10 +226,7 @@ class LongformerSelfAttention(nn.Module):
         self.one_sided_attn_window_size = attention_window // 2
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
@@ -722,10 +719,7 @@ class LongformerSelfAttention(nn.Module):
             is_local_index_no_global_attn_nonzero[0], :, is_local_index_no_global_attn_nonzero[1], :
         ] = -10000.0
 
-        global_attn_scores = global_attn_scores.masked_fill(
-            is_index_masked[:, None, None, :],
-            -10000.0,
-        )
+        global_attn_scores = global_attn_scores.masked_fill(is_index_masked[:, None, None, :], -10000.0,)
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
 
@@ -794,16 +788,9 @@ class LongformerAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, output_attentions=False,
     ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            output_attentions,
-        )
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions,)
         attn_output = self.output(self_outputs[0], hidden_states)
         outputs = (attn_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -850,16 +837,9 @@ class LongformerLayer(nn.Module):
         self.seq_len_dim = 1
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, output_attentions=False,
     ):
-        self_attn_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            output_attentions=output_attentions,
-        )
+        self_attn_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions,)
         attn_output = self_attn_outputs[0]
         outputs = self_attn_outputs[1:]  # add self attentions if we output attention weights
 
@@ -904,16 +884,10 @@ class LongformerEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
+                    create_custom_forward(layer_module), hidden_states, attention_mask,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions,)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1157,9 +1131,7 @@ class LongformerModel(LongformerPreTrainedModel):
                 position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
                 input_ids_padding = inputs_embeds.new_full(
-                    (batch_size, padding_len),
-                    self.config.pad_token_id,
-                    dtype=torch.long,
+                    (batch_size, padding_len), self.config.pad_token_id, dtype=torch.long,
                 )
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
@@ -1322,7 +1294,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs
+        **kwargs,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1475,10 +1447,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1718,10 +1687,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1827,8 +1793,5 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )

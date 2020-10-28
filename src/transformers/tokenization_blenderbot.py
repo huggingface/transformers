@@ -135,7 +135,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         eos_token="__end__",
         unk_token="__unk__",
         pad_token="__null",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
 

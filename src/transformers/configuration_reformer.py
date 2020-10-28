@@ -187,7 +187,7 @@ class ReformerConfig(PretrainedConfig):
         pad_token_id=0,
         vocab_size=320,
         tie_word_embeddings=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,

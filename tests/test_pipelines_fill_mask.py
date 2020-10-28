@@ -89,13 +89,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         ]
         valid_targets = [" Patrick", " Clara"]
         for model_name in self.large_models:
-            nlp = pipeline(
-                task="fill-mask",
-                model=model_name,
-                tokenizer=model_name,
-                framework="pt",
-                topk=2,
-            )
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,

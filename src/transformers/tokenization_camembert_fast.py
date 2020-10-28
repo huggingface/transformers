@@ -125,7 +125,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

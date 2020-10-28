@@ -105,7 +105,7 @@ class LayoutLMConfig(BertConfig):
         pad_token_id=0,
         gradient_checkpointing=False,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,

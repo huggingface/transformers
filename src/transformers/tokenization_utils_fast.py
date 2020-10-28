@@ -356,7 +356,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
 
         if not isinstance(batch_text_or_text_pairs, list):
@@ -384,9 +384,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         )
 
         encodings = self._tokenizer.encode_batch(
-            batch_text_or_text_pairs,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=is_split_into_words,
+            batch_text_or_text_pairs, add_special_tokens=add_special_tokens, is_pretokenized=is_split_into_words,
         )
 
         # Convert encoding to dict
@@ -442,7 +440,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if "is_pretokenized" in kwargs:
             warnings.warn(
@@ -493,7 +491,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         if isinstance(token_ids, int):
             token_ids = [token_ids]

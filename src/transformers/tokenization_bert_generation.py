@@ -69,7 +69,7 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         sep_token="<::::>",
-        **kwargs
+        **kwargs,
     ):
         # Add extra_ids to the special token list
         super().__init__(

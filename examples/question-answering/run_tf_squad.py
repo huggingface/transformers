@@ -231,12 +231,7 @@ def main():
     eval_dataset = eval_dataset.apply(tf.data.experimental.assert_cardinality(len(eval_examples)))
 
     # Initialize our Trainer
-    trainer = TFTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-    )
+    trainer = TFTrainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=eval_dataset,)
 
     # Training
     if training_args.do_train:

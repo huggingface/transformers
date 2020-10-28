@@ -189,11 +189,7 @@ DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
 
 
 def write_model_card(
-    hf_model_name: str,
-    repo_root=DEFAULT_REPO,
-    save_dir=Path("marian_converted"),
-    dry_run=False,
-    extra_metadata={},
+    hf_model_name: str, repo_root=DEFAULT_REPO, save_dir=Path("marian_converted"), dry_run=False, extra_metadata={},
 ) -> str:
     """
     Copy the most recent model's readme section from opus, and add metadata. upload command: aws s3 sync model_card_dir
@@ -522,9 +518,7 @@ class OpusState:
 
         assert "hidden_size" not in cfg.to_dict()
         load_layers_(
-            model.model.encoder.layers,
-            state_dict,
-            BART_CONVERTER,
+            model.model.encoder.layers, state_dict, BART_CONVERTER,
         )
         load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
 
