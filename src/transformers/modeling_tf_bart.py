@@ -250,7 +250,9 @@ class TFEncoderLayer(Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
-        assert x.shape == residual.shape, f"Self attn modified the shape of query {residual.shape} to {x.shape}"
+        assert shape_list(x) == shape_list(
+            residual
+        ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
@@ -570,7 +572,7 @@ class TFBartDecoder(Layer):
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
-        assert len(encoder_hidden_states.shape) == 3, "encoder_hidden_states must be a 3D tensor"
+        assert len(shape_list(encoder_hidden_states)) == 3, "encoder_hidden_states must be a 3D tensor"
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
 
         # decoder layers
@@ -691,8 +693,10 @@ class TFAttention(Layer):
                 (default: None).
         """
         static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
-        tgt_len, bsz, embed_dim = query.shape
-        assert embed_dim == self.embed_dim, f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {query.shape}"
+        tgt_len, bsz, embed_dim = shape_list(query)
+        assert (
+            embed_dim == self.embed_dim
+        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
         # get here for encoder decoder cause of static_kv
         if layer_state is not None:  # get the last k and v for reuse
             saved_state = layer_state.get(self.cache_key, {})
@@ -731,7 +735,7 @@ class TFAttention(Layer):
             )
 
         # Compute multi-headed attention
-        src_len = k.shape[1]
+        src_len = shape_list(k)[1]
         attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -783,7 +787,7 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
 
     def call(self, input_ids: tf.Tensor, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids.shape[:2]
+        bsz, seq_len = shape_list(input_ids)[:2]
 
         if use_cache:
             positions = tf.fill((1, 1), seq_len - 1)
@@ -834,7 +838,7 @@ class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
 
     def call(self, input_ids, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids.shape[:2]
+        bsz, seq_len = shape_list(input_ids)[:2]
         if use_cache:
             positions = tf.fill((1, 1), seq_len - 1)
         else:
@@ -881,7 +885,7 @@ class TFBartModel(TFPretrainedBartModel):
         pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
             decoder_input_ids = self._shift_right(inputs)
-        bsz, tgt_len = decoder_input_ids.shape[:2]
+        bsz, tgt_len = shape_list(decoder_input_ids)[:2]
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         else:
@@ -1180,7 +1184,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         (encoder_out, decoder_cached_states) = past
         reordered_past = []
         for layer_past in decoder_cached_states:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+            # get the correct batch idx from decod    er layer's batch dim for cross and self-attn
 
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
@@ -1203,7 +1207,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         # TODO: https://github.com/huggingface/transformers/issues/7954
         output_list = []
         # Is there a better way to do scores[:, [x for if x != token_id]] = -float("inf") in TF?
-        bs, vocab_size = scores.shape
+        bs, vocab_size = shape_list(scores)
         inf_tensor = tf.convert_to_tensor([-float("inf")] * bs, dtype=scores.dtype)
         for x in range(vocab_size):
             do_inf = (x == token_id) if inverted else (x != token_id)
@@ -1212,7 +1216,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             else:
                 output_list.append(scores[:, x])
         scores = tf.stack(output_list, axis=1, name="scores")
-        assert scores.shape == (bs, vocab_size)
+        assert shape_list(scores) == [bs, vocab_size]
         return scores
 
     def get_output_embeddings(self):
