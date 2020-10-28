@@ -182,7 +182,7 @@ class ExamplesTests(TestCasePlus):
             testargs.append("--no_cuda")
 
         with patch.object(sys, "argv", testargs):
-            result = run_language_modeling.main()
+            result = run_mlm.main()
             self.assertLess(result["perplexity"], 42)
 
     def test_run_squad(self):
