@@ -420,9 +420,6 @@ def main(args, model=None) -> SummarizationModule:
     if not args.do_predict:
         return model
 
-    if trainer.accelerator_backend:
-        trainer.accelerator_backend.barrier()
-
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
     if checkpoints:
