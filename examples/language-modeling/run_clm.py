@@ -15,8 +15,8 @@
 """
 Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
 
-Find the full list of model architectures that can be fine-tuned by this script on the documentation:
-https://huggingface.co/transformers/model_doc/auto.html#transformers.AutoModelForCausalLM
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=causal-lm
 """
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
