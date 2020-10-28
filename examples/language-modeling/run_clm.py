@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2020 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL) on a text file or a dataset.
-"""
+Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
 
+Find the full list of model architectures that can be fine-tuned by this script on the documentation:
+https://huggingface.co/transformers/model_doc/auto.html#transformers.AutoModelForCausalLM
+"""
+# You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import logging
 import math
@@ -59,7 +61,8 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization. Leave None if you want to train a model from scratch."
+            "help": "The model checkpoint for weights initialization."
+            "Don't set if you want to train a model from scratch."
         },
     )
     model_type: Optional[str] = field(
@@ -108,6 +111,10 @@ class DataTrainingArguments:
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
     def __post_init__(self):
@@ -167,7 +174,8 @@ def main():
     set_seed(training_args.seed)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
-    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/ (the dataset will be downloaded automatically from the datasets Hub
+    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
+    # (the dataset will be downloaded automatically from the datasets Hub
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column. You can easily tweak this
     # behavior (see below)
@@ -245,6 +253,7 @@ def main():
     tokenized_datasets = datasets.map(
         tokenize_function,
         batched=True,
+        num_proc=data_args.preprocessing_num_workers,
         remove_columns=[text_column_name],
         load_from_cache_file=not data_args.overwrite_cache,
     )
@@ -252,6 +261,11 @@ def main():
     if data_args.block_size <= 0:
         block_size = tokenizer.max_len
     else:
+        if data_args.block_size > tokenizer.max_len:
+            logger.warn(
+                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+                f"({tokenizer.max_len}). Using block_size={tokenizer.max_len}."
+            )
         block_size = min(data_args.block_size, tokenizer.max_len)
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
@@ -273,7 +287,15 @@ def main():
     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
     # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
     # to preprocess.
-    lm_datasets = tokenized_datasets.map(group_texts, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+    #
+    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+    lm_datasets = tokenized_datasets.map(
+        group_texts,
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        load_from_cache_file=not data_args.overwrite_cache,
+    )
 
     # Initialize our Trainer
     trainer = Trainer(
