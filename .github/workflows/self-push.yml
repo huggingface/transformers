@@ -1,10 +1,10 @@
 name: Self-hosted runner (push)
 
-on: 
+on:
   push:
     branches:
       - master
-    paths: 
+    paths:
       - "src/**"
       - "tests/**"
       - ".github/**"
@@ -22,7 +22,7 @@ jobs:
           which python
           python --version
           pip --version
-          
+
       - name: Current dir
         run: pwd
       - run: nvidia-smi
@@ -32,7 +32,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v1-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -41,7 +41,7 @@ jobs:
           which python
           python --version
           pip --version
-          
+
       - name: Install dependencies
         run: |
           source .env/bin/activate
@@ -84,7 +84,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-tests_tf_torch_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v1-tests_tf_torch_multiple_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
