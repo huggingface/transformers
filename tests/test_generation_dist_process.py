@@ -104,7 +104,7 @@ class DistProcessorTest(unittest.TestCase):
         scores[0, 0] = -(1 / vocab_size)
         scores[1, 5] = 4 / vocab_size
 
-        rep_penalty_proc = RepetitionPenaltyDistProcessor(penalty=2)
+        rep_penalty_proc = RepetitionPenaltyDistProcessor(penalty=2.0)
 
         scores = rep_penalty_proc(input_ids, scores.clone())
 
@@ -138,7 +138,7 @@ class DistProcessorTest(unittest.TestCase):
         length = 5
 
         logits = self._get_uniform_logits(batch_size=batch_size, length=length)
-        top_k_warp_safety_check = TopKDistWarper(k=1, filter_value=0.0, min_tokens_to_keep=3)
+        top_k_warp_safety_check = TopKDistWarper(top_k=1, filter_value=0.0, min_tokens_to_keep=3)
 
         scores = top_k_warp_safety_check(input_ids, logits)
         # uniform dist is not changed
@@ -247,7 +247,7 @@ class DistProcessorTest(unittest.TestCase):
         # instantiate all dist processors
         min_dist_proc = MinLengthDistProcessor(min_length=10, eos_token_id=eos_token_id)
         temp_dist_warp = TemperatureDistWarper(temperature=0.5)
-        rep_penalty_proc = RepetitionPenaltyDistProcessor(penalty=2)
+        rep_penalty_proc = RepetitionPenaltyDistProcessor(penalty=2.0)
         top_k_warp = TopKDistWarper(3)
         top_p_warp = TopPDistWarper(0.8)
         no_repeat_proc = NoRepeatNGramDistProcessor(2)
