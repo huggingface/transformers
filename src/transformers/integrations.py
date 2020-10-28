@@ -1,6 +1,7 @@
 # Integrations with other Python libraries
 import math
 import os
+import re
 
 from .utils import logging
 
@@ -378,7 +379,9 @@ class WandbCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self._log_artifacts and self._initialized and state.is_world_process_zero:
             logger.info("Logging artifacts. This may take time.")
-            wandb.Artifact(name=f'run-{wandb.run.name}', type='outputs').add_dir(args.output_dir)
+            # use run name and ensure it's a valid Artifact name
+            artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
+            wandb.Artifact(name=f'run-{artifact_name}', type='outputs').add_dir(args.output_dir)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if not self._initialized:
