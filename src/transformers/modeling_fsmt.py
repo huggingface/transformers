@@ -43,7 +43,7 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
@@ -899,7 +899,7 @@ class FSMTModel(PretrainedFSMTModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FSMT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/wmt19-ru-en",
@@ -1039,7 +1039,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
 
         return new_embeddings
 
-    @add_start_docstrings_to_callable(FSMT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
     def forward(

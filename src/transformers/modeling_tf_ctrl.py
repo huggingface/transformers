@@ -20,7 +20,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from .modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
 from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
@@ -547,7 +547,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="ctrl",
@@ -602,7 +602,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
-    @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="ctrl",
