@@ -93,9 +93,8 @@ class SqueezeBertEmbeddings(nn.Module):
 
 class MatMulWrapper(torch.nn.Module):
     """
-    Wrapper for torch.matmul(). This makes flop-counting easier to implement.
-    Note that if you directly call torch.matmul() in your code, the flop counter will typically
-    ignore the flops of the matmul.
+    Wrapper for torch.matmul(). This makes flop-counting easier to implement. Note that if you directly call
+    torch.matmul() in your code, the flop counter will typically ignore the flops of the matmul.
     """
 
     def __init__(self):
@@ -104,13 +103,10 @@ class MatMulWrapper(torch.nn.Module):
     def forward(self, mat1, mat2):
         """
 
-        :param inputs: two torch tensors
-        :return: matmul of these tensors
+        :param inputs: two torch tensors :return: matmul of these tensors
 
-        Here are the typical dimensions found in BERT (the B is optional)
-            mat1.shape: [B, <optional extra dims>, M, K]
-            mat2.shape: [B, <optional extra dims>, K, N]
-            output shape: [B, <optional extra dims>, M, N]
+        Here are the typical dimensions found in BERT (the B is optional) mat1.shape: [B, <optional extra dims>, M, K]
+        mat2.shape: [B, <optional extra dims>, K, N] output shape: [B, <optional extra dims>, M, N]
         """
         return torch.matmul(mat1, mat2)
 
@@ -119,9 +115,7 @@ class SqueezeBertLayerNorm(nn.LayerNorm):
     """
     This is a nn.LayerNorm subclass that accepts NCW data layout and performs normalization in the C dimension.
 
-    N = batch
-    C = channels
-    W = sequence length
+    N = batch C = channels W = sequence length
     """
 
     def __init__(self, hidden_size, eps=1e-12):
@@ -171,8 +165,7 @@ class ConvActivation(nn.Module):
 class SqueezeBertSelfAttention(nn.Module):
     def __init__(self, config, cin, q_groups=1, k_groups=1, v_groups=1):
         """
-        config = used for some things; ignored for others (work in progress...)
-        cin = input channels = output channels
+        config = used for some things; ignored for others (work in progress...) cin = input channels = output channels
         groups = number of groups to use in conv1d layers
         """
         super().__init__()
@@ -197,9 +190,8 @@ class SqueezeBertSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x):
         """
-        input: [N, C, W]
-        output: [N, C1, W, C2]
-            where C1 is the head index, and C2 is one head's contents
+        - input: [N, C, W]
+        - output: [N, C1, W, C2] where C1 is the head index, and C2 is one head's contents
         """
         new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1])  # [N, C1, C2, W]
         x = x.view(*new_x_shape)
@@ -207,9 +199,8 @@ class SqueezeBertSelfAttention(nn.Module):
 
     def transpose_key_for_scores(self, x):
         """
-        input: [N, C, W]
-        output: [N, C1, C2, W]
-            where C1 is the head index, and C2 is one head's contents
+        - input: [N, C, W]
+        - output: [N, C1, C2, W] where C1 is the head index, and C2 is one head's contents
         """
         new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1])  # [N, C1, C2, W]
         x = x.view(*new_x_shape)
@@ -218,8 +209,8 @@ class SqueezeBertSelfAttention(nn.Module):
 
     def transpose_output(self, x):
         """
-        input: [N, C1, W, C2]
-        output: [N, C, W]
+        - input: [N, C1, W, C2]
+        - output: [N, C, W]
         """
         x = x.permute(0, 1, 3, 2).contiguous()  # [N, C1, C2, W]
         new_x_shape = (x.size()[0], self.all_head_size, x.size()[3])  # [N, C, W]
@@ -265,10 +256,11 @@ class SqueezeBertSelfAttention(nn.Module):
 class SqueezeBertModule(nn.Module):
     def __init__(self, config):
         """
-        hidden_size = input chans = output chans for Q, K, V (they are all the same ... for now) = output chans for the module
-        intermediate_size = output chans for intermediate layer
-        groups = number of groups for all layers in the BertModule. (eventually we could change the interface to allow
-                 different groups for different layers)
+        - hidden_size = input chans = output chans for Q, K, V (they are all the same ... for now) = output chans for
+          the module
+        - intermediate_size = output chans for intermediate layer
+        - groups = number of groups for all layers in the BertModule. (eventually we could change the interface to
+          allow different groups for different layers)
         """
         super().__init__()
 
@@ -382,8 +374,9 @@ class SqueezeBertPooler(nn.Module):
 
 
 class SqueezeBertPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = SqueezeBertConfig
@@ -405,25 +398,26 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
 SQUEEZEBERT_START_DOCSTRING = r"""
 
-    The SqueezeBERT model was proposed in
-    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks?
-    <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer
+    The SqueezeBERT model was proposed in `SqueezeBERT: What can computer vision teach NLP about efficient neural
+    networks? <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W.
+    Keutzer
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     For best results finetuning SqueezeBERT on text classification tasks, it is recommended to use the
     `squeezebert/squeezebert-mnli-headless` checkpoint as a starting point.
 
     Parameters:
         config (:class:`~transformers.SqueezeBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 
     Hierarchy::
 
@@ -439,9 +433,8 @@ SQUEEZEBERT_START_DOCSTRING = r"""
 
         Input data is in [batch, sequence_length, hidden_size] format.
 
-        Data inside the encoder is in [batch, hidden_size, sequence_length] format.
-            But, if :obj:`output_hidden_states == True`, the data from inside the encoder is
-            returned in [batch, sequence_length, hidden_size] format.
+        Data inside the encoder is in [batch, hidden_size, sequence_length] format. But, if :obj:`output_hidden_states
+        == True`, the data from inside the encoder is returned in [batch, sequence_length, hidden_size] format.
 
         The final output of the encoder is in [batch, sequence_length, hidden_size] format.
 """
@@ -451,35 +444,33 @@ SQUEEZEBERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.SqueezeBertTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.SqueezeBertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -520,9 +511,9 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -636,10 +627,9 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -676,8 +666,10 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SqueezeBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    SqueezeBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     SQUEEZEBERT_START_DOCSTRING,
 )
 class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
@@ -713,9 +705,8 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -760,8 +751,10 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SqueezeBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    SqueezeBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for RocStories/SWAG tasks.
+    """,
     SQUEEZEBERT_START_DOCSTRING,
 )
 class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
@@ -798,9 +791,9 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where `num_choices` is the size of the second dimension of the input tensors. (see
+            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -851,8 +844,10 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SqueezeBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    SqueezeBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
+    """,
     SQUEEZEBERT_START_DOCSTRING,
 )
 class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
@@ -888,8 +883,8 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -937,8 +932,9 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SqueezeBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD
-     (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """
+     SqueezeBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+     linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
      """,
     SQUEEZEBERT_START_DOCSTRING,
 )
@@ -976,12 +972,12 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

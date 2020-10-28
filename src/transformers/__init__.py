@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.3.1"
+__version__ = "3.4.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -654,6 +654,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
+    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
@@ -843,6 +844,11 @@ else:
 if is_flax_available():
     from .modeling_flax_bert import FlaxBertModel
     from .modeling_flax_roberta import FlaxRobertaModel
+else:
+    # Import the same objects as dummies to get them in the namespace.
+    # They will raise an import error if the user tries to instantiate / use them.
+    from .utils.dummy_flax_objects import *
+
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(

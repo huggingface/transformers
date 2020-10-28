@@ -4,6 +4,9 @@ thumbnail: https://miro.medium.com/max/700/1*MoPnD6vA9wTHjdLfW7POyw.png
 widget:
 - text: "Le camembert LePetit c'est le <mask>."
 - text: "Salut les <mask> ça va ?"
+license: gpl-3.0
+tags:
+- masked-lm
 ---
 
 # LePetit: A pre-training efficient and lightning fast French Language Model

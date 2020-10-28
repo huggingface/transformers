@@ -30,8 +30,8 @@ Tips:
   directly for tasks that just require a sentence summary (like sequence classification or multiple choice). For other
   tasks, the full model is used; this full model has a decoder that upsamples the final hidden states to the same
   sequence length as the input.
-- The Funnel Transformer checkpoints are all available with a full version and a base version. The first ones should
-  be used for :class:`~transformers.FunnelModel`, :class:`~transformers.FunnelForPreTraining`,
+- The Funnel Transformer checkpoints are all available with a full version and a base version. The first ones should be
+  used for :class:`~transformers.FunnelModel`, :class:`~transformers.FunnelForPreTraining`,
   :class:`~transformers.FunnelForMaskedLM`, :class:`~transformers.FunnelForTokenClassification` and
   class:`~transformers.FunnelForQuestionAnswering`. The second ones should be used for
   :class:`~transformers.FunnelBaseModel`, :class:`~transformers.FunnelForSequenceClassification` and

@@ -446,7 +446,6 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
 
-        torch.manual_seed(0)
         outputs = model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
             attention_mask=inputs["attention_mask"].to(torch_device),

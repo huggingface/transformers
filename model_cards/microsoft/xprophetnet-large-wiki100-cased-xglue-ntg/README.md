@@ -8,7 +8,7 @@ For xGLUE corss-lingual NLG tasks, xProphetNet is finetuned with English data, b
 ### Usage
 A quick usage is like: 
 ```
-from transformers import ProphetNetTokenizer, ProphetNetForConditionalGeneration, ProphetNetConfig
+from transformers import XLMProphetNetTokenizer, XLMProphetNetForConditionalGeneration, ProphetNetConfig
 
 model = ProphetNetForConditionalGeneration.from_pretrained('microsoft/xprophetnet-large-wiki100-cased-xglue-ntg')
 tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased-xglue-ntg')
@@ -19,7 +19,12 @@ ZH_SENTENCE = "根据该组织的官方门户网站，微软公司打算在2020�
 inputs = tokenizer([EN_SENTENCE, RU_SENTENCE, ZH_SENTENCE], padding=True, max_length=256, return_tensors='pt')
 
 summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=100, early_stopping=True)
-print([tokenizer.decode(g) for g in summary_ids])  
+tokenizer.batch_decode(summary_ids, skip_special_tokens=True)
+
+# should give:
+# 'Microsoft to end Windows 7 free support after January 14, 2020'
+# 'Microsoft намерена прекратить бесплатную поддержку Windows 7 после 14 января 2020 года'
+# '微软终止对Windows 7操作系统的免费支持'
 ```
 ### Citation
 ```bibtex

@@ -15,7 +15,8 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
 ## Datasets
 
-#### XSUM:
+#### XSUM
+
 ```bash
 cd examples/seq2seq
 wget https://cdn-datasets.huggingface.co/summarization/xsum.tar.gz
@@ -26,6 +27,7 @@ this should make a directory called `xsum/` with files like `test.source`.
 To use your own data, copy that files format. Each article to be summarized is on its own line.
 
 #### CNN/DailyMail
+
 ```bash
 cd examples/seq2seq
 wget https://cdn-datasets.huggingface.co/summarization/cnn_dm_v2.tgz
@@ -35,7 +37,8 @@ export CNN_DIR=${PWD}/cnn_dm
 ```
 this should make a directory called `cnn_dm/` with 6 files.
 
-#### WMT16 English-Romanian Translation Data:
+#### WMT16 English-Romanian Translation Data
+
 download with this command:
 ```bash
 wget https://cdn-datasets.huggingface.co/translation/wmt_en_ro.tar.gz
@@ -44,12 +47,24 @@ export ENRO_DIR=${PWD}/wmt_en_ro
 ```
 this should make a directory called `wmt_en_ro/` with 6 files.
 
-#### WMT English-German:
+#### WMT English-German
+
 ```bash
 wget https://cdn-datasets.huggingface.co/translation/wmt_en_de.tgz
 tar -xzvf wmt_en_de.tgz
 export DATA_DIR=${PWD}/wmt_en_de
 ```
+
+#### FSMT datasets (wmt)
+
+Refer to the scripts starting with `eval_` under:
+https://github.com/huggingface/transformers/tree/master/scripts/fsmt
+
+#### Pegasus (multiple datasets)
+
+Multiple eval datasets are available for download from: 
+https://github.com/stas00/porting/tree/master/datasets/pegasus
+
 
 #### Private Data
 
@@ -63,7 +78,6 @@ test.source
 test.target
 ```
 The `.source` files are the input, the `.target` files are the desired output.
-
 
 ### Tips and Tricks
 

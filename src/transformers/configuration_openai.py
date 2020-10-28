@@ -33,9 +33,8 @@ class OpenAIGPTConfig(PretrainedConfig):
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the `GPT <https://huggingface.co/openai-gpt>`__ architecture from OpenAI.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 40478):
@@ -43,8 +42,8 @@ class OpenAIGPTConfig(PretrainedConfig):
             :obj:`inputs_ids` passed when calling :class:`~transformers.OpenAIGPTModel` or
             :class:`~transformers.TFOpenAIGPTModel`.
         n_positions (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         n_ctx (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 768):
@@ -54,8 +53,8 @@ class OpenAIGPTConfig(PretrainedConfig):
         n_head (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         afn (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):

@@ -60,7 +60,7 @@ python run_language_modeling.py \
     --do_eval \
     --eval_data_file=$TEST_FILE \
     --mlm \
-    --wwm
+    --whole_word_mask
 ```
 
 For Chinese models, it's same with English model with only --mlm`. If using whole-word masking, we need to generate a reference files, case it's char level.
@@ -107,7 +107,7 @@ python run_language_modeling.py \
     --eval_data_file=$TEST_FILE \
     --mlm \
     --line_by_line \
-    --wwm
+    --whole_word_mask
 ```
 
 ### XLNet and permutation language modeling

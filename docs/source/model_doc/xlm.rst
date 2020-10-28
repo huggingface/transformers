@@ -14,21 +14,21 @@ Guillaume Lample, Alexis Conneau. It's a transformer pretrained using one of the
 The abstract from the paper is the following:
 
 *Recent studies have demonstrated the efficiency of generative pretraining for English natural language understanding.
-In this work, we extend this approach to multiple languages and show the effectiveness of cross-lingual pretraining.
-We propose two methods to learn cross-lingual language models (XLMs): one unsupervised that only relies on monolingual
+In this work, we extend this approach to multiple languages and show the effectiveness of cross-lingual pretraining. We
+propose two methods to learn cross-lingual language models (XLMs): one unsupervised that only relies on monolingual
 data, and one supervised that leverages parallel data with a new cross-lingual language model objective. We obtain
-state-of-the-art results on cross-lingual classification, unsupervised and supervised machine translation. On XNLI,
-our approach pushes the state of the art by an absolute gain of 4.9% accuracy. On unsupervised machine translation,
-we obtain 34.3 BLEU on WMT'16 German-English, improving the previous state of the art by more than 9 BLEU. On
-supervised machine translation, we obtain a new state of the art of 38.5 BLEU on WMT'16 Romanian-English, outperforming
-the previous best approach by more than 4 BLEU. Our code and pretrained models will be made publicly available.*
+state-of-the-art results on cross-lingual classification, unsupervised and supervised machine translation. On XNLI, our
+approach pushes the state of the art by an absolute gain of 4.9% accuracy. On unsupervised machine translation, we
+obtain 34.3 BLEU on WMT'16 German-English, improving the previous state of the art by more than 9 BLEU. On supervised
+machine translation, we obtain a new state of the art of 38.5 BLEU on WMT'16 Romanian-English, outperforming the
+previous best approach by more than 4 BLEU. Our code and pretrained models will be made publicly available.*
 
 Tips:
 
 - XLM has many different checkpoints, which were trained using different objectives: CLM, MLM or TLM. Make sure to
   select the correct objective for your task (e.g. MLM checkpoints are not suitable for generation).
-- XLM has multilingual checkpoints which leverage a specific :obj:`lang` parameter. Check out the
-  :doc:`multi-lingual <../multilingual>` page for more information.
+- XLM has multilingual checkpoints which leverage a specific :obj:`lang` parameter. Check out the :doc:`multi-lingual
+  <../multilingual>` page for more information.
 
 The original code can be found `here <https://github.com/facebookresearch/XLM/>`__.
 
