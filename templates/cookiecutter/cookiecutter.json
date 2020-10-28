@@ -1,10 +1,10 @@
 {
-  "modelname": "LysBERT",
-  "uppercase_modelname": "{{cookiecutter.modelname|upper}}",
-  "lowercase_modelname": "{{cookiecutter.modelname|lower}}",
-  "camelcase_modelname": "{{cookiecutter.modelname|capitalize}}",
+  "modelname": "BrandNewBERT",
+  "uppercase_modelname": "BRAND_NEW_BERT",
+  "lowercase_modelname": "brand_new_bert",
+  "camelcase_modelname": "BrandNewBert",
   "authors": "The HuggingFace Team",
-  "checkpoint_identifier": "lysbert-base-cased",
+  "checkpoint_identifier": "brand-new-bert-base-cased",
   "tokenizer_type": ["Based on BERT", "Standalone"],
   "is_encoder_decoder_model": ["True", "False"]
 }
