@@ -96,6 +96,8 @@ class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
 
 
 class AbstractMarianIntegrationTest(unittest.TestCase):
+    maxDiff = 1000  # show more chars for failing integration tests
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
@@ -129,10 +131,26 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
             src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
         )
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128
         )
         generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)
         return generated_words
+
+
+@require_sentencepiece
+@require_tokenizers
+@is_pt_tf_cross_test
+class TestMarian_MT_EN(AbstractMarianIntegrationTest):
+    """Cover low resource/high perplexity setting. This breaks if pad_token_id logits not set to LARGE_NEGATIVE."""
+
+    src = "mt"
+    tgt = "en"
+    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
+    expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
+
+    @slow
+    def test_batch_generation_mt_en(self):
+        self._assert_generated_batch_equal_expected()
 
 
 @is_pt_tf_cross_test
