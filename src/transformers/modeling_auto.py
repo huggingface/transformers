@@ -938,7 +938,7 @@ class AutoModelForMaskedLM:
     This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
     language modeling head---when created with the when created with the
     :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelForMasedLM.from_config` class method.
+    :meth:`~transformers.AutoModelForMaskedLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
