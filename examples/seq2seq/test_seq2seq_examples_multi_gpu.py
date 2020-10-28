@@ -1,15 +1,13 @@
 # as due to their complexity multi-gpu tests could impact other tests, and to aid debug we have those in a separate module.
 
-import logging
 import os
 import sys
-from pathlib import Path
 
-from transformers import is_torch_available
 from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multigpu
 
-from .utils import load_json
 from .test_seq2seq_examples import CHEAP_ARGS, make_test_data_dir
+from .utils import load_json
+
 
 class TestSummarizationDistillerMultiGPU(TestCasePlus):
     @classmethod
