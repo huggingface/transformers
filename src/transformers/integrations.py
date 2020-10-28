@@ -368,7 +368,7 @@ class WandbCallback(TrainerCallback):
                 wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
             
             # log outputs
-            self._log_artifacts = os.getenv("WANDB_ARTIFACTS", False)
+            self._log_artifacts = os.getenv("WANDB_LOG_ARTIFACTS", "FALSE").upper() == "TRUE"
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         hp_search = state.is_hyper_param_search
