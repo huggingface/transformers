@@ -425,7 +425,7 @@ def add_start_docstrings(*docstr):
     return docstring_decorator
 
 
-def add_start_docstrings_to_callable(*docstr):
+def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
         class_name = ":class:`~transformers.{}`".format(fn.__qualname__.split(".")[0])
         intro = "   The {} forward method, overrides the :func:`__call__` special method.".format(class_name)

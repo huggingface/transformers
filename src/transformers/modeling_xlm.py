@@ -35,7 +35,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -486,7 +486,7 @@ class XLMModel(XLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -703,7 +703,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             langs = None
         return {"input_ids": input_ids, "langs": langs}
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -781,7 +781,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -868,7 +868,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -972,7 +972,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=XLMForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1091,7 +1091,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1184,7 +1184,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, num_choicec, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choicec, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",

@@ -23,7 +23,12 @@ from typing import List, Optional, Tuple
 import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
@@ -803,7 +808,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="transfo-xl-wt103",
@@ -873,7 +878,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     def init_mems(self, bsz):
         return self.transformer.init_mems(bsz)
 
-    @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="transfo-xl-wt103",

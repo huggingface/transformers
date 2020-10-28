@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from .modeling_utils import ModuleUtilsMixin
 from .utils import logging
@@ -187,7 +187,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         self.transformer = transformer
         self.modal_encoder = ModalEmbeddings(config, encoder, transformer.embeddings)
 
-    @add_start_docstrings_to_callable(MMBT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MMBT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

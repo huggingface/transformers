@@ -74,13 +74,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,tf-cpu,torch,testing]
             - save_cache:
-                key: v0.3-{{ checksum "setup.py" }}
+                key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pt_tf_cross_test --durations=0 | tee output.txt
@@ -99,13 +99,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-torch-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,torch,testing]
             - save_cache:
-                  key: v0.3-torch-{{ checksum "setup.py" }}
+                  key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=tests ./tests/ | tee tests_output.txt
@@ -113,7 +113,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-                  
+
     run_tests_tf:
         working_directory: ~/transformers
         docker:
@@ -126,13 +126,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-tf-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,tf-cpu,testing]
             - save_cache:
-                  key: v0.3-tf-{{ checksum "setup.py" }}
+                  key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
@@ -151,13 +151,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - v0.3-flax-{{ checksum "setup.py" }}
-                    - v0.3-{{ checksum "setup.py" }}
+                    - v0.4-flax-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: sudo pip install .[flax,sklearn,torch,testing]
             - save_cache:
-                  key: v0.3-flax-{{ checksum "setup.py" }}
+                  key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
@@ -176,13 +176,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-torch-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,torch,testing]
             - save_cache:
-                  key: v0.3-torch-{{ checksum "setup.py" }}
+                  key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
@@ -201,13 +201,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-tf-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install git+https://github.com/huggingface/datasets
             - run: pip install .[sklearn,tf-cpu,testing]
             - save_cache:
-                  key: v0.3-tf-{{ checksum "setup.py" }}
+                  key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
@@ -224,13 +224,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-custom_tokenizers-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[ja,testing]
             - run: python -m unidic download
             - save_cache:
-                  key: v0.3-custom_tokenizers-{{ checksum "setup.py" }}
+                  key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
@@ -249,13 +249,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-torch_examples-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-torch_examples-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing]
             - run: pip install -r examples/requirements.txt
             - save_cache:
-                  key: v0.3-torch_examples-{{ checksum "setup.py" }}
+                  key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=examples ./examples/ | tee examples_output.txt
@@ -271,12 +271,12 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-build_doc-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-build_doc-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[tf,torch,sentencepiece,docs]
             - save_cache:
-                  key: v0.3-build_doc-{{ checksum "setup.py" }}
+                  key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: cd docs && make html SPHINXOPTS="-W"
@@ -293,11 +293,11 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-deploy_doc-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-deploy_doc-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install .[tf,torch,sentencepiece,docs]
             - save_cache:
-                  key: v0.3-deploy_doc-{{ checksum "setup.py" }}
+                  key: v0.4-deploy_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: ./.circleci/deploy.sh
@@ -311,13 +311,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-code_quality-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
+                      - v0.4-code_quality-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install isort
             - run: pip install .[tf,torch,flax,quality]
             - save_cache:
-                  key: v0.3-code_quality-{{ checksum "setup.py" }}
+                  key: v0.4-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: black --check examples templates tests src utils
