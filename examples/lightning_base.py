@@ -39,7 +39,7 @@ try:
     pkg_resources.require(f"{pkg}>={min_ver}")
 except pkg_resources.VersionConflict:
     logger.warning(
-        f"{pkg}>={min_ver} is required for a normal functioning of this module, but found {pkg}=={pkg_resources.get_distribution(pkg).version}."
+        f"{pkg}>={min_ver} is required for a normal functioning of this module, but found {pkg}=={pkg_resources.get_distribution(pkg).version}. Try pip install -r examples/requirements.txt"
     )
 
 
