@@ -23,7 +23,7 @@ from torch.nn import functional as F
 from .file_utils import add_start_docstrings_to_callable
 
 
-DIST_PROCESSOR_INPUTS_DOCSTRING = r"""
+LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -43,33 +43,33 @@ DIST_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class DistProcessorList(list):
+class LogitsProcessorList(list):
     """
-    This class can be used to create a list of :class:`~transformers.DistProcessor` to subsequently process a
+    This class can be used to create a list of :class:`~transformers.LogitsProcessor` to subsequently process a
     :obj:`scores` input tensor. This class inherits from list and adds a specific `__call__` method to apply each
-    :class:`~transformers.DistProcessor` to the inputs.
+    :class:`~transformers.LogitsProcessor` to the inputs.
     """
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         for processor in self:
             scores = processor(input_ids, scores)
         return scores
 
 
-class DistProcessor(ABC):
-    """Abstract base class for all samplers which are probability distribution warps performed during generation."""
+class LogitsProcessor(ABC):
+    """Abstract base class for all logit processors that can be applied during generation."""
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """Torch method for processing a distribution."""
+        """Torch method for processing logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
 
 
-class MinLengthDistProcessor(DistProcessor):
-    """DistProcessor enforcing a min-length by setting EOS probability to 0."""
+class MinLengthLogitsProcessor(LogitsProcessor):
+    """LogitsProcessor enforcing a min-length by setting EOS probability to 0."""
 
     def __init__(self, min_length: int, eos_token_id: int):
         if not isinstance(min_length, int) or min_length < 0:
@@ -81,7 +81,6 @@ class MinLengthDistProcessor(DistProcessor):
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len < self.min_length:
@@ -89,8 +88,8 @@ class MinLengthDistProcessor(DistProcessor):
         return scores
 
 
-class TemperatureDistWarper(DistProcessor):
-    """DistProcessor for temperature (exponential scaling output probability distribution)."""
+class TemperatureDistWarper(LogitsProcessor):
+    """LogitsProcessor for temperature (exponential scaling output probability distribution)."""
 
     def __init__(self, temperature: float):
         if not isinstance(temperature, float) or not (temperature > 0):
@@ -98,14 +97,13 @@ class TemperatureDistWarper(DistProcessor):
 
         self.temperature = temperature
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         scores = scores / self.temperature
         return scores
 
 
-class RepetitionPenaltyDistProcessor(DistProcessor):
-    """DistProcessor enforcing an exponential penalty on repeated sequences."""
+class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
+    """LogitsProcessor enforcing an exponential penalty on repeated sequences."""
 
     def __init__(self, penalty: float):
         if not isinstance(penalty, float) or not (penalty > 0):
@@ -113,7 +111,6 @@ class RepetitionPenaltyDistProcessor(DistProcessor):
 
         self.penalty = penalty
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         for i in range(scores.shape[0]):
             for previous_token in set(input_ids[i].tolist()):
@@ -125,8 +122,8 @@ class RepetitionPenaltyDistProcessor(DistProcessor):
         return scores
 
 
-class TopPDistWarper(DistProcessor):
-    """DistProcessor that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off."""
+class TopPDistWarper(LogitsProcessor):
+    """LogitsProcessor that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off."""
 
     def __init__(self, top_p: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
@@ -136,7 +133,6 @@ class TopPDistWarper(DistProcessor):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         sorted_logits, sorted_indices = torch.sort(scores, descending=True)
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
@@ -156,8 +152,8 @@ class TopPDistWarper(DistProcessor):
         return scores
 
 
-class TopKDistWarper(DistProcessor):
-    """DistProcessor that performs top-k, i.e. restricting to the k highest probability elements."""
+class TopKDistWarper(LogitsProcessor):
+    """LogitsProcessor that performs top-k, i.e. restricting to the k highest probability elements."""
 
     def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_k, int) or top_k <= 0:
@@ -167,7 +163,6 @@ class TopKDistWarper(DistProcessor):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
@@ -176,9 +171,9 @@ class TopKDistWarper(DistProcessor):
         return scores
 
 
-class NoRepeatNGramDistProcessor(DistProcessor):
+class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     """
-    DistProcessor that enforces no repetition of n-grams. See Fairseq:
+    LogitsProcessor that enforces no repetition of n-grams. See Fairseq:
     https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345.
     """
 
@@ -187,7 +182,6 @@ class NoRepeatNGramDistProcessor(DistProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
@@ -223,8 +217,8 @@ class NoRepeatNGramDistProcessor(DistProcessor):
         return banned_tokens
 
 
-class NoBadWordsDistProcessor(DistProcessor):
-    """DistProcessor that enforces that specified sequences will never be sampled."""
+class NoBadWordsLogitsProcessor(LogitsProcessor):
+    """LogitsProcessor that enforces that specified sequences will never be sampled."""
 
     def __init__(self, bad_words_ids: Iterable[Iterable[int]], eos_token_id: int):
 
@@ -247,7 +241,6 @@ class NoBadWordsDistProcessor(DistProcessor):
                 bad_words_ids
             )
 
-    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)
         scores = self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)

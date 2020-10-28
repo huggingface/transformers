@@ -26,12 +26,12 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers.generation_dist_process import (
-        DistProcessorList,
-        MinLengthDistProcessor,
-        NoBadWordsDistProcessor,
-        NoRepeatNGramDistProcessor,
-        RepetitionPenaltyDistProcessor,
+    from transformers.generation_logits_process import (
+        LogitsProcessorList,
+        MinLengthLogitsProcessor,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        RepetitionPenaltyLogitsProcessor,
         TemperatureDistWarper,
         TopKDistWarper,
         TopPDistWarper,
@@ -39,7 +39,7 @@ if is_torch_available():
 
 
 @require_torch
-class DistProcessorTest(unittest.TestCase):
+class LogitsProcessorTest(unittest.TestCase):
     def _get_uniform_logits(self, batch_size: int, length: int):
         scores = torch.ones((batch_size, length), device=torch_device, dtype=torch.float) / length
         return scores
@@ -49,7 +49,7 @@ class DistProcessorTest(unittest.TestCase):
         batch_size = 4
         eos_token_id = 0
 
-        min_dist_processor = MinLengthDistProcessor(min_length=10, eos_token_id=eos_token_id)
+        min_dist_processor = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
 
         # check that min length is applied at length 5
         input_ids = ids_tensor((batch_size, 5), vocab_size=20)
@@ -104,7 +104,7 @@ class DistProcessorTest(unittest.TestCase):
         scores[0, 0] = -(1 / vocab_size)
         scores[1, 5] = 4 / vocab_size
 
-        rep_penalty_proc = RepetitionPenaltyDistProcessor(penalty=2.0)
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
 
         scores = rep_penalty_proc(input_ids, scores.clone())
 
@@ -192,8 +192,8 @@ class DistProcessorTest(unittest.TestCase):
         input_ids = torch.tensor([[1, 1, 2, 1], [0, 1, 0, 1]], device=torch_device, dtype=torch.long)
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
-        no_repeat_proc_2_gram = NoRepeatNGramDistProcessor(2)
-        no_repeat_proc_3_gram = NoRepeatNGramDistProcessor(3)
+        no_repeat_proc_2_gram = NoRepeatNGramLogitsProcessor(2)
+        no_repeat_proc_3_gram = NoRepeatNGramLogitsProcessor(3)
 
         filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores.clone())
         filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores.clone())
@@ -215,7 +215,7 @@ class DistProcessorTest(unittest.TestCase):
         bad_word_tokens = [[1], [4], [1, 0], [0, 1, 2], [1, 3, 1, 3]]
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
-        no_bad_words_dist_proc = NoBadWordsDistProcessor(bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id)
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id)
 
         filtered_scores = no_bad_words_dist_proc(input_ids, scores.clone())
 
@@ -227,7 +227,7 @@ class DistProcessorTest(unittest.TestCase):
         )
 
         # check edge case
-        no_bad_words_dist_proc = NoBadWordsDistProcessor(bad_words_ids=[[4]], eos_token_id=eos_token_id)
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[4]], eos_token_id=eos_token_id)
         filtered_scores = no_bad_words_dist_proc(input_ids, scores.clone())
         self.assertTrue(torch.allclose(scores, filtered_scores, atol=1e-3))
 
@@ -245,13 +245,13 @@ class DistProcessorTest(unittest.TestCase):
         scores_comp = scores.clone()
 
         # instantiate all dist processors
-        min_dist_proc = MinLengthDistProcessor(min_length=10, eos_token_id=eos_token_id)
+        min_dist_proc = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
         temp_dist_warp = TemperatureDistWarper(temperature=0.5)
-        rep_penalty_proc = RepetitionPenaltyDistProcessor(penalty=2.0)
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
         top_k_warp = TopKDistWarper(3)
         top_p_warp = TopPDistWarper(0.8)
-        no_repeat_proc = NoRepeatNGramDistProcessor(2)
-        no_bad_words_dist_proc = NoBadWordsDistProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
+        no_repeat_proc = NoRepeatNGramLogitsProcessor(2)
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
 
         # no processor list
         scores = min_dist_proc(input_ids, scores)
@@ -263,7 +263,7 @@ class DistProcessorTest(unittest.TestCase):
         scores = no_bad_words_dist_proc(input_ids, scores)
 
         # with processor list
-        processor = DistProcessorList(
+        processor = LogitsProcessorList(
             [
                 min_dist_proc,
                 temp_dist_warp,

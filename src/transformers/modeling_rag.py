@@ -1421,9 +1421,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
             beam_scorer = BeamSearchScorer(
-                batch_size,
-                max_length,
-                num_beams,
+                batch_size=batch_size,
+                max_length=max_length,
+                num_beams=num_beams,
+                device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,

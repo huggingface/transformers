@@ -21,12 +21,12 @@ from torch.nn import functional as F
 
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
-from .generation_dist_process import (
-    DistProcessorList,
-    MinLengthDistProcessor,
-    NoBadWordsDistProcessor,
-    NoRepeatNGramDistProcessor,
-    RepetitionPenaltyDistProcessor,
+from .generation_logits_process import (
+    LogitsProcessorList,
+    MinLengthLogitsProcessor,
+    NoBadWordsLogitsProcessor,
+    NoRepeatNGramLogitsProcessor,
+    RepetitionPenaltyLogitsProcessor,
     TemperatureDistWarper,
     TopKDistWarper,
     TopPDistWarper,
@@ -206,11 +206,11 @@ class GenerationMixin:
     def _reorder_cache(past: Tuple[torch.Tensor], beam_idx: torch.Tensor) -> Tuple[torch.Tensor]:
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
-    def get_dist_warpper(
+    def get_logits_warper(
         self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
-    ) -> DistProcessorList:
+    ) -> LogitsProcessorList:
         """
-        This class returns a `DistProcessorList` object, that contains all distribution pre processing functions that
+        This class returns a `LogitsProcessorList` object, that contains all distribution pre processing functions that
         are ONLY related to sampling
         """
 
@@ -219,7 +219,7 @@ class GenerationMixin:
         top_p = top_p if top_p is not None else self.config.top_p
         temperature = temperature if temperature is not None else self.config.temperature
         # instantiate warpers list
-        warpers = DistProcessorList()
+        warpers = LogitsProcessorList()
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
@@ -231,16 +231,16 @@ class GenerationMixin:
             warpers.append(TemperatureDistWarper(temperature))
         return warpers
 
-    def get_dist_pre_processor(
+    def get_logits_processor(
         self,
         repetition_penalty: float,
         no_repeat_ngram_size: int,
         bad_words_ids: List[List[int]],
         min_length: int,
         eos_token_id: int,
-    ) -> DistProcessorList:
+    ) -> LogitsProcessorList:
         """
-        This class returns a `DistProcessorList` object, that contains all distribution pre processing functions that
+        This class returns a `LogitsProcessorList` object, that contains all distribution pre processing functions that
         are related to all generation functions.
         """
 
@@ -253,18 +253,18 @@ class GenerationMixin:
         min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         # instantiate processors list
-        processors = DistProcessorList()
+        processors = LogitsProcessorList()
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
         if repetition_penalty is not None and repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyDistProcessor(penalty=repetition_penalty))
+            processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
-            processors.append(NoRepeatNGramDistProcessor(no_repeat_ngram_size))
+            processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if bad_words_ids is not None:
-            processors.append(NoBadWordsDistProcessor(bad_words_ids, eos_token_id))
-        if min_length is not None and eos_token_id is not None and min_length > 0:
-            processors.append(MinLengthDistProcessor(min_length, eos_token_id))
+            processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
+        if min_length is not None and eos_token_id is not None and min_length > -1:
+            processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         return processors
 
     @torch.no_grad()
@@ -454,7 +454,7 @@ class GenerationMixin:
         model_kwargs["use_cache"] = use_cache
 
         # get distribution pre_processing samplers
-        pre_processor = self.get_dist_pre_processor(
+        logits_processor = self.get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             bad_words_ids=bad_words_ids,
@@ -471,7 +471,7 @@ class GenerationMixin:
             # greedy search
             return self.greedy_search(
                 input_ids,
-                pre_processor=pre_processor,
+                logits_processor=logits_processor,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -480,7 +480,9 @@ class GenerationMixin:
 
         elif is_sample_gen_mode:
             # get probability distribution warper
-            dist_warper = self.get_dist_warpper(top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams)
+            logits_warper = self.get_logits_warper(
+                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+            )
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -493,8 +495,8 @@ class GenerationMixin:
             # sample
             return self.sample(
                 input_ids,
-                pre_processor=pre_processor,
-                dist_warper=dist_warper,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -511,9 +513,10 @@ class GenerationMixin:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
             beam_scorer = BeamSearchScorer(
-                batch_size,
-                max_length,
-                num_beams,
+                batch_size=batch_size,
+                max_length=max_length,
+                num_beams=num_beams,
+                device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
@@ -525,7 +528,7 @@ class GenerationMixin:
             return self.beam_search(
                 input_ids,
                 beam_scorer,
-                pre_processor=pre_processor,
+                logits_processor=logits_processor,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -533,15 +536,18 @@ class GenerationMixin:
             )
 
         elif is_beam_sample_gen_mode:
-            dist_warper = self.get_dist_warpper(top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams)
+            logits_warper = self.get_logits_warper(
+                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+            )
 
             batch_size = input_ids.shape[0] * num_return_sequences
 
             length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
             beam_scorer = BeamSearchScorer(
-                batch_size,
-                max_length,
-                num_beams,
+                batch_size=batch_size,
+                max_length=max_length,
+                num_beams=num_beams,
+                device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
             )
@@ -557,8 +563,8 @@ class GenerationMixin:
             return self.beam_sample(
                 input_ids,
                 beam_scorer,
-                pre_processor=pre_processor,
-                dist_warper=dist_warper,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -569,14 +575,14 @@ class GenerationMixin:
     def greedy_search(
         self,
         input_ids: torch.LongTensor,
-        pre_processor: Optional[DistProcessorList] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
         # init values
-        pre_processor = pre_processor if pre_processor is not None else DistProcessorList()
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -595,7 +601,7 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
-            scores = pre_processor(input_ids, next_token_logits)
+            scores = logits_processor(input_ids, next_token_logits)
 
             # argmax
             next_tokens = torch.argmax(scores, dim=-1)
@@ -632,16 +638,16 @@ class GenerationMixin:
     def sample(
         self,
         input_ids: torch.LongTensor,
-        pre_processor: Optional[DistProcessorList] = None,
-        dist_warper: Optional[DistProcessorList] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
         # init values
-        pre_processor = pre_processor if pre_processor is not None else DistProcessorList()
-        dist_warper = dist_warper if dist_warper is not None else DistProcessorList()
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -661,8 +667,8 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
-            scores = pre_processor(input_ids, next_token_logits)
-            scores = dist_warper(input_ids, scores)
+            scores = logits_processor(input_ids, next_token_logits)
+            scores = logits_warper(input_ids, scores)
 
             # sample
             probs = F.softmax(scores, dim=-1)
@@ -699,14 +705,14 @@ class GenerationMixin:
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
-        pre_processor: Optional[DistProcessorList] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
         # init values
-        pre_processor = pre_processor if pre_processor is not None else DistProcessorList()
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -737,7 +743,7 @@ class GenerationMixin:
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores = pre_processor(input_ids, next_token_scores)
+            next_token_scores = logits_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -769,7 +775,7 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
-            if beam_scorer.is_done():
+            if beam_scorer.is_done:
                 break
 
         decoded = beam_scorer.finalize(
@@ -783,15 +789,15 @@ class GenerationMixin:
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
-        pre_processor: Optional[DistProcessorList] = None,
-        dist_warper: Optional[DistProcessorList] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
         # init values
-        pre_processor = pre_processor if pre_processor is not None else DistProcessorList()
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -817,9 +823,9 @@ class GenerationMixin:
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores = pre_processor(input_ids, next_token_scores)
+            next_token_scores = logits_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
-            next_token_scores = dist_warper(input_ids, next_token_scores)
+            next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -854,7 +860,7 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
-            if beam_scorer.is_done():
+            if beam_scorer.is_done:
                 break
 
         decoded = beam_scorer.finalize(

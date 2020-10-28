@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 
@@ -24,9 +24,9 @@ class BeamScorer(ABC):
     def update_beams(
         self,
         input_ids: torch.LongTensor,
-        scores: torch.FloatTensor,
+        next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
-        next_indexes: torch.LongTensor,
+        next_indices: torch.LongTensor,
         **kwargs
     ) -> Tuple[torch.Tensor]:
         raise NotImplementedError("This is an abstract method.")
@@ -35,9 +35,9 @@ class BeamScorer(ABC):
     def finalize(
         self,
         input_ids: torch.LongTensor,
-        scores: torch.FloatTensor,
+        next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
-        next_indexes: torch.LongTensor,
+        next_indices: torch.LongTensor,
         **kwargs
     ) -> torch.LongTensor:
         raise NotImplementedError("This is an abstract method.")
@@ -49,12 +49,14 @@ class BeamSearchScorer(BeamScorer):
         batch_size: int,
         max_length: int,
         num_beams: int,
+        device: torch.device,
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[bool] = True,
         num_beam_hyps_to_keep: Optional[int] = 1,
     ):
-        self.num_beams = num_beams
         self.max_length = max_length
+        self.num_beams = num_beams
+        self.device = device
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
@@ -69,17 +71,18 @@ class BeamSearchScorer(BeamScorer):
             )
             for _ in range(batch_size)
         ]
-        self._done = [False for _ in range(batch_size)]
+        self._done = torch.tensor([False for _ in range(batch_size)], dtype=torch.bool, device=self.device)
 
+    @property
     def is_done(self) -> bool:
-        return all(self._done)
+        return self._done.all()
 
     def update_beams(
         self,
         input_ids: torch.LongTensor,
-        scores: torch.FloatTensor,
+        next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
-        next_indexes: torch.LongTensor,
+        next_indices: torch.LongTensor,
         **kwargs
     ) -> Tuple[torch.Tensor]:
         pad_token_id = kwargs.get("pad_token_id", None)
@@ -90,9 +93,9 @@ class BeamSearchScorer(BeamScorer):
         assert batch_size == (input_ids.shape[0] // self.num_beams)
 
         device = input_ids.device
-        next_beam_scores = torch.zeros((batch_size, self.num_beams), dtype=scores.dtype, device=device)
+        next_beam_next_scores = torch.zeros((batch_size, self.num_beams), dtype=next_scores.dtype, device=device)
         next_beam_tokens = torch.zeros((batch_size, self.num_beams), dtype=next_tokens.dtype, device=device)
-        next_beam_indexes = torch.zeros((batch_size, self.num_beams), dtype=next_indexes.dtype, device=device)
+        next_beam_indexes = torch.zeros((batch_size, self.num_beams), dtype=next_indices.dtype, device=device)
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -103,7 +106,7 @@ class BeamSearchScorer(BeamScorer):
                     eos_token_id is not None and pad_token_id is not None
                 ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                 # pad the batch
-                next_beam_scores[batch_idx, :] = 0
+                next_beam_next_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
                 next_beam_indexes[batch_idx, :] = 0
                 continue
@@ -111,7 +114,7 @@ class BeamSearchScorer(BeamScorer):
             # next tokens for this sentence
             beam_idx = 0
             for beam_token_rank, (next_token, next_score, next_index) in enumerate(
-                zip(next_tokens[batch_idx], scores[batch_idx], next_indexes[batch_idx])
+                zip(next_tokens[batch_idx], next_scores[batch_idx], next_indices[batch_idx])
             ):
                 batch_beam_idx = batch_idx * self.num_beams + next_index
                 # add to generated hypotheses if end of sentence
@@ -126,7 +129,7 @@ class BeamSearchScorer(BeamScorer):
                     )
                 else:
                     # add next predicted token since it is not eos_token
-                    next_beam_scores[batch_idx, beam_idx] = next_score
+                    next_beam_next_scores[batch_idx, beam_idx] = next_score
                     next_beam_tokens[batch_idx, beam_idx] = next_token
                     next_beam_indexes[batch_idx, beam_idx] = batch_beam_idx
                     beam_idx += 1
@@ -135,17 +138,24 @@ class BeamSearchScorer(BeamScorer):
                 if beam_idx == self.num_beams:
                     break
 
-            # Check if we are done so that we can save a pad step if all(done)
-            self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(scores[batch_idx].max().item(), cur_len)
+            if beam_idx < self.num_beams:
+                raise ValueError(
+                    f"At most {self.num_beams} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                )
 
-        return next_beam_scores.view(-1), next_beam_tokens.view(-1), next_beam_indexes.view(-1)
+            # Check if we are done so that we can save a pad step if all(done)
+            self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
+                next_scores[batch_idx].max().item(), cur_len
+            )
+
+        return next_beam_next_scores.view(-1), next_beam_tokens.view(-1), next_beam_indexes.view(-1)
 
     def finalize(
         self,
         input_ids: torch.LongTensor,
-        scores: torch.FloatTensor,
+        next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
-        next_indexes: torch.LongTensor,
+        next_indices: torch.LongTensor,
         **kwargs
     ) -> torch.LongTensor:
         pad_token_id = kwargs.get("pad_token_id", None)
@@ -161,7 +171,7 @@ class BeamSearchScorer(BeamScorer):
             # need to add best num_beams hypotheses to generated hyps
             for beam_id in range(self.num_beams):
                 batch_beam_idx = batch_idx * self.num_beams + beam_id
-                final_score = scores[batch_beam_idx].item()
+                final_score = next_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
                 beam_hyp.add(final_tokens, final_score)
 
@@ -211,17 +221,17 @@ class BeamHypotheses:
         """
         return len(self.beams)
 
-    def add(self, hyp: List[torch.LongTensor], sum_logprobs: float):
+    def add(self, hyp: torch.LongTensor, sum_logprobs: float):
         """
         Add a new hypothesis to the list.
         """
-        score = sum_logprobs / len(hyp) ** self.length_penalty
+        score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:
-                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
-                del self.beams[sorted_scores[0][1]]
-                self.worst_score = sorted_scores[1][0]
+                sorted_next_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
+                del self.beams[sorted_next_scores[0][1]]
+                self.worst_score = sorted_next_scores[1][0]
             else:
                 self.worst_score = min(score, self.worst_score)
 
