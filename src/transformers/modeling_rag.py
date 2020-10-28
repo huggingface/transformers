@@ -22,7 +22,7 @@ import torch
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
-from .generation_utils_beam_search import BeamSearchBase
+from .generation_beam_search import BeamSearchScorer
 from .modeling_outputs import ModelOutput
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
@@ -1420,7 +1420,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-            beam_scorer = BeamSearchBase(
+            beam_scorer = BeamSearchScorer(
                 batch_size,
                 max_length,
                 num_beams,

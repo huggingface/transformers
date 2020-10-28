@@ -1,6 +1,6 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
+# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch.nn import functional as F
 
 from .file_utils import ModelOutput
-from .generation_utils_beam_search import BeamScorer, BeamSearchBase
-from .generation_utils_dist_process import (
+from .generation_beam_search import BeamScorer, BeamSearchScorer
+from .generation_dist_process import (
     DistProcessorList,
     MinLengthDistProcessor,
     NoBadWordsDistProcessor,
@@ -43,36 +43,39 @@ class GenerationMixin:
     :class:`~transfomers.PreTrainedModel`.
     """
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
         """
         Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to prepare inputs in the
         generate method.
         """
         return {"input_ids": input_ids}
 
-    def adjust_logits_during_generation(self, logits, **kwargs):
+    def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
         Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to adjust the logits in
         the generate method.
         """
         return logits
 
-    def _prepare_input_ids(self, bos_token_id: int):
+    def _prepare_input_ids_for_generation(self, bos_token_id: int) -> torch.LongTensor:
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-        return torch.ones((1, 1), dtype=torch.long, device=next(self.parameters()).device) * bos_token_id
+        return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
-    def _prepare_attention_mask(self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int):
+    def _prepare_attention_mask_for_generation(
+        self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
+    ) -> torch.LongTensor:
         is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
         if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
             return input_ids.ne(pad_token_id).long()
-        else:
-            return input_ids.new_ones(input_ids.shape)
+        return input_ids.new_ones(input_ids.shape)
 
-    def _prepare_encoder_decoder_kwargs(self, input_ids, model_kwargs):
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, input_ids: torch.LongTensor, model_kwargs
+    ) -> Dict[str, Any]:
         # retrieve encoder hidden states
         encoder = self.get_encoder()
         encoder_kwargs = {
@@ -81,7 +84,9 @@ class GenerationMixin:
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
-    def _prepare_decoder_input_ids(self, input_ids, decoder_start_token_id=None, bos_token_id=None, **model_kwargs):
+    def _prepare_decoder_input_ids_for_generation(
+        self, input_ids: torch.LongTensor, decoder_start_token_id: int = None, bos_token_id: int = None, **model_kwargs
+    ) -> torch.LongTensor:
 
         if "decoder_input_ids" in model_kwargs:
             return model_kwargs["decoder_input_ids"]
@@ -93,13 +98,13 @@ class GenerationMixin:
         )
         return decoder_input_ids
 
-    def _get_pad_token_id(self, pad_token_id, eos_token_id):
+    def _get_pad_token_id(self, pad_token_id: int, eos_token_id: int) -> int:
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
         return pad_token_id
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id, bos_token_id):
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int, bos_token_id: int) -> int:
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
@@ -126,14 +131,14 @@ class GenerationMixin:
         )
 
     @staticmethod
-    def _expand_inputs(
+    def _expand_inputs_for_generation(
         input_ids: torch.LongTensor,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         attention_mask: torch.LongTensor = None,
         encoder_outputs: ModelOutput = None,
         **model_kwargs
-    ):
+    ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         expanded_return_idx = (
             torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
         )
@@ -151,7 +156,9 @@ class GenerationMixin:
         return input_ids, model_kwargs
 
     @staticmethod
-    def _init_sequence_length(input_ids, max_length):
+    def _init_sequence_length_for_generation(
+        input_ids: torch.LongTensor, max_length: int
+    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
         sequence_lengths = input_ids.new(input_ids.shape[0]).fill_(max_length)
 
@@ -159,7 +166,12 @@ class GenerationMixin:
         return sequence_lengths, unfinished_sequences, cur_len
 
     @staticmethod
-    def update_sequence_lengths(sequence_lengths, unfinished_sequences, cur_len, is_eos_in_next_token):
+    def _update_seq_length_for_generation(
+        sequence_lengths: torch.LongTensor,
+        unfinished_sequences: torch.LongTensor,
+        cur_len: int,
+        is_eos_in_next_token: torch.BoolTensor,
+    ) -> Tuple[torch.LongTensor, torch.LongTensor]:
         # check if sentence is not finished yet
         is_sent_unfinished = unfinished_sequences.mul(is_eos_in_next_token.long()).bool()
 
@@ -169,7 +181,9 @@ class GenerationMixin:
         return sequence_lengths, unfinished_sequences
 
     @staticmethod
-    def _update_model_kwargs(outputs, model_kwargs, is_encoder_decoder=False):
+    def _update_model_kwargs_for_generation(
+        outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+    ) -> Dict[str, Any]:
         # update past
         if "past_key_values" in outputs:
             model_kwargs["past"] = outputs.past_key_values
@@ -189,35 +203,48 @@ class GenerationMixin:
         return model_kwargs
 
     @staticmethod
-    def _reorder_cache(past: Tuple, beam_idx: torch.Tensor) -> Tuple[torch.Tensor]:
+    def _reorder_cache(past: Tuple[torch.Tensor], beam_idx: torch.Tensor) -> Tuple[torch.Tensor]:
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
-    def get_dist_warpper(self, top_k=None, top_p=None, temperature=None, num_beams=None):
+    def get_dist_warpper(
+        self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
+    ) -> DistProcessorList:
+        """
+        This class returns a `DistProcessorList` object, that contains all distribution pre processing functions that
+        are ONLY related to sampling
+        """
+
+        # init warp parameters
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
         temperature = temperature if temperature is not None else self.config.temperature
-        """
-            This class returns a `DistProcessorList` object, that contains all distribution pre processing functions
-            that are ONLY related to sampling
-        """
         # instantiate warpers list
         warpers = DistProcessorList()
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
         if top_k is not None and top_k != 0:
-            warpers.append(TopKDistWarper(k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+            warpers.append(TopKDistWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
-            warpers.append(TopPDistWarper(prob_cut_off=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+            warpers.append(TopPDistWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if temperature is not None and temperature != 1.0:
             warpers.append(TemperatureDistWarper(temperature))
         return warpers
 
     def get_dist_pre_processor(
-        self, repetition_penalty, no_repeat_ngram_size, bad_words_ids, min_length, eos_token_id
-    ):
+        self,
+        repetition_penalty: float,
+        no_repeat_ngram_size: int,
+        bad_words_ids: List[List[int]],
+        min_length: int,
+        eos_token_id: int,
+    ) -> DistProcessorList:
+        """
+        This class returns a `DistProcessorList` object, that contains all distribution pre processing functions that
+        are related to all generation functions.
+        """
 
-        # verify pre-prossed tokens
+        # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
@@ -225,7 +252,6 @@ class GenerationMixin:
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-
         # instantiate processors list
         processors = DistProcessorList()
 
@@ -393,11 +419,13 @@ class GenerationMixin:
 
         if input_ids is None:
             # init `input_ids` with bos_token_id
-            input_ids = self._prepare_input_ids(bos_token_id)
+            input_ids = self._prepare_input_ids_for_generation(bos_token_id)
 
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
-            model_kwargs["attention_mask"] = self._prepare_attention_mask(input_ids, pad_token_id, eos_token_id)
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+                input_ids, pad_token_id, eos_token_id
+            )
 
         # special case if pad_token_id is not defined
         if pad_token_id is None and eos_token_id is not None:
@@ -406,17 +434,17 @@ class GenerationMixin:
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs(input_ids, model_kwargs)
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
 
             # set input_ids as decoder_input_ids
-            input_ids = self._prepare_decoder_input_ids(
+            input_ids = self._prepare_decoder_input_ids_for_generation(
                 input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id, **model_kwargs
             )
 
             if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
 
-        # determine generation model
+        # determine generation mode
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
         is_beam_gen_mode = (num_beams > 1) and do_sample is False
@@ -455,7 +483,7 @@ class GenerationMixin:
             dist_warper = self.get_dist_warpper(top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams)
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs(
+            input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
@@ -482,7 +510,7 @@ class GenerationMixin:
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
-            beam_scorer = BeamSearchBase(
+            beam_scorer = BeamSearchScorer(
                 batch_size,
                 max_length,
                 num_beams,
@@ -491,7 +519,7 @@ class GenerationMixin:
                 num_beam_hyps_to_keep=num_return_sequences,
             )
             # interleave with `num_beams`
-            input_ids, model_kwargs = self._expand_inputs(
+            input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
             )
             return self.beam_search(
@@ -510,7 +538,7 @@ class GenerationMixin:
             batch_size = input_ids.shape[0] * num_return_sequences
 
             length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
-            beam_scorer = BeamSearchBase(
+            beam_scorer = BeamSearchScorer(
                 batch_size,
                 max_length,
                 num_beams,
@@ -519,7 +547,7 @@ class GenerationMixin:
             )
 
             # interleave with `num_beams * num_return_sequences`
-            input_ids, model_kwargs = self._expand_inputs(
+            input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_beams * num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
@@ -554,7 +582,9 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
         # init sequence length tensors
-        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length(input_ids, max_length)
+        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
+            input_ids, max_length
+        )
 
         while cur_len < max_length:
             # prepare model inputs
@@ -580,12 +610,12 @@ class GenerationMixin:
 
             # update sequence length
             if eos_token_id is not None:
-                sequence_lengths, unfinished_sequences = self.update_sequence_lengths(
+                sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
             # update model kwargs
-            model_kwargs = self._update_model_kwargs(
+            model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
@@ -617,7 +647,9 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
         # init sequence length tensors
-        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length(input_ids, max_length)
+        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
+            input_ids, max_length
+        )
 
         # auto-regressive generation
         while cur_len < max_length:
@@ -647,7 +679,7 @@ class GenerationMixin:
 
             # update sequence length
             if eos_token_id is not None:
-                sequence_lengths, unfinished_sequences = self.update_sequence_lengths(
+                sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
@@ -656,7 +688,7 @@ class GenerationMixin:
                 break
 
             # update model kwargs
-            model_kwargs = self._update_model_kwargs(
+            model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
@@ -731,7 +763,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
 
-            model_kwargs = self._update_model_kwargs(
+            model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
@@ -816,7 +848,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
 
-            model_kwargs = self._update_model_kwargs(
+            model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
@@ -851,11 +883,11 @@ def top_k_top_p_filtering(
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     if top_k > 0:
-        logits = TopKDistWarper(k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
+        logits = TopKDistWarper(top_k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
             None, logits
         )
 
     if 0 <= top_p <= 1.0:
-        logits = TopPDistWarper(prob_cut_off=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+        logits = TopPDistWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
 
     return logits

@@ -26,7 +26,7 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers.generation_utils_dist_process import (
+    from transformers.generation_dist_process import (
         DistProcessorList,
         MinLengthDistProcessor,
         NoBadWordsDistProcessor,

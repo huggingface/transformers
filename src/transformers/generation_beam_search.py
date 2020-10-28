@@ -14,29 +14,44 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
+from typing import List, Optional, Tuple
 
 import torch
 
 
 class BeamScorer(ABC):
     @abstractmethod
-    def update_beams(self, input_ids, scores, next_tokens, next_indexes, **kwargs):
+    def update_beams(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        next_tokens: torch.LongTensor,
+        next_indexes: torch.LongTensor,
+        **kwargs
+    ) -> Tuple[torch.Tensor]:
         raise NotImplementedError("This is an abstract method.")
 
     @abstractmethod
-    def finalize(self, input_ids, scores, next_tokens, next_indexes, **kwargs):
+    def finalize(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        next_tokens: torch.LongTensor,
+        next_indexes: torch.LongTensor,
+        **kwargs
+    ) -> torch.LongTensor:
         raise NotImplementedError("This is an abstract method.")
 
 
-class BeamSearchBase(BeamScorer):
+class BeamSearchScorer(BeamScorer):
     def __init__(
         self,
         batch_size: int,
         max_length: int,
         num_beams: int,
-        length_penalty: float = 1.0,
-        do_early_stopping: bool = True,
-        num_beam_hyps_to_keep: int = 1,
+        length_penalty: Optional[float] = 1.0,
+        do_early_stopping: Optional[bool] = True,
+        num_beam_hyps_to_keep: Optional[int] = 1,
     ):
         self.num_beams = num_beams
         self.max_length = max_length
@@ -56,10 +71,17 @@ class BeamSearchBase(BeamScorer):
         ]
         self._done = [False for _ in range(batch_size)]
 
-    def is_done(self):
+    def is_done(self) -> bool:
         return all(self._done)
 
-    def update_beams(self, input_ids, scores, next_tokens, next_indexes, **kwargs):
+    def update_beams(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        next_tokens: torch.LongTensor,
+        next_indexes: torch.LongTensor,
+        **kwargs
+    ) -> Tuple[torch.Tensor]:
         pad_token_id = kwargs.get("pad_token_id", None)
         eos_token_id = kwargs.get("eos_token_id", None)
 
@@ -118,7 +140,14 @@ class BeamSearchBase(BeamScorer):
 
         return next_beam_scores.view(-1), next_beam_tokens.view(-1), next_beam_indexes.view(-1)
 
-    def finalize(self, input_ids, scores, next_tokens, next_indexes, **kwargs):
+    def finalize(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        next_tokens: torch.LongTensor,
+        next_indexes: torch.LongTensor,
+        **kwargs
+    ) -> torch.LongTensor:
         pad_token_id = kwargs.get("pad_token_id", None)
         eos_token_id = kwargs.get("eos_token_id", None)
 
@@ -150,7 +179,7 @@ class BeamSearchBase(BeamScorer):
 
         # prepare for adding eos
         sent_max_len = min(sent_lengths.max().item() + 1, self.max_length)
-        decoded = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
+        decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
             assert pad_token_id is not None, "`pad_token_id` has to be defined"
@@ -164,8 +193,8 @@ class BeamSearchBase(BeamScorer):
         return decoded
 
 
-class BeamHypotheses(object):
-    def __init__(self, num_beams, max_length, length_penalty, early_stopping):
+class BeamHypotheses:
+    def __init__(self, num_beams: int, max_length: int, length_penalty: float, early_stopping: bool):
         """
         Initialize n-best list of hypotheses.
         """
@@ -182,7 +211,7 @@ class BeamHypotheses(object):
         """
         return len(self.beams)
 
-    def add(self, hyp, sum_logprobs):
+    def add(self, hyp: List[torch.LongTensor], sum_logprobs: float):
         """
         Add a new hypothesis to the list.
         """
@@ -196,7 +225,7 @@ class BeamHypotheses(object):
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs, cur_len):
+    def is_done(self, best_sum_logprobs: float, cur_len: int) -> bool:
         """
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
         one in the heap, then we are done with this sentence.

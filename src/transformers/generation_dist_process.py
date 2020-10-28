@@ -16,17 +16,42 @@
 from abc import ABC
 from typing import Iterable, List
 
+import numpy as np
 import torch
 from torch.nn import functional as F
+
+from .file_utils import add_start_docstrings_to_callable
+
+
+DIST_PROCESSOR_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`):
+            Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
+            or scores for each vocabulary token after SoftMax.
+
+    Returns:
+        scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`): The processed prediction
+        scores.
+"""
 
 
 class DistProcessorList(list):
     """
-    This class inherits from list and adds a special `__call__` method that call each distribution processing function
-    one by one and returns the processed scores
+    This class can be used to create a list of :class:`~transformers.DistProcessor` to subsequently process a
+    :obj:`scores` input tensor. This class inherits from list and adds a specific `__call__` method to apply each
+    :class:`~transformers.DistProcessor` to the inputs.
     """
 
-    def __call__(self, input_ids, scores):
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         for processor in self:
             scores = processor(input_ids, scores)
         return scores
@@ -35,8 +60,9 @@ class DistProcessorList(list):
 class DistProcessor(ABC):
     """Abstract base class for all samplers which are probability distribution warps performed during generation."""
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """Torch method for warping a distribution, defaults to `warp`'s implementation."""
+        """Torch method for processing a distribution."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
@@ -46,9 +72,16 @@ class MinLengthDistProcessor(DistProcessor):
     """DistProcessor enforcing a min-length by setting EOS probability to 0."""
 
     def __init__(self, min_length: int, eos_token_id: int):
+        if not isinstance(min_length, int) or min_length < 0:
+            raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
+
+        if not isinstance(eos_token_id, int) or eos_token_id < 0:
+            raise ValueError(f"`eos_token_id` has to be a positive integer, but is {eos_token_id}")
+
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len < self.min_length:
@@ -60,8 +93,12 @@ class TemperatureDistWarper(DistProcessor):
     """DistProcessor for temperature (exponential scaling output probability distribution)."""
 
     def __init__(self, temperature: float):
+        if not isinstance(temperature, float) or not (temperature > 0):
+            raise ValueError(f"`temperature` has to be a strictly positive float, but is {temperature}")
+
         self.temperature = temperature
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         scores = scores / self.temperature
         return scores
@@ -71,8 +108,12 @@ class RepetitionPenaltyDistProcessor(DistProcessor):
     """DistProcessor enforcing an exponential penalty on repeated sequences."""
 
     def __init__(self, penalty: float):
+        if not isinstance(penalty, float) or not (penalty > 0):
+            raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
         self.penalty = penalty
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         for i in range(scores.shape[0]):
             for previous_token in set(input_ids[i].tolist()):
@@ -87,18 +128,21 @@ class RepetitionPenaltyDistProcessor(DistProcessor):
 class TopPDistWarper(DistProcessor):
     """DistProcessor that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off."""
 
-    def __init__(self, prob_cut_off: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        assert 0 <= prob_cut_off <= 1.0, "P must be a prob_cut_off between 0 and 1"
-        self.prob_cut_off = prob_cut_off
+    def __init__(self, top_p: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
+            raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+
+        self.top_p = top_p
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         sorted_logits, sorted_indices = torch.sort(scores, descending=True)
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
-        # Remove tokens with cumulative prob_cut_off above the threshold (token with 0 are kept)
-        sorted_indices_to_remove = cumulative_probs > self.prob_cut_off
+        # Remove tokens with cumulative top_p above the threshold (token with 0 are kept)
+        sorted_indices_to_remove = cumulative_probs > self.top_p
         if self.min_tokens_to_keep > 1:
             # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
             sorted_indices_to_remove[..., : self.min_tokens_to_keep - 1] = 0
@@ -115,15 +159,17 @@ class TopPDistWarper(DistProcessor):
 class TopKDistWarper(DistProcessor):
     """DistProcessor that performs top-k, i.e. restricting to the k highest probability elements."""
 
-    def __init__(self, k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        assert k > 0, f"Must specify a positive value k, but is {k}"
+    def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        if not isinstance(top_k, int) or top_k <= 0:
+            raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.k = k
+        self.top_k = top_k
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        top_k = min(max(self.k, self.min_tokens_to_keep), scores.size(-1))  # Safety check
+        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
         scores[indices_to_remove] = self.filter_value
@@ -137,8 +183,11 @@ class NoRepeatNGramDistProcessor(DistProcessor):
     """
 
     def __init__(self, ngram_size: int):
+        if not isinstance(ngram_size, int) or ngram_size <= 0:
+            raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
@@ -178,6 +227,19 @@ class NoBadWordsDistProcessor(DistProcessor):
     """DistProcessor that enforces that specified sequences will never be sampled."""
 
     def __init__(self, bad_words_ids: Iterable[Iterable[int]], eos_token_id: int):
+
+        if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
+            raise ValueError(f"`bad_words_ids` has to be a non-emtpy list, but is {bad_words_ids}.")
+        if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
+            raise ValueError(f"`bad_words_ids` has to be a list of lists, but is {bad_words_ids}.")
+        if any(
+            any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in bad_word_ids)
+            for bad_word_ids in bad_words_ids
+        ):
+            raise ValueError(
+                f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
+            )
+
         self.bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
 
         for banned_token_seq in self.bad_words_ids:
@@ -185,13 +247,14 @@ class NoBadWordsDistProcessor(DistProcessor):
                 bad_words_ids
             )
 
+    @add_start_docstrings_to_callable(DIST_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)
         scores = self._set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
 
-    def _tokens_match(self, prev_tokens, tokens) -> bool:
+    def _tokens_match(self, prev_tokens: torch.LongTensor, tokens: List[int]) -> bool:
         if len(tokens) == 0:
             # if bad word tokens is just one token always ban it
             return True
