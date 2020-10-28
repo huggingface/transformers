@@ -793,7 +793,7 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
         return super().call(positions + self.offset)  # super object is not callable for some reason
 
 
-class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
+class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions, embedding_dim, **kwargs):
@@ -805,7 +805,6 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
             embedding_dim,
             **kwargs,
         )
-        # self.weight = self._init_weight(*self.weight.shape)
 
     def build(self, input_shape):
         """
@@ -813,7 +812,7 @@ class TFSinusoidalPositionalEmbedding(TFSharedEmbeddings):
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         super().build(input_shape)  # Instantiates self.weight so it can be loaded
-        weight: np.ndarray = self._init_weight(self.vocab_size, self.hidden_size)
+        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
         self.set_weights([weight])  # overwrite self.weight to correct value
 
     @staticmethod

@@ -383,7 +383,7 @@ class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
     def test_positional_emb_weights_against_marian(self):
         emb1 = TFSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
         emb1.build(None)
-        weights = emb1.weight.numpy()
+        weights = emb1.embeddings.numpy()
         for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
             for j in range(5):
                 self.assertAlmostEqual(expected_weight[j], actual_weight[j], places=3)
