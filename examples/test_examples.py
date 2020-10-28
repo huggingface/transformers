@@ -169,15 +169,15 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_mlm.py
             --model_name_or_path distilroberta-base
-            --train_data_file ./tests/fixtures/sample_text.txt
-            --eval_data_file ./tests/fixtures/sample_text.txt
+            --train_file ./tests/fixtures/sample_text.txt
+            --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --do_train
             --do_eval
             --prediction_loss_only
             --num_train_epochs=1
-            """
+        """.split()
 
         if torch_device != "cuda":
             testargs.append("--no_cuda")
