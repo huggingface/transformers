@@ -663,7 +663,7 @@ accessors to them:
    - ``repo_root_dir`` - the directory of the repository
    - ``src_dir`` - the directory of ``src`` (i.e. where the ``transformers`` sub-dir resides)
 
-* stringified paths - same as above but these return paths as strings, rather than ``pathlib`` objects:
+* stringified paths---same as above but these return paths as strings, rather than ``pathlib`` objects:
 
    - ``test_file_path_str``
    - ``test_file_dir_str``
