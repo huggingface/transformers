@@ -14,6 +14,7 @@ from torch.nn import functional as F
 
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
+from lightning_base import generic_train  # noqa
 from make_student import create_student_by_copying_alternating_layers, get_layers_to_supervise
 from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
@@ -22,7 +23,6 @@ from utils import calculate_bleu, check_output_dir, freeze_params, label_smoothe
 
 # need the parent dir module
 sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
-from lightning_base import generic_train  # noqa
 
 
 class BartSummarizationDistiller(SummarizationModule):

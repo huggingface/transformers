@@ -6,18 +6,13 @@ import os
 import warnings
 from typing import Callable, Dict, Optional, Tuple
 
-
-# Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
-    is_comet_available,
-    is_wandb_available,
-)
-
 import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 
+# Integrations must be imported before ML frameworks:
+from .integrations import is_comet_available, is_wandb_available  # isort: split
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed

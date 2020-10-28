@@ -19,9 +19,8 @@ import os
 from os.path import expanduser
 from typing import Dict, List, Optional, Tuple
 
-from tqdm import tqdm
-
 import requests
+from tqdm import tqdm
 
 
 ENDPOINT = "https://huggingface.co"

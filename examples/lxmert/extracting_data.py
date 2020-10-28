@@ -1,7 +1,6 @@
 import getopt
 import json
 import os
-
 # import numpy as np
 import sys
 from collections import OrderedDict

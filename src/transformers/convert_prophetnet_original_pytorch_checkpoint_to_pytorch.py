@@ -22,7 +22,6 @@ import torch
 from transformers import logging
 from transformers.modeling_prophetnet import ProphetNetForConditionalGeneration
 from transformers.modeling_xlm_prophetnet import XLMProphetNetForConditionalGeneration
-
 # transformers_old should correspond to branch `save_old_prophetnet_model_structure` here
 # original prophetnet_checkpoints are saved under `patrickvonplaten/..._old` respectively
 from transformers_old.modeling_prophetnet import (

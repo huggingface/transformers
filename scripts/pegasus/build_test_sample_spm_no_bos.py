@@ -9,6 +9,7 @@
 # 3. build
 import sentencepiece as spm
 
+
 # pegasus:
 # 1. no bos
 # 2. eos_id is 1

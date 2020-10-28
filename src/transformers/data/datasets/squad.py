@@ -5,9 +5,8 @@ from enum import Enum
 from typing import Dict, List, Optional, Union
 
 import torch
-from torch.utils.data.dataset import Dataset
-
 from filelock import FileLock
+from torch.utils.data.dataset import Dataset
 
 from ...modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer

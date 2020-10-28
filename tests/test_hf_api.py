@@ -20,6 +20,7 @@ import unittest
 
 import requests
 from requests.exceptions import HTTPError
+
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, S3Obj
 
 

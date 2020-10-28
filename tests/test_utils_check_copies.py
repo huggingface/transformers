@@ -5,11 +5,12 @@ import sys
 import tempfile
 import unittest
 
+import check_copies  # noqa: E402
+
 
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
-import check_copies  # noqa: E402
 
 
 # This is the reference code that will be used in the tests.

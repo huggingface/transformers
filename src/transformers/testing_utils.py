@@ -1,3 +1,5 @@
+# adapted from https://stackoverflow.com/a/59041913/9201239
+import asyncio  # noqa
 import inspect
 import logging
 import os
@@ -796,8 +798,6 @@ def pytest_terminal_summary_main(tr, id):
 
 # the following code deals with async io between processes
 
-# adapted from https://stackoverflow.com/a/59041913/9201239
-import asyncio  # noqa
 
 
 class _RunOutput:

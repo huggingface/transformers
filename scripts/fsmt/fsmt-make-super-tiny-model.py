@@ -11,12 +11,13 @@
 #
 # It will be used then as "stas/tiny-wmt19-en-ru"
 
-from pathlib import Path
 import json
 import tempfile
+from pathlib import Path
 
-from transformers import FSMTTokenizer, FSMTConfig, FSMTForConditionalGeneration
+from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
 from transformers.tokenization_fsmt import VOCAB_FILES_NAMES
+
 
 mname_tiny = "tiny-wmt19-en-ru"
 

@@ -23,11 +23,12 @@ from shutil import copyfile
 from transformers import BatchEncoding, MarianTokenizer
 from transformers.testing_utils import _sentencepiece_available, _torch_available, require_sentencepiece
 
+from .test_tokenization_common import TokenizerTesterMixin
+
 
 if _sentencepiece_available:
     from transformers.tokenization_marian import save_json, vocab_files_names
 
-from .test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")

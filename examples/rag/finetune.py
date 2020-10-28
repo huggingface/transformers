@@ -17,6 +17,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
+from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -52,7 +53,6 @@ from utils import (  # noqa: E402 # isort:skip
 
 # need the parent dir module
 sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
-from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
 
 
 logging.basicConfig(level=logging.INFO)

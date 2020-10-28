@@ -26,7 +26,6 @@ from collections import Counter, OrderedDict
 from typing import List, Optional, Tuple
 
 import numpy as np
-
 import sacremoses as sm
 
 from .file_utils import cached_path, is_torch_available, torch_only_method

@@ -22,9 +22,8 @@ from functools import lru_cache
 from typing import Optional, Tuple
 from zipfile import ZipFile
 
-import tqdm
-
 import requests
+import tqdm
 
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging

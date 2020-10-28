@@ -6,9 +6,8 @@ import time
 from typing import Dict, List, Optional
 
 import torch
-from torch.utils.data.dataset import Dataset
-
 from filelock import FileLock
+from torch.utils.data.dataset import Dataset
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging

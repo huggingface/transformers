@@ -2,6 +2,9 @@
 import math
 import os
 
+from .file_utils import is_torch_tpu_available  # noqa: E402
+from .trainer_callback import TrainerCallback  # noqa: E402
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # noqa: E402
 from .utils import logging
 
 
@@ -77,9 +80,6 @@ except ImportError:
 
 # No transformer imports above this point
 
-from .file_utils import is_torch_tpu_available  # noqa: E402
-from .trainer_callback import TrainerCallback  # noqa: E402
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # noqa: E402
 
 
 # Integration functions:
