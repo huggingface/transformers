@@ -381,7 +381,9 @@ class WandbCallback(TrainerCallback):
             logger.info("Logging artifacts. This may take time.")
             # use run name and ensure it's a valid Artifact name
             artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
-            wandb.Artifact(name=f'run-{artifact_name}', type='outputs').add_dir(args.output_dir)
+            artifact = wandb.Artifact(name=f'run-{artifact_name}', type='outputs')
+            artifact.add_dir(args.output_dir)
+            wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if not self._initialized:
