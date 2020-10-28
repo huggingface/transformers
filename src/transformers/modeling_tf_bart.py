@@ -1184,8 +1184,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         (encoder_out, decoder_cached_states) = past
         reordered_past = []
         for layer_past in decoder_cached_states:
-            # get the correct batch idx from decod    er layer's batch dim for cross and self-attn
-
+            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
