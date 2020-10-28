@@ -382,14 +382,12 @@ class WandbCallback(TrainerCallback):
                 model_dir = state.best_model_checkpoint
             else:
                 # we save current model
-                model_dir = os.path.join(args.output_dir, "wandb")                
+                model_dir = os.path.join(args.output_dir, "wandb")
                 # TODO: Trainer.save_model - how to access Trainer?
 
             # use run name and ensure it's a valid Artifact name
             artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", " ", wandb.run.name)
-            artifact = wandb.Artifact(name=f'run-{artifact_name}',
-                                        type='model',
-                                        metadata={'score': state.best_metric})
+            artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={"score": state.best_metric})
             artifact.add_dir(model_dir)
             wandb.run.log_artifact(artifact)
 
