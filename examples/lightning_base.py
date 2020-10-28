@@ -33,7 +33,6 @@ from transformers.optimization import (
 
 logger = logging.getLogger(__name__)
 
-# remember to update along with ./requirements.txt when there are breaking changes
 try:
     pkg = "pytorch_lightning"
     min_ver = "1.0.4"
