@@ -41,7 +41,6 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
         # Find the model name chosen by the user
         directory = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]][0]
-        model_name = directory[22:]
         lowercase_model_name = [file for file in os.listdir(directory) if file.endswith(".rst")][0][:-4]
 
         shutil.move(
