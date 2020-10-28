@@ -328,8 +328,8 @@ class WandbCallback(TrainerCallback):
         <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
-            WANDB_LOG_ARTIFACTS (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to log output artifacts from `TrainingArguments.output_dir`.
+            WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to log model as artifact
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
                 Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
                 logging or :obj:`"all"` to log gradients and parameters.
@@ -367,9 +367,9 @@ class WandbCallback(TrainerCallback):
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
-            
+
             # log outputs
-            self._log_artifacts = os.getenv("WANDB_LOG_ARTIFACTS", "FALSE").upper() == "TRUE"
+            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() == "TRUE"
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         hp_search = state.is_hyper_param_search
@@ -377,12 +377,20 @@ class WandbCallback(TrainerCallback):
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
     def on_train_end(self, args, state, control, **kwargs):
-        if self._log_artifacts and self._initialized and state.is_world_process_zero:
-            logger.info("Logging artifacts. This may take time.")
+        if self._log_model and self._initialized and state.is_world_process_zero:
+            if state.best_model_checkpoint is not None:
+                model_dir = state.best_model_checkpoint
+            else:
+                # we save current model
+                model_dir = os.path.join(args.output_dir, "wandb")                
+                # TODO: Trainer.save_model - how to access Trainer?
+
             # use run name and ensure it's a valid Artifact name
-            artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
-            artifact = wandb.Artifact(name=f'run-{artifact_name}', type='outputs')
-            artifact.add_dir(args.output_dir)
+            artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", " ", wandb.run.name)
+            artifact = wandb.Artifact(name=f'run-{artifact_name}',
+                                        type='model',
+                                        metadata={'score': state.best_metric})
+            artifact.add_dir(model_dir)
             wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
