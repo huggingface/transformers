@@ -470,7 +470,7 @@ This is still under development but you can study 2 different tests that perform
   <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal
   (non-PL) test
 
-To jump right into the execution point, search for the ``execute_async_std`` function in those tests.
+To jump right into the execution point, search for the ``execute_subprocess_async`` function in those tests.
 
 You will need at least 2 GPUs to see these tests in action:
 

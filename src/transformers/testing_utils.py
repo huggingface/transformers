@@ -818,7 +818,7 @@ async def _read_stream(stream, callback):
 
 async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
     if echo:
-        print(cmd)
+        print("\nRunning: ", " ".join(cmd))
 
     p = await asyncio.create_subprocess_exec(
         cmd[0],
@@ -828,6 +828,15 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         stderr=asyncio.subprocess.PIPE,
         env=env,
     )
+
+    # note: there is a warning for a possible deadlock when using `wait` with huge amounts of data in the pipe
+    # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process.wait
+    #
+    # If it starts hanging, will need to switch to the following code. The problem is that no data
+    # will be seen until it's done and if it hangs for example there will be no debug info.
+    # out, err = await p.communicate()
+    # return _RunOutput(p.returncode, out, err)
+
     out = []
     err = []
 
@@ -837,6 +846,7 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         if not quiet:
             print(label, line, file=pipe)
 
+    # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
             _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout)),
@@ -844,21 +854,22 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         ],
         timeout=timeout,
     )
-
-    # XXX: warning for a possible deadlock when using `wait` with huge amounts of data in the pipe
-    # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process.wait
-    #
-    # If it starts hanging, will need to switch s/wait/communicate/ - so perhaps for debug we will enable
-    # `wait` as it's easier to see in real time, but for normal runs use `communicate`
     return _RunOutput(await p.wait(), out, err)
 
 
-def execute_async_std(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
-    print("\nRunning: ", " ".join(cmd))
+def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
 
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
     )
+
+    cmd_str = " ".join(cmd)
+    if result.returncode > 0:
+        raise RuntimeError(
+            f"'{cmd_str}' failed with returncode {result.returncode} - see the `stderr:` messages from above for details."
+        )
+    if not result.stdout:
+        raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result

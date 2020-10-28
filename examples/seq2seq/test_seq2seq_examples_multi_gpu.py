@@ -5,10 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 from transformers import is_torch_available
-from transformers.testing_utils import TestCasePlus, execute_async_std, require_torch_multigpu
+from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multigpu
 
 from .utils import load_json
 
@@ -159,11 +157,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
 
         cli_args = [x for x in (convert(k, v) for k, v in args_d.items()) if len(x)]
         cmd = [sys.executable, f"{self.test_file_dir}/distillation.py"] + cli_args
-        result = execute_async_std(cmd, env=self.get_env(), stdin=None, timeout=180, quiet=False, echo=False)
-
-        assert result.stdout, "produced no output"
-        if result.returncode > 0:
-            pytest.fail(f"failed with returncode {result.returncode}")
+        execute_subprocess_async(cmd, env=self.get_env())
 
         contents = os.listdir(output_dir)
         contents = {os.path.basename(p) for p in contents}

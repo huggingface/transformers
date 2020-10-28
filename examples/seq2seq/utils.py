@@ -640,6 +640,6 @@ def check_output_dir(args, expected_items=0):
     ):
         raise ValueError(
             f"Output directory ({args.output_dir}) already exists and "
-            "has {len(os.listdir(args.output_dir))} items in it (expected {expected_items} items). "
+            f"has {len(os.listdir(args.output_dir))} items in it (expected {expected_items} items). "
             "Use --overwrite_output_dir to overcome."
         )
