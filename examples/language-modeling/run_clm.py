@@ -167,7 +167,7 @@ def main():
     set_seed(training_args.seed)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
-    # or specify a GLUE benchmark task (the dataset will be downloaded automatically from the datasets Hub
+    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/ (the dataset will be downloaded automatically from the datasets Hub
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column. You can easily tweak this
     # behavior (see below)
@@ -187,7 +187,7 @@ def main():
         if extension == "txt":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files)
-    # See more about loading any type of standard or custom dataset at
+    # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Load pretrained model and tokenizer
@@ -254,7 +254,7 @@ def main():
     else:
         block_size = min(data_args.block_size, tokenizer.max_len)
 
-    # Main function that will concatenate all texts from our dataset and generate chunks of block_size.
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
         # Concatenate all texts.
         concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
