@@ -1,22 +1,8 @@
-# This test is meant to be run in torch.distributed,
-# on a machine with multiple GPUs, in the following way:
-#
-#   python -m torch.distributed.launch --nproc_per_node 2 ./tests/test_trainer_distributed.py
-#
-# Replace 2 with the number of GPUs you have.
-#
-# You can also run it as a standalone file to test identical behavior in nn.DataParallel:
-#   python ./tests/test_trainer_distributed.py
-# and in single-GPU mode:
-#   CUDA_VISIBLE_DEVICES=0 python ./tests/test_trainer_distributed.py
-# and in CPU mode:
-#   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
-#
-
 import sys
 from typing import Dict
 
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
+from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multigpu
 from transformers.utils import logging
 
 
@@ -57,9 +43,28 @@ if is_torch_available():
                 return input_ids
 
 
+class TestTrainerDistributed(TestCasePlus):
+    @require_torch_multigpu
+    def test_trainer(self):
+
+        distributed_args = f"""
+            -m torch.distributed.launch
+            --nproc_per_node={torch.cuda.device_count()}
+            {self.test_file_dir}/test_trainer_distributed.py
+        """.split()
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"--output_dir {output_dir}".split()
+        cmd = [sys.executable] + distributed_args + args
+        execute_subprocess_async(cmd, env=self.get_env())
+        # successful return here == success - any errors would have caused an error in the sub-call
+
+
 if __name__ == "__main__":
+    # The script below is meant to be run under torch.distributed, on a machine with multiple GPUs:
+    #
+    # PYTHONPATH="src" python -m torch.distributed.launch --nproc_per_node 2 --output_dir output_dir ./tests/test_trainer_distributed.py
+
     parser = HfArgumentParser((TrainingArguments,))
-    sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
@@ -70,9 +75,8 @@ if __name__ == "__main__":
         training_args.local_rank != -1,
     )
 
-    # Essentially, what we want to verify in the distributed case is
-    # that we get all samples back, in the right order.
-    # (this is crucial for prediction for instance)
+    # Essentially, what we want to verify in the distributed case is that we get all samples back,
+    # in the right order. (this is crucial for prediction for instance)
     for dataset_length in [101, 40, 7]:
         dataset = DummyDataset(dataset_length)
 
@@ -115,5 +119,3 @@ if __name__ == "__main__":
             exit(1)
 
         trainer.args.eval_accumulation_steps = None
-
-    logger.info("🔥 All distributed tests successful")

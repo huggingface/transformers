@@ -25,7 +25,14 @@ from itertools import takewhile
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_tf, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    is_pt_tf_cross_test,
+    require_tf,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 from transformers.tokenization_utils import AddedToken
 
 
@@ -169,6 +176,25 @@ class TokenizerTesterMixin:
 
         self.assertIn("tokenizer_file", signature.parameters)
         self.assertIsNone(signature.parameters["tokenizer_file"].default)
+
+    def test_tokenizer_slow_store_full_signature(self):
+        signature = inspect.signature(self.tokenizer_class.__init__)
+        tokenizer = self.get_tokenizer()
+
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter.default != inspect.Parameter.empty:
+                self.assertIn(parameter_name, tokenizer.init_kwargs)
+
+    def test_tokenizer_fast_store_full_signature(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        signature = inspect.signature(self.rust_tokenizer_class.__init__)
+        tokenizer = self.get_rust_tokenizer()
+
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter.default != inspect.Parameter.empty:
+                self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -1517,8 +1543,7 @@ class TokenizerTesterMixin:
                 string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
             )
 
-    @require_torch
-    @require_tf
+    @is_pt_tf_cross_test
     def test_batch_encode_plus_tensors(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

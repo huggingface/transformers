@@ -26,6 +26,22 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+
+# Integrations must be imported before ML frameworks:
+from .integrations import (  # isort: split
+    default_hp_search_backend,
+    hp_params,
+    is_azureml_available,
+    is_comet_available,
+    is_mlflow_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+    run_hp_search_optuna,
+    run_hp_search_ray,
+)
+
 import numpy as np
 import torch
 from packaging import version
@@ -37,17 +53,6 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
-from .integrations import (
-    default_hp_search_backend,
-    hp_params,
-    is_comet_available,
-    is_optuna_available,
-    is_ray_available,
-    is_tensorboard_available,
-    is_wandb_available,
-    run_hp_search_optuna,
-    run_hp_search_ray,
-)
 from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -139,19 +144,28 @@ if is_comet_available():
 
     DEFAULT_CALLBACKS.append(CometCallback)
 
+if is_mlflow_available():
+    from .integrations import MLflowCallback
+
+    DEFAULT_CALLBACKS.append(MLflowCallback)
+
 if is_optuna_available():
     import optuna
 
 if is_ray_available():
     from ray import tune
 
+if is_azureml_available():
+    from .integrations import AzureMLCallback
+
+    DEFAULT_CALLBACKS.append(AzureMLCallback)
+
 logger = logging.get_logger(__name__)
 
 
 class Trainer:
     """
-    Trainer is a simple but feature-complete training and eval loop for PyTorch,
-    optimized for 🤗 Transformers.
+    Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
 
     Args:
         model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
@@ -163,18 +177,19 @@ class Trainer:
                 provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
                 they work the same way as the 🤗 Transformers models.
         args (:class:`~transformers.TrainingArguments`, `optional`):
-            The arguments to tweak for training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
-            with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.
+            The arguments to tweak for training. Will default to a basic instance of
+            :class:`~transformers.TrainingArguments` with the ``output_dir`` set to a directory named `tmp_trainer` in
+            the current directory if not provided.
         data_collator (:obj:`DataCollator`, `optional`):
-            The function to use to form a batch from a list of elements of :obj:`train_dataset` or
-            :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
-            provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
+            The function to use to form a batch from a list of elements of :obj:`train_dataset` or :obj:`eval_dataset`.
+            Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is provided, an instance of
+            :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-            ``model.forward()`` method are automatically removed.
+             ``model.forward()`` method are automatically removed.
         tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
@@ -183,8 +198,9 @@ class Trainer:
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be able to choose
-            different architectures according to hyper parameters (such as layer count, sizes of inner layers, dropout probabilities etc).
+            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
+            able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
+            layers, dropout probabilities etc).
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -193,8 +209,8 @@ class Trainer:
             detailed in :doc:`here <callback>`.
 
             If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
-            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+            containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
         kwargs:
@@ -374,7 +390,9 @@ class Trainer:
         dataset.set_format(type=dataset.format["type"], columns=columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
-        if not isinstance(self.train_dataset, collections.abc.Sized):
+        if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
+            self.train_dataset, collections.abc.Sized
+        ):
             return None
         elif is_torch_tpu_available():
             return get_tpu_sampler(self.train_dataset)
@@ -389,8 +407,8 @@ class Trainer:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
 
-        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler
-        (adapted to distributed training if necessary) otherwise.
+        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler (adapted
+        to distributed training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -979,8 +997,10 @@ class Trainer:
                 Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
                 more information see:
 
-                - the documentation of `optuna.create_study <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
-                - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
+                - the documentation of `optuna.create_study
+                  <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                - the documentation of `tune.run
+                  <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
@@ -1118,8 +1138,8 @@ class Trainer:
 
     def is_local_master(self) -> bool:
         """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
-        several machines) main process.
+        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
+        machines) main process.
 
         .. warning::
 
@@ -1130,8 +1150,8 @@ class Trainer:
 
     def is_local_process_zero(self) -> bool:
         """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
-        several machines) main process.
+        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
+        machines) main process.
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
@@ -1140,8 +1160,8 @@ class Trainer:
 
     def is_world_master(self) -> bool:
         """
-        Whether or not this process is the global main process (when training in a distributed fashion on
-        several machines, this is only going to be :obj:`True` for one process).
+        Whether or not this process is the global main process (when training in a distributed fashion on several
+        machines, this is only going to be :obj:`True` for one process).
 
         .. warning::
 
@@ -1152,8 +1172,8 @@ class Trainer:
 
     def is_world_process_zero(self) -> bool:
         """
-        Whether or not this process is the global main process (when training in a distributed fashion on
-        several machines, this is only going to be :obj:`True` for one process).
+        Whether or not this process is the global main process (when training in a distributed fashion on several
+        machines, this is only going to be :obj:`True` for one process).
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
@@ -1261,16 +1281,16 @@ class Trainer:
         """
         Run evaluation and returns metrics.
 
-        The calling script will be responsible for providing a method to compute metrics, as they are
-        task-dependent (pass it to the init :obj:`compute_metrics` argument).
+        The calling script will be responsible for providing a method to compute metrics, as they are task-dependent
+        (pass it to the init :obj:`compute_metrics` argument).
 
         You can also subclass and override this method to inject custom behavior.
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
-                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement
-                the :obj:`__len__` method.
+                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement the
+                :obj:`__len__` method.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
@@ -1295,22 +1315,20 @@ class Trainer:
         """
         Run prediction and returns predictions and potential metrics.
 
-        Depending on the dataset and your use case, your test dataset may contain labels.
-        In that case, this method will also return metrics, like in :obj:`evaluate()`.
+        Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
+        will also return metrics, like in :obj:`evaluate()`.
 
         Args:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
-        Returns:
-            `NamedTuple`:
-            predictions (:obj:`np.ndarray`):
-                The predictions on :obj:`test_dataset`.
-            label_ids (:obj:`np.ndarray`, `optional`):
-                The labels (if the dataset contained some).
-            metrics (:obj:`Dict[str, float]`, `optional`):
-                The potential dictionary of metrics (if the dataset contained labels).
+        Returns: `NamedTuple` A namedtuple with the following keys:
+
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
+            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+              contained labels).
         """
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
@@ -1459,14 +1477,18 @@ class Trainer:
                 Whether or not to return the loss only.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
-            A tuple with the loss, logits and labels (each being optional).
+            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
+            labels (each being optional).
         """
         has_labels = all(inputs.get(k) is not None for k in self.label_names)
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
-            outputs = model(**inputs)
+            if self.args.fp16 and _use_native_amp:
+                with autocast():
+                    outputs = model(**inputs)
+            else:
+                outputs = model(**inputs)
             if has_labels:
                 loss = outputs[0].mean().detach()
                 logits = outputs[1:]
@@ -1497,9 +1519,9 @@ class Trainer:
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
-        For models that inherit from :class:`~transformers.PreTrainedModel`, uses
-        that method to compute the number of floating point operations for every backward + forward pass. If using
-        another model, either implement such a method in the model or subclass and override this method.
+        For models that inherit from :class:`~transformers.PreTrainedModel`, uses that method to compute the number of
+        floating point operations for every backward + forward pass. If using another model, either implement such a
+        method in the model or subclass and override this method.
 
         Args:
             model (:obj:`nn.Module`):

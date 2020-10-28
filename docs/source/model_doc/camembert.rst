@@ -4,26 +4,26 @@ CamemBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The CamemBERT model was proposed in `CamemBERT: a Tasty French Language Model <https://arxiv.org/abs/1911.03894>`__
-by Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suárez, Yoann Dupont, Laurent Romary, Éric Villemonte de la
+The CamemBERT model was proposed in `CamemBERT: a Tasty French Language Model <https://arxiv.org/abs/1911.03894>`__ by
+Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suárez, Yoann Dupont, Laurent Romary, Éric Villemonte de la
 Clergerie, Djamé Seddah, and Benoît Sagot. It is based on Facebook's RoBERTa model released in 2019. It is a model
 trained on 138GB of French text.
 
 The abstract from the paper is the following:
 
-*Pretrained language models are now ubiquitous in Natural Language Processing. Despite their success,
-most available models have either been trained on English data or on the concatenation of data in multiple
-languages. This makes practical use of such models --in all languages except English-- very limited. Aiming
-to address this issue for French, we release CamemBERT, a French version of the Bi-directional Encoders for
-Transformers (BERT). We measure the performance of CamemBERT compared to multilingual models in multiple
-downstream tasks, namely part-of-speech tagging, dependency parsing, named-entity recognition, and natural
-language inference. CamemBERT improves the state of the art for most of the tasks considered. We release the
-pretrained model for CamemBERT hoping to foster research and downstream applications for French NLP.*
+*Pretrained language models are now ubiquitous in Natural Language Processing. Despite their success, most available
+models have either been trained on English data or on the concatenation of data in multiple languages. This makes
+practical use of such models --in all languages except English-- very limited. Aiming to address this issue for French,
+we release CamemBERT, a French version of the Bi-directional Encoders for Transformers (BERT). We measure the
+performance of CamemBERT compared to multilingual models in multiple downstream tasks, namely part-of-speech tagging,
+dependency parsing, named-entity recognition, and natural language inference. CamemBERT improves the state of the art
+for most of the tasks considered. We release the pretrained model for CamemBERT hoping to foster research and
+downstream applications for French NLP.*
 
 Tips:
 
-- This implementation is the same as RoBERTa. Refer to the :doc:`documentation of RoBERTa <roberta>` for usage
-  examples as well as the information relative to the inputs and outputs.
+- This implementation is the same as RoBERTa. Refer to the :doc:`documentation of RoBERTa <roberta>` for usage examples
+  as well as the information relative to the inputs and outputs.
 
 The original code can be found `here <https://camembert-model.fr/>`__.
 
