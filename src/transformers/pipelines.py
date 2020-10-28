@@ -2734,12 +2734,17 @@ def pipeline(
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default configuration file for the requested model will be used. That means that if
+            :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
+            this :obj:`task`'s default model's config is used instead.
         tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default tokenizer for the given :obj:`model` will be loaded (if it is a string). If
+            :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
+            it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
+            for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
