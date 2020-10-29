@@ -150,9 +150,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     else:
         # XXX This error message needs to be updated to be more generic if more tasks are going to become
         # parametrized
-        raise ValueError(
-            'The task defaults can\'t be correctly selectionned. You probably meant "translation_XX_to_YY"'
-        )
+        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_XX_to_YY"')
 
     if framework is None:
         framework = "pt"
@@ -695,7 +693,7 @@ class Pipeline(_ScikitCompat):
         Internal framework specific forward dispatching
 
         Args:
-            inputs: dict holding all the keyworded arguments for required by the model forward method.
+            inputs: dict holding all the keyword arguments for required by the model forward method.
             return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
 
         Returns:
