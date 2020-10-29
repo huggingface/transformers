@@ -40,7 +40,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Languaged modeling loss.
+            Language modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
@@ -413,7 +413,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
             Used by the (:class:`~transformers.RagModel`) model during decoding.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for generation tasks. `None` by default, constuct as per instructions for the generator model
+            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
             you're using with your RAG instance.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size,  target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
@@ -424,7 +424,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values` are used in the (:class:`~transformers.RagTokenForGeneration`) model during
             decoding.
         doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-            Score between each retrieved document embeddigs (see :obj:`retrieved_doc_embeds`) and
+            Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
             :obj:`question_encoder_last_hidden_state`. If the model has is not initialized with a ``retriever``
             :obj:`doc_scores` has to be provided to the forward pass. :obj:`doc_scores` can be computed via
             :obj:`question_encoder_last_hidden_state` and :obj:`retrieved_doc_embeds`, see examples for more
@@ -660,7 +660,7 @@ class RagModel(RagPreTrainedModel):
 
 @add_start_docstrings_to_model_forward(
     """
-    A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass.
+    A RAG-sequence model implementation. It performs RAG-sequence specific marginalization in the forward pass.
     """,
     RAG_START_DOCSTRING,
 )
@@ -736,7 +736,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> input_ids = input_dict["input_ids"]
             >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
 
-            >>> # or use retriever seperately
+            >>> # or use retriever separately
             >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", use_dummy_dataset=True)
             >>> # 1. Encode
             >>> question_hidden_states = model.question_encoder(input_ids)[0]
@@ -940,13 +940,13 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         )  # batch_size x n_docs x tgt_len x dim
         doc_logprobs = torch.nn.functional.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
 
-        # RAG-sequence marginaliation
+        # RAG-sequence marginalization
         first_token_scores = seq_logprobs[:, :, :1, :]
         second_token_scores = seq_logprobs[:, :, 1:2, :]
         remainder = seq_logprobs[:, :, 2:, :]
         rag_logprobs = torch.cat([first_token_scores, second_token_scores + doc_logprobs, remainder], dim=2)
 
-        # calcualate loss
+        # calculate loss
         target = target.unsqueeze(1).unsqueeze(-1).repeat(1, n_docs, 1, 1)
         assert target.dim() == rag_logprobs.dim()
 
@@ -986,7 +986,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
 @add_start_docstrings_to_model_forward(
     """
-    A RAG-token model impementation. It performs RAG-token specific marginalization in the forward pass.
+    A RAG-token model implementation. It performs RAG-token specific marginalization in the forward pass.
     """,
     RAG_START_DOCSTRING,
 )
@@ -1129,7 +1129,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             >>> input_ids = input_dict["input_ids"]
             >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
 
-            >>> # or use retriever seperately
+            >>> # or use retriever separately
             >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", use_dummy_dataset=True)
             >>> # 1. Encode
             >>> question_hidden_states = model.question_encoder(input_ids)[0]
@@ -1257,7 +1257,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 to the forward pass. :obj:`context_input_ids` are returned by
                 :meth:`~transformers.RagRetriever.__call__`.
             doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-                Score between each retrieved document embeddigs (see :obj:`retrieved_doc_embeds`) and
+                Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
                 :obj:`question_encoder_last_hidden_state`.
 
                 If the model has is not initialized with a ``retriever``, :obj:`context_input_ids` has to be provided

@@ -549,7 +549,7 @@ GPT2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare GPT2 Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT2_START_DOCSTRING,
 )
 class TFGPT2Model(TFGPT2PreTrainedModel):

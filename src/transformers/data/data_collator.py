@@ -330,7 +330,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
         input_ids, labels, attention_mask = self.mask_tokens(input_ids)
 
         token_type_ids = [example["token_type_ids"] for example in examples]
-        # size of segment_ids varied because randomness, padding zero to the end as the orignal implementation
+        # size of segment_ids varied because randomness, padding zero to the end as the original implementation
         token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
         sop_label_list = [example["sentence_order_label"] for example in examples]

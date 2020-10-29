@@ -332,7 +332,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
                 - **x** (Tensor): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
 
                 - **encoder_states** (List[Tensor]): all intermediate hidden states of shape `(src_len, batch,
-                  embed_dim)`. Only populated if *return_all_hiddens* is True.
+                  embed_dim)`. Only populated if *output_hidden_states* is True.
                 - **all_attentions** (List[Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """

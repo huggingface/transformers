@@ -77,7 +77,7 @@ class TransfoXLConfig(PretrainedConfig):
         adaptive (:obj:`boolean`, `optional`, defaults to :obj:`True`):
             Whether or not to use adaptive softmax.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         dropatt (:obj:`float`, `optional`, defaults to 0):
             The dropout ratio for the attention probabilities.
         untie_r (:obj:`boolean`, `optional`, defaults to :obj:`True`):

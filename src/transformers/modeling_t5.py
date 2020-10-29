@@ -44,7 +44,7 @@ _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 ####################################################
-# This dict contrains shortcut names and associated url
+# This dict contains shortcut names and associated url
 # for the pretrained weights provided with the models
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -156,7 +156,7 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Construct a layernorm module in the T5 style No bias and no substraction of mean.
+        Construct a layernorm module in the T5 style No bias and no subtraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -256,7 +256,7 @@ class T5Attention(nn.Module):
             relative_position: an int32 Tensor
             bidirectional: a boolean - whether the attention is bidirectional
             num_buckets: an integer
-            max_distance: an intege
+            max_distance: an integer
 
         Returns:
             a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
@@ -705,7 +705,7 @@ class T5Stack(T5PreTrainedModel):
             raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape

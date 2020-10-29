@@ -118,9 +118,9 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         Returns: tf.Tensor
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
-        incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
+        incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
-        return incremental_indicies + self.padding_idx
+        return incremental_indices + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
@@ -709,7 +709,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RoBERTa Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaModel(TFRobertaPreTrainedModel):

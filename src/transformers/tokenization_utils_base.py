@@ -14,7 +14,7 @@
 # limitations under the License.
 """
 Base classes common to both the slow and the fast tokenization classes: PreTrainedTokenizerBase (host all the user
-fronting encoding methodes) Special token mixing (host the special tokens logic) and BatchEncoding (wrap the dictionary
+fronting encoding methods) Special token mixing (host the special tokens logic) and BatchEncoding (wrap the dictionary
 of output with special method for the Fast tokenizers)
 """
 
@@ -537,10 +537,10 @@ class BatchEncoding(UserDict):
         Args:
             batch_or_char_index (:obj:`int`):
                 Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
-                the character in the orginal string.
+                the character in the original string.
             char_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index of the character in the
-                orginal string.
+                original string.
 
 
         Returns:
@@ -607,7 +607,7 @@ class BatchEncoding(UserDict):
 
                 tensor = as_tensor(value)
 
-                # Removing this for now in favor of controling the shape with `prepend_batch_axis`
+                # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
                 # # at-least2d
                 # if tensor.ndim > 2:
                 #     tensor = tensor.squeeze(0)
@@ -648,7 +648,7 @@ class SpecialTokensMixin:
     """
     A mixin derived by :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast` to
     handle specific behaviors related to special tokens. In particular, this class hold the attributes which can be
-    used to directly access these special tokens in a model-independant manner and allow to set and update the special
+    used to directly access these special tokens in a model-independent manner and allow to set and update the special
     tokens.
 
     Args:
@@ -696,8 +696,8 @@ class SpecialTokensMixin:
         self.verbose = verbose
 
         # We directly set the hidden value to allow initialization with special tokens
-        # which are not yet in the vocabulary. Necesssary for serialization/de-serialization
-        # TODO clean this up at some point (probably by sitching to fast tokenizers)
+        # which are not yet in the vocabulary. Necessary for serialization/de-serialization
+        # TODO clean this up at some point (probably by switching to fast tokenizers)
         for key, value in kwargs.items():
             if value is None:
                 continue
@@ -721,7 +721,7 @@ class SpecialTokensMixin:
         Add the missing ones to the vocabulary if needed.
 
         Return:
-            :obj:`int`: The number of tokens added in the vocaulary during the operation.
+            :obj:`int`: The number of tokens added in the vocabulary during the operation.
         """
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
@@ -805,7 +805,7 @@ class SpecialTokensMixin:
                 string token to let you personalize its behavior: whether this token should only match against a single
                 word, whether this token should strip all potential whitespaces on the left side, whether this token
                 should strip all potential whitespaces on the right side, etc.
-            special_token (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Can be used to specify if the token is a special token. This mostly change the normalization behavior
                 (special tokens like CLS or [MASK] are usually not lower-cased for instance).
 
@@ -1799,7 +1799,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
            modifying :obj:`tokenizer.do_lower_case` after creation).
 
         Args:
-            save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
+            save_directory (:obj:`str`): The path to a directory where the tokenizer will be saved.
             legacy_format (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether to save the tokenizer in legacy format (default), i.e. with tokenizer specific vocabulary and a
                 separate added_tokens files or in the unified JSON file format for the `tokenizers` library. It's only
@@ -2006,15 +2006,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If you only set max_length, it activates truncation for max_length
         if max_length is not None and padding is False and truncation is False:
             if verbose:
-                if not self.deprecation_warnings.get("Truncation-not-explicitely-activated", False):
+                if not self.deprecation_warnings.get("Truncation-not-explicitly-activated", False):
                     logger.warning(
-                        "Truncation was not explicitely activated but `max_length` is provided a specific value, "
-                        "please use `truncation=True` to explicitely truncate examples to max length. "
+                        "Truncation was not explicitly activated but `max_length` is provided a specific value, "
+                        "please use `truncation=True` to explicitly truncate examples to max length. "
                         "Defaulting to 'longest_first' truncation strategy. "
                         "If you encode pairs of sequences (GLUE-style) with the tokenizer you can select this strategy "
                         "more precisely by providing a specific strategy to `truncation`."
                     )
-                self.deprecation_warnings["Truncation-not-explicitely-activated"] = True
+                self.deprecation_warnings["Truncation-not-explicitly-activated"] = True
             truncation = "longest_first"
 
         # Get padding strategy
@@ -2591,7 +2591,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Create the token type IDs corresponding to the sequences passed. `What are token type IDs?
         <../glossary.html#token-type-ids>`__
 
-        Should be overriden in a subclass if the model has a special way of building those.
+        Should be overridden in a subclass if the model has a special way of building those.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
@@ -2611,7 +2611,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens.
 
-        This implementation does not add special tokens and this method should be overriden in a subclass.
+        This implementation does not add special tokens and this method should be overridden in a subclass.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
@@ -2783,7 +2783,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 and ``convert_tokens_to_ids`` methods.
             num_tokens_to_remove (:obj:`int`, `optional`, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation (:obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation_strategy (:obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
                 The strategy to follow for truncation. Can be:
 
                 * :obj:`'longest_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
@@ -2798,12 +2798,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
                   greater than the model maximum admissible input size).
-            max_length (:obj:`int`, `optional`):
-                Controls the maximum length to use by one of the truncation/padding parameters.
-
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
             stride (:obj:`int`, `optional`, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
@@ -2871,7 +2865,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
-        Pad encoded inputs (on left/right and up to predefined legnth or max length in the batch)
+        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
             encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
@@ -3037,7 +3031,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -3058,7 +3052,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
 
         Args:
             out_string (:obj:`str`): The text to clean up.

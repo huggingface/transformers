@@ -327,7 +327,7 @@ def squad_convert_examples_to_features(
         padding_strategy: Default to "max_length". Which padding strategy to use
         return_dataset: Default False. Either 'pt' or 'tf'.
             if 'pt': returns a torch.data.TensorDataset, if 'tf': returns a tf.data.Dataset
-        threads: multiple processing threadsa-smi
+        threads: multiple processing threads.
 
 
     Returns:
@@ -527,7 +527,7 @@ def squad_convert_examples_to_features(
 
 class SquadProcessor(DataProcessor):
     """
-    Processor for the SQuAD data set. Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
+    Processor for the SQuAD data set. overridden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
     version 2.0 of SQuAD, respectively.
     """
 

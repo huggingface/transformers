@@ -431,7 +431,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(
                 map(
