@@ -520,7 +520,7 @@ class DataCollatorForPermutationLanguageModeling:
                 perm_index.reshape((labels.size(1), 1)) <= perm_index.reshape((1, labels.size(1)))
             ) & masked_indices[i]
 
-        return inputs, perm_mask, target_mapping, labels
+        return inputs.long(), perm_mask, target_mapping, labels.long()
 
 
 @dataclass
