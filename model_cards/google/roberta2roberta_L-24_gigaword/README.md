@@ -3,6 +3,8 @@ language: en
 license: apache-2.0
 datasets:
 - gigaword
+tags:
+- summarization
 ---
 
 # Roberta2Roberta_L-24_gigaword EncoderDecoder model

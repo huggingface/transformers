@@ -3,6 +3,8 @@ language: en
 license: apache-2.0
 datasets:
 - cnn_dailymail
+tags:
+- summarization
 ---
 
 # Roberta2Roberta_L-24_cnn_daily_mail EncoderDecoder model
