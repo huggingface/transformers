@@ -11,7 +11,7 @@ This model is a fine-tuned on Spanish [CONLL CORPORA](https://www.kaggle.com/nlt
 
 - [Dataset:  CONLL Corpora ES](https://www.kaggle.com/nltkdata/conll-corpora) with data augmentation techniques
 
-I preprocessed the dataset and splitted it as train / dev (80/20)
+I preprocessed the dataset and split it as train / dev (80/20)
 
 | Dataset                | # Examples |
 | ---------------------- | ----- |

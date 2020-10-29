@@ -1226,7 +1226,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Funnel Transfprmer Model with a sequence classification/regression head on top (two linear layer on top of the
+    Funnel Transformer Model with a sequence classification/regression head on top (two linear layer on top of the
     first timestep of the last hidden state) e.g. for GLUE tasks.
     """,
     FUNNEL_START_DOCSTRING,

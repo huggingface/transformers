@@ -109,7 +109,7 @@ for batch in train_data:
     loss.backward()
     optimizer.step()
 
-### In 🤗 Transformers, optimizer and schedules are splitted and instantiated like this:
+### In 🤗 Transformers, optimizer and schedules are split and instantiated like this:
 optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
 scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)  # PyTorch scheduler
 ### and used like this:
