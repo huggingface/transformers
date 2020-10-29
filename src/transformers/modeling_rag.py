@@ -15,7 +15,7 @@
 """RAG model implementation."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import torch
 
@@ -891,10 +891,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 index * self.config.n_docs : (index + 1) * self.config.n_docs
             ]  # (n_docs, max_len)
 
-            output_sequences = self.generator.generate(
-                generator_input_ids,
-                **kwargs,
-            )  # n_docs * n_beam, tgt_len
+            output_sequences = self.generator.generate(generator_input_ids, **kwargs,)  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication, max_output_len
                 output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
