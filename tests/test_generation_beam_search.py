@@ -23,6 +23,8 @@ from .test_modeling_common import floats_tensor, ids_tensor
 
 
 if is_torch_available():
+    import torch
+
     from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer
 
 
@@ -140,13 +142,35 @@ class BeamSearchTester:
         beam_scorer = self.prepare_beam_scorer()
 
         tokens = next_tokens.clone()
-        tokens[: self.num_beams // 2, 0] = self.eos_token_id
-        tokens[self.num_beams // 2 :, 1] = self.eos_token_id
+        tokens[:, 1] = self.eos_token_id
         output_scores, output_tokens, output_indices = beam_scorer.update_beams(
             input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id
         )
 
+        def cut_expected_tensor(tensor):
+            return torch.cat([tensor[:, :1], tensor[:, 2 : self.num_beams + 1]], dim=1).flatten()
+
         # check all outptus
+        # cut out id of eos token and take best `num_beams` outputs
+        expected_output_tokens = cut_expected_tensor(tokens)
+        expected_output_scores = cut_expected_tensor(next_scores)
+
+        # add num_beams * batch_idx
+        expected_output_indices = (
+            cut_expected_tensor(next_indices)
+            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams
+        )
+
+        self.parent.assertListEqual(expected_output_tokens.tolist(), output_tokens.tolist())
+        self.parent.assertListEqual(expected_output_indices.tolist(), output_indices.tolist())
+        self.parent.assertTrue(torch.allclose(expected_output_scores, output_scores, atol=1e-3))
+
+        # make sure ids of eos token are correctly saved in beam_hyps of beam scorer
+        for batch_idx in range(self.batch_size):
+            correct_idx = batch_idx * self.num_beams + next_indices[batch_idx, 1]
+            self.parent.assertListEqual(
+                input_ids[correct_idx].tolist(), beam_scorer._beam_hyps[batch_idx].beams[0][-1].tolist()
+            )
 
 
 @require_torch
