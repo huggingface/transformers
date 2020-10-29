@@ -105,7 +105,7 @@ class DataTrainingArguments:
     )
     chinese_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input ref data file for whole word mask in Chinees."},
+        metadata={"help": "An optional input ref data file for whole word mask in Chinese."},
     )
     line_by_line: bool = field(
         default=False,
