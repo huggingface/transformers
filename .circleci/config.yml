@@ -320,9 +320,9 @@ jobs:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: black --check examples templates tests src utils
-            - run: isort --check-only examples templates tests src utils
-            - run: flake8 examples templates tests src utils
+            - run: black --check examples tests src utils
+            - run: isort --check-only examples tests src utils
+            - run: flake8 examples tests src utils
             - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
             - run: python utils/check_copies.py
             - run: python utils/check_dummies.py
