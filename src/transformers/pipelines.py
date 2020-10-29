@@ -2669,8 +2669,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - :obj:`"conversational"`
 
     Returns:
-        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize
-        the pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
+        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
+        pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
