@@ -1,3 +1,6 @@
+---
+language: tr
+---
 # Turkish News Text Classification
 
     Turkish text classification model obtained by fine-tuning the Turkish bert model (dbmdz/bert-base-turkish-cased)
