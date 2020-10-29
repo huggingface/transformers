@@ -79,7 +79,7 @@ RETRIBERT_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """Bert Based model to embed queries or document for document retreival. """,
+    """Bert Based model to embed queries or document for document retrieval. """,
     RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
@@ -117,7 +117,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
                 attention_mask, input_shape, device
             )
 
-            # define function for cehckpointing
+            # define function for checkpointing
             def partial_encode(*inputs):
                 encoder_outputs = sent_encoder.encoder(
                     inputs[0],
@@ -200,7 +200,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
 
         Return:
             :obj:`torch.FloatTensor`: The bidirectional cross-entropy loss obtained while trying to match each query to
-            its corresponding document and each cocument to its corresponding query in the batch
+            its corresponding document and each document to its corresponding query in the batch
         """
         device = input_ids_query.device
         q_reps = self.embed_questions(input_ids_query, attention_mask_query, checkpoint_batch_size)

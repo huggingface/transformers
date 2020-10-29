@@ -402,7 +402,7 @@ class TrainingArguments:
             n_gpu = torch.cuda.device_count()
         else:
             # Here, we'll use torch.distributed.
-            # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+            # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             n_gpu = 1

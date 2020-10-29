@@ -366,7 +366,7 @@ XLM_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`__
         lengths (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatbility. Indices selected in
+            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
             ``[0, ..., input_ids.size(-1)]``.
         cache (:obj:`Dict[str, torch.FloatTensor]`, `optional`):
             Dictionary string to ``torch.FloatTensor`` that contains precomputed hidden states (key and values in the

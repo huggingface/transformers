@@ -61,7 +61,7 @@ class DistilBertConfig(PretrainedConfig):
         hidden_dim (:obj:`int`, `optional`, defaults to 3072):
             The size of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):

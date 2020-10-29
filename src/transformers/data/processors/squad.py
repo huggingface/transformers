@@ -327,7 +327,7 @@ def squad_convert_examples_to_features(
         padding_strategy: Default to "max_length". Which padding strategy to use
         return_dataset: Default False. Either 'pt' or 'tf'.
             if 'pt': returns a torch.data.TensorDataset, if 'tf': returns a tf.data.Dataset
-        threads: multiple processing threadsa-smi
+        threads: multiple processing threads.
 
 
     Returns:

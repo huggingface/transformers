@@ -290,7 +290,7 @@ class Transformer(nn.Module):
             attn_mask: torch.tensor(bs, seq_length) Attention mask on the sequence.
 
         Returns:
-            hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hiddens states in the last (top)
+            hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hidden states in the last (top)
             layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True

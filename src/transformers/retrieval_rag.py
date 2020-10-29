@@ -465,8 +465,6 @@ class RagRetriever:
         Postprocessing retrieved ``docs`` and combining them with ``input_strings``.
 
         Args:
-            doc_scores (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`):
-                Retrieval scores of respective docs - passed for logging.
             docs  (:obj:`dict`):
                 Retrieved documents.
             input_strings (:obj:`str`):

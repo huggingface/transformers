@@ -1524,8 +1524,6 @@ class Trainer:
         method in the model or subclass and override this method.
 
         Args:
-            model (:obj:`nn.Module`):
-                The model to evaluate.
             inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
