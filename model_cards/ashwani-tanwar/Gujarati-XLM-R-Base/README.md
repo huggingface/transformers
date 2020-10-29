@@ -1,4 +1,9 @@
+---
+language: gu
+---
+
 # Gujarati-XLM-R-Base
+
 
 This model is finetuned over [XLM-RoBERTa](https://huggingface.co/xlm-roberta-base) (XLM-R) using its base variant with the Gujarati language using the [OSCAR](https://oscar-corpus.com/) monolingual dataset. We used the same masked language modelling (MLM) objective which was used for pretraining the XLM-R. As it is built over the pretrained XLM-R, we leveraged *Transfer Learning* by exploiting the knowledge from its parent model.
 
