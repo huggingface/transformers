@@ -732,7 +732,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separatly for added tokens and byte-level tokens
+        # we need to build string separately for added tokens and byte-level tokens
         # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []
