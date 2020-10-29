@@ -39,8 +39,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
 
     Peculiarities:
 
-    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of a
-      punctuation character will be treated separately.
+    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of
+      a punctuation character will be treated separately.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.

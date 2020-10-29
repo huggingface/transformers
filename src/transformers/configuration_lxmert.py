@@ -95,8 +95,7 @@ class LxmertConfig(PretrainedConfig):
             Whether or not to add masked language modeling (as used in pretraining models such as BERT) to the loss
             objective.
         task_obj_predict (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to add object prediction, attribute ppredictionand feature regression to the loss
-            objective.
+            Whether or not to add object prediction, attribute ppredictionand feature regression to the loss objective.
         task_qa (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to add the question-asansweringoss to the objective
         visual_obj_loss (:obj:`bool`, `optional`, defaults to :obj:`True`):
