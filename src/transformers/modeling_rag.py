@@ -1207,6 +1207,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         bad_words_ids=None,
         num_return_sequences=None,
         decoder_start_token_id=None,
+        prefix_allowed_tokens_fn: Optional[Callable] = None,
         **kwargs
     ):
         """
@@ -1278,6 +1279,13 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 function, where we set ``num_return_sequences`` to :obj:`num_beams`.
             decoder_start_token_id (:obj:`int`, `optional`):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
+            prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
+                If provided, it has to be a function that has as arguments :obj:`inputs_id`.
+                At each step of Beam Search, this function is called with the :obj:`inputs_id` containing the
+                previously generated tokens as a tensor of shape :obj:`(batch_size * num_beams)`:. This function has
+                to return a list of lists with the allowed BPE tokens at the next step (list of batches and list of beams).
+                This argument is useful for constrained generation conditioned on the prefix. If not provided no constrain
+                is applied.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
@@ -1397,6 +1405,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 vocab_size=vocab_size,
                 attention_mask=context_attention_mask,
                 use_cache=use_cache,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 model_kwargs=kwargs,
             )
         else:
@@ -1417,6 +1426,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 batch_size=batch_size,
                 attention_mask=context_attention_mask,
                 use_cache=use_cache,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 model_kwargs=kwargs,
             )
 
