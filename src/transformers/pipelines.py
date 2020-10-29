@@ -874,7 +874,7 @@ class TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1959,7 +1959,7 @@ class SummarizationPipeline(Pipeline):
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
@@ -2077,7 +2077,7 @@ class TranslationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Texts to be translated.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -2188,7 +2188,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Input text for the encoder.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
