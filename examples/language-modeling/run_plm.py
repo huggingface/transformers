@@ -28,22 +28,21 @@ from datasets import load_dataset
 
 import transformers
 from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
     AutoConfig,
-    XLNetConfig,
-    XLNetLMHeadModel,
     AutoTokenizer,
+    DataCollatorForPermutationLanguageModeling,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    DataCollatorForPermutationLanguageModeling,
+    XLNetConfig,
+    XLNetLMHeadModel,
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ModelArguments:
