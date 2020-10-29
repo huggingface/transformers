@@ -355,42 +355,143 @@ stas/wmt19-en-ru data/en-ru/val.source data/en-ru/test_translations.txt --refere
 If you pass `--info "some experiment-specific info"` it will get printed before the results table - this is useful for scripting and multiple runs, so one can tell the different sets of results from each other.
 
 
-### DistilBART
+# DistilBART
+
 This section describes all code and artifacts from our [Paper](http://arxiv.org/abs/2010.13002)
+<-It should be called distilling bart and pegasus, but I don't want to break the link in the paper.->
 ![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
 
-For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works, which we call "Shrink and Fine-tune".
-you just copy alternating layers from `bart-large-cnn` and finetune more on the same data.
++ For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works, which we call "Shrink and Fine-tune", or SFT.
+you just copy alternating layers from `facebook/bart-large-cnn` and fine-tune more on the cnn/dm data. `sshleifer/distill-pegasus-cnn-16-4`, `sshleifer/distilbart-cnn-12-6` and all other checkpoints under `sshleifer` that start with `distilbart-cnn` were trained this way. 
++ For the XSUM dataset, training on pseudo-labels worked best for Pegasus (`sshleifer/distill-pegasus-16-4`), while training with KD worked best for `distilbart-xsum-12-6`
++ For `sshleifer/dbart-xsum-12-3`
++ If you want a command to replicate a figure from the paper that is not documented below, feel free to ask on the [forums]() and tag `@sshleifer`. 
 
-For the XSUM dataset, that didn’t work as well so we used that same initialization strategy followed by a combination of Distillbert’s ce_loss and the hidden states MSE loss used in the tinybert paper.
+
 
 You can see the performance tradeoffs of model sizes [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=0).
 and more granular timing results [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=1753259047&range=B2:I23).
 
-#### No Teacher Distillation
-To run the simpler distilbart-cnn style distillation all you need is data, a GPU, and a properly initialized student.
-You don't even need `distillation.py`.
+### Evaluation Commands
 
-Some [un-finetuned students](https://huggingface.co/models?search=sshleifer%2Fstudent) are available for replication purposes.
-They are initialized by copying layers from the associated `bart-large-{cnn|xsum}` teacher using `--init_strategy alternate`. (You can read about that in `initialization_utils.py`)
-The command that produced `sshleifer/distilbart-cnn-12-6` is
+use [run_distributed_eval][./run_ditributed_eval.py], with the following convenient alias
+```bash
+deval () {
+	proc=$1
+	m=$2
+	dd=$3
+	sd=$4
+	shift
+	shift
+	shift
+	shift
+	python -m torch.distributed.launch --nproc_per_node=$proc  run_distributed_eval.py \
+		--model_name $m  --save_dir $sd --data_dir $dd $@
+}
+```
+On a 1 GPU system, here are four commands (that assume `xsum`, `cnn_dm` are downloaded (cmd-F for those links in this file).
+
+`distilBART`:
+```bash
+deval 1 sshleifer/distilbart-xsum-12-3 xsum dbart_12_3_xsum_eval --fp16 # --help for more choices.
+deval 1 sshleifer/distilbart-cnn_dm-12-6 cnn_dm dbart_12_6_cnn_eval --fp16
+```
+
+`distill-pegasus`:
+```bash
+deval 1 sshleifer/distill-pegasus-cnn-16-4 cnn_dm dpx_cnn_eval
+deval 1 sshleifer/distill-pegasus-xsum-16-4 xsum dpx_xsum_eval
+```
+
++ Note: For all of the following commands, you can get roughly equivalent result and faster run times by passing `--num_beams=4`. That's not what we did for the paper.
++ All commands will be faster with more GPUs
++ The results in the paper were aggregated over many months, so things maybe slower or slightly worse. Large performance deviations (> 5X slower or more than 0.5 Rouge-2 worse), should be reported. 
++ For Pegasus, reduce batch size, and increase gradient accumulation steps so that the product `gpus * batch size * gradient_accumulation_steps = 256`. We used `--learning-rate=1e-4 * gradient accumulation steps`
+
+
+
+### Distillation
+
+### Initialization
+We use [make_student.py](./make_student.py) to copy alternating layers from the teacher, and save the resulting model to disk
+```bash
+python make_student.py facebook/bart-large-xsum --save_path dbart_xsum_12_3  -e 12 -d 3
+```
+we now have an initialized student saved to  `dbart_xsum_12_3`, which we will use for the following commands.
+
+### SFT (No Teacher Distillation)
+You don't need `distillation.py`, you can just run:
+
+```bash
+python finetune.py \
+  --data_dir xsum \
+  --freeze_encoder --freeze_embeds \
+  --learning_rate=3e-4 \
+  --do_train \
+  --do_predict \
+  --fp16 --fp16_opt_level=O1 \
+  --val_check_interval 0.1 --n_val 1000 --eval_beams 2 --length_penalty=0.5 \
+  --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 \
+  --model_name_or_path dbart_xsum_12_3 \
+  --train_batch_size=64 --eval_batch_size=64 \
+  --sortish_sampler \
+  --num_train_epochs=6 \
+  --warmup_steps 500 \
+  --output_dir distilbart_xsum_sft_12_3 --gpus 1
+```
+
++ Note: The command that produced `sshleifer/distilbart-cnn-12-6` is at [train_distilbart_cnn.sh](./[train_distilbart_cnn.sh)
+
 ```bash
 ./train_distilbart_cnn.sh
 ```
 runtime: 6H on NVIDIA RTX 24GB GPU
-
-*Note*: You can get the same simple distillation logic by using `./run_distiller.sh --no_teacher` followed by identical arguments as the ones in `train_distilbart_cnn.sh`.
+<!---
++ Tip: You can get the same simple distillation logic by using `distillation.py --no_teacher ` followed by identical arguments as the ones in `train_distilbart_cnn.sh`.
 If you are using `wandb` and comparing the two distillation methods, using this entry point will make your logs consistent,
 because you will have the same hyperparameters logged in every run.
+-->
 
 ### Pseudo-Labeling
-You don't even need `distillation.py`.
-Instructions to generate pseudo-labels and use pre-computed pseudolabels can be found [here](./precomputed_pseudo_labels.md).
-Simply run `finetune.py` with one of those pseudo-label datasets as `--data_dir`.
++ You don't need `distillation.py`.
++ Instructions to generate pseudo-labels and use pre-computed pseudo-labels can be found [here](./precomputed_pseudo_labels.md).
+Simply run `finetune.py` with one of those pseudo-label datasets as `--data_dir` (`DATA`, below).
 
+```bash
+python finetune.py \
+  --teacher facebook/bart-large-xsum --data_dir DATA \
+  --freeze_encoder --freeze_embeds \
+  --learning_rate=3e-4 \
+  --do_train \
+  --do_predict \
+  --fp16 --fp16_opt_level=O1 \
+  --val_check_interval 0.1 --n_val 1000 --eval_beams 2 --length_penalty=0.5 \
+  --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 \
+  --model_name_or_path dbart_xsum_12_3 \
+  --train_batch_size=32 --eval_batch_size=32 \
+  --sortish_sampler \
+  --num_train_epochs=5 \
+  --warmup_steps 500 \
+  --output_dir dbart_xsum_12_3_PL --gpus 1 --logger_name wandb
+```
+
+ 
+
+To combine datasets, as in Section 6.2, try something like:
+```bash
+curl -S https://cdn-datasets.huggingface.co/pseudo/xsum/bart_xsum_pl.tgz | tar -xvz -C .
+curl -S https://cdn-datasets.huggingface.co/pseudo/xsum/pegasus_xsum.tgz | tar -xvz -C .
+curl -S https://cdn-datasets.huggingface.co/summarization/xsum.tar.gz | tar -xvz -C .
+mkdir all_pl
+cat bart_xsum_pl/train.source pegasus_xsum/train.source xsum/train.source > all_pl/train.source
+cat bart_xsum_pl/train.target pegasus_xsum/train.target xsum/train.target > all_pl/train.target
+cp xsum/val* all_pl
+cp xsum/test* all_pl
+```
+then use `all_pl` as DATA
 #### With a teacher (Direct KD)
-You do need `distillation.py`.
-*Note* only BART variants are supported
+
++ You do need [`distillation.py`](./distillation.py)
 
 In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `BartSummarizationDistiller`.
 This is how `sshleifer/distilbart-xsum*` checkpoints were produced.
@@ -443,7 +544,7 @@ python convert_pl_checkpoint_to_hf.py PATH_TO_CKPT  randomly_initialized_hf_mode
 Then either `run_eval` or `run_distributed_eval` with `save_dir/best_tfmr` (see previous sections)
 
 
-## Experimental Features 
+# Experimental Features 
 These features are harder to use and not always useful.
 
 ###  Dynamic Batch Size for MT
