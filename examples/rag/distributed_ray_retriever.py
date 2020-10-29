@@ -4,15 +4,16 @@ import random
 import ray
 
 from transformers import RagRetriever
+from transformers.retrieval_rag import LegacyIndex
 
 logger = logging.getLogger(__name__)
 
-@ray.remote
 class RayRetriever(RagRetriever):
     _init_retrieval = False
 
     def __init__(self):
         self.initialized = False
+        self.test = False
         # import pdb; pdb.set_trace()
         print("----------------------------------actor created")
         pass
@@ -21,19 +22,28 @@ class RayRetriever(RagRetriever):
              index):
         if not self.initialized:
             assert not self._init_retrieval
-            super().__init__(config,
+            super(RayRetriever, self).__init__(config,
                              question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer, index=index)
             self.initialized = True
 
     def init_retrieval(self):
+        assert not self.test
         print(
             "*******************************************************************************************initializing retrieval actor")
+        assert isinstance(self.index, LegacyIndex)
         self.index.init_index()
+        assert self.index is not None
+        self.test = True
+
+    def test_f(self):
+        return self.test
 
     def retrieve(self, question_hidden_states, n_docs):
         doc_ids, retrieved_doc_embeds = self._main_retrieve(
             question_hidden_states, n_docs)
-        return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
+        #return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(
+        # doc_ids)
+        return doc_ids, retrieved_doc_embeds
 
 class RagRayDistributedRetriever(RagRetriever):
     _init_retrieval = False
@@ -41,7 +51,7 @@ class RagRayDistributedRetriever(RagRetriever):
     def __init__(self, config, question_encoder_tokenizer,
                  generator_tokenizer, retrieval_workers, index=None):
         #import pdb; pdb.set_trace()
-        assert len(retrieval_workers) == 1
+        #assert len(retrieval_workers) == 1
         super().__init__(
             config, question_encoder_tokenizer=question_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer, index=index
@@ -61,10 +71,15 @@ class RagRayDistributedRetriever(RagRetriever):
                  self.retrieval_workers])
 
     def retrieve(self, question_hidden_states, n_docs):
-        assert len(self.retrieval_workers) > 0
-        random_worker = random.randint(0, len(self.retrieval_workers)-1)
-        return ray.get(self.retrieval_workers[random_worker].retrieve.remote(
-            question_hidden_states, n_docs))
+        assert len(self.retrieval_workers) == 2
+        random_worker = self.retrieval_workers[random.randint(0,
+                                               len(self.retrieval_workers)-1)]
+        #assert ray.get(random_worker.test_f.remote())
+        # return ray.get(random_worker.retrieve.remote(
+        #     question_hidden_states, n_docs))
+        doc_ids, retrieved_doc_embeds = ray.get(
+            random_worker.retrieve.remote(question_hidden_states, n_docs))
+        return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
     @classmethod
     def get_tokenizers(cls, retriever_name_or_path,

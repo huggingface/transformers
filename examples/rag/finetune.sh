@@ -33,4 +33,5 @@ python finetune.py \
     --num_train_epochs 1 \
     --warmup_steps 500 \
     --gradient_accumulation_steps 1 \
-    --distributed_retriever ray
+    --distributed_retriever ray \
+    --num_retrieval_workers 2
