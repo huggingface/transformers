@@ -15,7 +15,7 @@ on:
 
 jobs:
   run_tests_torch_gpu:
-    runs-on: [self-hosted, gpu-tests]
+    runs-on: [self-hosted, single-gpu]
     steps:
       - uses: actions/checkout@v2
       - name: Python version
@@ -65,7 +65,7 @@ jobs:
           python -m pytest -n 2 --dist=loadfile -s ./tests/
 
   run_tests_tf_gpu:
-    runs-on: [self-hosted, gpu-tests]
+    runs-on: [self-hosted, single-gpu]
     steps:
       - uses: actions/checkout@v2
       - name: Python version
@@ -114,7 +114,7 @@ jobs:
           python -m pytest -n 2 --dist=loadfile -s ./tests/
 
   run_tests_torch_multiple_gpu:
-    runs-on: [self-hosted, multi-gpu-tests]
+    runs-on: [self-hosted, multi-gpu]
     steps:
       - uses: actions/checkout@v2
       - name: Python version
@@ -162,7 +162,7 @@ jobs:
           python -m pytest -n 2 --dist=loadfile -s ./tests/
 
   run_tests_tf_multiple_gpu:
-    runs-on: [self-hosted, multi-gpu-tests]
+    runs-on: [self-hosted, multi-gpu]
     steps:
       - uses: actions/checkout@v2
       - name: Python version

@@ -19,7 +19,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-slow_tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v0-slow_tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -46,6 +46,7 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
+          pip list
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -88,7 +89,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-slow_tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v0-slow_tests_tf_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -115,6 +116,7 @@ jobs:
           pip install --upgrade pip
           pip install .[tf,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
+          pip list
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -140,7 +142,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-slow_tests_tf_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v0-slow_tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -167,6 +169,7 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
+          pip list
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -201,7 +204,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0-slow_tests_tf_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v0-slow_tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -228,6 +231,7 @@ jobs:
           pip install --upgrade pip
           pip install .[tf,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
+          pip list
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
