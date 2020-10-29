@@ -1,7 +1,7 @@
 .PHONY: modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
 
-check_dirs := examples templates tests src utils
+check_dirs := examples tests src utils
 
 # get modified files since the branch was made
 fork_point_sha := $(shell git merge-base --fork-point master)
