@@ -739,7 +739,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Albert Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare Albert Model transformer outputting raw hidden-states without any specific head on top.",
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertModel(TFAlbertPreTrainedModel):

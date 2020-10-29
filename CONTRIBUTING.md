@@ -96,7 +96,7 @@ folder.
 
 ## Start contributing! (Pull Requests)
 
-Before writing code, we strongly advise you to search through the exising PRs or
+Before writing code, we strongly advise you to search through the existing PRs or
 issues to make sure that nobody is already working on the same thing. If you are
 unsure, it is always a good idea to open an issue to get some feedback.
 
@@ -235,7 +235,7 @@ Follow these steps to start contributing:
 ### Checklist
 
 1. The title of your pull request should be a summary of its contribution;
-2. If your pull request adresses an issue, please mention the issue number in
+2. If your pull request addresses an issue, please mention the issue number in
    the pull request description to make sure they are linked (and people
    consulting the issue know you are working on it);
 3. To indicate a work in progress please prefix the title with `[WIP]`. These

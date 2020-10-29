@@ -39,8 +39,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
 
     Peculiarities:
 
-    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurence of a
-      punctuation character will be treated separately.
+    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of
+      a punctuation character will be treated separately.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -122,7 +122,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
