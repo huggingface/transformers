@@ -216,7 +216,7 @@ class TFGenerationMixin:
         )
 
         if input_ids is not None:
-            batch_size = shape_list(input_ids)[0]  # overriden by the input batch_size
+            batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
         else:
             batch_size = 1
 

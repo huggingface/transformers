@@ -2591,7 +2591,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Create the token type IDs corresponding to the sequences passed. `What are token type IDs?
         <../glossary.html#token-type-ids>`__
 
-        Should be overriden in a subclass if the model has a special way of building those.
+        Should be overridden in a subclass if the model has a special way of building those.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
@@ -2611,7 +2611,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens.
 
-        This implementation does not add special tokens and this method should be overriden in a subclass.
+        This implementation does not add special tokens and this method should be overridden in a subclass.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.

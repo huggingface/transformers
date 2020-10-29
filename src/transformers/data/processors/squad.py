@@ -527,7 +527,7 @@ def squad_convert_examples_to_features(
 
 class SquadProcessor(DataProcessor):
     """
-    Processor for the SQuAD data set. Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
+    Processor for the SQuAD data set. overridden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
     version 2.0 of SQuAD, respectively.
     """
 
