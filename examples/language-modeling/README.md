@@ -76,16 +76,17 @@ So we need a ref file to tell model which pos of BERT original token should be a
 **A :** Cause the best known Chinese WWM BERT is [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm) by HIT. It works well on so many Chines Task like CLUE (Chinese GLUE).
 They use LTP, so if we want to fine-tune their model, we need LTP.
 
-Now LTP only works well on `transformers==3.2.0`. So we don't add it to requirements.txt.
+Now LTP only only works well on `transformers==3.2.0`. So we don't add it to requirements.txt.
+You need to check to `3.2.0` for `run_chinese_ref.py`. And the code  could be found in `examples/contrib`.
 
-You have to run `chinese_ref.py` on older version, but `run_language_modeling.py` on newest version. 
+
 ```bash
 export TRAIN_FILE=/path/to/dataset/wiki.train.raw
 export LTP_RESOURCE=/path/to/ltp/tokenizer
 export BERT_RESOURCE=/path/to/bert/tokenizer
 export SAVE_PATH=/path/to/data/ref.txt
 
-python chinese_ref.py \
+python examples/contrib/run_chinese_ref.py \
     --file_name=$TRAIN_FILE \
     --ltp=$LTP_RESOURCE \
     --bert=$BERT_RESOURCE \
