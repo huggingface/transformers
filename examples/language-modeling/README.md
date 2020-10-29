@@ -63,7 +63,7 @@ python run_language_modeling.py \
     --whole_word_mask
 ```
 
-For Chinese models, it's same with English model with only `--mlm`. If using whole-word masking, we need to generate a reference files, cause it's char level.
+For Chinese models, it's same with English model with only `--mlm`. If using whole-word masking, we need to generate a reference files, because it's char level.
 
 **Q :** Why ref file ?
 
