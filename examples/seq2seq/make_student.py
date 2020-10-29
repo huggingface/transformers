@@ -30,6 +30,7 @@ LAYERS_TO_COPY = {
         9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
         12: list(range(12)),
     },
+    4: {3: [0, 1, 3], 2: [0, 3]},
     16: {  # maps  num layers in student -> which teacher layers to copy
         1: [0],
         2: [0, 15],
@@ -85,7 +86,9 @@ def create_student_by_copying_alternating_layers(
     d_layers_to_copy=None,
     **extra_config_kwargs
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
-    """Make a student by copying alternating layers from a teacher, save it to save_path.
+    """
+    Make a student by copying alternating layers from a teacher, save it to save_path
+
     Args:
         teacher: str or PreTrainedModel if str, this will call AutoModelForSeq2SeqLM.from_pretrained(teacher) before
         copying layers
@@ -96,9 +99,8 @@ def create_student_by_copying_alternating_layers(
         **extra_config_kwargs: extra kwargs to pass to the student, by default the teacher config is used.
 
     Returns:
-        student: new, smaller model.  (Also saves it to save_path)
-        e_layers_to_copy: list of which teacher encoder layers were used
-        d_layers_to_copy: list of which teacher decoder layers were used
+        student: new, smaller model. (Also saves it to save_path) e_layers_to_copy: list of which teacher encoder
+        layers were used d_layers_to_copy: list of which teacher decoder layers were used
     """
     _msg = "encoder_layers and decoder_layers cannot be both None-- you would just have an identical teacher."
     assert (e is not None) or (d is not None), _msg
