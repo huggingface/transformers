@@ -22,6 +22,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -853,7 +854,7 @@ class ProphetNetStandaloneEncoderModelTester:
 
 
 @require_torch
-class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
+class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
@@ -917,7 +918,7 @@ class ProphetNetModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
+class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetDecoder, ProphetNetForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (ProphetNetForCausalLM,) if is_torch_available() else ()
     test_pruning = False

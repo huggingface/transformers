@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -267,7 +268,7 @@ class RobertaModelTester:
 
 
 @require_torch
-class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
+class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -282,6 +283,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = RobertaModelTester(self)
