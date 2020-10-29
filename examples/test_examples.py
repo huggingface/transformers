@@ -147,7 +147,6 @@ class ExamplesTests(TestCasePlus):
             --num_train_epochs 2
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --prediction_loss_only
             """.split()
 
         if torch.cuda.device_count() > 1:

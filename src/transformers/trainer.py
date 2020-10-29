@@ -1300,7 +1300,13 @@ class Trainer:
 
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
-        output = self.prediction_loop(eval_dataloader, description="Evaluation")
+        output = self.prediction_loop(
+            eval_dataloader,
+            description="Evaluation",
+            # No point gathering the predictions if there are no metrics, otherwise we defer to
+            # self.args.prediction_loss_only
+            prediction_loss_only=True if self.compute_metrics is None else None,
+        )
 
         self.log(output.metrics)
 
@@ -1382,8 +1388,9 @@ class Trainer:
         world_size = max(1, world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
-        preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
-        labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
+        if not prediction_loss_only:
+            preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
+            labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
 
         model.eval()
 
@@ -1409,8 +1416,9 @@ class Trainer:
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
             if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-                preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-                labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+                if not prediction_loss_only:
+                    preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+                    labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
@@ -1421,12 +1429,13 @@ class Trainer:
 
         # Gather all remaining tensors and put them back on the CPU
         eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-        preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-        labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+        if not prediction_loss_only:
+            preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+            labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
         eval_loss = eval_losses_gatherer.finalize()
-        preds = preds_gatherer.finalize()
-        label_ids = labels_gatherer.finalize()
+        preds = preds_gatherer.finalize() if not prediction_loss_only else None
+        label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
