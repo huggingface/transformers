@@ -849,7 +849,7 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
-            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout)),
+            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:")),
             _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:")),
         ],
         timeout=timeout,
@@ -869,7 +869,10 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(
             f"'{cmd_str}' failed with returncode {result.returncode} - see the `stderr:` messages from above for details."
         )
-    if not result.stdout:
+
+    # check that the subprocess actually did run and produced some output, should the test rely on
+    # the remote side to do the testing
+    if not result.stdout and not result.stderr:
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
