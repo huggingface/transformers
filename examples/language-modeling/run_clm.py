@@ -18,7 +18,7 @@ Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, .
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=causal-lm
 """
-# You can also adapt this script on your own text classification task. Pointers for this are left as comments.
+# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
 import logging
 import math
@@ -325,7 +325,7 @@ def main():
         perplexity = math.exp(eval_output["eval_loss"])
         results["perplexity"] = perplexity
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_lm.txt")
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results_clm.txt")
         if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Eval results *****")

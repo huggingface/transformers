@@ -30,7 +30,7 @@ RAG_CONFIG_DOC = r"""
             Separator inserted between the title and the text of the retrieved document when calling
             :class:`~transformers.RagRetriever`.
         doc_sep (:obj:`str`, `optional`, defaults to  ``" // "``):
-            Separator inserted between the the text of the retrieved document and the original input when calliang
+            Separator inserted between the the text of the retrieved document and the original input when calling
             :class:`~transformers.RagRetriever`.
         n_docs (:obj:`int`, `optional`, defaults to 5):
             Number of documents to retrieve.
@@ -39,7 +39,7 @@ RAG_CONFIG_DOC = r"""
         retrieval_vector_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the document embeddings indexed by :class:`~transformers.RagRetriever`.
         retrieval_batch_size (:obj:`int`, `optional`, defaults to 8):
-            Retrieval batch size, defined as the number of queries issues concurrently to the faiss index excapsulated
+            Retrieval batch size, defined as the number of queries issues concurrently to the faiss index encapsulated
             :class:`~transformers.RagRetriever`.
         dataset (:obj:`str`, `optional`, defaults to :obj:`"wiki_dpr"`):
             A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and ids

@@ -58,7 +58,7 @@ class GeLU(nn.Module):
 @dataclass
 class LxmertModelOutput(ModelOutput):
     """
-    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilites for the language,
+    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilities for the language,
     visual, and, cross-modality encoders. (note: the visual encoder in Lxmert is referred to as the "relation-ship"
     encoder")
 
@@ -405,7 +405,7 @@ class LxmertSelfAttentionLayer(nn.Module):
         self.output = LxmertAttentionOutput(config)
 
     def forward(self, input_tensor, attention_mask, output_attentions=False):
-        # Self attention attends to itself, thus keys and querys are the same (input_tensor).
+        # Self attention attends to itself, thus keys and queries are the same (input_tensor).
         output = self.self(
             input_tensor,
             input_tensor,
@@ -799,7 +799,7 @@ LXMERT_START_DOCSTRING = r"""
     <https://arxiv.org/abs/1908.07490>`__ by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pretrained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression, cross entropy loss for
-    question answering attribute prediction, and object tag predicition.
+    question answering attribute prediction, and object tag prediction.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -1076,12 +1076,10 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         will add newly initialized weights. Reducing the size will remove weights from the end
 
         Args:
-            cur_qa_logit_layer (:obj:`torch.nn.Linear`):
-                Old linear layer to be resized.
             num_labels (:obj:`int`, `optional`):
                 New number of labels in the linear layer weight matrix. Increasing the size will add newly initialized
                 weights at the end. Reducing the size will remove weights from the end. If not provided or :obj:`None`,
-                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model wihtout doing
+                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model without doing
                 anything.
 
         Return:
@@ -1298,12 +1296,10 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         will add newly initialized weights. Reducing the size will remove weights from the end
 
         Args:
-            cur_qa_logit_layer (:obj:`torch.nn.Linear`):
-                Old linear layer to be resized.
             num_labels (:obj:`int`, `optional`):
                 New number of labels in the linear layer weight matrix. Increasing the size will add newly initialized
                 weights at the end. Reducing the size will remove weights from the end. If not provided or :obj:`None`,
-                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model wihtout doing
+                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model without doing
                 anything.
 
         Return:

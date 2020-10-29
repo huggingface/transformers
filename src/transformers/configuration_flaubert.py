@@ -59,11 +59,11 @@ class FlaubertConfig(XLMConfig):
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for the attention mechanism
         gelu_activation (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to use a `gelu` actibation instead of `relu`.
+            Whether or not to use a `gelu` activation instead of `relu`.
         sinusoidal_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use sinusoidal positional embeddings instead of absolute positional embeddings.
         causal (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model shoul behave in a causal manner. Causal models use a triangular attention mask in
+            Whether or not the model should behave in a causal manner. Causal models use a triangular attention mask in
             order to only attend to the left-side context instead if a bidirectional context.
         asm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use an adaptive log softmax projection layer instead of a linear layer for the prediction

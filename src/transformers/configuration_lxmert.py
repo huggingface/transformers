@@ -57,7 +57,7 @@ class LxmertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
@@ -95,10 +95,9 @@ class LxmertConfig(PretrainedConfig):
             Whether or not to add masked language modeling (as used in pretraining models such as BERT) to the loss
             objective.
         task_obj_predict (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to add object predicition, attribute predicition and feature regression to the loss
-            objective.
+            Whether or not to add object prediction, attribute ppredictionand feature regression to the loss objective.
         task_qa (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to add the question-asnwering loss to the objective
+            Whether or not to add the question-asansweringoss to the objective
         visual_obj_loss (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to calculate the object-prediction loss objective
         visual_attr_loss (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -106,10 +105,10 @@ class LxmertConfig(PretrainedConfig):
         visual_feat_loss (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to calculate the feature-regression loss objective
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model should return the attentions from the vision, langauge, and cross-modality layers
+            Whether or not the model should return the attentions from the vision, language, and cross-modality layers
             should be returned.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model should return the hidden states from the vision, langauge, and cross-modality
+            Whether or not the model should return the hidden states from the vision, language, and cross-modality
             layers should be returned.
     """
 

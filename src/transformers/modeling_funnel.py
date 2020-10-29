@@ -226,7 +226,7 @@ class FunnelAttentionStructure(nn.Module):
         d_model = self.config.d_model
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
-            # We need to create and return the matrics phi, psi, pi and omega.
+            # We need to create and return the matrices phi, psi, pi and omega.
             pos_seq = torch.arange(0, seq_len, 1.0, dtype=dtype, device=device)
             freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
@@ -1226,7 +1226,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Funnel Transfprmer Model with a sequence classification/regression head on top (two linear layer on top of the
+    Funnel Transformer Model with a sequence classification/regression head on top (two linear layer on top of the
     first timestep of the last hidden state) e.g. for GLUE tasks.
     """,
     FUNNEL_START_DOCSTRING,

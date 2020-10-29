@@ -53,7 +53,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 def _is_whitespace(char):
     """Checks whether `char` is a whitespace character."""
-    # \t, \n, and \r are technically contorl characters but we treat them
+    # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
     if char == " " or char == "\t" or char == "\n" or char == "\r":
         return True
@@ -367,7 +367,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocabulary.
 
         Args:
-            token (:obj:`str` or :obj:`List[str]`): One or several token(s) to convert to token id(s).
+            tokens (:obj:`str` or :obj:`List[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
             :obj:`int` or :obj:`List[int]`: The token id or list of token ids.
@@ -644,7 +644,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
 
         Args:
-            test (:obj:`str`):
+            text (:obj:`str`):
                 The text to prepare.
             is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the text has been pretokenized.
@@ -669,7 +669,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -732,7 +732,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separatly for added tokens and byte-level tokens
+        # we need to build string separately for added tokens and byte-level tokens
         # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []

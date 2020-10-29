@@ -352,7 +352,7 @@ XXX_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XXX Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare XXX Model transformer outputting raw hidden-states without any specific head on top.",
     XXX_START_DOCSTRING,
 )
 class TFXxxModel(TFXxxPreTrainedModel):

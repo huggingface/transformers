@@ -50,7 +50,7 @@ tokenizer = AutoTokenizer.from_pretrained("mrm8488/t5-base-finetuned-wikiSQL")
 model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-wikiSQL")
 
 def get_sql(query):
-  input_text = "translante English to SQL: %s </s>" % query
+  input_text = "translate English to SQL: %s </s>" % query
   features = tokenizer([input_text], return_tensors='pt')
 
   output = model.generate(input_ids=features['input_ids'], 

@@ -364,14 +364,14 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
             model_args (additional positional arguments, `optional`):
                 Will be passed along to the underlying model ``__init__()`` method.
             config (:class:`~transformers.PretrainedConfig`, `optional`):
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `shortcut name` string of a
                       pretrained model).
                     - The model was saved using :meth:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
-                      by suppling the save directory.
-                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      by suppyling the save directory.
+                    - The model is loaded by suppyling a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
             state_dict (`Dict[str, torch.Tensor]`, `optional`):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.
@@ -398,7 +398,7 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to only look at local files (e.g., not try doanloading the model).
+                Whether or not to only look at local files (e.g., not try downloading the model).
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
@@ -815,7 +815,7 @@ class TFAutoModelForMaskedLM:
     This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
     language modeling head---when created with the when created with the
     :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForMasedLM.from_config` class method.
+    :meth:`~transformers.TFAutoModelForMaskedLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1297,7 +1297,7 @@ class TFAutoModelForTokenClassification:
 class TFAutoModelForMultipleChoice:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classifcation head---when created with the when created with the
+    multiple choice classification head---when created with the when created with the
     :meth:`~transformers.TFAutoModelForMultipleChoice.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForMultipleChoice.from_config` class method.
 

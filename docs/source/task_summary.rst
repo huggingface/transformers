@@ -510,8 +510,8 @@ As a default all models apply *Top-K* sampling when used in pipelines, as config
 
 
 Here, the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am
-concerned, I will"*. The default arguments of ``PreTrainedModel.generate()`` can be directly overriden in the pipeline,
-as is shown above for the argument ``max_length``.
+concerned, I will"*. The default arguments of ``PreTrainedModel.generate()`` can be directly overridden in the
+pipeline, as is shown above for the argument ``max_length``.
 
 Here is an example of text generation using ``XLNet`` and its tokenzier.
 

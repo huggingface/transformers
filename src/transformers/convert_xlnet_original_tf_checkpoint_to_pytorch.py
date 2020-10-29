@@ -104,7 +104,7 @@ if __name__ == "__main__":
         "--finetuning_task",
         default=None,
         type=str,
-        help="Name of a task on which the XLNet TensorFloaw model was fine-tuned",
+        help="Name of a task on which the XLNet TensorFlow model was fine-tuned",
     )
     args = parser.parse_args()
     print(args)

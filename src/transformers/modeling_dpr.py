@@ -418,7 +418,7 @@ DPR_READER_INPUTS_DOCSTRING = r"""
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to rturn the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.

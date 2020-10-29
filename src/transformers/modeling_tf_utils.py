@@ -145,7 +145,7 @@ class TFCausalLanguageModelingLoss:
 
 class TFQuestionAnsweringLoss:
     """
-    Loss function suitable for quetion answering.
+    Loss function suitable for question answering.
     """
 
     def compute_loss(self, labels, logits):
@@ -807,7 +807,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
 
     Args:
         vocab_size (:obj:`int`):
-            The size of the vocabular, e.g., the number of unique tokens.
+            The size of the vocabulary, e.g., the number of unique tokens.
         hidden_size (:obj:`int`):
             The size of the embedding vectors.
         initializer_range (:obj:`float`, `optional`):
@@ -860,7 +860,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             :obj:`tf.Tensor`: In embedding mode, the output is a float32 embedding tensor, with shape
             :obj:`[batch_size, length, embedding_size]`.
 
-            In linear mode, the ouput is a float32 with shape :obj:`[batch_size, length, vocab_size]`.
+            In linear mode, the output is a float32 with shape :obj:`[batch_size, length, vocab_size]`.
 
         Raises:
             ValueError: if :obj:`mode` is not valid.
@@ -1043,7 +1043,7 @@ def get_initializer(initializer_range: float = 0.02) -> tf.initializers.Truncate
 def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor_to_true=False) -> bool:
     """
     Function arguments can be inserted as boolean tensor and bool variables to cope with Keras serialization we need to
-    cast the bool argumnets (like :obj:`output_attentions` for instance) to correct boolean if it is a tensor.
+    cast the bool arguments (like :obj:`output_attentions` for instance) to correct boolean if it is a tensor.
 
     Args:
         bool_variable (:obj:`Union[tf.Tensor, bool]`):

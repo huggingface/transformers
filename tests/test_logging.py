@@ -34,7 +34,7 @@ class HfArgumentParserTest(unittest.TestCase):
         logger = logging.get_logger("transformers.tokenization_bart")
         msg = "Testing 1, 2, 3"
 
-        # should be able to log warnings (if default settings weren't overriden by `pytest --log-level-all`)
+        # should be able to log warnings (if default settings weren't overridden by `pytest --log-level-all`)
         if level_origin <= logging.WARNING:
             with CaptureLogger(logger) as cl:
                 logger.warn(msg)

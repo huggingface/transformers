@@ -34,7 +34,7 @@ model = AutoModelWithLMHead.from_pretrained("jannesg/takalane_afr_roberta")
 
 #### Limitations and bias
 
-Updates will be added continously to improve performance. 
+Updates will be added continuously to improve performance. 
 
 ## Training data
 

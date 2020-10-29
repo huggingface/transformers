@@ -49,7 +49,7 @@ class ModelCard:
     """
 
     def __init__(self, **kwargs):
-        # Recomended attributes from https://arxiv.org/abs/1810.03993 (see papers)
+        # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)
         self.model_details = kwargs.pop("model_details", {})
         self.intended_use = kwargs.pop("intended_use", {})
         self.factors = kwargs.pop("factors", {})

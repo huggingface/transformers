@@ -205,7 +205,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
         num_steps (:obj:`int`): The number of steps during training.
         column_names (:obj:`List[str]`, `optional`):
-            The list of column names for the metrics table (will be infered from the first call to
+            The list of column names for the metrics table (will be inferred from the first call to
             :meth:`~transformers.utils.notebook.NotebookTrainingTracker.write_line` if not set).
     """
 
@@ -246,7 +246,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
     def add_child(self, total, prefix=None, width=300):
         """
-        Add a child progress bar disaplyed under the table of metrics. The child progress bar is returned (so it can be
+        Add a child progress bar displayed under the table of metrics. The child progress bar is returned (so it can be
         easily updated).
 
         Args:
