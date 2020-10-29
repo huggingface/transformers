@@ -63,7 +63,12 @@ jobs:
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s --make_reports=tests tests
 
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/report_tests_failures_short.txt
+        
       - name: Run examples tests on GPU
+        if: ${{ always() }}
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
           OMP_NUM_THREADS: 1
@@ -73,7 +78,12 @@ jobs:
           pip install -r examples/requirements.txt
           python -m pytest -n 1 --dist=loadfile -s --make_reports=examples examples
 
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/report_examples_failures_short.txt
+
       - name: Run all pipeline tests on GPU
+        if: ${{ always() }}
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
           OMP_NUM_THREADS: 1
@@ -83,11 +93,15 @@ jobs:
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make_reports=tests_pipeline tests
 
-      - name: test suite reports artifacts
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/report_tests_pipeline_failures_short.txt
+
+      - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: test_reports
+          name: run_all_tests_torch_and_tf_gpu_test_reports
           path: reports
 
 
