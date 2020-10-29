@@ -540,7 +540,7 @@ class BatchEncoding(UserDict):
                 the character in the original string.
             char_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index of the character in the
-                orginal string.
+                original string.
 
 
         Returns:
