@@ -457,14 +457,22 @@ def load_json(path):
 
 
 def get_git_info():
-    repo = git.Repo(search_parent_directories=True)
-    repo_infos = {
-        "repo_id": str(repo),
-        "repo_sha": str(repo.head.object.hexsha),
-        "repo_branch": str(repo.active_branch),
-        "hostname": str(socket.gethostname()),
-    }
-    return repo_infos
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        repo_infos = {
+            "repo_id": str(repo),
+            "repo_sha": str(repo.head.object.hexsha),
+            "repo_branch": str(repo.active_branch),
+            "hostname": str(socket.gethostname()),
+        }
+        return repo_infos
+    except TypeError:
+        return {
+            "repo_id": None,
+            "repo_sha": None,
+            "repo_branch": None,
+            "hostname": None,
+        }
 
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
@@ -611,3 +619,27 @@ def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
+
+
+def check_output_dir(args, expected_items=0):
+    """
+    Checks whether to bail out if output_dir already exists and has more than expected_items in it
+
+    `args`: needs to have the following attributes of `args`:
+      - output_dir
+      - do_train
+      - overwrite_output_dir
+
+    `expected_items`: normally 0 (default) - i.e. empty dir, but in some cases a few files are expected (e.g. recovery from OOM)
+    """
+    if (
+        os.path.exists(args.output_dir)
+        and len(os.listdir(args.output_dir)) > expected_items
+        and args.do_train
+        and not args.overwrite_output_dir
+    ):
+        raise ValueError(
+            f"Output directory ({args.output_dir}) already exists and "
+            f"has {len(os.listdir(args.output_dir))} items in it (expected {expected_items} items). "
+            "Use --overwrite_output_dir to overcome."
+        )

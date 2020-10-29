@@ -170,7 +170,7 @@ class BaseTransformer(pl.LightningModule):
             self.dataset_size = len(self.test_dataloader().dataset)
         else:
             self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
-            self.dataset_size = len(self.train_loader.dataset)
+            self.dataset_size = len(self.train_dataloader().dataset)
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False):
         raise NotImplementedError("You must implement this for your task")
@@ -291,7 +291,8 @@ class LoggingCallback(pl.Callback):
 
 
 def add_generic_args(parser, root_dir) -> None:
-    #  TODO(SS): allow all pl args? parser = pl.Trainer.add_argparse_args(parser)
+    #  To allow all pl args uncomment the following line
+    #  parser = pl.Trainer.add_argparse_args(parser)
     parser.add_argument(
         "--output_dir",
         default=None,
@@ -336,7 +337,7 @@ def add_generic_args(parser, root_dir) -> None:
 def generic_train(
     model: BaseTransformer,
     args: argparse.Namespace,
-    early_stopping_callback=False,
+    early_stopping_callback=None,
     logger=True,  # can pass WandbLogger() here
     extra_callbacks=[],
     checkpoint_callback=None,
@@ -354,6 +355,8 @@ def generic_train(
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
         )
+    if early_stopping_callback:
+        extra_callbacks.append(early_stopping_callback)
     if logging_callback is None:
         logging_callback = LoggingCallback()
 
@@ -375,7 +378,6 @@ def generic_train(
         callbacks=[logging_callback] + extra_callbacks,
         logger=logger,
         checkpoint_callback=checkpoint_callback,
-        early_stop_callback=early_stopping_callback,
         **train_params,
     )
 

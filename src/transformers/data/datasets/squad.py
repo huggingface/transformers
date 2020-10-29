@@ -86,8 +86,7 @@ class Split(Enum):
 
 class SquadDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     args: SquadDataTrainingArguments

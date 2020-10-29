@@ -54,8 +54,6 @@ def rename_state_dict_key(k):
 
 # See appendix C of paper for all hyperparams
 
-# TODO(SS): one constant
-
 
 def convert_pegasus(tf_weights: dict, cfg_updates: dict) -> PegasusForConditionalGeneration:
     cfg_kwargs = DEFAULTS.copy()

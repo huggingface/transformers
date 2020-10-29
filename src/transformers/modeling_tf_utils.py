@@ -67,8 +67,8 @@ def keras_serializable(cls):
        serialization time.
     2. Wrapping :obj:`__init__` to accept that :obj:`transformers_config` dict (passed by Keras at deserialization
        time) and convert it to a config object for the actual layer initializer.
-    3. Registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does
-       not need to be supplied in :obj:`custom_objects` in the call to :obj:`tf.keras.models.load_model`.
+    3. Registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does not
+       need to be supplied in :obj:`custom_objects` in the call to :obj:`tf.keras.models.load_model`.
 
     Args:
         cls (a :obj:`tf.keras.layers.Layers subclass`):
@@ -136,8 +136,7 @@ class TFCausalLanguageModelingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        # make sure only labels that are not equal to -100
-        # are taken into account as loss
+        # make sure only labels that are not equal to -100 do not affect loss
         active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
@@ -312,14 +311,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         * prune heads in the self-attention heads.
 
     Class attributes (overridden by derived classes):
+
         - **config_class** (:class:`~transformers.PretrainedConfig`) -- A subclass of
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
         - **authorized_missing_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
           from the model when loading the model weights (and avoid unnecessary warnings).
-        - **authorized_unexpected_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
-          from the weights when loading the model weights (and avoid unnecessary warnings).
+        - **authorized_unexpected_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to
+          ignore from the weights when loading the model weights (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
@@ -346,8 +346,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     self.__class__.__name__, self.__class__.__name__
                 )
             )
-        # Save config in model
+        # Save config and origin of the pretrained weights if given in model
         self.config = config
+        self.name_or_path = config.name_or_path
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -478,9 +479,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         Arguments:
             heads_to_prune (:obj:`Dict[int, List[int]]`):
-                Dictionary with keys being selected layer indices (:obj:`int`) and associated values being the list
-                of heads to prune in said layer (list of :obj:`int`). For instance {1: [0, 2], 2: [2, 3]} will
-                prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
+                Dictionary with keys being selected layer indices (:obj:`int`) and associated values being the list of
+                heads to prune in said layer (list of :obj:`int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads
+                0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         """
         raise NotImplementedError
 
@@ -565,21 +566,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies: (:obj:`Dict[str, str], `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
-                messages.
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
             mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
-                Mirror source to accelerate downloads in China. If you are from China and have an accessibility problem,
-                you can set this option to resolve it. Note that we do not guarantee the timeliness or safety. Please
-                refer to the mirror site for more information.
+                Mirror source to accelerate downloads in China. If you are from China and have an accessibility
+                problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
+                Please refer to the mirror site for more information.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -640,12 +639,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Load model
         if pretrained_model_name_or_path is not None:
             if os.path.isdir(pretrained_model_name_or_path):
-                if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
+                if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    # Load from a PyTorch checkpoint in priority if from_pt
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
-                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
-                    # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_pt` set to False".format(
@@ -689,6 +688,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
         else:
             resolved_archive_file = None
+
+        config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
@@ -801,8 +802,8 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
     r"""
     Construct shared token embeddings.
 
-    The weights of the embedding layer is usually shared with the weights of the linear decoder when doing
-    language modeling.
+    The weights of the embedding layer is usually shared with the weights of the linear decoder when doing language
+    modeling.
 
     Args:
         vocab_size (:obj:`int`):
@@ -823,9 +824,9 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
-        """Build shared token embedding layer
-        Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+        Build shared token embedding layer Shared weights logic adapted from
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         self.weight = self.add_weight(
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
@@ -856,8 +857,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
                should be used as an embedding layer, the second one that the layer should be used as a linear decoder.
 
         Returns:
-            :obj:`tf.Tensor`:
-            In embedding mode, the output is a float32  embedding tensor, with shape
+            :obj:`tf.Tensor`: In embedding mode, the output is a float32 embedding tensor, with shape
             :obj:`[batch_size, length, embedding_size]`.
 
             In linear mode, the ouput is a float32 with shape :obj:`[batch_size, length, vocab_size]`.
@@ -865,8 +865,8 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         Raises:
             ValueError: if :obj:`mode` is not valid.
 
-        Shared weights logic is adapted from
-        `here <https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24>`__.
+        Shared weights logic is adapted from `here
+        <https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24>`__.
         """
         if mode == "embedding":
             return self._embedding(inputs)
@@ -902,8 +902,8 @@ class TFSequenceSummary(tf.keras.layers.Layer):
 
     Args:
         config (:class:`~transformers.PretrainedConfig`):
-            The config used by the model. Relevant arguments in the config class of the model are (refer to the
-            actual config class of your model for the default values it uses):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
 
             - **summary_type** (:obj:`str`) -- The method to use to make this summary. Accepted values are:
 
@@ -916,7 +916,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             - **summary_use_proj** (:obj:`bool`) -- Add a projection after the vector extraction.
             - **summary_proj_to_labels** (:obj:`bool`) -- If :obj:`True`, the projection outputs to
               :obj:`config.num_labels` classes (otherwise to :obj:`config.hidden_size`).
-            - **summary_activation**  (:obj:`Optional[str]`) -- Set to :obj:`"tanh"` to add a tanh activation to the
+            - **summary_activation** (:obj:`Optional[str]`) -- Set to :obj:`"tanh"` to add a tanh activation to the
               output, another string or :obj:`None` will add no activation.
             - **summary_first_dropout** (:obj:`float`) -- Optional dropout probability before the projection and
               activation.
@@ -1063,3 +1063,33 @@ def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor
 
     # else variable is bool
     return bool_variable
+
+
+class TFWrappedEmbeddings:
+    """
+    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer' class to avoid problem with
+    weight restoring. Also it makes sure that the layer is called from the correct scope to avoid problem with
+    saving/storing the correct weights
+    """
+
+    def __init__(self, layer, abs_scope_name=None):
+        self._layer = layer
+        self._abs_scope_name = abs_scope_name
+
+    def call(self, inputs, mode="embedding"):
+        if self._abs_scope_name is None:
+            return self._layer.call(inputs, mode)
+
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer.call(inputs, mode)
+
+    def __call__(self, inputs, mode="embedding"):
+        if self._abs_scope_name is None:
+            return self._layer(inputs, mode)
+
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer(inputs, mode)

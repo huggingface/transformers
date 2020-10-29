@@ -15,7 +15,7 @@ from transformers import logging as transformers_logging
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # isort:skip
-from examples.rag.utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
+from utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def get_precision_at_k(args, preds_path, gold_data_path):
     em = total = 0
     for hypo, reference in zip(hypos, references):
         hypo_provenance = set(hypo.split("\t")[:k])
-        ref_provenance = set(reference.split("\t")[1 : (k + 1)])
+        ref_provenance = set(reference.split("\t"))
         total += 1
         em += len(hypo_provenance & ref_provenance) / k
 

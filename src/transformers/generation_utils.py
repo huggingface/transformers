@@ -129,6 +129,7 @@ class GenerationMixin:
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
         do_sample: Optional[bool] = None,
@@ -168,8 +169,11 @@ class GenerationMixin:
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
-                it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                initial input_ids for the decoder of encoder-decoder type models. If :obj:`None` then only
+                decoder_start_token_id is passed as the first token to the decoder.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (:obj:`int`, `optional`, defaults to 10):
@@ -233,9 +237,9 @@ class GenerationMixin:
 
         Return:
 
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
-            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
-            shorter if all batches finished early due to the :obj:`eos_token_id`.
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
 
         Examples::
 
@@ -444,14 +448,19 @@ class GenerationMixin:
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
-            # create empty decoder input_ids
-            input_ids = torch.full(
-                (effective_batch_size * num_beams, 1),
-                decoder_start_token_id,
-                dtype=torch.long,
-                device=next(self.parameters()).device,
-            )
-            cur_len = 1
+            device = next(self.parameters()).device
+            if decoder_input_ids is not None:
+                # give initial decoder input ids
+                input_ids = decoder_input_ids.repeat(effective_batch_size * num_beams, 1).to(device)
+            else:
+                # create empty decoder input_ids
+                input_ids = torch.full(
+                    (effective_batch_size * num_beams, 1),
+                    decoder_start_token_id,
+                    dtype=torch.long,
+                    device=device,
+                )
+            cur_len = input_ids.shape[-1]
 
             assert (
                 batch_size == encoder_outputs.last_hidden_state.shape[0]
@@ -552,8 +561,9 @@ class GenerationMixin:
         prefix_allowed_tokens_fn,
         model_kwargs,
     ):
-        """Generate sequences for each example without beam search (num_beams == 1).
-        All returned sequence are generated independantly.
+        """
+        Generate sequences for each example without beam search (num_beams == 1). All returned sequence are generated
+        independantly.
         """
         # length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
@@ -959,8 +969,10 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
 
 
 def set_scores_to_inf_for_banned_tokens(scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
-    """Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be
-    a list of list of banned tokens to ban in the format [[batch index, vocabulary position],...]
+    """
+    Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a list
+    of list of banned tokens to ban in the format [[batch index, vocabulary position],...
+
         Args:
             scores: logits distribution of shape (batch size, vocabulary size)
             banned_tokens: list of list of tokens to ban of length (batch_size)
@@ -989,7 +1001,9 @@ def top_k_top_p_filtering(
     filter_value: float = -float("Inf"),
     min_tokens_to_keep: int = 1,
 ) -> Tensor:
-    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    """
+    Filter a distribution of logits using top-k and/or nucleus (top-p) filterin
+
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
         if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
@@ -1057,8 +1071,8 @@ class BeamHypotheses(object):
 
     def is_done(self, best_sum_logprobs, cur_len):
         """
-        If there are enough hypotheses and that none of the hypotheses being generated
-        can become better than the worst one in the heap, then we are done with this sentence.
+        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
+        one in the heap, then we are done with this sentence.
         """
 
         if len(self) < self.num_beams:

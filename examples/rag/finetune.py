@@ -31,16 +31,13 @@ from transformers import (
 from transformers import logging as transformers_logging
 
 
-sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
-
-from examples.lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa: E402 # isort:skip
-from examples.rag.callbacks import (  # noqa: E402 # isort:skip
+from callbacks import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
     get_early_stopping_callback,
     Seq2SeqLoggingCallback,
 )
-from examples.rag.distributed_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
-from examples.rag.utils import (  # noqa: E402 # isort:skip
+from distributed_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
+from utils import (  # noqa: E402 # isort:skip
     calculate_exact_match,
     flatten_list,
     get_git_info,
@@ -52,6 +49,11 @@ from examples.rag.utils import (  # noqa: E402 # isort:skip
     set_extra_model_params,
     Seq2SeqDataset,
 )
+
+# need the parent dir module
+sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
+from lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,6 +90,11 @@ class GenerativeQAModule(BaseTransformer):
         config_class = RagConfig if self.is_rag_model else AutoConfig
         config = config_class.from_pretrained(hparams.model_name_or_path)
 
+        # set retriever parameters
+        config.index_name = args.index_name or config.index_name
+        config.passages_path = args.passages_path or config.passages_path
+        config.index_path = args.index_path or config.index_path
+
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
@@ -95,7 +102,7 @@ class GenerativeQAModule(BaseTransformer):
                 config.generator.prefix = args.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
-            retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path)
+            retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path, config=config)
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
             prefix = config.question_encoder.prefix
         else:
@@ -403,6 +410,28 @@ class GenerativeQAModule(BaseTransformer):
         )
         return parser
 
+    @staticmethod
+    def add_retriever_specific_args(parser):
+        parser.add_argument(
+            "--index_name",
+            type=str,
+            default=None,
+            help="Name of the index to use: 'hf' for a canonical dataset from the datasets library (default), 'custom' for a local index, or 'legacy' for the orignal one)",
+        )
+        parser.add_argument(
+            "--passages_path",
+            type=str,
+            default=None,
+            help="Path to the dataset of passages for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+        )
+        parser.add_argument(
+            "--index_path",
+            type=str,
+            default=None,
+            help="Path to the faiss index for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+        )
+        return parser
+
 
 def main(args, model=None) -> GenerativeQAModule:
     Path(args.output_dir).mkdir(exist_ok=True)
@@ -463,6 +492,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
     parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())
+    parser = GenerativeQAModule.add_retriever_specific_args(parser)
 
     args = parser.parse_args()
 

@@ -27,20 +27,20 @@ The Authors' code can be found `here <https://github.com/allenai/longformer>`__.
 Longformer Self Attention
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Longformer self attention employs self attention on both a "local" context and a "global" context.
-Most tokens only attend "locally" to each other meaning that each token attends to its :math:`\frac{1}{2} w` previous
-tokens and :math:`\frac{1}{2} w` succeding tokens with :math:`w` being the window length as defined in
+Longformer self attention employs self attention on both a "local" context and a "global" context. Most tokens only
+attend "locally" to each other meaning that each token attends to its :math:`\frac{1}{2} w` previous tokens and
+:math:`\frac{1}{2} w` succeding tokens with :math:`w` being the window length as defined in
 :obj:`config.attention_window`. Note that :obj:`config.attention_window` can be of type :obj:`List` to define a
 different :math:`w` for each layer. A selected few tokens attend "globally" to all other tokens, as it is
 conventionally done for all tokens in :obj:`BertSelfAttention`.
 
-Note that "locally" and "globally" attending tokens are projected by different query, key and value matrices.
-Also note that every "locally" attending token not only attends to tokens within its window :math:`w`, but also to all
-"globally" attending tokens so that global attention is *symmetric*.
+Note that "locally" and "globally" attending tokens are projected by different query, key and value matrices. Also note
+that every "locally" attending token not only attends to tokens within its window :math:`w`, but also to all "globally"
+attending tokens so that global attention is *symmetric*.
 
 The user can define which tokens attend "locally" and which tokens attend "globally" by setting the tensor
 :obj:`global_attention_mask` at run-time appropriately. All Longformer models employ the following logic for
-:obj:`global_attention_mask`: 
+:obj:`global_attention_mask`:
 
 - 0: the token attends "locally",
 - 1: the token attends "globally".

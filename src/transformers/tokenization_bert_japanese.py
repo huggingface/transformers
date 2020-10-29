@@ -94,13 +94,13 @@ class BertJapaneseTokenizer(BertTokenizer):
         mecab_kwargs=None,
         **kwargs
     ):
-        """Constructs a MecabBertTokenizer.
+        """
+        Constructs a MecabBertTokenizer.
 
         Args:
             **vocab_file**: Path to a one-wordpiece-per-line vocabulary file.
             **do_lower_case**: (`optional`) boolean (default True)
-                Whether to lower case the input.
-                Only has an effect when do_basic_tokenize=True.
+                Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
             **do_word_tokenize**: (`optional`) boolean (default True)
                 Whether to do word tokenization.
             **do_subword_tokenize**: (`optional`) boolean (default True)
@@ -205,20 +205,20 @@ class MecabTokenizer:
         mecab_dic: Optional[str] = "ipadic",
         mecab_option: Optional[str] = None,
     ):
-        """Constructs a MecabTokenizer.
+        """
+        Constructs a MecabTokenizer.
 
         Args:
             **do_lower_case**: (`optional`) boolean (default True)
                 Whether to lowercase the input.
             **never_split**: (`optional`) list of str
-                Kept for backward compatibility purposes.
-                Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
-                List of tokens not to split.
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                :func:`PreTrainedTokenizer.tokenize`) List of tokens not to split.
             **normalize_text**: (`optional`) boolean (default True)
                 Whether to apply unicode normalization to text before tokenization.
             **mecab_dic**: (`optional`) string (default "ipadic")
-                Name of dictionary to be used for MeCab initialization.
-                If you are using a system-installed dictionary, set thi option to `None` and modify `mecab_option`.
+                Name of dictionary to be used for MeCab initialization. If you are using a system-installed dictionary,
+                set thi option to `None` and modify `mecab_option`.
             **mecab_option**: (`optional`) string
                 String passed to MeCab constructor.
         """
@@ -306,7 +306,8 @@ class CharacterTokenizer:
     """Runs Character tokenziation."""
 
     def __init__(self, vocab, unk_token, normalize_text=True):
-        """Constructs a CharacterTokenizer.
+        """
+        Constructs a CharacterTokenizer.
 
         Args:
             **vocab**:
@@ -321,14 +322,15 @@ class CharacterTokenizer:
         self.normalize_text = normalize_text
 
     def tokenize(self, text):
-        """Tokenizes a piece of text into characters.
+        """
+        Tokenizes a piece of text into characters.
 
-        For example:
-            input = "apple"
-            output = ["a", "p", "p", "l", "e"]
+        For example, :obj:`input = "apple""` wil return as output :obj:`["a", "p", "p", "l", "e"]`.
+
         Args:
             text: A single token or whitespace separated tokens.
                 This should have already been passed through `BasicTokenizer`.
+
         Returns:
             A list of characters.
         """
