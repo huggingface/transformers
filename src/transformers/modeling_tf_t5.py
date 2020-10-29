@@ -71,7 +71,7 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFT5LayerNorm(tf.keras.layers.Layer):
     def __init__(self, epsilon=1e-6, **kwargs):
         """
-        Construct a layernorm module in the T5 style No bias and no substraction of mean.
+        Construct a layernorm module in the T5 style No bias and no subtraction of mean.
         """
         super().__init__(**kwargs)
         self.variance_epsilon = epsilon
@@ -170,7 +170,7 @@ class TFT5Attention(tf.keras.layers.Layer):
             relative_position: an int32 Tensor
             bidirectional: a boolean - whether the attention is bidirectional
             num_buckets: an integer
-            max_distance: an intege
+            max_distance: an integer
 
         Returns:
             a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
@@ -682,8 +682,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if self.is_decoder and encoder_attention_mask is not None:
             # If a 2D ou 3D attention mask is provided for the cross-attention
-            # we need to make broadcastabe to [batch_size, num_heads, mask_seq_length, mask_seq_length]
-            # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+            # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
+            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
             encoder_attention_mask = tf.cast(encoder_attention_mask, dtype=tf.float32)
             num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
             if num_dims_encoder_attention_mask == 3:
@@ -894,7 +894,7 @@ T5_INPUTS_DOCSTRING = r"""
             sequence of hidden states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
         past_key_values (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            ontains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`

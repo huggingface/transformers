@@ -176,7 +176,7 @@ def get_args():
         choices=["e2e", "retrieval"],
         default="e2e",
         type=str,
-        help="Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calulates precision@k.",
+        help="Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calculates precision@k.",
     )
     parser.add_argument("--k", default=1, type=int, help="k for the precision@k calculation")
     parser.add_argument(
@@ -206,7 +206,7 @@ def get_args():
         "--predictions_path",
         type=str,
         default="predictions.txt",
-        help="Name of the predictions file, to be stored in the checkpoints directry",
+        help="Name of the predictions file, to be stored in the checkpoints directory",
     )
     parser.add_argument(
         "--eval_all_checkpoints",

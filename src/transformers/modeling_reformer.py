@@ -986,7 +986,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 class ReverseSort(Function):
     """
     After chunked attention is applied which sorted clusters, original ordering has to be restored. Since customized
-    backward function is used for Reformer, the gradients of the output vectors have to be explicitely sorted here.
+    backward function is used for Reformer, the gradients of the output vectors have to be explicitly sorted here.
     """
 
     @staticmethod
@@ -2075,7 +2075,7 @@ class ReformerModel(ReformerPreTrainedModel):
                 device=device,
             )
 
-        # start index for postion encoding depends on incremental decoding
+        # start index for position encoding depends on incremental decoding
         if past_buckets_states is not None:
             start_idx_pos_encodings = past_buckets_states[0][1].shape[1]
         else:

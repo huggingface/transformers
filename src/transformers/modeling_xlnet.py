@@ -1132,7 +1132,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
         # data mask: input mask & perm mask
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
-        "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+        "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - attention_mask
         if input_mask is not None and perm_mask is not None:

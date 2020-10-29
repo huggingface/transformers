@@ -346,7 +346,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
         Returns:
             hidden_state: tf.Tensor(bs, seq_length, dim)
-                Sequence of hiddens states in the last (top) layer
+                Sequence of hidden states in the last (top) layer
             all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
@@ -552,7 +552,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        iinputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
@@ -571,7 +571,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare DistilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
+    "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertModel(TFDistilBertPreTrainedModel):

@@ -89,7 +89,7 @@ try:
     # Check we're not importing a "datasets" directory somewhere
     _datasets_available = hasattr(datasets, "__version__") and hasattr(datasets, "load_dataset")
     if _datasets_available:
-        logger.debug(f"Succesfully imported datasets version {datasets.__version__}")
+        logger.debug(f"Successfully imported datasets version {datasets.__version__}")
     else:
         logger.debug("Imported a datasets object but this doesn't seem to be the 🤗 datasets library.")
 
@@ -147,7 +147,7 @@ try:
     import faiss  # noqa: F401
 
     _faiss_available = True
-    logger.debug(f"Succesfully imported faiss version {faiss.__version__}")
+    logger.debug(f"Successfully imported faiss version {faiss.__version__}")
 except ImportError:
     _faiss_available = False
 
@@ -290,7 +290,7 @@ def torch_only_method(fn):
 
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """
-{0} requires the 🤗 Datasets library but it was not found in your enviromnent. You can install it with:
+{0} requires the 🤗 Datasets library but it was not found in your environment. You can install it with:
 ```
 pip install datasets
 ```
@@ -308,7 +308,7 @@ that python file if that's the case.
 
 # docstyle-ignore
 TOKENIZERS_IMPORT_ERROR = """
-{0} requires the 🤗 Tokenizers library but it was not found in your enviromnent. You can install it with:
+{0} requires the 🤗 Tokenizers library but it was not found in your environment. You can install it with:
 ```
 pip install tokenizers
 ```
@@ -321,30 +321,30 @@ In a notebook or a colab, you can install it by executing a cell with
 
 # docstyle-ignore
 SENTENCEPIECE_IMPORT_ERROR = """
-{0} requires the SentencePiece library but it was not found in your enviromnent. Checkout the instructions on the
+{0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
-that match your enviromnent.
+that match your environment.
 """
 
 
 # docstyle-ignore
 FAISS_IMPORT_ERROR = """
-{0} requires the faiss library but it was not found in your enviromnent. Checkout the instructions on the
+{0} requires the faiss library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
-that match your enviromnent.
+that match your environment.
 """
 
 
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
-{0} requires the PyTorch library but it was not found in your enviromnent. Checkout the instructions on the
-installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your enviromnent.
+{0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 """
 
 
 # docstyle-ignore
 SKLEARN_IMPORT_ERROR = """
-{0} requires the scikit-learn library but it was not found in your enviromnent. You can install it with:
+{0} requires the scikit-learn library but it was not found in your environment. You can install it with:
 ```
 pip install -U scikit-learn
 ```
@@ -357,15 +357,15 @@ In a notebook or a colab, you can install it by executing a cell with
 
 # docstyle-ignore
 TENSORFLOW_IMPORT_ERROR = """
-{0} requires the TensorFlow library but it was not found in your enviromnent. Checkout the instructions on the
-installation page: https://www.tensorflow.org/install and follow the ones that match your enviromnent.
+{0} requires the TensorFlow library but it was not found in your environment. Checkout the instructions on the
+installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
 """
 
 
 # docstyle-ignore
 FLAX_IMPORT_ERROR = """
-{0} requires the FLAX library but it was not found in your enviromnent. Checkout the instructions on the
-installation page: https://github.com/google/flax and follow the ones that match your enviromnent.
+{0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
+installation page: https://github.com/google/flax and follow the ones that match your environment.
 """
 
 
@@ -918,13 +918,13 @@ def cached_path(
 
     Args:
         cache_dir: specify a cache directory to save the file to (overwrite the default cache dir).
-        force_download: if True, re-dowload the file even if it's already cached in the cache dir.
-        resume_download: if True, resume the download if incompletly recieved file is found.
+        force_download: if True, re-download the file even if it's already cached in the cache dir.
+        resume_download: if True, resume the download if incompletely received file is found.
         user_agent: Optional string or dict that will be appended to the user-agent on remote requests.
         extract_compressed_file: if True and the path point to a zip or tar file, extract the compressed
             file in a folder along the archive.
         force_extract: if True when extract_compressed_file is True and the archive was already extracted,
-            re-extract the archive and overide the folder where it was extracted.
+            re-extract the archive and override the folder where it was extracted.
 
     Return:
         None in case of non-recoverable file (non-existent or inaccessible url + no cache on disk). Local path (string)

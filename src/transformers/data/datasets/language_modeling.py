@@ -71,7 +71,7 @@ class TextDataset(Dataset):
                         tokenizer.build_inputs_with_special_tokens(tokenized_text[i : i + block_size])
                     )
                 # Note that we are losing the last truncated example here for the sake of simplicity (no padding)
-                # If your dataset is small, first you should loook for a bigger one :-) and second you
+                # If your dataset is small, first you should look for a bigger one :-) and second you
                 # can change this behavior by adding (model specific) padding.
 
                 start = time.time()

@@ -497,7 +497,7 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                 return_obj_labels="PreTraining" in model_class.__name__
             )
 
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beggining
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             config.output_hidden_states = True

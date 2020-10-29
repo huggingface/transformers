@@ -42,7 +42,7 @@ class BertGenerationConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
@@ -62,7 +62,7 @@ class BertGenerationConfig(PretrainedConfig):
         >>> # Initializing a BertGeneration config
         >>> configuration = BertGenerationConfig()
 
-        >>> # Initializing a modelfrom the config
+        >>> # Initializing a model from the config
         >>> model = BertGenerationEncoder(configuration)
 
         >>> # Accessing the model configuration

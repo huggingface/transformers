@@ -178,7 +178,7 @@ class TFFunnelAttentionStructure:
         self.sin_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         self.cos_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         # Track where we are at in terms of pooling from the original input, e.g., by how much the sequence length was
-        # dividide.
+        # divided.
         self.pooling_mult = None
 
     def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None, training=False):
@@ -219,7 +219,7 @@ class TFFunnelAttentionStructure:
         """
         if self.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
-            # We need to create and return the matrics phi, psi, pi and omega.
+            # We need to create and return the matrices phi, psi, pi and omega.
             pos_seq = tf.range(0, seq_len, 1.0, dtype=dtype)
             freq_seq = tf.range(0, self.d_model // 2, 1.0, dtype=dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (self.d_model // 2)))
