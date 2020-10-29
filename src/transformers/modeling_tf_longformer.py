@@ -172,9 +172,9 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         Returns: tf.Tensor
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
-        incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
+        incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
-        return incremental_indicies + self.padding_idx
+        return incremental_indices + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
