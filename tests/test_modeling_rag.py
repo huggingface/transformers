@@ -25,8 +25,14 @@ import numpy as np
 
 from transformers import BartTokenizer, T5Tokenizer
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device, \
-    require_torch_non_multigpu
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_non_multigpu,
+    slow,
+    torch_device,
+)
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES

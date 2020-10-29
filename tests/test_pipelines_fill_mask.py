@@ -109,10 +109,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
             self.assertIsInstance(multi_result[0], (dict, list))
 
             for result, expected in zip(multi_result, EXPECTED_FILL_MASK_RESULT):
-                self.assertEqual(
-                    set([o["sequence"] for o in result]),
-                    set([o["sequence"] for o in result])
-                )
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
 
             if isinstance(multi_result[0], list):
                 multi_result = multi_result[0]
@@ -136,10 +133,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
             self.assertIsInstance(multi_result[0], (dict, list))
 
             for result, expected in zip(multi_result, EXPECTED_FILL_MASK_TARGET_RESULT):
-                self.assertEqual(
-                    set([o["sequence"] for o in result]),
-                    set([o["sequence"] for o in result])
-                )
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
 
             if isinstance(multi_result[0], list):
                 multi_result = multi_result[0]
@@ -174,10 +168,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
             self.assertIsInstance(multi_result[0], (dict, list))
 
             for result, expected in zip(multi_result, EXPECTED_FILL_MASK_RESULT):
-                self.assertEqual(
-                    set([o["sequence"] for o in result]),
-                    set([o["sequence"] for o in result])
-                )
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
 
             if isinstance(multi_result[0], list):
                 multi_result = multi_result[0]
@@ -201,10 +192,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
             self.assertIsInstance(multi_result[0], (dict, list))
 
             for result, expected in zip(multi_result, EXPECTED_FILL_MASK_TARGET_RESULT):
-                self.assertEqual(
-                    set([o["sequence"] for o in result]),
-                    set([o["sequence"] for o in result])
-                )
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
 
             if isinstance(multi_result[0], list):
                 multi_result = multi_result[0]

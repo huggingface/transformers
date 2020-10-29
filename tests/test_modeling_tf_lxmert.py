@@ -687,7 +687,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
-            num_out = len(model(class_inputs_dict))
             model._saved_model_inputs_spec = None
             model._set_save_spec(class_inputs_dict)
 
@@ -724,7 +723,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
-            num_out = len(model(inputs_dict))
             model._saved_model_inputs_spec = None
             model._set_save_spec(class_inputs_dict)
 
