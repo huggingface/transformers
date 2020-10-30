@@ -297,15 +297,15 @@ class GPT2Tokenizer(object):
     Args:
         vocab_file (:obj:`str`, optional):
             The local path of vocabulary package or the release name of vocabulary in `DeBERTa GitHub releases
-            <https://github.com/microsoft/DeBERTa/releases>`_, \ e.g. "bpe_encoder", default: `None`.
+            <https://github.com/microsoft/DeBERTa/releases>`_, e.g. "bpe_encoder", default: `None`.
 
             If it's `None`, then it will download the vocabulary in the latest release from GitHub. The vocabulary file
-            is a \ state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files
-            used in `RoBERTa`, i.e. `dict.txt`, `vocab.txt` and `encoder.json`. \ The difference between our wrapped
-            GPT2 tokenizer and RoBERTa wrapped tokenizer are,
+            is a state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files used
+            in `RoBERTa`, i.e. `dict.txt`, `vocab.txt` and `encoder.json`. The difference between our wrapped GPT2
+            tokenizer and RoBERTa wrapped tokenizer are,
 
             - Special tokens, unlike `RoBERTa` which use `<s>`, `</s>` as the `start` token and `end` token of a
-              sentence. We use `[CLS]` and `[SEP]` as the `start` and `end`\ token of input sentence which is the same
+              sentence. We use `[CLS]` and `[SEP]` as the `start` and `end` token of input sentence which is the same
               as `BERT`.
 
             - We remapped the token ids in our dictionary with regarding to the new special tokens, `[PAD]` => 0,
