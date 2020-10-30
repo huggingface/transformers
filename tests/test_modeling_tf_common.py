@@ -965,24 +965,41 @@ class TFModelTesterMixin:
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
-                signature = inspect.signature(model.call).parameters
-                signature_names = list(signature.keys())
-                print(signature_names)
-                # Create a dictionary holding the location of the tensors in the tuple
-                tuple_index_mapping = {0: "input_ids"}
-                for label_key in label_keys:
-                    label_key_index = signature_names.index(label_key)
-                    tuple_index_mapping[label_key_index] = label_key
-                sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
 
-                # Initialize a list with their default values, update the values and convert to a tuple
-                list_input = []
+                if model.base_model_prefix in ["bert"]:
+                    signature = inspect.signature(model.call).parameters
+                    signature_names = list(signature.keys())
 
-                for name in signature_names:
-                    list_input.append(signature[name].default)
+                    # Create a dictionary holding the location of the tensors in the tuple
+                    tuple_index_mapping = {0: "input_ids"}
+                    for label_key in label_keys:
+                        label_key_index = signature_names.index(label_key)
+                        tuple_index_mapping[label_key_index] = label_key
+                    sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
 
-                for index, value in sorted_tuple_index_mapping:
-                    list_input[index] = prepared_for_class[value]
+                    # Initialize a list with their default values, update the values and convert to a tuple
+                    list_input = []
+
+                    for name in signature_names:
+                        list_input.append(signature[name].default)
+
+                    for index, value in sorted_tuple_index_mapping:
+                        list_input[index] = prepared_for_class[value]
+                else:
+                    signature = inspect.getfullargspec(model.call)[0]
+
+                    # Create a dictionary holding the location of the tensors in the tuple
+                    tuple_index_mapping = {1: "input_ids"}
+                    for label_key in label_keys:
+                        label_key_index = signature.index(label_key)
+                        tuple_index_mapping[label_key_index] = label_key
+                    sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
+
+                    # Initialize a list with None, update the values and convert to a tuple
+                    list_input = [None] * sorted_tuple_index_mapping[-1][0]
+                    for index, value in sorted_tuple_index_mapping:
+                        list_input[index - 1] = prepared_for_class[value]
+
                 tuple_input = tuple(list_input)
 
                 # Send to model
