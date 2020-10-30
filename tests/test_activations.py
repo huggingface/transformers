@@ -19,6 +19,7 @@ class TestActivations(unittest.TestCase):
         self.assertFalse(torch.eq(_gelu_python(x), gelu_new(x)).all().item())
 
     def test_get_activation(self):
+        get_activation("swish")
         get_activation("silu")
         get_activation("relu")
         get_activation("tanh")
