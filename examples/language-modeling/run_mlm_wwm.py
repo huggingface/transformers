@@ -13,10 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for permutation language modeling.
-"""
-# You can also adapt this script on your own permutation language modeling task. Pointers for this are left as comments.
+Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...) with whole word masking on a
+text file or a dataset.
 
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=masked-lm
+"""
+# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+
+import json
 import logging
 import math
 import os
@@ -24,24 +29,27 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 
 import transformers
 from transformers import (
+    CONFIG_MAPPING,
+    MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
+    AutoModelForMaskedLM,
     AutoTokenizer,
-    DataCollatorForPermutationLanguageModeling,
+    DataCollatorForWholeWordMask,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    XLNetConfig,
-    XLNetLMHeadModel,
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 @dataclass
@@ -56,6 +64,10 @@ class ModelArguments:
             "help": "The model checkpoint for weights initialization."
             "Don't set if you want to train a model from scratch."
         },
+    )
+    model_type: Optional[str] = field(
+        default=None,
+        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -78,16 +90,18 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
-    )
-    dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
-    )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+    )
+    train_ref_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
+    )
+    validation_ref_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input validation ref data file for whole word masking in Chinese."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -103,27 +117,27 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    plm_probability: float = field(
-        default=1 / 6,
-        metadata={
-            "help": "Ratio of length of a span of masked tokens to surrounding context length for "
-            "permutation language modeling."
-        },
-    )
-    max_span_length: int = field(
-        default=5, metadata={"help": "Maximum length of a span of masked tokens for permutation language modeling."}
+    mlm_probability: float = field(
+        default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+        if self.train_file is not None:
+            extension = self.train_file.split(".")[-1]
+            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+        if self.validation_file is not None:
+            extension = self.validation_file.split(".")[-1]
+            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+
+
+def add_chinese_references(dataset, ref_file):
+    with open(ref_file, "r", encoding="utf-8") as f:
+        refs = [json.loads(line) for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+    assert len(dataset) == len(refs)
+
+    dataset_dict = {c: dataset[c] for c in dataset.column_names}
+    dataset_dict["chinese_ref"] = refs
+    return Dataset.from_dict(dataset_dict)
 
 
 def main():
@@ -179,19 +193,15 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    if data_args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
-    else:
-        data_files = {}
-        if data_args.train_file is not None:
-            data_files["train"] = data_args.train_file
-        if data_args.validation_file is not None:
-            data_files["validation"] = data_args.train_file
-        extension = data_args.train_file.split(".")[-1]
-        if extension == "txt":
-            extension = "text"
-        datasets = load_dataset(extension, data_files=data_files)
+    data_files = {}
+    if data_args.train_file is not None:
+        data_files["train"] = data_args.train_file
+    if data_args.validation_file is not None:
+        data_files["validation"] = data_args.train_file
+    extension = data_args.train_file.split(".")[-1]
+    if extension == "txt":
+        extension = "text"
+    datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -205,7 +215,7 @@ def main():
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
-        config = XLNetConfig()
+        config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
@@ -223,7 +233,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = XLNetLMHeadModel.from_pretrained(
+        model = AutoModelForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
             config=config,
@@ -231,7 +241,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = XLNetLMHeadModel.from_config(config)
+        model = AutoModelForMaskedLM.from_config(config)
 
     model.resize_token_embeddings(len(tokenizer))
 
@@ -256,12 +266,17 @@ def main():
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
+    # Add the chinese references if provided
+    if data_args.train_ref_file is not None:
+        tokenized_datasets["train"] = add_chinese_references(tokenized_datasets["train"], data_args.train_ref_file)
+    if data_args.valid_ref_file is not None:
+        tokenized_datasets["validation"] = add_chinese_references(
+            tokenized_datasets["validation"], data_args.validation_ref_file
+        )
+
     # Data collator
-    data_collator = DataCollatorForPermutationLanguageModeling(
-        tokenizer=tokenizer,
-        plm_probability=data_args.plm_probability,
-        max_span_length=data_args.max_span_length,
-    )
+    # This one will take care of randomly masking the tokens.
+    data_collator = DataCollatorForWholeWordMask(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -290,7 +305,7 @@ def main():
         perplexity = math.exp(eval_output["eval_loss"])
         results["perplexity"] = perplexity
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_plm.txt")
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results_mlm_wwm.txt")
         if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Eval results *****")
