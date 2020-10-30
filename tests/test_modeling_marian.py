@@ -69,6 +69,7 @@ class SelectiveCommonTest(unittest.TestCase):
 
 class ModelManagementTests(unittest.TestCase):
     @slow
+    @require_torch
     def test_model_names(self):
         model_list = HfApi().model_list()
         model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
