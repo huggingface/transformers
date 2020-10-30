@@ -144,7 +144,7 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
 @dataclass
 class LxmertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.LxmertForPreTrainingModel`.
+    Output type of :class:`~transformers.LxmertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
