@@ -850,7 +850,9 @@ class Trainer:
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (self.state.global_step - self._globalstep_last_logged)
+            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (
+                self.state.global_step - self._globalstep_last_logged
+            )
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
