@@ -58,7 +58,9 @@ class Seq2SeqTrainer(Trainer):
                 f"The `config.pad_token_id` is `None`. Using `config.eos_token_id` = {self.config.eos_token_id} for padding.."
             )
 
-        if self.args.label_smoothing > 0:
+        if self.args.label_smoothing == 0:
+            self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
+        else:
             # dynamically import label_smoothed_nll_loss
             try:
                 from .utils import label_smoothed_nll_loss
@@ -66,8 +68,6 @@ class Seq2SeqTrainer(Trainer):
                 from utils import label_smoothed_nll_loss
 
             self.loss_fn = label_smoothed_nll_loss
-        else:
-            self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
