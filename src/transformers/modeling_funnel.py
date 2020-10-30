@@ -798,7 +798,7 @@ class FunnelClassificationHead(nn.Module):
 @dataclass
 class FunnelForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FunnelForPreTrainingModel`.
+    Output type of :class:`~transformers.FunnelForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):

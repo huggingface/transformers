@@ -478,7 +478,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
 @dataclass
 class AlbertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.AlbertForPreTrainingModel`.
+    Output type of :class:`~transformers.AlbertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
