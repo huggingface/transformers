@@ -666,7 +666,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
 @dataclass
 class TFBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFBertForPreTrainingModel`.
+    Output type of :class:`~transformers.TFBertForPreTraining`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):

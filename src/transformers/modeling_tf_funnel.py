@@ -1031,7 +1031,7 @@ class TFFunnelPreTrainedModel(TFPreTrainedModel):
 @dataclass
 class TFFunnelForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FunnelForPreTrainingModel`.
+    Output type of :class:`~transformers.FunnelForPreTraining`.
 
     Args:
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):

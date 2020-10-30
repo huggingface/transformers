@@ -695,7 +695,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
 @dataclass
 class MobileBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.MobileBertForPreTrainingModel`.
+    Output type of :class:`~transformers.MobileBertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):

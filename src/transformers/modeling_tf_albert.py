@@ -628,7 +628,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 @dataclass
 class TFAlbertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFAlbertForPreTrainingModel`.
+    Output type of :class:`~transformers.TFAlbertForPreTraining`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):

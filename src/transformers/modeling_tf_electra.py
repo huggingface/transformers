@@ -598,7 +598,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
 @dataclass
 class TFElectraForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFElectraForPreTrainingModel`.
+    Output type of :class:`~transformers.TFElectraForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``tf.Tensor`` of shape :obj:`(1,)`):

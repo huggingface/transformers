@@ -833,7 +833,7 @@ class TFMobileBertPreTrainedModel(TFPreTrainedModel):
 @dataclass
 class TFMobileBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFMobileBertForPreTrainingModel`.
+    Output type of :class:`~transformers.TFMobileBertForPreTraining`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):

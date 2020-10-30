@@ -96,7 +96,7 @@ class TFLxmertModelOutput(ModelOutput):
 @dataclass
 class TFLxmertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.LxmertForPreTrainingModel`.
+    Output type of :class:`~transformers.LxmertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``tf.Tensor`` of shape :obj:`(1,)`):

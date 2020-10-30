@@ -555,7 +555,7 @@ class ElectraPreTrainedModel(PreTrainedModel):
 @dataclass
 class ElectraForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.ElectraForPreTrainingModel`.
+    Output type of :class:`~transformers.ElectraForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
