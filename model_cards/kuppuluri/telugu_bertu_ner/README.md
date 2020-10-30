@@ -17,10 +17,6 @@ text = "విరాట్ కోహ్లీ కూడా అదే నిర�
 results = model.predict([text])
 ```
 
-#### Limitations and bias
-
-Provide examples of latent issues and potential remediations.
-
 ## Training data
 
 Training data is from https://github.com/anikethjr/NER_Telugu
