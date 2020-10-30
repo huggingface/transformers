@@ -397,6 +397,9 @@ if is_torch_available():
         DPRPretrainedReader,
         DPRQuestionEncoder,
         DPRReader,
+        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_electra import (
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -670,7 +673,6 @@ if is_tf_available():
         TFBertModel,
         TFBertPreTrainedModel,
     )
-    from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
     from .modeling_tf_camembert import (
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCamembertForMaskedLM,
@@ -751,8 +753,6 @@ if is_tf_available():
         TFLxmertPreTrainedModel,
         TFLxmertVisualFeatureEncoder,
     )
-    from .modeling_tf_marian import TFMarianMTModel
-    from .modeling_tf_mbart import TFMBartForConditionalGeneration
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMobileBertForMaskedLM,
@@ -774,7 +774,6 @@ if is_tf_available():
         TFOpenAIGPTModel,
         TFOpenAIGPTPreTrainedModel,
     )
-    from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
     from .modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,
@@ -831,6 +830,14 @@ if is_tf_available():
         TFXLNetMainLayer,
         TFXLNetModel,
         TFXLNetPreTrainedModel,
+    )
+    from .modeling_tf_dpr import (
+        TFDPRContextEncoder,
+        TFDPRPretrainedContextEncoder,
+        TFDPRPretrainedQuestionEncoder,
+        TFDPRPretrainedReader,
+        TFDPRQuestionEncoder,
+        TFDPRReader,
     )
 
     # Optimization
