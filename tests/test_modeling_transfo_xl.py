@@ -279,6 +279,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0])
 
 
+@require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):
