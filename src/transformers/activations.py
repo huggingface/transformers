@@ -1,4 +1,5 @@
 import math
+from packaging import version
 
 import torch
 import torch.nn.functional as F
@@ -27,7 +28,7 @@ def gelu_new(x):
     return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
 
 
-if torch.__version__ < "1.4.0":
+if version.parse(torch.__version__) < version.parse("1.4"):
     gelu = _gelu_python
 else:
     gelu = F.gelu
@@ -37,7 +38,7 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
-def silu(x):
+def _silu_python(x):
     """
     See Gaussian Error Linear Units (Hendrycks et al., https://arxiv.org/abs/1606.08415) where the SiLU (Sigmoid Linear
     Unit) was originally introduced and coined, and see Sigmoid-Weighted Linear Units for Neural Network Function
@@ -48,7 +49,9 @@ def silu(x):
     return x * torch.sigmoid(x)
 
 
-if torch.__version__ >= "1.7":
+if version.parse(torch.__version__) < version.parse("1.7"):
+    silu = _silu_python
+else:
     silu = F.silu
 
 
