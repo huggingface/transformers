@@ -30,7 +30,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_utils import (
@@ -652,7 +652,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # data mask: input mask & perm mask
         assert input_mask is None or attention_mask is None, (
             "You can only use one of input_mask (uses 1 for padding) "
-            "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+            "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
         )
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - tf.cast(attention_mask, dtype=dtype_float)
@@ -1122,7 +1122,7 @@ XLNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XLNet Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare XLNet Model transformer outputting raw hidden-states without any specific head on top.",
     XLNET_START_DOCSTRING,
 )
 class TFXLNetModel(TFXLNetPreTrainedModel):
@@ -1130,7 +1130,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1197,7 +1197,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         return inputs
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFXLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -1314,7 +1314,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1417,7 +1417,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1552,7 +1552,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1639,7 +1639,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",

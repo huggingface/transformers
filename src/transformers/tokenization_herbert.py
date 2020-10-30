@@ -40,7 +40,7 @@ class HerbertTokenizer(XLMTokenizer):
 
     Peculiarities:
 
-    - uses BERT's pre-tokenizer: BaseTokenizer splits tokens on spaces, and also on punctuation. Each occurence of a
+    - uses BERT's pre-tokenizer: BaseTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of a
       punctuation character will be treated separately.
 
     - Such pretokenized input is BPE subtokenized

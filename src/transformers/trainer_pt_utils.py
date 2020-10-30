@@ -135,7 +135,7 @@ def torch_distributed_zero_first(local_rank: int):
 
 class SequentialDistributedSampler(Sampler):
     """
-    Distributed Sampler that subsamples indicies sequentially, making it easier to collate all results at the end.
+    Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
 
     Even though we only use this sampler for eval and predict (no training), which means that the model params won't
     have to be synced (i.e. will not hang for synchronization even if varied number of forward passes), we still add

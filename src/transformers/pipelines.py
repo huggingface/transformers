@@ -122,7 +122,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
 
     Args:
         targeted_task (:obj:`Dict` ):
-           Dictionnary representing the given task, that should contain default models
+           Dictionary representing the given task, that should contain default models
 
         framework (:obj:`str`, None)
            "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
@@ -150,9 +150,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     else:
         # XXX This error message needs to be updated to be more generic if more tasks are going to become
         # parametrized
-        raise ValueError(
-            'The task defaults can\'t be correctly selectionned. You probably meant "translation_XX_to_YY"'
-        )
+        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_XX_to_YY"')
 
     if framework is None:
         framework = "pt"
@@ -695,7 +693,7 @@ class Pipeline(_ScikitCompat):
         Internal framework specific forward dispatching
 
         Args:
-            inputs: dict holding all the keyworded arguments for required by the model forward method.
+            inputs: dict holding all the keyword arguments for required by the model forward method.
             return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
 
         Returns:
@@ -874,7 +872,7 @@ class TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1710,7 +1708,7 @@ class QuestionAnsweringPipeline(Pipeline):
             question (:obj:`str` or :obj:`List[str]`):
                 One or several question(s) (must be used in conjunction with the :obj:`context` argument).
             context (:obj:`str` or :obj:`List[str]`):
-                One or several context(s) associated with the qustion(s) (must be used in conjunction with the
+                One or several context(s) associated with the question(s) (must be used in conjunction with the
                 :obj:`question` argument).
             topk (:obj:`int`, `optional`, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood).
@@ -1959,7 +1957,7 @@ class SummarizationPipeline(Pipeline):
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
@@ -2077,7 +2075,7 @@ class TranslationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Texts to be translated.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -2188,7 +2186,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Input text for the encoder.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -2253,8 +2251,8 @@ class Conversation:
     :class:`~transformers.ConversationalPipeline`. The conversation contains a number of utility function to manage the
     addition of new user input and generated model responses. A conversation needs to contain an unprocessed user input
     before being passed to the :class:`~transformers.ConversationalPipeline`. This user input is either created when
-    the class is instantiated, or by calling :obj:`conversional_pipeline.append_response("input")` after a conversation
-    turn.
+    the class is instantiated, or by calling :obj:`conversational_pipeline.append_response("input")` after a
+    conversation turn.
 
     Arguments:
         text (:obj:`str`, `optional`):
@@ -2671,8 +2669,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - :obj:`"conversational"`
 
     Returns:
-        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionnary required to initialize
-        the pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
+        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
+        pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
@@ -2734,12 +2732,17 @@ def pipeline(
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default configuration file for the requested model will be used. That means that if
+            :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
+            this :obj:`task`'s default model's config is used instead.
         tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default tokenizer for the given :obj:`model` will be loaded (if it is a string). If
+            :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
+            it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
+            for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.

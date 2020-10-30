@@ -37,7 +37,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -837,7 +837,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -887,7 +887,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         )
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
@@ -970,7 +970,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1088,7 +1088,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1184,7 +1184,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1276,7 +1276,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1361,7 +1361,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1460,7 +1460,9 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1555,7 +1557,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",

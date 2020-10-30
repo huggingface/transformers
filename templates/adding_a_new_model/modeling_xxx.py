@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_xxx import XxxConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from .modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedLMOutput,
@@ -309,7 +309,7 @@ class XxxModel(XxxPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xxx-base-uncased",
@@ -391,7 +391,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xxx-base-uncased",
@@ -468,7 +468,7 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xxx-base-uncased",
@@ -551,7 +551,7 @@ class XxxForMultipleChoice(XxxPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(XXX_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xxx-base-uncased",
@@ -641,7 +641,7 @@ class XxxForTokenClassification(XxxPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xxx-base-uncased",
@@ -726,7 +726,7 @@ class XxxForQuestionAnswering(XxxPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XXX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xxx-base-uncased",

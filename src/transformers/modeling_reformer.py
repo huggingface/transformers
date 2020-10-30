@@ -36,7 +36,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
 )
 from .modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
@@ -986,7 +986,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 class ReverseSort(Function):
     """
     After chunked attention is applied which sorted clusters, original ordering has to be restored. Since customized
-    backward function is used for Reformer, the gradients of the output vectors have to be explicitely sorted here.
+    backward function is used for Reformer, the gradients of the output vectors have to be explicitly sorted here.
     """
 
     @staticmethod
@@ -1991,7 +1991,7 @@ class ReformerModel(ReformerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2075,7 +2075,7 @@ class ReformerModel(ReformerPreTrainedModel):
                 device=device,
             )
 
-        # start index for postion encoding depends on incremental decoding
+        # start index for position encoding depends on incremental decoding
         if past_buckets_states is not None:
             start_idx_pos_encodings = past_buckets_states[0][1].shape[1]
         else:
@@ -2195,7 +2195,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2309,7 +2309,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2389,7 +2389,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2491,7 +2491,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",

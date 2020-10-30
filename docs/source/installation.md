@@ -80,9 +80,9 @@ cache home followed by ``/transformers/`` (even if you don't have PyTorch instal
 So if you don't have any specific environment variable set, the cache directory will be at
 ``~/.cache/torch/transformers/``.
 
-**Note:** If you have set a shell enviromnent variable for one of the predecessors of this library
+**Note:** If you have set a shell environment variable for one of the predecessors of this library
 (``PYTORCH_TRANSFORMERS_CACHE`` or ``PYTORCH_PRETRAINED_BERT_CACHE``), those will be used if there is no shell
-enviromnent variable for ``TRANSFORMERS_CACHE``.
+environment variable for ``TRANSFORMERS_CACHE``.
 
 ### Note on model downloads (Continuous Integration or large-scale deployments)
 

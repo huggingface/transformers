@@ -28,7 +28,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
@@ -50,7 +50,7 @@ TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class TFLxmertModelOutput(ModelOutput):
     """
-    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilites for the language,
+    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilities for the language,
     visual, and, cross-modality encoders. (note: the visual encoder in Lxmert is referred to as the "relation-ship"
     encoder")
 
@@ -423,7 +423,7 @@ class TFLxmertSelfAttentionLayer(tf.keras.layers.Layer):
         self.attention_output = TFLxmertAttentionOutput(config, name="output")
 
     def call(self, input_tensor, attention_mask, output_attentions, training=False):
-        # Self attention attends to itself, thus keys and querys are the same (input_tensor).
+        # Self attention attends to itself, thus keys and queries are the same (input_tensor).
         self_output = self.self(input_tensor, input_tensor, attention_mask, output_attentions)
         if output_attentions:
             attention_probs = self_output[1]
@@ -868,7 +868,7 @@ LXMERT_START_DOCSTRING = r"""
     <https://arxiv.org/abs/1908.07490>`__ by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression, cross entropy loss for
-    question answering attribute prediction, and object tag predicition.
+    question answering attribute prediction, and object tag prediction.
 
     This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
@@ -962,7 +962,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Lxmert Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare Lxmert Model transformer outputting raw hidden-states without any specific head on top.",
     LXMERT_START_DOCSTRING,
 )
 class TFLxmertModel(TFLxmertPreTrainedModel):
@@ -970,7 +970,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.lxmert = TFLxmertMainLayer(config, name="lxmert")
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="unc-nlp/lxmert-base-uncased",
@@ -1224,7 +1224,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,

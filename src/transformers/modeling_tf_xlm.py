@@ -32,7 +32,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
 )
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
@@ -654,7 +654,7 @@ XLM_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`__
         lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatbility. Indices selected in
+            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
             ``[0, ..., input_ids.size(-1)]``.
         cache (:obj:`Dict[str, tf.Tensor]`, `optional`):
             Dictionary string to ``torch.FloatTensor`` that contains precomputed hidden states (key and values in the
@@ -688,7 +688,7 @@ XLM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XLM Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_START_DOCSTRING,
 )
 class TFXLMModel(TFXLMPreTrainedModel):
@@ -696,7 +696,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -775,7 +775,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             langs = None
         return {"inputs": inputs, "langs": langs}
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -813,7 +813,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -914,7 +914,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
         }
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1056,7 +1056,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",
@@ -1143,7 +1143,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlm-mlm-en-2048",

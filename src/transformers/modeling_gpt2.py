@@ -30,7 +30,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
@@ -502,7 +502,7 @@ class GPT2Model(GPT2PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
@@ -588,7 +588,7 @@ class GPT2Model(GPT2PreTrainedModel):
             attention_mask = (1.0 - attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.add_cross_attention and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
@@ -708,7 +708,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
 
         if attention_mask is not None and position_ids is None:
-            # create postion_ids on the fly for batch generation
+            # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past:
@@ -723,7 +723,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             "attention_mask": attention_mask,
         }
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
@@ -837,7 +837,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             "use_cache": kwargs.get("use_cache"),
         }
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -987,7 +987,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/dialogrpt",
@@ -1050,7 +1050,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

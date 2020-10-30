@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - ci_*
     paths:
       - "src/**"
       - "tests/**"
@@ -33,7 +32,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0.1-tests_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -82,7 +81,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0.1-tests_tf_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_tf_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -132,7 +131,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0.1-tests_torch_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_torch_multiple_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -180,7 +179,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0.1-tests_tf_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_tf_multiple_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |

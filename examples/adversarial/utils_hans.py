@@ -291,10 +291,9 @@ def hans_convert_examples_to_features(
 
     Args:
         examples: List of ``InputExamples`` containing the examples.
-        tokenizer: Instance of a tokenizer that will tokenize the examples.
-        max_length: Maximum example length.
         label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method.
-        output_mode: String indicating the output mode. Either ``regression`` or ``classification``.
+        max_length: Maximum example length.
+        tokenizer: Instance of a tokenizer that will tokenize the examples.
 
     Returns:
         A list of task-specific ``InputFeatures`` which can be fed to the model.

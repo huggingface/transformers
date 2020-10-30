@@ -39,7 +39,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     return tuple with:
 
         - pytorch model weight name
-        - transpose: boolean indicating weither TF2.0 and PyTorch weights matrices are transposed with regards to each
+        - transpose: boolean indicating wether TF2.0 and PyTorch weights matrices are transposed with regards to each
           other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
@@ -270,7 +270,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     logger.info("Loading TensorFlow weights from {}".format(tf_checkpoint_path))
 
     # Instantiate and load the associated TF 2.0 model
-    tf_model_class_name = "TF" + pt_model.__class__.__name__  # Add "TF" at the beggining
+    tf_model_class_name = "TF" + pt_model.__class__.__name__  # Add "TF" at the beginning
     tf_model_class = getattr(transformers, tf_model_class_name)
     tf_model = tf_model_class(pt_model.config)
 

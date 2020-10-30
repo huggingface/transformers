@@ -27,7 +27,7 @@ from .configuration_longformer import LongformerConfig
 from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -382,7 +382,7 @@ class LongformerSelfAttention(nn.Module):
                 # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
                 # which is the attention weights from tokens with global attention to all tokens
                 # It doesn't not return local attention
-                # In case of variable number of global attantion in the rows of a batch,
+                # In case of variable number of global attention in the rows of a batch,
                 # attn_probs are padded with -10000.0 attention scores
                 attn_probs = attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
             else:
@@ -416,7 +416,7 @@ class LongformerSelfAttention(nn.Module):
                                        -0.7584,  0.4206, -0.0405,  0.1599,
                                        2.0514, -1.1600,  0.5372,  0.2629 ]
               window_overlap = num_rows = 4
-             (pad & diagonilize) =>
+             (pad & diagonalize) =>
              [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
                0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
                0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
@@ -440,7 +440,7 @@ class LongformerSelfAttention(nn.Module):
 
     @staticmethod
     def _chunk(hidden_states, window_overlap):
-        """convert into overlapping chunkings. Chunk size = 2w, overlap size = w"""
+        """convert into overlapping chunks. Chunk size = 2w, overlap size = w"""
 
         # non-overlapping chunks of size = 2w
         hidden_states = hidden_states.view(
@@ -491,7 +491,7 @@ class LongformerSelfAttention(nn.Module):
         chunked_query = self._chunk(query, window_overlap)
         chunked_key = self._chunk(key, window_overlap)
 
-        # matrix multipication
+        # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcyd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcxy: batch_size * num_heads x chunks x 2window_overlap x window_overlap
@@ -1030,7 +1030,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to decide the attention given on each token, local attention or global attenion. Tokens with global
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
@@ -1181,7 +1181,7 @@ class LongformerModel(LongformerPreTrainedModel):
             attention_mask = global_attention_mask + 1
         return attention_mask
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1308,7 +1308,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1412,7 +1412,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",
@@ -1521,7 +1521,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1655,7 +1655,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",
@@ -1742,7 +1742,9 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",

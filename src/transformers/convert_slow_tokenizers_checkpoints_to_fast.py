@@ -123,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--force_download",
         action="store_true",
-        help="Re-dowload checkpoints.",
+        help="Re-download checkpoints.",
     )
     args = parser.parse_args()
 

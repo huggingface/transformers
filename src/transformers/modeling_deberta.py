@@ -15,7 +15,7 @@
 """ PyTorch DeBERTa model. """
 
 import math
-from collections import Sequence
+from collections.abc import Sequence
 
 import torch
 from packaging import version
@@ -24,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import ACT2FN
 from .configuration_deberta import DebertaConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from .modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel
 from .utils import logging
@@ -69,8 +69,8 @@ class XSoftmax(torch.autograd.Function):
 
     Args:
       input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-      mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax caculation.
-      dim (int): The dimenssion that will apply softmax
+      mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+      dim (int): The dimension that will apply softmax
 
     Example::
       import torch
@@ -480,7 +480,7 @@ class DisentangledSelfAttention(torch.nn.Module):
     Parameters:
         config (:obj:`str`):
             A model config class instance with the configuration to build a new model. The schema is similar to
-            `BertConfig`, \ for more details, please refer :class:`~transformers.DebertaConfig`
+            `BertConfig`, for more details, please refer :class:`~transformers.DebertaConfig`
 
     """
 
@@ -540,16 +540,16 @@ class DisentangledSelfAttention(torch.nn.Module):
 
         Args:
             hidden_states (:obj:`torch.FloatTensor`):
-                Input states to the module usally the output from previous layer, it will be the Q,K and V in
+                Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 `Attention(Q,K,V)`
 
             attention_mask (:obj:`torch.ByteTensor`):
-                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maxium
+                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maximum
                 sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
                 th token.
 
             return_att (:obj:`bool`, optional):
-                Whether return the attention maxitrix.
+                Whether return the attention matrix.
 
             query_states (:obj:`torch.FloatTensor`, optional):
                 The `Q` state in `Attention(Q,K,V)`.
@@ -627,7 +627,7 @@ class DisentangledSelfAttention(torch.nn.Module):
             relative_pos = relative_pos.unsqueeze(1)
         # bxhxqxk
         elif relative_pos.dim() != 4:
-            raise ValueError(f"Relative postion ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
+            raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
         att_span = min(max(query_layer.size(-2), key_layer.size(-2)), self.max_relative_positions)
         relative_pos = relative_pos.long().to(query_layer.device)
@@ -772,7 +772,7 @@ DEBERTA_START_DOCSTRING = r"""
     The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention
     <https://arxiv.org/abs/2006.03654>`_ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of
     BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
-    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pre-trianing data.
+    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pre-training data.
 
     This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
@@ -858,7 +858,7 @@ class DebertaModel(DebertaPreTrainedModel):
         """
         raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
-    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/deberta-base",
@@ -976,7 +976,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.deberta.set_input_embeddings(new_embeddings)
 
-    @add_start_docstrings_to_callable(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/deberta-base",
