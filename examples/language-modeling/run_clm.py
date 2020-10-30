@@ -259,14 +259,14 @@ def main():
     )
 
     if data_args.block_size <= 0:
-        block_size = tokenizer.max_len
+        block_size = tokenizer.model_max_length
     else:
-        if data_args.block_size > tokenizer.max_len:
+        if data_args.block_size > tokenizer.model_max_length:
             logger.warn(
                 f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
-                f"({tokenizer.max_len}). Using block_size={tokenizer.max_len}."
+                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
-        block_size = min(data_args.block_size, tokenizer.max_len)
+        block_size = min(data_args.block_size, tokenizer.model_max_length)
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
