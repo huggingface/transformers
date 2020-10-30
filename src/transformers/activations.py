@@ -63,6 +63,7 @@ def linear_act(x):
 ACT2FN = {
     "relu": F.relu,
     "silu": silu,
+    "swish": silu,
     "gelu": gelu,
     "tanh": torch.tanh,
     "gelu_new": gelu_new,
