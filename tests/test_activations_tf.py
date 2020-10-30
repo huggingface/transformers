@@ -11,7 +11,7 @@ if is_tf_available():
 @require_tf
 class TestTFActivations(unittest.TestCase):
     def test_get_activation(self):
-        get_tf_activation("swish")
+        get_tf_activation("silu")
         get_tf_activation("gelu")
         get_tf_activation("relu")
         get_tf_activation("tanh")

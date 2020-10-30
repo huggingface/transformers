@@ -53,7 +53,7 @@ def gelu(x):
 ACT2FN = {
     "gelu": nn.gelu,
     "relu": nn.relu,
-    "swish": nn.swish,
+    "silu": nn.silu,
     "gelu_new": gelu,
 }
 

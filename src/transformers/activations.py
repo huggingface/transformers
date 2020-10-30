@@ -9,24 +9,20 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-def swish(x):
-    return x * torch.sigmoid(x)
-
-
 def _gelu_python(x):
     """
-    Original Implementation of the gelu activation function in Google Bert repo when initially created. For
+    Original Implementation of the gelu activation function in Google BERT repo when initially created. For
     information: OpenAI GPT's gelu is slightly different (and gives slightly different results): 0.5 * x * (1 +
     torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in
-    torch.nn.functional Also see https://arxiv.org/abs/1606.08415
+    torch.nn.functional Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def gelu_new(x):
     """
-    Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT). Also see
-    https://arxiv.org/abs/1606.08415
+    Implementation of the gelu activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
+    the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
     """
     return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
 
@@ -41,6 +37,24 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
+def silu(x):
+    """
+    See Gaussian Error Linear Units (Hendrycks et al., https://arxiv.org/abs/1606.08415) 
+    where the SiLU (Sigmoid Linear Unit) was originally introduced and coined,
+    and see Sigmoid-Weighted Linear Units for Neural Network Function Approximation 
+    in Reinforcement Learning (Elfwing et al., https://arxiv.org/abs/1702.03118) and Swish: 
+    a Self-Gated Activation Function (Ramachandran et al., https://arxiv.org/abs/1710.05941v1)
+    where the SiLU was experimented with later.
+    """
+    return x * torch.sigmoid(x)
+
+
+if torch.__version__ < "1.7":
+    silu = silu
+else:
+    silu = F.silu
+
+
 def mish(x):
     return x * torch.tanh(torch.nn.functional.softplus(x))
 
@@ -51,7 +65,7 @@ def linear_act(x):
 
 ACT2FN = {
     "relu": F.relu,
-    "swish": swish,
+    "silu": silu,
     "gelu": gelu,
     "tanh": torch.tanh,
     "gelu_new": gelu_new,
