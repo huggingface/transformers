@@ -164,14 +164,6 @@ conversion utilities for the following models:
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 34. `Other community models <https://huggingface.co/models>`__, contributed by the `community
-35. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
-    Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`__ by Alexis Conneau*, Kartikay
-    Khandelwal*, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke
-    Zettlemoyer and Veselin Stoyanov.
-36. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
-    Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
-    Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-37. `Other community models <https://huggingface.co/models>`__, contributed by the `community
     <https://huggingface.co/users>`__.
 
 .. toctree::

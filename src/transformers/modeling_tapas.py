@@ -28,7 +28,7 @@ from .activations import ACT2FN
 from .configuration_tapas import TapasConfig
 from .file_utils import (ModelOutput, 
                         add_start_docstrings, 
-                        add_start_docstrings_to_callable,
+                        add_start_docstrings_to_model_forward,
                         replace_return_docstrings,
                         is_scatter_available,
                         requires_scatter,
@@ -70,7 +70,7 @@ class TableQuestionAnsweringOutput(ModelOutput):
     Output type of :class:`~transformers.TapasForQuestionAnswering`.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` (and possibly :obj:`answer`, :obj:`aggregation_labels`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided):
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label_ids` (and possibly :obj:`answer`, :obj:`aggregation_labels`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided)):
             Total loss as the sum of the hierarchical cell selection log-likelihood loss and (optionally) the semi-supervised regression loss and (optionally) supervised loss for aggregations.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the cell selection head, for every token.
@@ -754,7 +754,7 @@ class TapasModel(TapasPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -879,7 +879,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1023,7 +1023,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1322,7 +1322,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

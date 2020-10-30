@@ -64,44 +64,52 @@ Usage
 
 If you just want to perform inference (i.e. making predictions) in a non-conversational setup, you can do the following:
 
+.. code-block::
+
         >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
         >>> import pandas as pd 
-        >>> 
+        
         >>> model_name = 'tapas-base-finetuned-wtq'
         >>> model = TapasForQuestionAnswering.from_pretrained(model_name)
         >>> tokenizer = TapasTokenizer.from_pretrained(model_name)
-        >>> 
+        
         >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Number of movies': ["87", "53", "69"]}
         >>> queries = ["What is the name of the first actor?", "How many movies has George Clooney played in?", "What is the total number of movies?"]
         >>> table = pd.Dataframe(data)
         >>> inputs = tokenizer(table, queries, return_tensors='pt')
         >>> logits, logits_agg = model(**inputs)
         >>> answer_coordinates_batch, aggregation_predictions = tokenizer.convert_logits_to_predictions(inputs, logits, logits_agg)
-        >>> 
+        
         >>> # let's print out the results:
         >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}
         >>> aggregation_predictions_string = [id2aggregation[x] for x in aggregation_predictions]
-        >>>
+        
         >>> answers = []
         >>> for coordinates in answer_coordinates_batch:
-        >>>   if len(coordinates) == 1:
-        >>>     # only a single cell:
-        >>>     answers.append(df.iat[coordinates[0]])
-        >>>   else:
-        >>>     # multiple cells
-        >>>     cell_values = []
-        >>>     for coordinate in coordinates:
-        >>>        cell_values.append(df.iat[coordinate])
-        >>>     answers.append(", ".join(cell_values))
-        >>>
+        ...   if len(coordinates) == 1:
+        ...     # only a single cell:
+        ...     answers.append(df.iat[coordinates[0]])
+        ...   else:
+        ...     # multiple cells
+        ...     cell_values = []
+        ...     for coordinate in coordinates:
+        ...        cell_values.append(df.iat[coordinate])
+        ...     answers.append(", ".join(cell_values))
+        
         >>> display(df)
         >>> print("")
         >>> for query, answer, predicted_agg in zip(queries, answers, aggregation_predictions_string):
-        >>>   print(query)
-        >>>   if predicted_agg == "NONE":
-        >>>     print("Predicted answer: " + answer)
-        >>>   else:
-        >>>     print("Predicted answer: " + predicted_agg + " > " + answer)    
+        ...   print(query)
+        ...   if predicted_agg == "NONE":
+        ...     print("Predicted answer: " + answer)
+        ...   else:
+        ...     print("Predicted answer: " + predicted_agg + " > " + answer)    
+        When was Brad Pitt born?
+        Predicted answer: 18 december 1963
+        Which actor appeared in the least number of movies?
+        Predicted answer: Leonardo Di Caprio
+        What is the average number of movies?
+        Predicted answer: AVERAGE > 87, 53, 69
 
 
 Tapas specific outputs

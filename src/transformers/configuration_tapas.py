@@ -85,6 +85,7 @@ class TapasConfig(BertConfig):
             Span selection mode to use. Currently only "none" is supported. 
 
     Example::
+
         >>> from transformers import TapasModel, TapasConfig
         >>> # Initializing a Tapas configuration
         >>> configuration = TapasConfig()
