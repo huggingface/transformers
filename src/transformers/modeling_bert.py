@@ -606,7 +606,7 @@ class BertPreTrainedModel(PreTrainedModel):
 @dataclass
 class BertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.BertForPreTrainingModel`.
+    Output type of :class:`~transformers.BertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
