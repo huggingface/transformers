@@ -113,6 +113,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
+        # XXX: More discussion is necessary to remove this hard coded value
+        # more info here: https://github.com/huggingface/transformers/issues/8117
+        model_max_length=512,
         **kwargs
     ):
         super().__init__(
@@ -124,6 +127,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
+            model_max_length=model_max_length,
             **kwargs,
         )
         self.sp_model = spm.SentencePieceProcessor()

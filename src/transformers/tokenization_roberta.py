@@ -145,6 +145,9 @@ class RobertaTokenizer(GPT2Tokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
+        # XXX: More discussion is necessary to remove this hard coded value
+        # more info here: https://github.com/huggingface/transformers/issues/8117
+        model_max_length=512,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -169,6 +172,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
+            model_max_length=model_max_length,
             **kwargs,
         )
 

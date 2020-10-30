@@ -102,6 +102,21 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
         )
 
+    def test_model_max_length_by_default(self):
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.model_max_length, 512)
+
+        rust_tokenizer = self.tokenizer_class.from_pretrained("roberta-base", use_fast=True)
+        self.assertEqual(rust_tokenizer.model_max_length, 512)
+
+    @slow
+    def test_model_max_length(self):
+        tokenizer = self.tokenizer_class.from_pretrained("roberta-base")
+        self.assertEqual(tokenizer.model_max_length, 512)
+
+        rust_tokenizer = self.tokenizer_class.from_pretrained("roberta-base", use_fast=True)
+        self.assertEqual(rust_tokenizer.model_max_length, 512)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("roberta-base")

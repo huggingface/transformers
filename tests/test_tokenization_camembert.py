@@ -50,6 +50,9 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
 
+        self.assertEqual(tokenizer.model_max_length, 512)
+        self.assertEqual(rust_tokenizer.model_max_length, 512)
+
         sequence = "I was born in 92000, and this is falsé."
 
         tokens = tokenizer.tokenize(sequence)
