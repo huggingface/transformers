@@ -41,6 +41,10 @@ from .configuration_auto import (
     XLNetConfig,
     replace_list_option_in_docstrings,
 )
+from .configuration_blenderbot import BlenderbotConfig
+from .configuration_marian import MarianConfig
+from .configuration_mbart import MBartConfig
+from .configuration_pegasus import PegasusConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_albert import (
@@ -63,6 +67,7 @@ from .modeling_tf_bert import (
     TFBertLMHeadModel,
     TFBertModel,
 )
+from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
 from .modeling_tf_camembert import (
     TFCamembertForMaskedLM,
     TFCamembertForMultipleChoice,
@@ -108,6 +113,8 @@ from .modeling_tf_funnel import (
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from .modeling_tf_marian import TFMarianMTModel
+from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -118,6 +125,7 @@ from .modeling_tf_mobilebert import (
     TFMobileBertModel,
 )
 from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -210,6 +218,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
+        (MarianConfig, TFMarianMTModel),
         (BartConfig, TFBartForConditionalGeneration),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
@@ -261,8 +270,16 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     ]
 )
 
+
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
-    [(T5Config, TFT5ForConditionalGeneration), (BartConfig, TFBartForConditionalGeneration)]
+    [
+        (T5Config, TFT5ForConditionalGeneration),
+        (MarianConfig, TFMarianMTModel),
+        (MBartConfig, TFMBartForConditionalGeneration),
+        (PegasusConfig, TFPegasusForConditionalGeneration),
+        (BlenderbotConfig, TFBlenderbotForConditionalGeneration),
+        (BartConfig, TFBartForConditionalGeneration),
+    ]
 )
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
