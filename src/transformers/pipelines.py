@@ -23,9 +23,8 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from itertools import chain
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
 import numpy as np
@@ -183,57 +182,6 @@ class ArgumentHandler(ABC):
     @abstractmethod
     def __call__(self, *args, **kwargs):
         raise NotImplementedError()
-
-
-class DefaultArgumentHandler(ArgumentHandler):
-    """
-    Default argument parser handling parameters for each :class:`~transformers.pipelines.Pipeline`.
-    """
-
-    @staticmethod
-    def handle_kwargs(kwargs: Dict) -> List:
-        if len(kwargs) == 1:
-            output = list(kwargs.values())
-        else:
-            output = list(chain(kwargs.values()))
-
-        return DefaultArgumentHandler.handle_args(output)
-
-    @staticmethod
-    def handle_args(args: Sequence[Any]) -> List[str]:
-
-        # Only one argument, let's do case by case
-        if len(args) == 1:
-            if isinstance(args[0], str):
-                return [args[0]]
-            elif not isinstance(args[0], list):
-                return list(args)
-            else:
-                return args[0]
-
-        # Multiple arguments (x1, x2, ...)
-        elif len(args) > 1:
-            if all([isinstance(arg, str) for arg in args]):
-                return list(args)
-
-            # If not instance of list, then it should instance of iterable
-            elif isinstance(args, Iterable):
-                return list(chain.from_iterable(chain(args)))
-            else:
-                raise ValueError(
-                    "Invalid input type {}. Pipeline supports Union[str, Iterable[str]]".format(type(args))
-                )
-        else:
-            return []
-
-    def __call__(self, *args, **kwargs):
-        if len(kwargs) > 0 and len(args) > 0:
-            raise ValueError("Pipeline cannot handle mixed args and kwargs")
-
-        if len(kwargs) > 0:
-            return DefaultArgumentHandler.handle_kwargs(kwargs)
-        else:
-            return DefaultArgumentHandler.handle_args(args)
 
 
 class PipelineDataFormat:
@@ -574,7 +522,6 @@ class Pipeline(_ScikitCompat):
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else "cuda:{}".format(device))
         self.binary_output = binary_output
-        self._args_parser = args_parser or DefaultArgumentHandler()
 
         # Special handling
         if self.framework == "pt" and self.device.type == "cuda":
@@ -669,12 +616,11 @@ class Pipeline(_ScikitCompat):
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
             )
 
-    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
             inputs,
             add_special_tokens=add_special_tokens,
@@ -836,7 +782,7 @@ class TextGenerationPipeline(Pipeline):
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
 
-    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
@@ -845,7 +791,6 @@ class TextGenerationPipeline(Pipeline):
             tokenizer_kwargs = {"add_space_before_punct_symbol": True}
         else:
             tokenizer_kwargs = {}
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
             inputs,
             add_special_tokens=add_special_tokens,
@@ -858,7 +803,7 @@ class TextGenerationPipeline(Pipeline):
 
     def __call__(
         self,
-        *args,
+        text_inputs,
         return_tensors=False,
         return_text=True,
         clean_up_tokenization_spaces=False,
@@ -890,7 +835,6 @@ class TextGenerationPipeline(Pipeline):
             - **generated_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
               -- The token ids of the generated text.
         """
-        text_inputs = self._args_parser(*args)
 
         results = []
         for prompt_text in text_inputs:
@@ -1094,7 +1038,8 @@ class ZeroShotClassificationPipeline(Pipeline):
     """
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, args_parser=args_parser, **kwargs)
+        super().__init__(*args, **kwargs)
+        self._args_parser = args_parser
         if self.entailment_id == -1:
             logger.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
@@ -1108,11 +1053,10 @@ class ZeroShotClassificationPipeline(Pipeline):
                 return ind
         return -1
 
-    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
             inputs,
             add_special_tokens=add_special_tokens,
@@ -1425,7 +1369,7 @@ class TokenClassificationPipeline(Pipeline):
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, inputs, **kwargs):
         """
         Classify each token of the text(s) given as inputs.
 
@@ -1444,7 +1388,6 @@ class TokenClassificationPipeline(Pipeline):
             - **index** (:obj:`int`, only present when ``self.grouped_entities=False``) -- The index of the
               corresponding token in the sentence.
         """
-        inputs = self._args_parser(*args, **kwargs)
         answers = []
         for sentence in inputs:
 
@@ -1659,12 +1602,12 @@ class QuestionAnsweringPipeline(Pipeline):
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            args_parser=QuestionAnsweringArgumentHandler(),
             device=device,
             task=task,
             **kwargs,
         )
 
+        self._args_parser = QuestionAnsweringArgumentHandler()
         self.check_model_type(
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
         )
@@ -2489,12 +2432,11 @@ class ConversationalPipeline(Pipeline):
             else:
                 return output
 
-    def _parse_and_tokenize(self, *args, **kwargs):
+    def _parse_and_tokenize(self, inputs, **kwargs):
         """
         Parse arguments and tokenize, adding an EOS token at the end of the user input
         """
         # Parse arguments
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
         for input in inputs:
             input.append(self.tokenizer.eos_token_id)
