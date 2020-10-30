@@ -15,18 +15,16 @@
 
 
 import unittest
-from typing import List
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
-
-from .test_modeling_common import ids_tensor
 
 
 if is_torch_available():
     import torch
 
     from transformers import top_k_top_p_filtering
+    from transformers.generation_beam_search import BeamSearchScorer
     from transformers.generation_logits_process import (
         LogitsProcessorList,
         MinLengthLogitsProcessor,
@@ -48,16 +46,22 @@ class GenerationTesterMixin:
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = torch.ones_like(input_ids)
-        max_length = input_ids.shape[-1] + 3
 
         # cut to half length & take max batch_size 3
         max_batch_size = 2
         sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:max_batch_size, :sequence_length]
         attention_mask = attention_mask[:max_batch_size, :sequence_length]
+
+        # generate max 3 tokens
+        max_length = input_ids.shape[-1] + 3
+        if config.eos_token_id is not None and config.pad_token_id is None:
+            # hack to allow generate for models such as GPT2 as is done in `generate()`
+            config.pad_token_id = config.eos_token_id
         return config, input_ids, attention_mask, max_length
 
-    def _get_logits_processor_and_kwargs(self, input_length, eos_token_id):
+    @staticmethod
+    def _get_logits_processor_and_kwargs(input_length, eos_token_id):
         process_kwargs = {
             "min_length": input_length + 1,
             "bad_words_ids": [[1, 0]],
@@ -65,8 +69,14 @@ class GenerationTesterMixin:
             "repetition_penalty": 1.2,
         }
         logits_processor = LogitsProcessorList(
-            [
-                MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
+            (
+                [
+                    MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
+                ]
+                if eos_token_id is not None
+                else []
+            )
+            + [
                 NoBadWordsLogitsProcessor(process_kwargs["bad_words_ids"], eos_token_id),
                 NoRepeatNGramLogitsProcessor(process_kwargs["no_repeat_ngram_size"]),
                 RepetitionPenaltyLogitsProcessor(process_kwargs["repetition_penalty"]),
@@ -74,7 +84,8 @@ class GenerationTesterMixin:
         )
         return process_kwargs, logits_processor
 
-    def _get_warper_and_kwargs(self, num_beams):
+    @staticmethod
+    def _get_warper_and_kwargs(num_beams):
         warp_kwargs = {"top_k": 10, "top_p": 0.7, "temperature": 0.7}
         logits_warper = LogitsProcessorList(
             [
@@ -84,6 +95,36 @@ class GenerationTesterMixin:
             ]
         )
         return warp_kwargs, logits_warper
+
+    @staticmethod
+    def _get_beam_scorer_and_kwargs(batch_size, max_length, num_return_sequences=1):
+        beam_kwargs = {
+            "early_stopping": False,
+            "length_penalty": 2.0,
+            "num_beams": 2,
+            "num_return_sequences": num_return_sequences,
+        }
+        beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=beam_kwargs["num_beams"],
+            device=torch_device,
+            length_penalty=beam_kwargs["length_penalty"],
+            do_early_stopping=beam_kwargs["early_stopping"],
+            num_beam_hyps_to_keep=num_return_sequences,
+        )
+        return beam_kwargs, beam_scorer
+
+    @staticmethod
+    def _get_encoder_outputs(model, input_ids, attention_mask, num_interleave=1):
+        encoder = model.get_encoder()
+        encoder_outputs = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
+        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+            num_interleave, dim=0
+        )
+        input_ids = torch.zeros_like(input_ids[:, :1]) + model._get_decoder_start_token_id()
+        attention_mask = None
+        return encoder_outputs, input_ids, attention_mask
 
     def test_greedy_generate(self):
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -95,7 +136,15 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # check generate and `greedy_search` are equal
+            # check `generate()` and `greedy_search()` are equal
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                    model, input_ids, attention_mask
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+                max_length = 4
+
             output_ids_generate = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
@@ -105,7 +154,11 @@ class GenerationTesterMixin:
                 **logits_process_kwargs,
             )
             output_ids_greedy = model.greedy_search(
-                input_ids, max_length=max_length, attention_mask=attention_mask, logits_processor=logits_processor
+                input_ids,
+                max_length=max_length,
+                attention_mask=attention_mask,
+                logits_processor=logits_processor,
+                **kwargs,
             )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_greedy.tolist())
 
@@ -120,161 +173,207 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # check generate and `sample()` are equal
-            torch.manual_seed(0)
-            output_ids_generate = model.generate(
-                input_ids,
-                do_sample=True,
-                num_beams=1,
-                max_length=max_length,
-                **logits_warper_kwargs,
-                **process_kwargs,
-            )
-            torch.manual_seed(0)
-            output_ids_sample = model.sample(
-                input_ids, max_length=max_length, logits_processor=logits_processor, logits_warper=logits_warper
-            )
-            self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
+            # check `generate()` and `sample()` are equal
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                    model, input_ids, attention_mask
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+                max_length = 4
 
-            # check generate and `sample()` yield equal results for `num_return_sequences`
             torch.manual_seed(0)
             output_ids_generate = model.generate(
                 input_ids,
                 do_sample=True,
                 num_beams=1,
                 max_length=max_length,
-                num_return_sequences=3,
                 **logits_warper_kwargs,
                 **process_kwargs,
             )
             torch.manual_seed(0)
             output_ids_sample = model.sample(
-                input_ids.repeat_interleave(3, dim=0),
+                input_ids,
                 max_length=max_length,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
+                **kwargs,
             )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
 
-    def test_lm_head_model_random_no_beam_search_generate(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+            # check `generate()` and `sample()` yield equal results for `num_return_sequences`
+            kwargs = {}
+            num_return_sequences = 3
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                    model, input_ids, attention_mask, num_interleave=num_return_sequences
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+                max_length = 4
 
-        # make sure that input_ids is at most of size 15
-        input_ids = input_ids[..., :15]
-
-        # iterate over all generative models
-        for model_class in self.all_generative_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-
-            if config.bos_token_id is None:
-                # if bos token id is not defined, model needs input_ids
-                with self.assertRaises(ValueError):
-                    model.generate(do_sample=True, max_length=5)
-                # num_return_sequences = 1
-                self._check_generated_ids(model.generate(input_ids, do_sample=True))
-            else:
-                # num_return_sequences = 1
-                self._check_generated_ids(model.generate(do_sample=True, max_length=5))
-
-            with self.assertRaises(ValueError):
-                # generating multiple sequences when no beam search generation
-                # is not allowed as it would always generate the same sequences
-                model.generate(input_ids, do_sample=False, num_beams=1, num_return_sequences=2)
-
-            # num_return_sequences > 1, sample
-            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=2))
-
-            # check bad words tokens language generation
-            # create list of 1-seq bad token and list of 2-seq of bad tokens
-            bad_words_ids = [
-                self._generate_random_bad_tokens(1, model.config),
-                self._generate_random_bad_tokens(2, model.config),
-            ]
-            output_tokens = model.generate(
-                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=2
+            torch.manual_seed(0)
+            output_ids_generate = model.generate(
+                input_ids,
+                do_sample=True,
+                num_beams=1,
+                max_length=max_length,
+                num_return_sequences=num_return_sequences,
+                **logits_warper_kwargs,
+                **process_kwargs,
             )
-            # only count generated tokens
-            generated_ids = output_tokens[:, input_ids.shape[-1] :]
-            self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
+            torch.manual_seed(0)
+            output_ids_sample = model.sample(
+                input_ids.repeat_interleave(num_return_sequences, dim=0),
+                max_length=max_length,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                **kwargs,
+            )
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
 
-    def test_lm_head_model_random_beam_search_generate(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = (inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]).to(
-            torch_device
+    def test_beam_search_generate(self):
+        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+        logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            input_ids.shape[-1], config.eos_token_id
         )
 
-        # make sure that input_ids is at most of size 15
-        input_ids = input_ids[..., :15]
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # check `generate()` and `beam_search()` are equal
+            if model.config.is_encoder_decoder:
+                max_length = 4
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
+            output_ids_generate = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                do_sample=False,
+                max_length=max_length,
+                **beam_kwargs,
+                **logits_process_kwargs,
+            )
+
+            # beam_search does not automatically interleave `batch_size` dim for `num_beams`
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                    model, input_ids, attention_mask, num_interleave=beam_scorer.num_beams
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+            else:
+                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+
+            output_ids_beam_search = model.beam_search(
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
+                beam_scorer,
+                max_length=max_length,
+                attention_mask=attention_mask,
+                logits_processor=logits_processor,
+                **kwargs,
+            )
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_beam_search.tolist())
+
+            # check `generate()` and `beam_search()` are equal for `num_return_sequences`
+            num_return_sequences = 2
+            if model.config.is_encoder_decoder:
+                max_length = 4
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
+                input_ids.shape[0], max_length, num_return_sequences=num_return_sequences
+            )
+
+            output_ids_generate = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                do_sample=False,
+                max_length=max_length,
+                **beam_kwargs,
+                **logits_process_kwargs,
+            )
+            # beam_search does not automatically interleave `batch_size` dim for `num_beams`
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                    model, input_ids, attention_mask, num_interleave=beam_scorer.num_beams
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+            else:
+                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+
+            output_ids_beam_search = model.beam_search(
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
+                beam_scorer,
+                max_length=max_length,
+                attention_mask=attention_mask,
+                logits_processor=logits_processor,
+                **kwargs,
+            )
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_beam_search.tolist())
+
+    def test_beam_sample_generate(self):
+        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+        logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            if config.bos_token_id is None:
-                # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
-                self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
-            else:
-                # num_return_sequences = 1
-                self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
-
-            with self.assertRaises(ValueError):
-                # generating more sequences than having beams leads is not possible
-                model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
-
-            # num_return_sequences > 1, sample
-            self._check_generated_ids(
-                model.generate(
-                    input_ids,
-                    do_sample=True,
-                    num_beams=2,
-                    num_return_sequences=2,
+            # check `generate()` and `beam_search()` are equal
+            # change `num_return_sequences = 2` but not for `beam_scorer`
+            num_return_sequences = 2
+            if model.config.is_encoder_decoder:
+                max_length = 4
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
+                input_ids.shape[0] * num_return_sequences, max_length
+            )
+            beam_kwargs["num_return_sequences"] = num_return_sequences
+            torch.manual_seed(0)
+            output_ids_generate = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                do_sample=True,
+                max_length=max_length,
+                **beam_kwargs,
+                **logits_warper_kwargs,
+            )
+            # beam_search does not automatically interleave `batch_size` dim for `num_beams * num_return_sequences`
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                    model, input_ids, attention_mask, num_interleave=beam_scorer.num_beams * num_return_sequences
                 )
+                kwargs["encoder_outputs"] = encoder_outputs
+            else:
+                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+
+            torch.manual_seed(0)
+            output_ids_beam_sample = model.beam_sample(
+                input_ids.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0),
+                beam_scorer,
+                max_length=max_length,
+                attention_mask=attention_mask,
+                logits_warper=logits_warper,
+                **kwargs,
             )
-            # num_return_sequences > 1, greedy
-            self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=2, num_return_sequences=2))
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_beam_sample.tolist())
 
-            # check bad words tokens language generation
-            # create list of 1-seq bad token and list of 2-seq of bad tokens
-            bad_words_ids = [
-                self._generate_random_bad_tokens(1, model.config),
-                self._generate_random_bad_tokens(2, model.config),
-            ]
-            output_tokens = model.generate(
-                input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_beams=2, num_return_sequences=2
-            )
-            # only count generated tokens
-            generated_ids = output_tokens[:, input_ids.shape[-1] :]
-            self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
+        def test_generate_without_input_ids(self):
+            config, _, _, max_length = self._get_input_ids_and_config()
 
-    def _generate_random_bad_tokens(self, num_bad_tokens: int, config) -> List[int]:
-        # special tokens cannot be bad tokens
-        special_tokens = [x for x in [config.bos_token_id, config.eos_token_id, config.pad_token_id] if x is not None]
-        # create random bad tokens that are not special tokens
-        bad_tokens = []
-        while len(bad_tokens) < num_bad_tokens:
-            token = ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(0).cpu().numpy()[0]
-            if token not in special_tokens:
-                bad_tokens.append(token)
-        return bad_tokens
+            # if no bos token id => cannot generate from None
+            if config.bos_token_id is None:
+                return
 
-    def _check_generated_ids(self, output_ids):
-        for token_id in output_ids[0].tolist():
-            self.assertGreaterEqual(token_id, 0)
-            self.assertLess(token_id, self.model_tester.vocab_size)
+            for model_class in self.all_generative_model_classes:
+                model = model_class(config).to(torch_device)
+                model.eval()
 
-    def _check_match_tokens(self, generated_ids, bad_words_ids):
-        # for all bad word tokens
-        for bad_word_ids in bad_words_ids:
-            # for all slices in batch
-            for generated_ids_slice in generated_ids:
-                # for all word idx
-                for i in range(len(bad_word_ids), len(generated_ids_slice)):
-                    # if tokens match
-                    if generated_ids_slice[i - len(bad_word_ids) : i] == bad_word_ids:
-                        return True
-        return False
+                output_ids_generate = model.generate(
+                    do_sample=False,
+                    max_length=max_length,
+                )
+
+                self.assertIsNotNone(output_ids_generate)
 
 
 @require_torch

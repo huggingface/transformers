@@ -98,13 +98,13 @@ class GenerationMixin:
         )
         return decoder_input_ids
 
-    def _get_pad_token_id(self, pad_token_id: int, eos_token_id: int) -> int:
+    def _get_pad_token_id(self, pad_token_id: int = None, eos_token_id: int = None) -> int:
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
         return pad_token_id
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int, bos_token_id: int) -> int:
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
@@ -571,7 +571,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-    @torch.no_grad()
     def greedy_search(
         self,
         input_ids: torch.LongTensor,
@@ -634,7 +633,6 @@ class GenerationMixin:
 
         return input_ids
 
-    @torch.no_grad()
     def sample(
         self,
         input_ids: torch.LongTensor,
@@ -700,7 +698,6 @@ class GenerationMixin:
 
         return input_ids
 
-    @torch.no_grad()
     def beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -784,7 +781,6 @@ class GenerationMixin:
 
         return decoded
 
-    @torch.no_grad()
     def beam_sample(
         self,
         input_ids: torch.LongTensor,
