@@ -12,15 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TAPAS configuration. Inherits from BERT configuration and adds additional hyperparameters."""
+""" TAPAS configuration. Adds additional hyperparameters to the configuration of BERT."""
 
 
-from .configuration_bert import BertConfig
+from .configuration_utils import PretrainedConfig
 
 TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"tapas-base": "", "tapas-large": ""}  # to be added  # to be added
 
 
-class TapasConfig(BertConfig):
+class TapasConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.TapasModel`.
     It is used to instantiate a TAPAS model according to the specified arguments, defining the model
@@ -33,10 +33,36 @@ class TapasConfig(BertConfig):
     Original implementation available at https://github.com/google-research/tapas/tree/master.
 
     Args:
+        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.BertModel` or
+            :class:`~transformers.TFBertModel`.
+        hidden_size (:obj:`int`, `optional`, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`List[int]`, `optional`, defaults to [3, 256, 256, 2, 256, 256, 10]):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.TapasModel`.
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        type_vocab_sizes (:obj:`List[int]`, `optional`, defaults to [3, 256, 256, 2, 256, 256, 10]):
+            The vocabulary sizes of the :obj:`token_type_ids` passed when calling :class:`~transformers.TapasModel`.
+        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         positive_weight (:obj:`float`, `optional`, defaults to 10.0):
             Weight for positive labels.
         num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
@@ -99,8 +125,20 @@ class TapasConfig(BertConfig):
 
     def __init__(
         self,
+        vocab_size=30522,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
         max_position_embeddings=1024,
-        type_vocab_size=[3, 256, 256, 2, 256, 256, 10],
+        type_vocab_sizes=[3, 256, 256, 2, 256, 256, 10],
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=0,
+        gradient_checkpointing=False,
         positive_weight=10.0,
         num_aggregation_labels=0,
         aggregation_loss_importance=1.0,
@@ -127,9 +165,24 @@ class TapasConfig(BertConfig):
         **kwargs
     ):
 
-        super().__init__(max_position_embeddings=max_position_embeddings, type_vocab_size=type_vocab_size, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
-        # Fine-tuning task arguments
+        # BERT hyperparameters (with updated max_position_embeddings and type_vocab_sizes)
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_sizes = type_vocab_sizes
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.gradient_checkpointing = gradient_checkpointing
+
+        # Fine-tuning task hyperparameters
         self.positive_weight = positive_weight
         self.num_aggregation_labels = num_aggregation_labels
         self.aggregation_loss_importance = aggregation_loss_importance

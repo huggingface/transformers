@@ -42,7 +42,7 @@ if is_torch_available():
 global_rng = random.Random()
 
 
-def token_type_ids_tensor_tapas(shape, type_vocab_size, rng=None, name=None):
+def token_type_ids_tensor_tapas(shape, type_vocab_sizes, rng=None, name=None):
     #  Creates a random int32 tensor of the shape within the type vocab sizes
     if rng is None:
         rng = global_rng
@@ -51,7 +51,7 @@ def token_type_ids_tensor_tapas(shape, type_vocab_size, rng=None, name=None):
     for example in range(shape[0]):
         for token in range(shape[1]):
             for idx in range(shape[2]):
-                values.append(rng.randint(0, type_vocab_size[idx] - 1))
+                values.append(rng.randint(0, type_vocab_sizes[idx] - 1))
 
     return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
 
@@ -78,7 +78,7 @@ class TapasModelTester:
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         max_position_embeddings=512,
-        type_vocab_size=[3, 256, 256, 2, 256, 256, 10],
+        type_vocab_sizes=[3, 256, 256, 2, 256, 256, 10],
         type_sequence_label_size=2,
         positive_weight=10.0,
         num_aggregation_labels=4,
@@ -123,7 +123,7 @@ class TapasModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
+        self.type_vocab_sizes = type_vocab_sizes
         self.type_sequence_label_size = type_sequence_label_size
         self.positive_weight = positive_weight
         self.num_aggregation_labels = num_aggregation_labels
@@ -161,7 +161,7 @@ class TapasModelTester:
         token_type_ids = None
         if self.use_token_type_ids:
             token_type_ids = token_type_ids_tensor_tapas(
-                [self.batch_size, self.seq_length, len(self.type_vocab_size)], self.type_vocab_size
+                [self.batch_size, self.seq_length, len(self.type_vocab_sizes)], self.type_vocab_sizes
             )
 
         sequence_labels = None
@@ -190,7 +190,7 @@ class TapasModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
+            type_vocab_sizes=self.type_vocab_sizes,
             initializer_range=self.initializer_range,
             positive_weight=self.positive_weight,
             num_aggregation_labels=self.num_aggregation_labels,

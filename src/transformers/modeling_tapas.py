@@ -243,11 +243,11 @@ class TapasEmbeddings(nn.Module):
         # token type embeddings
         token_type_embedding_name = "token_type_embeddings"
 
-        for i, type_vocab_size in enumerate(config.type_vocab_size):
+        for i, type_vocab_sizes in enumerate(config.type_vocab_sizes):
             name = "%s_%d" % (token_type_embedding_name, i)
-            setattr(self, name, nn.Embedding(type_vocab_size, config.hidden_size))
+            setattr(self, name, nn.Embedding(type_vocab_sizes, config.hidden_size))
 
-        self.number_of_token_type_embeddings = len(config.type_vocab_size)
+        self.number_of_token_type_embeddings = len(config.type_vocab_sizes)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -272,10 +272,10 @@ class TapasEmbeddings(nn.Module):
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.config.reset_position_index_per_cell:
                 col_index = utils.IndexMap(
-                    token_type_ids[:, :, 1], self.config.type_vocab_size[1], batch_dims=1
+                    token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1
                 )  # shape (batch_size, seq_len)
                 row_index = utils.IndexMap(
-                    token_type_ids[:, :, 2], self.config.type_vocab_size[2], batch_dims=1
+                    token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1
                 )  # shape (batch_size, seq_len)
                 full_index = utils.ProductIndexMap(col_index, row_index)  # shape (batch_size, seq_len)
 
@@ -811,7 +811,7 @@ class TapasModel(TapasPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(
-                (*input_shape, len(self.config.type_vocab_size)), dtype=torch.long, device=device
+                (*input_shape, len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
             )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
@@ -1113,7 +1113,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         # Construct indices for the table.
         if token_type_ids is None:
             token_type_ids = torch.zeros(
-                (*input_shape, len(self.config.type_vocab_size)), dtype=torch.long, device=device
+                (*input_shape, len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
             )
 
         token_types = [
