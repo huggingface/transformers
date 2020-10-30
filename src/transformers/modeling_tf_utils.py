@@ -292,7 +292,8 @@ def input_analysis(func, inputs, **kwargs):
 
 def old_load_tf_weights(model, resolved_archive_file):
     """
-    Load the TF weights from a H5 file.
+    Load the TF weights from a H5 file
+
     Args:
         model (:obj:`tf.keras.models.Model`):
             The model to load the weights into.

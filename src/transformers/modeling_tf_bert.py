@@ -91,7 +91,8 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFBertPreTrainingLoss:
     """
-    Loss function suitable for BERT-like pre-training, that is, the task of pretraining a language model by combining NSP + MLM.
+    Loss function suitable for BERT-like pre-training, that is, the task of pretraining a language model by combining
+    NSP + MLM.
 
     .. note::
 
@@ -949,8 +950,8 @@ BERT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. Since
-            the v4.0 this parameter is always set to :obj:`True` in graph mode. The :obj:`False` value is deprecated and
-            this parameter will be removed in a future major version.
+            the v4.0 this parameter is always set to :obj:`True` in graph mode. The :obj:`False` value is deprecated
+            and this parameter will be removed in a future major version.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1248,7 +1249,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
             )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
