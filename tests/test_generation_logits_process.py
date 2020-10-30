@@ -32,9 +32,9 @@ if is_torch_available():
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
-        TemperatureDistWarper,
-        TopKDistWarper,
-        TopPDistWarper,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
     )
 
 
@@ -76,8 +76,8 @@ class LogitsProcessorTest(unittest.TestCase):
         # compute softmax
         probs = F.softmax(scores, dim=-1)
 
-        temp_dist_warper_sharper = TemperatureDistWarper(temperature=0.5)
-        temp_dist_warper_smoother = TemperatureDistWarper(temperature=1.3)
+        temp_dist_warper_sharper = TemperatureLogitsWarper(temperature=0.5)
+        temp_dist_warper_smoother = TemperatureLogitsWarper(temperature=1.3)
 
         warped_prob_sharp = F.softmax(temp_dist_warper_sharper(input_ids, scores.clone()), dim=-1)
         warped_prob_smooth = F.softmax(temp_dist_warper_smoother(input_ids, scores.clone()), dim=-1)
@@ -126,7 +126,7 @@ class LogitsProcessorTest(unittest.TestCase):
         )
         ramp_logits[1:, : vocab_size // 2] = ramp_logits[1:, : vocab_size // 2] + vocab_size
 
-        top_k_warp = TopKDistWarper(3)
+        top_k_warp = TopKLogitsWarper(3)
 
         scores = top_k_warp(input_ids, ramp_logits)
 
@@ -138,7 +138,7 @@ class LogitsProcessorTest(unittest.TestCase):
         length = 5
 
         logits = self._get_uniform_logits(batch_size=batch_size, length=length)
-        top_k_warp_safety_check = TopKDistWarper(top_k=1, filter_value=0.0, min_tokens_to_keep=3)
+        top_k_warp_safety_check = TopKLogitsWarper(top_k=1, filter_value=0.0, min_tokens_to_keep=3)
 
         scores = top_k_warp_safety_check(input_ids, logits)
         # uniform dist is not changed
@@ -155,12 +155,12 @@ class LogitsProcessorTest(unittest.TestCase):
         vocab_size = 10
         batch_size = 2
 
-        # create distribution and take log (inverse to Softmax as taken in TopPDistWarper)
+        # create distribution and take log (inverse to Softmax as taken in TopPLogitsWarper)
         dist = torch.log(
             torch.tensor([[0.3, 0.1, 0.1, 0.5], [0.15, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float)
         )
 
-        top_p_warp = TopPDistWarper(0.7)
+        top_p_warp = TopPLogitsWarper(0.7)
         filtered_dist = torch.exp(top_p_warp(input_ids, dist))
 
         # dist should be filtered to keep min num values so that sum is >= 0.7
@@ -179,7 +179,7 @@ class LogitsProcessorTest(unittest.TestCase):
         ramp_logits[1] = ramp_logits[1] * 100.0
 
         # make sure at least 2 tokens are kept
-        top_p_warp = TopPDistWarper(0.9, min_tokens_to_keep=2, filter_value=0.0)
+        top_p_warp = TopPLogitsWarper(0.9, min_tokens_to_keep=2, filter_value=0.0)
         filtered_dist = top_p_warp(input_ids, ramp_logits)
 
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
@@ -246,10 +246,10 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # instantiate all dist processors
         min_dist_proc = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
-        temp_dist_warp = TemperatureDistWarper(temperature=0.5)
+        temp_dist_warp = TemperatureLogitsWarper(temperature=0.5)
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
-        top_k_warp = TopKDistWarper(3)
-        top_p_warp = TopPDistWarper(0.8)
+        top_k_warp = TopKLogitsWarper(3)
+        top_p_warp = TopPLogitsWarper(0.8)
         no_repeat_proc = NoRepeatNGramLogitsProcessor(2)
         no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
 

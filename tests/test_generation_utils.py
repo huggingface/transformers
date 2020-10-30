@@ -27,11 +27,134 @@ if is_torch_available():
     import torch
 
     from transformers import top_k_top_p_filtering
+    from transformers.generation_logits_process import (
+        LogitsProcessorList,
+        MinLengthLogitsProcessor,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        RepetitionPenaltyLogitsProcessor,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
+    )
 
 
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
+
+    def _get_input_ids_and_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = torch.ones_like(input_ids)
+        max_length = input_ids.shape[-1] + 3
+
+        # cut to half length & take max batch_size 3
+        max_batch_size = 2
+        sequence_length = input_ids.shape[-1] // 2
+        input_ids = input_ids[:max_batch_size, :sequence_length]
+        attention_mask = attention_mask[:max_batch_size, :sequence_length]
+        return config, input_ids, attention_mask, max_length
+
+    def _get_logits_processor_and_kwargs(self, input_length, eos_token_id):
+        process_kwargs = {
+            "min_length": input_length + 1,
+            "bad_words_ids": [[1, 0]],
+            "no_repeat_ngram_size": 2,
+            "repetition_penalty": 1.2,
+        }
+        logits_processor = LogitsProcessorList(
+            [
+                MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
+                NoBadWordsLogitsProcessor(process_kwargs["bad_words_ids"], eos_token_id),
+                NoRepeatNGramLogitsProcessor(process_kwargs["no_repeat_ngram_size"]),
+                RepetitionPenaltyLogitsProcessor(process_kwargs["repetition_penalty"]),
+            ]
+        )
+        return process_kwargs, logits_processor
+
+    def _get_warper_and_kwargs(self, num_beams):
+        warp_kwargs = {"top_k": 10, "top_p": 0.7, "temperature": 0.7}
+        logits_warper = LogitsProcessorList(
+            [
+                TopKLogitsWarper(top_k=warp_kwargs["top_k"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
+                TopPLogitsWarper(top_p=warp_kwargs["top_p"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
+                TemperatureLogitsWarper(warp_kwargs["temperature"]),
+            ]
+        )
+        return warp_kwargs, logits_warper
+
+    def test_greedy_generate(self):
+        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+        logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            input_ids.shape[-1], config.eos_token_id
+        )
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # check generate and `greedy_search` are equal
+            output_ids_generate = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                do_sample=False,
+                num_beams=1,
+                max_length=max_length,
+                **logits_process_kwargs,
+            )
+            output_ids_greedy = model.greedy_search(
+                input_ids, max_length=max_length, attention_mask=attention_mask, logits_processor=logits_processor
+            )
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_greedy.tolist())
+
+    def test_sample_generate(self):
+        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+        process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            input_ids.shape[-1], config.eos_token_id
+        )
+        logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # check generate and `sample()` are equal
+            torch.manual_seed(0)
+            output_ids_generate = model.generate(
+                input_ids,
+                do_sample=True,
+                num_beams=1,
+                max_length=max_length,
+                **logits_warper_kwargs,
+                **process_kwargs,
+            )
+            torch.manual_seed(0)
+            output_ids_sample = model.sample(
+                input_ids, max_length=max_length, logits_processor=logits_processor, logits_warper=logits_warper
+            )
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
+
+            # check generate and `sample()` yield equal results for `num_return_sequences`
+            torch.manual_seed(0)
+            output_ids_generate = model.generate(
+                input_ids,
+                do_sample=True,
+                num_beams=1,
+                max_length=max_length,
+                num_return_sequences=3,
+                **logits_warper_kwargs,
+                **process_kwargs,
+            )
+            torch.manual_seed(0)
+            output_ids_sample = model.sample(
+                input_ids.repeat_interleave(3, dim=0),
+                max_length=max_length,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+            )
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

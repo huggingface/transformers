@@ -88,7 +88,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class TemperatureDistWarper(LogitsProcessor):
+class TemperatureLogitsWarper(LogitsProcessor):
     """LogitsProcessor for temperature (exponential scaling output probability distribution)."""
 
     def __init__(self, temperature: float):
@@ -122,7 +122,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class TopPDistWarper(LogitsProcessor):
+class TopPLogitsWarper(LogitsProcessor):
     """LogitsProcessor that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off."""
 
     def __init__(self, top_p: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
@@ -152,7 +152,7 @@ class TopPDistWarper(LogitsProcessor):
         return scores
 
 
-class TopKDistWarper(LogitsProcessor):
+class TopKLogitsWarper(LogitsProcessor):
     """LogitsProcessor that performs top-k, i.e. restricting to the k highest probability elements."""
 
     def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):

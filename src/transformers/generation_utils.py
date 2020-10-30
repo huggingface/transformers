@@ -27,9 +27,9 @@ from .generation_logits_process import (
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
-    TemperatureDistWarper,
-    TopKDistWarper,
-    TopPDistWarper,
+    TemperatureLogitsWarper,
+    TopKLogitsWarper,
+    TopPLogitsWarper,
 )
 from .utils import logging
 
@@ -224,11 +224,11 @@ class GenerationMixin:
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
         if top_k is not None and top_k != 0:
-            warpers.append(TopKDistWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+            warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
-            warpers.append(TopPDistWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+            warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if temperature is not None and temperature != 1.0:
-            warpers.append(TemperatureDistWarper(temperature))
+            warpers.append(TemperatureLogitsWarper(temperature))
         return warpers
 
     def get_logits_processor(
@@ -889,11 +889,11 @@ def top_k_top_p_filtering(
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     if top_k > 0:
-        logits = TopKDistWarper(top_k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
+        logits = TopKLogitsWarper(top_k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
             None, logits
         )
 
     if 0 <= top_p <= 1.0:
-        logits = TopPDistWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+        logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
 
     return logits
