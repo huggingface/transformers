@@ -1273,7 +1273,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-            print("ORHJOERJGERKHPEKRHPERLPRTLHPTYLJPTUYLJPTYLJPTYLJPTLJPTKYJPROKTORJEORJG")
+
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return TFMaskedLMOutput(
@@ -1365,7 +1365,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         )
 
         if not return_dict:
-            print("OZEJGOZEJGOEZJFOZJEFOEZFJ")
             return (seq_relationship_scores,) + outputs[2:]
 
         return TFNextSentencePredictorOutput(
