@@ -1053,12 +1053,15 @@ class ZeroShotClassificationPipeline(Pipeline):
                 return ind
         return -1
 
-    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(
+        self, sequences, candidal_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+    ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
+        sequence_pairs = self._args_parser(sequences, candidal_labels, hypothesis_template)
         inputs = self.tokenizer(
-            inputs,
+            sequence_pairs,
             add_special_tokens=add_special_tokens,
             return_tensors=self.framework,
             padding=padding,
@@ -1067,7 +1070,13 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         return inputs
 
-    def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
+    def __call__(
+        self,
+        sequences: Union[str, List[str]],
+        candidate_labels,
+        hypothesis_template="This example is {}.",
+        multi_class=False,
+    ):
         """
         Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
         documentation for more information.
@@ -1098,8 +1107,11 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
+        if sequences and isinstance(sequences, str):
+            sequences = [sequences]
+
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
-        num_sequences = 1 if isinstance(sequences, str) else len(sequences)
+        num_sequences = len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
         reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
 
@@ -1369,12 +1381,12 @@ class TokenClassificationPipeline(Pipeline):
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
 
-    def __call__(self, inputs, **kwargs):
+    def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
         Classify each token of the text(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`):
+            inputs (:obj:`str` or :obj:`List[str]`):
                 One or several texts (or one list of texts) for token classification.
 
         Return:
@@ -1388,6 +1400,8 @@ class TokenClassificationPipeline(Pipeline):
             - **index** (:obj:`int`, only present when ``self.grouped_entities=False``) -- The index of the
               corresponding token in the sentence.
         """
+        if isinstance(inputs, str):
+            inputs = [inputs]
         answers = []
         for sentence in inputs:
 
