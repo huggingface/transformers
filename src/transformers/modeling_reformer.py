@@ -638,7 +638,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
         # create a random self.attention_head_size x num_hashes x num_buckets/2
         random_rotations = torch.randn(rotations_shape, device=vectors.device, dtype=vectors.dtype)
-
         # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
         rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
 
@@ -1471,7 +1470,9 @@ class ReformerLayer(nn.Module):
             # every forward pass we sample a different seed
             # for dropout and save for forward fn in backward pass
             # to have correct dropout
-            self._init_attention_seed()
+            if self.training:
+                self._init_attention_seed()
+
             attn_outputs = self.attention(
                 hidden_states=hidden_states,
                 head_mask=head_mask,
@@ -1494,7 +1495,8 @@ class ReformerLayer(nn.Module):
             # every forward pass we sample a different seed
             # for dropout and save seed for forward fn in backward
             # to have correct dropout
-            self._init_feed_forward_seed()
+            if self.training:
+                self._init_feed_forward_seed()
             # Y_2 = X_2 + g(Y_1)
             hidden_states = hidden_states + self.feed_forward(attn_output)
 

@@ -127,12 +127,13 @@ class GenerationTesterMixin:
         return encoder_outputs, input_ids, attention_mask
 
     def test_greedy_generate(self):
-        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-        logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-            input_ids.shape[-1], config.eos_token_id
-        )
-
         for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1], config.eos_token_id
+            )
+
             model = model_class(config).to(torch_device)
             model.eval()
 
@@ -153,33 +154,29 @@ class GenerationTesterMixin:
                 max_length=max_length,
                 **logits_process_kwargs,
             )
-            output_ids_greedy = model.greedy_search(
-                input_ids,
-                max_length=max_length,
-                attention_mask=attention_mask,
-                logits_processor=logits_processor,
-                **kwargs,
-            )
+            with torch.no_grad():
+                output_ids_greedy = model.greedy_search(
+                    input_ids,
+                    max_length=max_length,
+                    attention_mask=attention_mask,
+                    logits_processor=logits_processor,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_greedy.tolist())
 
     def test_sample_generate(self):
-        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-        process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-            input_ids.shape[-1], config.eos_token_id
-        )
-        logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
         for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1], config.eos_token_id
+            )
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+
             model = model_class(config).to(torch_device)
             model.eval()
 
             # check `generate()` and `sample()` are equal
-            kwargs = {}
             if model.config.is_encoder_decoder:
-                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
-                    model, input_ids, attention_mask
-                )
-                kwargs["encoder_outputs"] = encoder_outputs
                 max_length = 4
 
             torch.manual_seed(0)
@@ -188,27 +185,36 @@ class GenerationTesterMixin:
                 do_sample=True,
                 num_beams=1,
                 max_length=max_length,
+                attention_mask=attention_mask,
                 **logits_warper_kwargs,
                 **process_kwargs,
             )
+
             torch.manual_seed(0)
-            output_ids_sample = model.sample(
-                input_ids,
-                max_length=max_length,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
-                **kwargs,
-            )
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+                    model, input_ids, attention_mask
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+            else:
+                attention_mask_clone = attention_mask
+                input_ids_clone = input_ids
+
+            with torch.no_grad():
+                output_ids_sample = model.sample(
+                    input_ids_clone,
+                    attention_mask=attention_mask_clone,
+                    max_length=max_length,
+                    logits_processor=logits_processor,
+                    logits_warper=logits_warper,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
 
             # check `generate()` and `sample()` yield equal results for `num_return_sequences`
-            kwargs = {}
             num_return_sequences = 3
             if model.config.is_encoder_decoder:
-                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
-                    model, input_ids, attention_mask, num_interleave=num_return_sequences
-                )
-                kwargs["encoder_outputs"] = encoder_outputs
                 max_length = 4
 
             torch.manual_seed(0)
@@ -218,26 +224,42 @@ class GenerationTesterMixin:
                 num_beams=1,
                 max_length=max_length,
                 num_return_sequences=num_return_sequences,
+                attention_mask=attention_mask,
                 **logits_warper_kwargs,
                 **process_kwargs,
             )
+
             torch.manual_seed(0)
-            output_ids_sample = model.sample(
-                input_ids.repeat_interleave(num_return_sequences, dim=0),
-                max_length=max_length,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
-                **kwargs,
-            )
+            kwargs = {}
+            if model.config.is_encoder_decoder:
+                encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+                    model, input_ids, attention_mask, num_interleave=num_return_sequences
+                )
+                kwargs["encoder_outputs"] = encoder_outputs
+                input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
+            else:
+                attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
+                input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
+
+            with torch.no_grad():
+                output_ids_sample = model.sample(
+                    input_ids_clone,
+                    attention_mask=attention_mask_clone,
+                    max_length=max_length,
+                    logits_processor=logits_processor,
+                    logits_warper=logits_warper,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
 
     def test_beam_search_generate(self):
-        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-        logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-            input_ids.shape[-1], config.eos_token_id
-        )
-
         for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1], config.eos_token_id
+            )
+
             model = model_class(config).to(torch_device)
             model.eval()
 
@@ -257,21 +279,24 @@ class GenerationTesterMixin:
             # beam_search does not automatically interleave `batch_size` dim for `num_beams`
             kwargs = {}
             if model.config.is_encoder_decoder:
-                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
                     model, input_ids, attention_mask, num_interleave=beam_scorer.num_beams
                 )
                 kwargs["encoder_outputs"] = encoder_outputs
+                input_ids_clone = input_ids_clone.repeat_interleave(beam_scorer.num_beams, dim=0)
             else:
-                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+                attention_mask_clone = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+                input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
 
-            output_ids_beam_search = model.beam_search(
-                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
-                beam_scorer,
-                max_length=max_length,
-                attention_mask=attention_mask,
-                logits_processor=logits_processor,
-                **kwargs,
-            )
+            with torch.no_grad():
+                output_ids_beam_search = model.beam_search(
+                    input_ids_clone,
+                    beam_scorer,
+                    max_length=max_length,
+                    attention_mask=attention_mask_clone,
+                    logits_processor=logits_processor,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_beam_search.tolist())
 
             # check `generate()` and `beam_search()` are equal for `num_return_sequences`
@@ -293,28 +318,31 @@ class GenerationTesterMixin:
             # beam_search does not automatically interleave `batch_size` dim for `num_beams`
             kwargs = {}
             if model.config.is_encoder_decoder:
-                encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
                     model, input_ids, attention_mask, num_interleave=beam_scorer.num_beams
                 )
                 kwargs["encoder_outputs"] = encoder_outputs
+                input_ids_clone = input_ids_clone.repeat_interleave(beam_scorer.num_beams, dim=0)
             else:
-                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+                attention_mask_clone = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+                input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
 
-            output_ids_beam_search = model.beam_search(
-                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
-                beam_scorer,
-                max_length=max_length,
-                attention_mask=attention_mask,
-                logits_processor=logits_processor,
-                **kwargs,
-            )
+            with torch.no_grad():
+                output_ids_beam_search = model.beam_search(
+                    input_ids_clone,
+                    beam_scorer,
+                    max_length=max_length,
+                    attention_mask=attention_mask_clone,
+                    logits_processor=logits_processor,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_beam_search.tolist())
 
     def test_beam_sample_generate(self):
-        config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-        logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
         for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+
             model = model_class(config).to(torch_device)
             model.eval()
 
@@ -344,17 +372,18 @@ class GenerationTesterMixin:
                 )
                 kwargs["encoder_outputs"] = encoder_outputs
             else:
-                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0)
 
             torch.manual_seed(0)
-            output_ids_beam_sample = model.beam_sample(
-                input_ids.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0),
-                beam_scorer,
-                max_length=max_length,
-                attention_mask=attention_mask,
-                logits_warper=logits_warper,
-                **kwargs,
-            )
+            with torch.no_grad():
+                output_ids_beam_sample = model.beam_sample(
+                    input_ids.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0),
+                    beam_scorer,
+                    max_length=max_length,
+                    attention_mask=attention_mask,
+                    logits_warper=logits_warper,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_beam_sample.tolist())
 
         def test_generate_without_input_ids(self):
