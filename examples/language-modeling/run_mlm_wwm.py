@@ -97,11 +97,11 @@ class DataTrainingArguments:
     )
     train_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input train ref data file for whole word mask in Chinese."},
+        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
     )
     validation_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input validation ref data file for whole word mask in Chinese."},
+        metadata={"help": "An optional input validation ref data file for whole word masking in Chinese."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
