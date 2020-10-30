@@ -15,7 +15,7 @@
 """ PyTorch DeBERTa model. """
 
 import math
-from collections import Sequence
+from collections.abc import Sequence
 
 import torch
 from packaging import version
@@ -480,7 +480,7 @@ class DisentangledSelfAttention(torch.nn.Module):
     Parameters:
         config (:obj:`str`):
             A model config class instance with the configuration to build a new model. The schema is similar to
-            `BertConfig`, \ for more details, please refer :class:`~transformers.DebertaConfig`
+            `BertConfig`, for more details, please refer :class:`~transformers.DebertaConfig`
 
     """
 

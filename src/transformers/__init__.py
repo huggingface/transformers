@@ -670,6 +670,7 @@ if is_tf_available():
         TFBertModel,
         TFBertPreTrainedModel,
     )
+    from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
     from .modeling_tf_camembert import (
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCamembertForMaskedLM,
@@ -750,6 +751,8 @@ if is_tf_available():
         TFLxmertPreTrainedModel,
         TFLxmertVisualFeatureEncoder,
     )
+    from .modeling_tf_marian import TFMarianMTModel
+    from .modeling_tf_mbart import TFMBartForConditionalGeneration
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMobileBertForMaskedLM,
@@ -771,6 +774,7 @@ if is_tf_available():
         TFOpenAIGPTModel,
         TFOpenAIGPTPreTrainedModel,
     )
+    from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
     from .modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,

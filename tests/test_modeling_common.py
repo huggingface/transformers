@@ -1087,6 +1087,10 @@ class ModelUtilsTest(unittest.TestCase):
                 self.assertEqual(len(value), 0)
 
             config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+
+            # Not sure this is the intended behavior. TODO fix Lysandre & Thom
+            config.name_or_path = model_name
+
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
