@@ -427,7 +427,6 @@ class DecoderLayer(nn.Module):
         output_attentions=False,
     ):
         residual = x
-
         if layer_state is None:
             layer_state = {}
         if self.normalize_before:
@@ -447,7 +446,7 @@ class DecoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
 
-        # Cross attention
+        # Cross-Attention Block
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
@@ -628,7 +627,6 @@ class BartDecoder(nn.Module):
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
