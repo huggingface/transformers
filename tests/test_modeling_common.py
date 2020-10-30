@@ -1087,6 +1087,10 @@ class ModelUtilsTest(unittest.TestCase):
                 self.assertEqual(len(value), 0)
 
             config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+
+            # Not sure this is the intended behavior. TODO fix Lysandre & Thom
+            config.name_or_path = model_name
+
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
@@ -1130,7 +1134,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                     2.12662941,
                     -9.32562038,
                     2.35652522,
-                ],  # cummulative prob of 5 highest values <= 0.6
+                ],  # cumulative prob of 5 highest values <= 0.6
                 [
                     0.58425518,
                     4.53139238,
@@ -1162,7 +1166,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                     9.67702323,  # 1st highest value; idx. 27
                     -5.89478553,
                     1.85370467,
-                ],  # cummulative prob of 5 highest values <= 0.6
+                ],  # cumulative prob of 5 highest values <= 0.6
             ],
             dtype=torch.float,
             device=torch_device,

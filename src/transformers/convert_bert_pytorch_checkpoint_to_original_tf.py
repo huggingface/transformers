@@ -28,19 +28,20 @@ from transformers import BertModel
 def convert_pytorch_checkpoint_to_tf(model: BertModel, ckpt_dir: str, model_name: str):
 
     """
-    :param model:BertModel Pytorch model instance to be converted
-    :param ckpt_dir: Tensorflow model directory
-    :param model_name: model name
-    :return:
+    Args:
+        model: BertModel Pytorch model instance to be converted
+        ckpt_dir: Tensorflow model directory
+        model_name: model name
 
     Currently supported HF models:
-        Y BertModel
-        N BertForMaskedLM
-        N BertForPreTraining
-        N BertForMultipleChoice
-        N BertForNextSentencePrediction
-        N BertForSequenceClassification
-        N BertForQuestionAnswering
+
+        - Y BertModel
+        - N BertForMaskedLM
+        - N BertForPreTraining
+        - N BertForMultipleChoice
+        - N BertForNextSentencePrediction
+        - N BertForSequenceClassification
+        - N BertForQuestionAnswering
     """
 
     tensors_to_transpose = ("dense.weight", "attention.self.query", "attention.self.key", "attention.self.value")

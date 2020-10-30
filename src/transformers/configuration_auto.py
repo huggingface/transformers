@@ -258,8 +258,8 @@ class AutoConfig:
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 
-        The configuration class to instantiate is selected based on the :obj:`model_type` property of the config
-        object that is loaded, or when it's missing, by falling back to using pattern matching on
+        The configuration class to instantiate is selected based on the :obj:`model_type` property of the config object
+        that is loaded, or when it's missing, by falling back to using pattern matching on
         :obj:`pretrained_model_name_or_path`:
 
         List options
@@ -287,9 +287,8 @@ class AutoConfig:
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`False`, then this function returns just the final configuration object.
 
@@ -298,8 +297,8 @@ class AutoConfig:
                 the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
             kwargs(additional keyword arguments, `optional`):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
-                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is
-                controlled by the ``return_unused_kwargs`` keyword parameter.
+                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
+                by the ``return_unused_kwargs`` keyword parameter.
 
         Examples::
 

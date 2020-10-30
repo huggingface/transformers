@@ -63,13 +63,11 @@ __all__ = ["DebertaTokenizer"]
 @lru_cache()
 def bytes_to_unicode():
     """
-    Returns list of utf-8 byte and a corresponding list of unicode strings.
-    The reversible bpe codes work on unicode strings.
-    This means you need a large # of unicode characters in your vocab if you want to avoid UNKs.
-    When you're at something like a 10B token dataset you end up needing around 5K for decent coverage.
-    This is a signficant percentage of your normal, say, 32K bpe vocab.
-    To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
-    And avoids mapping to whitespace/control characters the bpe code barfs on.
+    Returns list of utf-8 byte and a corresponding list of unicode strings. The reversible bpe codes work on unicode
+    strings. This means you need a large # of unicode characters in your vocab if you want to avoid UNKs. When you're
+    at something like a 10B token dataset you end up needing around 5K for decent coverage. This is a signficant
+    percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup tables between utf-8 bytes and unicode
+    strings. And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
     bs = (
         list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
@@ -86,8 +84,9 @@ def bytes_to_unicode():
 
 
 def get_pairs(word):
-    """Return set of symbol pairs in a word.
-    Word is represented as tuple of symbols (symbols being variable-length strings).
+    """
+    Return set of symbol pairs in a word. Word is represented as tuple of symbols (symbols being variable-length
+    strings).
     """
     pairs = set()
     prev_char = word[0]
@@ -292,32 +291,31 @@ def load_vocab(name=None, tag=None, no_cache=False, cache_dir=None):
 
 
 class GPT2Tokenizer(object):
-    """    A wrapper of GPT2 tokenizer with similar interface as BERT tokenizer
+    """
+    A wrapper of GPT2 tokenizer with similar interface as BERT tokenizer
 
-  Args:
-    vocab_file (:obj:`str`, optional):
-      The local path of vocabulary package or the release name of vocabulary in `DeBERTa GitHub releases <https://github.com/microsoft/DeBERTa/releases>`_, \
-              e.g. "bpe_encoder", default: `None`.
+    Args:
+        vocab_file (:obj:`str`, optional):
+            The local path of vocabulary package or the release name of vocabulary in `DeBERTa GitHub releases
+            <https://github.com/microsoft/DeBERTa/releases>`_, e.g. "bpe_encoder", default: `None`.
 
-          If it's `None`, then it will download the vocabulary in the latest release from GitHub. The vocabulary file is a \
-          state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files used in `RoBERTa`, i.e. `dict.txt`, `vocab.txt` and `encoder.json`. \
-          The difference between our wrapped GPT2 tokenizer and RoBERTa wrapped tokenizer are,
+            If it's `None`, then it will download the vocabulary in the latest release from GitHub. The vocabulary file
+            is a state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files used
+            in `RoBERTa`, i.e. `dict.txt`, `vocab.txt` and `encoder.json`. The difference between our wrapped GPT2
+            tokenizer and RoBERTa wrapped tokenizer are,
 
-          - Special tokens, unlike `RoBERTa` which use `<s>`, `</s>` as the `start` token and `end` token of a sentence. We use `[CLS]` and `[SEP]` as the `start` and `end`\
-              token of input sentence which is the same as `BERT`.
+            - Special tokens, unlike `RoBERTa` which use `<s>`, `</s>` as the `start` token and `end` token of a
+              sentence. We use `[CLS]` and `[SEP]` as the `start` and `end` token of input sentence which is the same
+              as `BERT`.
 
-          - We remapped the token ids in our dictionary with regarding to the new special tokens, `[PAD]` => 0, `[CLS]` => 1, `[SEP]` => 2, `[UNK]` => 3, `[MASK]` => 50264
+            - We remapped the token ids in our dictionary with regarding to the new special tokens, `[PAD]` => 0,
+              `[CLS]` => 1, `[SEP]` => 2, `[UNK]` => 3, `[MASK]` => 50264
 
-    do_lower_case (:obj:`bool`, optional):
-      Whether to convert inputs to lower case. **Not used in GPT2 tokenizer**.
+        special_tokens (:obj:`list`, optional):
+            List of special tokens to be added to the end of the vocabulary.
+    """
 
-    special_tokens (:obj:`list`, optional):
-      List of special tokens to be added to the end of the vocabulary.
-
-
-  """
-
-    def __init__(self, vocab_file=None, do_lower_case=True, special_tokens=None):
+    def __init__(self, vocab_file=None, special_tokens=None):
         self.pad_token = "[PAD]"
         self.sep_token = "[SEP]"
         self.unk_token = "[UNK]"
@@ -347,7 +345,8 @@ class GPT2Tokenizer(object):
         self.ids_to_tokens = self.symbols
 
     def tokenize(self, text):
-        """Convert an input text to tokens.
+        """
+        Convert an input text to tokens.
 
         Args:
           text (:obj:`str`): input text to be tokenized.
@@ -367,7 +366,9 @@ class GPT2Tokenizer(object):
         return [t for t in bpe.split(" ") if t]
 
     def convert_tokens_to_ids(self, tokens):
-        """Convert list of tokens to ids.
+        """
+        Convert list of tokens to ids
+
         Args:
           tokens (:obj:`list<str>`): list of tokens
 
@@ -378,7 +379,9 @@ class GPT2Tokenizer(object):
         return [self.vocab[t] for t in tokens]
 
     def convert_ids_to_tokens(self, ids):
-        """Convert list of ids to tokens.
+        """
+        Convert list of ids to tokens
+
         Args:
           ids (:obj:`list<int>`): list of ids
 
@@ -395,7 +398,9 @@ class GPT2Tokenizer(object):
         return self.bpe.split_to_words(text)
 
     def decode(self, tokens):
-        """Decode list of tokens to text strings.
+        """
+        Decode list of tokens to text strings
+
         Args:
           tokens (:obj:`list<str>`): list of tokens.
 
@@ -414,7 +419,9 @@ class GPT2Tokenizer(object):
         return self.bpe.decode([int(t) for t in tokens if t not in self.special_tokens])
 
     def add_special_token(self, token):
-        """Adds a special token to the dictionary.
+        """
+        Adds a special token to the dictionary
+
         Args:
           token (:obj:`str`): Tthe new token/word to be added to the vocabulary.
 
@@ -447,7 +454,9 @@ class GPT2Tokenizer(object):
         return self.bpe.decode(map(int, x.split()))
 
     def add_symbol(self, word, n=1):
-        """Adds a word to the dictionary.
+        """
+        Adds a word to the dictionary
+
         Args:
           word (:obj:`str`): Tthe new token/word to be added to the vocabulary.
           n (int, optional): The frequency of the word.
@@ -480,8 +489,7 @@ class GPT2Tokenizer(object):
 
 class DebertaTokenizer(PreTrainedTokenizer):
     r"""
-    Constructs a DeBERTa tokenizer, which runs end-to-end tokenization: punctuation
-    splitting + wordpiece
+    Constructs a DeBERTa tokenizer, which runs end-to-end tokenization: punctuation splitting + wordpiece
 
     Args:
         vocab_file (:obj:`str`):
@@ -492,15 +500,14 @@ class DebertaTokenizer(PreTrainedTokenizer):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
@@ -523,6 +530,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -572,9 +580,8 @@ class DebertaTokenizer(PreTrainedTokenizer):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A BERT sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A DeBERTa sequence has the following format:
 
         - single sequence: [CLS] X [SEP]
         - pair of sequences: [CLS] A [SEP] B [SEP]
@@ -601,21 +608,22 @@ class DebertaTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
 
         Args:
-            token_ids_0: list of ids (must not contain special tokens)
-            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
-                for sequence pairs
-            already_has_special_tokens: (default False) Set to True if the token list is already formated with
-                special tokens for the model
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(
                 map(
@@ -630,13 +638,16 @@ class DebertaTokenizer(PreTrainedTokenizer):
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A BERT sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A DeBERTa
+        sequence pair mask has the following format:
 
-        if token_ids_1 is None, only returns the first portion of the mask (0's).
-        ~
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs.

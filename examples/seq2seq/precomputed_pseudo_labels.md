@@ -33,7 +33,7 @@ python -m torch.distributed.launch --nproc_per_node=8 run_distributed_eval.py \
     --type_path train
 ```
 
-+ These command takes a while to run. For example,  pegasus_cnn_cnn_pls.tgz took 8 hours on 8 GPUs.
++ These commands takes a while to run. For example, `pegasus_cnn_cnn_pls.tgz` took 8 hours on 8 GPUs.
 + Pegasus does not work in fp16 :(, Bart, mBART and Marian do.
 + Even if you have 1 GPU, `run_distributed_eval.py` is 10-20% faster than `run_eval.py` because it uses `SortishSampler` to minimize padding computation.
 

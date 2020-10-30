@@ -12,15 +12,15 @@ The library was designed with two strong goals in mind:
 - Be as easy and fast to use as possible:
 
     - We strongly limited the number of user-facing abstractions to learn, in fact, there are almost no abstractions,
-      just three standard classes required to use each model: :doc:`configuration <main_classes/configuration>`, 
+      just three standard classes required to use each model: :doc:`configuration <main_classes/configuration>`,
       :doc:`models <main_classes/model>` and :doc:`tokenizer <main_classes/tokenizer>`.
     - All of these classes can be initialized in a simple and unified way from pretrained instances by using a common
       :obj:`from_pretrained()` instantiation method which will take care of downloading (if needed), caching and
-      loading the related class instance and associated data (configurations' hyper-parameters, tokenizers' vocabulary, 
-      and models' weights) from a pretrained checkpoint provided on 
-      `Hugging Face Hub <https://huggingface.co/models>`__ or your own saved checkpoint.
+      loading the related class instance and associated data (configurations' hyper-parameters, tokenizers' vocabulary,
+      and models' weights) from a pretrained checkpoint provided on `Hugging Face Hub
+      <https://huggingface.co/models>`__ or your own saved checkpoint.
     - On top of those three base classes, the library provides two APIs: :func:`~transformers.pipeline` for quickly
-      using a model (plus its associated tokenizer and configuration) on a given task and 
+      using a model (plus its associated tokenizer and configuration) on a given task and
       :func:`~transformers.Trainer`/:func:`~transformers.TFTrainer` to quickly train or fine-tune a given model.
     - As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
       extend/build-upon the library, just use regular Python/PyTorch/TensorFlow/Keras modules and inherit from the base
@@ -52,10 +52,10 @@ Main concepts
 
 The library is built around three types of classes for each model:
 
-- **Model classes**  such as :class:`~transformers.BertModel`, which are 30+ PyTorch models 
-  (`torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__) or Keras models 
-  (`tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__) that work with the pretrained
-  weights provided in the library.
+- **Model classes** such as :class:`~transformers.BertModel`, which are 30+ PyTorch models (`torch.nn.Module
+  <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__) or Keras models (`tf.keras.Model
+  <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__) that work with the pretrained weights provided in the
+  library.
 - **Configuration classes** such as :class:`~transformers.BertConfig`, which store all the parameters required to build
   a model. You don't always need to instantiate these yourself. In particular, if you are using a pretrained model
   without any modification, creating the model will automatically take care of instantiating the configuration (which
@@ -66,8 +66,8 @@ The library is built around three types of classes for each model:
 All these classes can be instantiated from pretrained instances and saved locally using two methods:
 
 - :obj:`from_pretrained()` lets you instantiate a model/configuration/tokenizer from a pretrained version either
-  provided by the library itself (the supported models are provided in the list :doc:`here <pretrained_models>`
-  or stored locally (or on a server) by the user,
+  provided by the library itself (the supported models are provided in the list :doc:`here <pretrained_models>` or
+  stored locally (or on a server) by the user,
 - :obj:`save_pretrained()` lets you save a model/configuration/tokenizer locally so that it can be reloaded using
   :obj:`from_pretrained()`.
 

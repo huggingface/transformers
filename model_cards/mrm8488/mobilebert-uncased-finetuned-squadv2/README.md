@@ -44,7 +44,7 @@ python transformers/examples/question-answering/run_squad.py \
   --version_2_with_negative
 ```
 
-It is importatnt to say that this models converges much faster than other ones. So, it is also cheap to fine-tune.
+It is important to say that this models converges much faster than other ones. So, it is also cheap to fine-tune.
 
 ## Test set Results 🧾
 

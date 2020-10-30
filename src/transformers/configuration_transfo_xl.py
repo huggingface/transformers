@@ -32,13 +32,12 @@ TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class TransfoXLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a :class:`~transformers.TransfoXLModel` or a
-    :class:`~transformers.TFTransfoXLModel`. It is used to instantiate a Transformer-XL model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the `Transformer XL <https://huggingface.co/transfo-xl-wt103>`__ architecture.
+    :class:`~transformers.TFTransfoXLModel`. It is used to instantiate a Transformer-XL model according to the
+    specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a
+    similar configuration to that of the `Transformer XL <https://huggingface.co/transfo-xl-wt103>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 267735):
@@ -78,7 +77,7 @@ class TransfoXLConfig(PretrainedConfig):
         adaptive (:obj:`boolean`, `optional`, defaults to :obj:`True`):
             Whether or not to use adaptive softmax.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         dropatt (:obj:`float`, `optional`, defaults to 0):
             The dropout ratio for the attention probabilities.
         untie_r (:obj:`boolean`, `optional`, defaults to :obj:`True`):
