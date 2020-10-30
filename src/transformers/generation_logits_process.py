@@ -43,20 +43,6 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class LogitsProcessorList(list):
-    """
-    This class can be used to create a list of :class:`~transformers.LogitsProcessor` to subsequently process a
-    :obj:`scores` input tensor. This class inherits from list and adds a specific `__call__` method to apply each
-    :class:`~transformers.LogitsProcessor` to the inputs.
-    """
-
-    @add_start_docstrings_to_callable(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        for processor in self:
-            scores = processor(input_ids, scores)
-        return scores
-
-
 class LogitsProcessor(ABC):
     """Abstract base class for all logit processors that can be applied during generation."""
 
@@ -68,8 +54,31 @@ class LogitsProcessor(ABC):
         )
 
 
+class LogitsProcessorList(list):
+    """
+    This class can be used to create a list of :class:`~transformers.generation_logits_processor.LogitsProcessor` to
+    subsequently process a :obj:`scores` input tensor. This class inherits from list and adds a specific `__call__`
+    method to apply each :class:`~transformers.generation_logits_processor.LogitsProcessor` to the inputs.
+    """
+
+    @add_start_docstrings_to_callable(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        for processor in self:
+            scores = processor(input_ids, scores)
+        return scores
+
+
 class MinLengthLogitsProcessor(LogitsProcessor):
-    """LogitsProcessor enforcing a min-length by setting EOS probability to 0."""
+    r"""
+    :class:`transformers.generation_logits_processor.LogitsProcessor` enforcing a min-length by setting EOS probability
+    to 0.
+
+    Args:
+        min_length (:obj:`int`):
+            The minimum length below which the score of :obj:`eos_token_id` is set to :obj:`-float("Inf")`.
+        eos_token_id (:obj:`int`):
+            The id of the `end-of-sequence` token.
+    """
 
     def __init__(self, min_length: int, eos_token_id: int):
         if not isinstance(min_length, int) or min_length < 0:
@@ -89,7 +98,14 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
 
 class TemperatureLogitsWarper(LogitsProcessor):
-    """LogitsProcessor for temperature (exponential scaling output probability distribution)."""
+    r"""
+    :class:`transformers.generation_logits_processor.LogitsProcessor` for temperature (exponential scaling output
+    probability distribution).
+
+    Args:
+        temperature (:obj:`float`):
+            The value used to module the logits distribution.
+    """
 
     def __init__(self, temperature: float):
         if not isinstance(temperature, float) or not (temperature > 0):
@@ -103,7 +119,15 @@ class TemperatureLogitsWarper(LogitsProcessor):
 
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
-    """LogitsProcessor enforcing an exponential penalty on repeated sequences."""
+    r"""
+    :class:`transformers.generation_logits_processor.LogitsProcessor` enforcing an exponential penalty on repeated
+    sequences.
+
+    Args:
+        repetition_penalty (:obj:`float`):
+            The parameter for repetition penalty. 1.0 means no penalty. See `this paper
+            <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
+    """
 
     def __init__(self, penalty: float):
         if not isinstance(penalty, float) or not (penalty > 0):
@@ -123,9 +147,21 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 
 class TopPLogitsWarper(LogitsProcessor):
-    """LogitsProcessor that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off."""
+    """
+    :class:`transformers.generation_logits_processor.LogitsProcessor` that performs top-p, i.e. restricting to top
+    tokens summing to prob_cut_off <= prob_cut_off.
 
-    def __init__(self, top_p: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    Args:
+        top_p (:obj:`float`):
+            If set to < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or higher are
+            kept for generation.
+        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
 
@@ -153,7 +189,18 @@ class TopPLogitsWarper(LogitsProcessor):
 
 
 class TopKLogitsWarper(LogitsProcessor):
-    """LogitsProcessor that performs top-k, i.e. restricting to the k highest probability elements."""
+    r"""
+    :class:`transformers.generation_logits_processor.LogitsProcessor` that performs top-k, i.e. restricting to the k
+    highest probability elements.
+
+    Args:
+        top_k (:obj:`int`):
+            The number of highest probability vocabulary tokens to keep for top-k-filtering.
+        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
 
     def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_k, int) or top_k <= 0:
@@ -172,9 +219,14 @@ class TopKLogitsWarper(LogitsProcessor):
 
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
-    """
-    LogitsProcessor that enforces no repetition of n-grams. See Fairseq:
+    r"""
+    :class:`transformers.generation_logits_processor.LogitsProcessor` that enforces no repetition of n-grams. See
+    Fairseq:
     https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345.
+
+    Args:
+        ngram_size (:obj:`int`):
+            All ngrams of size :obj:`ngram_size` can only occur once.
     """
 
     def __init__(self, ngram_size: int):
@@ -218,7 +270,17 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
 
 class NoBadWordsLogitsProcessor(LogitsProcessor):
-    """LogitsProcessor that enforces that specified sequences will never be sampled."""
+    """
+    :class:`transformers.generation_logits_processor.LogitsProcessor` that enforces that specified sequences will never
+    be sampled.
+
+    Args:
+        bad_words_ids (:obj:`List[List[int]]`):
+            List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
+            that should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+        eos_token_id (:obj:`int`):
+            The id of the `end-of-sequence` token.
+    """
 
     def __init__(self, bad_words_ids: Iterable[Iterable[int]], eos_token_id: int):
 

@@ -325,7 +325,7 @@ class GenerationMixin:
             top_k (:obj:`int`, `optional`, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (:obj:`float`, `optional`, defaults to 1.0):
-                If set to float < 1, only the most probable tokens with probabilities that add up to ``top_p`` or
+                If set to float < 1, only the most probable tokens with probabilities that add up to :ob:`top_p` or
                 higher are kept for generation.
             repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
                 The parameter for repetition penalty. 1.0 means no penalty. See `this paper
@@ -342,7 +342,7 @@ class GenerationMixin:
                 sequences.
             no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
-            bad_words_ids(:obj:`List[int]`, `optional`):
+            bad_words_ids(:obj:`List[List[int]]`, `optional`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
