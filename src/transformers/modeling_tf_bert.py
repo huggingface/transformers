@@ -270,6 +270,8 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         if input_ids is None:
             tmp_word_embeddings = inputs_embeds
+            # We still have to build the WordEmbedding layer
+            self.word_embeddings.build([])
         else:
             tmp_word_embeddings = self.word_embeddings(input_ids=input_ids)
 
@@ -285,7 +287,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             tmp_position_embeddings = self.position_embeddings(position_ids=tmp_word_embeddings)
         else:
             tmp_position_embeddings = self.position_embeddings(position_ids=position_ids)
-        
+
         tmp_token_type_embeddings = self.token_type_embeddings(token_type_ids)
         final_embeddings = self.embeddings(
             inputs=[tmp_word_embeddings, tmp_position_embeddings, tmp_token_type_embeddings]
@@ -347,16 +349,16 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def call(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, training=False):
-        query_tensor  = self.query(inputs=hidden_states)
+        query_tensor = self.query(inputs=hidden_states)
         key_tensor = self.key(inputs=hidden_states)
         value_tensor = self.value(inputs=hidden_states)
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
-        dk = tf.cast(x=self.attention_head_size, dtype=query_tensor .dtype)
-        query_tensor  = tf.multiply(x=query_tensor , y=tf.math.rsqrt(x=dk))
-        attention_scores = tf.einsum("aecd,abcd->acbe", key_tensor, query_tensor )
-        
+        dk = tf.cast(x=self.attention_head_size, dtype=query_tensor.dtype)
+        query_tensor = tf.multiply(x=query_tensor, y=tf.math.rsqrt(x=dk))
+        attention_scores = tf.einsum("aecd,abcd->acbe", key_tensor, query_tensor)
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
             attention_scores = attention_scores + attention_mask
@@ -523,24 +525,42 @@ class TFBertEncoder(tf.keras.layers.Layer):
         return_dict=True,
         training=False,
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_hidden_states = None
+        all_attentions = None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                if all_hidden_states is None:
+                    all_hidden_states = tf.TensorArray(
+                        dtype=tf.float32, size=0, dynamic_size=True, element_shape=hidden_states.shape
+                    )
+
+                all_hidden_states = all_hidden_states.write(index=i, value=hidden_states)
 
             layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], output_attentions, training=training
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
+                training=training,
             )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                if all_attentions is None:
+                    all_attentions = tf.TensorArray(
+                        dtype=tf.float32, size=0, dynamic_size=True, element_shape=layer_outputs[1].shape
+                    )
+
+                all_attentions = all_attentions.write(index=i, value=layer_outputs[1])
 
         # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states.write(index=all_hidden_states.size(), value=hidden_states)
+            all_hidden_states = all_hidden_states.stack()
+
+        if output_attentions:
+            all_attentions = all_attentions.stack()
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
@@ -724,13 +744,11 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             return_dict=return_dict,
             training=training,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
+        output_attentions = inputs["output_attentions"] if tf.executing_eagerly() else self.output_attentions
         output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+            inputs["output_hidden_states"] if tf.executing_eagerly() is not None else self.output_hidden_states
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -984,7 +1002,7 @@ class TFBertModel(TFBertPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1014,7 +1032,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, name="bert")
-        self.cls = TFBertPreTrainingHeads(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="cls")
+        self.cls = TFBertPreTrainingHeads(
+            config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="cls"
+        )
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -1067,7 +1087,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             next_sentence_label=next_sentence_label,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1164,7 +1184,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1269,7 +1289,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1290,7 +1310,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-
+            print("ORHJOERJGERKHPEKRHPERLPRTLHPTYLJPTUYLJPTYLJPTYLJPTLJPTKYJPROKTORJEORJG")
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return TFMaskedLMOutput(
@@ -1359,7 +1379,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             next_sentence_label=next_sentence_label,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1382,6 +1402,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         )
 
         if not return_dict:
+            print("OZEJGOZEJGOEZJFOZJEFOEZFJ")
             return (seq_relationship_scores,) + outputs[2:]
 
         return TFNextSentencePredictorOutput(
@@ -1456,7 +1477,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1593,7 +1614,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             if inputs["inputs_embeds"] is not None
             else None
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=flat_input_ids,
             attention_mask=flat_attention_mask,
@@ -1688,7 +1709,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1788,7 +1809,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             end_positions=end_positions,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
