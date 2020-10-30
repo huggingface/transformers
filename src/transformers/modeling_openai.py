@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu_new, swish
+from .activations import gelu_new, silu
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import (
     ModelOutput,
@@ -139,7 +139,7 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     return model
 
 
-ACT_FNS = {"relu": nn.ReLU, "swish": swish, "gelu": gelu_new}
+ACT_FNS = {"relu": nn.ReLU, "silu": silu, "gelu": gelu_new, "swish": silu}
 
 
 class Attention(nn.Module):

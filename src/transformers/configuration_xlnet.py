@@ -54,7 +54,7 @@ class XLNetConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         ff_activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the If string, :obj:`"gelu"`, :obj:`"relu"`,
-            :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         untie_r (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to untie relative position biases
         attn_type (:obj:`str`, `optional`, defaults to :obj:`"bi"`):
