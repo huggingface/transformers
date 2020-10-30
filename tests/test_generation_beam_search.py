@@ -177,6 +177,8 @@ class BeamSearchTester:
         tokens = next_tokens.clone()
         # first batch, first output has to finish with eos token id since scores are correctly sorted
         tokens[0, 0] = self.eos_token_id
+        # make sure corresponding score is as good as possible to surely be picked first
+        next_scores[0, 0] = 0.0
         output_scores, output_tokens, output_indices = beam_scorer.update_beams(
             input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id
         )
