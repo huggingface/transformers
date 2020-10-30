@@ -3,9 +3,20 @@
 
 check_dirs := examples tests src utils
 
+<<<<<<< HEAD
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if test -n "$(modified_py_files)"; then \
+=======
+
+modified_only_fixup:
+	# get modified files since the branch was made
+	fork_point_sha := $(shell git merge-base --fork-point master)
+	joined_dirs := $(shell echo $(check_dirs) | tr " " "|")
+	modified_py_files := $(shell git diff --name-only $(fork_point_sha) | egrep '^($(joined_dirs))' | egrep '\.py$$')
+	#$(info modified files are: $(modified_py_files))
+	@if [ -n "$(modified_py_files)" ]; then \
+>>>>>>> ae42733d... Apply style + fix ONNX tests
 		echo "Checking/fixing $(modified_py_files)"; \
 		black $(modified_py_files); \
 		isort $(modified_py_files); \

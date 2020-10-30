@@ -129,8 +129,6 @@ class OnnxExportTestCase(unittest.TestCase):
                 "attention_mask",
                 "output_0",
                 "output_1",
-                "output_2",
-                "output_3",
             ]
         else:
             variable_names = [
