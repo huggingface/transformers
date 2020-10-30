@@ -1,16 +1,19 @@
-
 ## Language model training
 
-Based on the script [`run_language_modeling.py`](https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_language_modeling.py).
+Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2,
+ALBERT, BERT, DistilBERT, RoBERTa, XLNet... GPT and GPT-2 are trained or fine-tuned using a causal language modeling
+(CLM) loss while ALBERT, BERT, DistilBERT and RoBERTa are trained or fine-tuned using a masked language modeling (MLM)
+loss. XLNet uses permutation language modeling (PLM), you can find more information about the differences between those
+objectives in our [model summary](https://huggingface.co/transformers/model_summary.html).
 
-Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2, BERT, DistilBERT and RoBERTa. GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT, DistilBERT and RoBERTa
-are fine-tuned using a masked language modeling (MLM) loss.
+These scripts leverage the 🤗 Datasets library and the Trainer API. You can easily customize them to your needs if you
+need extra processing on your datasets.
 
-Before running the following example, you should get a file that contains text on which the language model will be
-trained or fine-tuned. A good example of such text is the [WikiText-2 dataset](https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/).
+**Note:** The old script `run_language_modeling.py` is still available
+[here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/language-modeling/run_language_modeling.py).
 
-We will refer to two different files: `$TRAIN_FILE`, which contains text for training, and `$TEST_FILE`, which contains
-text that will be used for evaluation.
+The following examples, will run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
+text files for training and validation. We give examples of both below.
 
 ### GPT-2/GPT and causal language modeling
 
@@ -18,21 +21,30 @@ The following example fine-tunes GPT-2 on WikiText-2. We're using the raw WikiTe
 the tokenization). The loss here is that of causal language modeling.
 
 ```bash
-export TRAIN_FILE=/path/to/dataset/wiki.train.raw
-export TEST_FILE=/path/to/dataset/wiki.test.raw
-
-python run_language_modeling.py \
-    --output_dir=output \
-    --model_type=gpt2 \
-    --model_name_or_path=gpt2 \
+python run_clm.py \
+    --model_name_or_path gpt2 \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
     --do_train \
-    --train_data_file=$TRAIN_FILE \
     --do_eval \
-    --eval_data_file=$TEST_FILE
+    --output_dir /tmp/test-clm
 ```
 
 This takes about half an hour to train on a single K80 GPU and about one minute for the evaluation to run. It reaches
 a score of ~20 perplexity once fine-tuned on the dataset.
+
+To run on your own training and validation files, use the following command:
+
+```bash
+python run_clm.py \
+    --model_name_or_path gpt2 \
+    --train_file path_to_train_file \
+    --validation_file path_to_validation_file \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-clm
+```
+
 
 ### RoBERTa/BERT/DistilBERT and masked language modeling
 
@@ -40,44 +52,68 @@ The following example fine-tunes RoBERTa on WikiText-2. Here too, we're using th
 as BERT/RoBERTa have a bidirectional mechanism; we're therefore using the same loss that was used during their
 pre-training: masked language modeling.
 
-In accordance to the RoBERTa paper, we use dynamic masking rather than static masking. The model may, therefore, converge
-slightly slower (over-fitting takes more epochs).
-
-We use the `--mlm` flag so that the script may change its loss function.
-
-If using whole-word masking, use both the`--mlm` and `--wwm` flags.
+In accordance to the RoBERTa paper, we use dynamic masking rather than static masking. The model may, therefore,
+converge slightly slower (over-fitting takes more epochs).
 
 ```bash
-export TRAIN_FILE=/path/to/dataset/wiki.train.raw
-export TEST_FILE=/path/to/dataset/wiki.test.raw
-
-python run_language_modeling.py \
-    --output_dir=output \
-    --model_type=roberta \
-    --model_name_or_path=roberta-base \
+python run_mlm.py \
+    --model_name_or_path roberta-base \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
     --do_train \
-    --train_data_file=$TRAIN_FILE \
     --do_eval \
-    --eval_data_file=$TEST_FILE \
-    --mlm \
-    --whole_word_mask
+    --output_dir /tmp/test-mlm
 ```
 
-For Chinese models, it's same with English model with only `--mlm`. If using whole-word masking, we need to generate a reference files, because it's char level.
+To run on your own training and validation files, use the following command:
 
-**Q :** Why ref file ?
+```bash
+python run_clm.py \
+    --model_name_or_path roberta-base \
+    --train_file path_to_train_file \
+    --validation_file path_to_validation_file \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-clm
+```
 
-**A :** Suppose we have a Chinese sentence like : `我喜欢你` The original Chinese-BERT will tokenize it as `['我','喜','欢','你']` in char level.
-Actually, `喜欢` is a whole word. For whole word mask proxy, We need res like `['我','喜','##欢','你']`.
-So we need a ref file to tell model which pos of BERT original token should be added `##`.
+### Whole word masking
+
+The BERT authors released a new version of BERT using Whole Word Masking in May 2019. Instead of masking randomly
+selected tokens (which may be aprt of words), they mask randomly selected words (masking all the tokens corresponding
+to that word). This technique has been refined for Chinese in [this paper](https://arxiv.org/abs/1906.08101).
+
+To fine-tune a model using whole word masking, use the following script:
+
+python run_mlm_wwm.py \
+    --model_name_or_path roberta-base \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-mlm-wwm
+```
+
+For Chinese models, we need to generate a reference files (which requires the ltp library), because it's tokenized at
+the character level.
+
+**Q :** Why a reference file?
+
+**A :** Suppose we have a Chinese sentence like: `我喜欢你` The original Chinese-BERT will tokenize it as
+`['我','喜','欢','你']` (character level). But `喜欢` is a whole word. For whole word masking proxy, we need a result
+like `['我','喜','##欢','你']`, so we need a reference file to tell the model which position of the BERT original token
+should be added `##`.
 
 **Q :** Why LTP ?
 
-**A :** Cause the best known Chinese WWM BERT is [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm) by HIT. It works well on so many Chines Task like CLUE (Chinese GLUE).
-They use LTP, so if we want to fine-tune their model, we need LTP.
+**A :** Cause the best known Chinese WWM BERT is [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm) by HIT.
+It works well on so many Chines Task like CLUE (Chinese GLUE). They use LTP, so if we want to fine-tune their model,
+we need LTP.
 
 Now LTP only only works well on `transformers==3.2.0`. So we don't add it to requirements.txt.
-You need to check to `3.2.0` for `run_chinese_ref.py`. And the code  could be found in `examples/contrib`.
+You need to create a separate enviromnent with this version of Transformers to run the `run_chinese_ref.py` script that
+will create the reference files. The script is in `examples/contrib`. Once in the proper enviromnent, run the
+following:
 
 
 ```bash
@@ -87,31 +123,25 @@ export BERT_RESOURCE=/path/to/bert/tokenizer
 export SAVE_PATH=/path/to/data/ref.txt
 
 python examples/contrib/run_chinese_ref.py \
-    --file_name=$TRAIN_FILE \
-    --ltp=$LTP_RESOURCE \
-    --bert=$BERT_RESOURCE \
-    --save_path=$SAVE_PATH 
+    --file_name=path_to_train_or_eval_file \
+    --ltp=path_to_ltp_tokenizer \
+    --bert=path_to_bert_tokenizer \
+    --save_path=path_to_reference_file
 ```
-Now Chinese Ref is only supported by `LineByLineWithRefDataset` Class, so we need add `line_by_line` flag: 
+
+Then you can run the script like this: 
 
 
 ```bash
-export TRAIN_FILE=/path/to/dataset/wiki.train.raw
-export TEST_FILE=/path/to/dataset/wiki.test.raw
-export REF_FILE=/path/to/ref.txt
-
-python run_language_modeling.py \
-    --output_dir=output \
-    --model_type=roberta \
-    --model_name_or_path=roberta-base \
+python run_mlm_wwm.py \
+    --model_name_or_path roberta-base \
+    --train_file path_to_train_file \
+    --validation_file path_to_validation_file \
+    --train_ref_file path_to_train_chinese_ref_file \
+    --validation_ref_file path_to_validation_chinese_ref_file \
     --do_train \
-    --train_data_file=$TRAIN_FILE \
-    --chinese_ref_file=$REF_FILE \
     --do_eval \
-    --eval_data_file=$TEST_FILE \
-    --mlm \
-    --line_by_line \
-    --whole_word_mask
+    --output_dir /tmp/test-mlm-wwm
 ```
 
 ### XLNet and permutation language modeling
@@ -126,15 +156,26 @@ context length for permutation language modeling.
 The `--max_span_length` flag may also be used to limit the length of a span of masked tokens used 
 for permutation language modeling.
 
-```bash
-export TRAIN_FILE=/path/to/dataset/wiki.train.raw
-export TEST_FILE=/path/to/dataset/wiki.test.raw
+Here is how to fine-tun XLNet on wikitext-2:
 
-python run_language_modeling.py \
-    --output_dir=output \
+```bash
+python run_plm.py \
     --model_name_or_path=xlnet-base-cased \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
     --do_train \
-    --train_data_file=$TRAIN_FILE \
     --do_eval \
-    --eval_data_file=$TEST_FILE \
+    --output_dir /tmp/test-plm
+```
+
+To fine-tune it on your own training and validation file, run:
+
+```bash
+python run_plm.py \
+    --model_name_or_path=xlnet-base-cased \
+    --train_file path_to_train_file \
+    --validation_file path_to_validation_file \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-plm
 ```
