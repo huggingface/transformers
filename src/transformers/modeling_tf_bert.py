@@ -43,6 +43,7 @@ from .modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from .modeling_tf_utils import (
+    PositionEmbeddings,
     TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
@@ -51,9 +52,8 @@ from .modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    WordEmbeddings,
-    PositionEmbeddings,
     TokenTypeEmbeddings,
+    WordEmbeddings,
     get_initializer,
     input_analysis,
     keras_serializable,
