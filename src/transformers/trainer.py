@@ -729,6 +729,7 @@ class Trainer:
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
         self._logging_loss_scalar = 0
+        self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
@@ -849,7 +850,9 @@ class Trainer:
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / self.args.logging_steps
+            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (
+                self.state.global_step - self._globalstep_last_logged
+            )
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
@@ -857,6 +860,7 @@ class Trainer:
                 else self.lr_scheduler.get_lr()[0]
             )
             self._logging_loss_scalar = tr_loss_scalar
+            self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
 
