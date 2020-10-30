@@ -108,10 +108,10 @@ class FlaxRobertaLayerNorm(nn.Module):
 
     epsilon: float = 1e-6
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    bias: bool = True               # If True, bias (beta) is added.
-    scale: bool = True              # If True, multiply by scale (gamma). When the next layer is linear
-                                    # (also e.g. nn.relu), this can be disabled since the scaling will be
-                                    # done by the next layer.
+    bias: bool = True  # If True, bias (beta) is added.
+    scale: bool = True  # If True, multiply by scale (gamma). When the next layer is linear
+    # (also e.g. nn.relu), this can be disabled since the scaling will be
+    # done by the next layer.
     bias_init: jnp.ndarray = nn.initializers.zeros
     scale_init: jnp.ndarray = nn.initializers.ones
 
