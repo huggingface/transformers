@@ -19,9 +19,10 @@ import random
 import warnings
 from typing import Dict, Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
-from tensorflow.keras.layers import Dense, LayerNormalization
+from tensorflow.keras.layers import Dense, Layer, LayerNormalization
 
 from .activations_tf import ACT2FN
 from .configuration_bart import BartConfig
@@ -43,7 +44,6 @@ from .utils import logging
 
 
 _CONFIG_FOR_DOC = "BartConfig"
-_TOKENIZER_FOR_DOC = "BartTokenizer"
 
 BART_START_DOCSTRING = r"""
 
@@ -218,22 +218,21 @@ PAST_KV_DEPRECATION_WARNING = (
 )
 
 
-class TFEncoderLayer(tf.keras.layers.Layer):
+class TFEncoderLayer(Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
         self.self_attn = TFAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout_wt = tf.keras.layers.Dropout(config.dropout)
+        self.normalize_before = config.normalize_before
+        self.self_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.activation_dropout = config.activation_dropout
         self.fc1 = Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-        self.normalize_before = config.normalize_before
 
     def call(self, x, encoder_padding_mask, training=False):
         """
@@ -251,8 +250,10 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
-        assert x.shape == residual.shape, f"Self attn modified the shape of query {residual.shape} to {x.shape}"
-        x = self.dropout_wt(x, training=training)
+        assert shape_list(x) == shape_list(
+            residual
+        ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
@@ -261,9 +262,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
-        x = self.activation_dropout(x, training=training)
+        x = tf.nn.dropout(x, rate=self.self.activation_dropout if training else 0)
         x = self.fc2(x)
-        x = self.dropout_wt(x, training=training)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
@@ -271,7 +272,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         return x, self_attn_weights
 
 
-class TFBartEncoder(tf.keras.layers.Layer):
+class TFBartEncoder(Layer):
     # config_class = BartConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -289,26 +290,30 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
-        embed_dim = embed_tokens.vocab_size
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
 
         self.embed_tokens = embed_tokens
-        self.embed_positions = TFLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_tokens.hidden_size,
-            self.padding_idx,
-            config.extra_pos_embeddings,
-            name="embed_positions",
-        )
+        if config.static_position_embeddings:
+            self.embed_positions = TFSinusoidalPositionalEmbedding(
+                config.max_position_embeddings,
+                config.d_model,
+                name="embed_positions",
+            )
+        else:
+            self.embed_positions = TFLearnedPositionalEmbedding(
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
+                config.extra_pos_embeddings,
+                name="embed_positions",
+            )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
+        self.layernorm_embedding = (
+            LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else Layer()
         )
+        self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
         self.return_dict = config.return_dict
 
     def call(
@@ -347,7 +352,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
             ), f"expected attention_mask._rank() to be a 2D tensor got {attention_mask._rank()}"
             attention_mask = tf.cast(attention_mask, dtype=tf.float32)
             attention_mask = (1.0 - attention_mask) * LARGE_NEGATIVE
-        inputs_embeds = self.embed_tokens(input_ids)
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
@@ -384,7 +389,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
-class TFDecoderLayer(tf.keras.layers.Layer):
+class TFDecoderLayer(Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -397,8 +402,9 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
+        self.normalize_before = config.normalize_before
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TFAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -406,10 +412,10 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             encoder_decoder_attention=True,
             name="encoder_attn",
         )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.encoder_attn_layer_norm = LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.final_layer_norm = LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
         self,
@@ -433,10 +439,12 @@ class TFDecoderLayer(tf.keras.layers.Layer):
 
             Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
+        residual = x  # Make a copy of the input tensor to add later.
         if layer_state is None:
             layer_state = {}
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
 
-        residual = x  # Make a copy of the input tensor to add later.
         # next line mutates layer state and we need a copy of it
         x, self_attn_weights = self.self_attn(
             query=x,
@@ -447,9 +455,12 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
-        x = self.self_attn_layer_norm(x)
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+        # Cross-Attention Block
         residual = x
-        # Cross-Attention
+        if self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
@@ -458,16 +469,19 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
-
-        x = self.encoder_attn_layer_norm(x)
-
+        if not self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
+        # Fully Connected
         residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
         x = self.fc2(x)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
-        x = self.final_layer_norm(x)
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
         return (
             x,
             self_attn_weights,
@@ -475,7 +489,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-class TFBartDecoder(tf.keras.layers.Layer):
+class TFBartDecoder(Layer):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`TFDecoderLayer`
 
@@ -491,26 +505,27 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.max_target_positions = config.max_position_embeddings
         self.embed_tokens = embed_tokens
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.embed_positions = TFLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            self.padding_idx,
-            config.extra_pos_embeddings,
-            name="embed_positions",
-        )
+        if config.static_position_embeddings:
+            self.embed_positions = TFSinusoidalPositionalEmbedding(
+                config.max_position_embeddings,
+                config.d_model,
+                name="embed_positions",
+            )
+        else:
+            self.embed_positions = TFLearnedPositionalEmbedding(
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
+                config.extra_pos_embeddings,
+                name="embed_positions",
+            )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.normalize_embedding
-            else tf.identity
+            LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else Layer()
         )
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
-        )
+        self.layer_norm = LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = config.dropout
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.use_cache = config.use_cache
@@ -553,11 +568,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
             x = self.layernorm_embedding(x) + positions
         else:
             x = self.layernorm_embedding(x + positions)
-        x = self.dropout(x)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
-        assert len(encoder_hidden_states.shape) == 3, "encoder_hidden_states must be a 3D tensor"
+        assert len(shape_list(encoder_hidden_states)) == 3, "encoder_hidden_states must be a 3D tensor"
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
 
         # decoder layers
@@ -623,7 +638,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class TFAttention(tf.keras.layers.Layer):
+class TFAttention(Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -678,8 +693,10 @@ class TFAttention(tf.keras.layers.Layer):
                 (default: None).
         """
         static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
-        tgt_len, bsz, embed_dim = query.shape
-        assert embed_dim == self.embed_dim, f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {query.shape}"
+        tgt_len, bsz, embed_dim = shape_list(query)
+        assert (
+            embed_dim == self.embed_dim
+        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
         # get here for encoder decoder cause of static_kv
         if layer_state is not None:  # get the last k and v for reuse
             saved_state = layer_state.get(self.cache_key, {})
@@ -718,7 +735,7 @@ class TFAttention(tf.keras.layers.Layer):
             )
 
         # Compute multi-headed attention
-        src_len = k.shape[1]
+        src_len = shape_list(k)[1]
         attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -770,7 +787,7 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
 
     def call(self, input_ids: tf.Tensor, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids.shape[:2]
+        bsz, seq_len = shape_list(input_ids)[:2]
 
         if use_cache:
             positions = tf.fill((1, 1), seq_len - 1)
@@ -778,6 +795,56 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
         return super().call(positions + self.offset)  # super object is not callable for some reason
+
+
+class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions, embedding_dim, **kwargs):
+
+        if embedding_dim % 2 != 0:
+            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
+        super().__init__(
+            num_positions,
+            embedding_dim,
+            **kwargs,
+        )
+
+    def build(self, input_shape):
+        """
+        Build shared token embedding layer Shared weights logic adapted from
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+        super().build(input_shape)  # Instantiates self.weight so it can be loaded
+        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
+        self.set_weights([weight])  # overwrite self.weight to correct value
+
+    @staticmethod
+    def _init_weight(n_pos, dim):
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        # index 0 is all zero
+        position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
+        position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
+        # convert to tensor
+        table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
+        tf.stop_gradient(table)
+        return table
+
+    def call(self, input_ids, use_cache=False):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = shape_list(input_ids)[:2]
+        if use_cache:
+            positions = tf.fill((1, 1), seq_len - 1)
+        else:
+            # starts at 0, ends at 1-seq_len
+            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
+        return super().call(positions)
 
 
 # Public API
@@ -818,7 +885,7 @@ class TFBartModel(TFPretrainedBartModel):
         pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
             decoder_input_ids = self._shift_right(inputs)
-        bsz, tgt_len = decoder_input_ids.shape[:2]
+        bsz, tgt_len = shape_list(decoder_input_ids)[:2]
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         else:
@@ -950,16 +1017,20 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
     authorized_missing_keys = [
         r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        "model.encoder.embed_tokens.weight",
-        "model.decoder.embed_tokens.weight",
+    ]
+    authorized_unexpected_keys = [
+        r"model.encoder.embed_tokens.weight",
+        r"model.decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BartConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.model = TFBartModel(config, name="model")
         self.use_cache = config.use_cache
+        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
+        self.final_logits_bias = self.add_weight(
+            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+        )
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1050,6 +1121,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             return_dict=True,  # TODO(SS): this may need to change to support compilation
         )
         logits = self.model.shared(outputs.last_hidden_state, mode="linear")
+        logits = logits + self.final_logits_bias
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         past = outputs.past_key_values if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
@@ -1096,7 +1168,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
         assert isinstance(
             encoder_outputs, TFBaseModelOutput
-        ), "encoder_outputs should be a TFBaseModelOutput, Instead got "
+        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
             "inputs": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
@@ -1113,7 +1185,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         reordered_past = []
         for layer_past in decoder_cached_states:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
@@ -1124,26 +1195,13 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1 and self.config.force_bos_token_to_be_generated:
-            logits = self._force_token_id_to_be_generated(logits, self.config.bos_token_id)
-        elif cur_len == max_length - 1 and self.config.eos_token_id is not None:
-            logits = self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
-        return logits
-
-    @staticmethod
-    def _force_token_id_to_be_generated(scores, token_id) -> None:
-        """force one of token_ids to be generated by setting prob of all other tokens to 0 (logprob=-float("inf"))"""
-        output_list = []
-
-        # Is there a better way to do scores[:, [x for if x != token_id]] = -float("inf") in TF?
-        bs, vocab_size = scores.shape
-        for x in range(vocab_size):
-            if x != token_id:
-                output_list.append(tf.convert_to_tensor([-float("inf")] * bs, dtype=scores.dtype))
-            else:
-                output_list.append(scores[:, x])
-        scores = tf.stack(output_list, axis=1, name="scores")
-        assert scores.shape == (bs, vocab_size)
-        return scores
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != self.config.bos_token_id, LARGE_NEGATIVE, logits)
+        elif cur_len == max_length - 1:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
+        else:
+            return logits
 
     def get_output_embeddings(self):
         return self.model.shared
