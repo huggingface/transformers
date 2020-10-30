@@ -959,6 +959,7 @@ class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
 
+@require_torch
 class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_pretrained_checkpoint_hidden_states(self):

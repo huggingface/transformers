@@ -13,7 +13,7 @@ on:
 
 
 jobs:
-  run_tests_torch_and_tf_gpu:
+  run_tests_torch_gpu:
     runs-on: [self-hosted, single-gpu]
     steps:
       - uses: actions/checkout@v2
@@ -32,7 +32,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -46,8 +46,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install torch!=1.6.0
-          pip install .[sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -58,16 +57,14 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         env:
-          TF_FORCE_GPU_ALLOW_GROWTH: "true"
-          # TF_GPU_MEMORY_LIMIT: 4096
           OMP_NUM_THREADS: 1
+          CUDA_VISIBLE_DEVICES: 0
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s tests
+          python -m pytest -n 2 --dist=loadfile -s ./tests/
 
-
-  run_tests_torch_and_tf_multiple_gpu:
-    runs-on: [self-hosted, multi-gpu]
+  run_tests_tf_gpu:
+    runs-on: [self-hosted, single-gpu]
     steps:
       - uses: actions/checkout@v2
       - name: Python version
@@ -84,7 +81,57 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1-tests_tf_torch_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_tf_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install git+https://github.com/huggingface/datasets
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+
+      - name: Run all non-slow tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+          CUDA_VISIBLE_DEVICES: 0
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s ./tests/
+
+  run_tests_torch_multiple_gpu:
+    runs-on: [self-hosted, multi-gpu]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-tests_torch_multiple_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -97,8 +144,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install torch!=1.6.0
-          pip install .[sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -109,8 +155,54 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         env:
-          TF_FORCE_GPU_ALLOW_GROWTH: "true"
-          # TF_GPU_MEMORY_LIMIT: 4096
+          OMP_NUM_THREADS: 1
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s ./tests/
+
+  run_tests_tf_multiple_gpu:
+    runs-on: [self-hosted, multi-gpu]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-tests_tf_multiple_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install git+https://github.com/huggingface/datasets
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+
+      - name: Run all non-slow tests on GPU
+        env:
           OMP_NUM_THREADS: 1
         run: |
           source .env/bin/activate
