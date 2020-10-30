@@ -60,7 +60,7 @@ class GPT2Config(PretrainedConfig):
         n_inner (:obj:`int`, `optional`, defaults to None):
             Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
         activation_function (:obj:`str`, `optional`, defaults to :obj:`"gelu"`):
-            Activation function, to be selected in the list :obj:`["relu", "swish", "gelu", "tanh", "gelu_new"]`.
+            Activation function, to be selected in the list :obj:`["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):
