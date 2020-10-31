@@ -25,7 +25,8 @@ from .modeling_tf_outputs import (
     TFMaskedLMOutput,
     TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
-    TFMultipleChoiceModelOutput
+    TFMultipleChoiceModelOutput,
+    TFTokenClassifierOutput
 )
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
@@ -35,7 +36,8 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
     TFSequenceClassificationLoss,
-    TFMultipleChoiceLoss
+    TFMultipleChoiceLoss,
+    TFTokenClassificationLoss
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
@@ -1855,7 +1857,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
 
         self.num_labels = config.num_labels
 
-        self.longformer = TFLongformerModel(config=config)
+        self.longformer = TFLongformerModel(config=config,)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -1869,7 +1871,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         global_attention_mask=None,
         token_type_ids=None,
@@ -1882,9 +1884,16 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         if global_attention_mask is None:
             logger.info("Initializing global attention on CLS token...")
-            global_attention_mask = tf.zeros_like(input_ids)
+            global_attention_mask = tf.zeros_like(inputs)
             # global attention on cls token
             global_attention_mask[:, 0] = 1
 
@@ -1944,7 +1953,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     )
     def call(
         self,
-        input_ids=None,
+        inputs,
         token_type_ids=None,
         attention_mask=None,
         global_attention_mask=None,
@@ -2050,3 +2059,82 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             attentions=outputs.attentions,
         )
 
+
+@add_start_docstrings(
+    """
+    Longformer Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
+    """,
+    LONGFORMER_START_DOCSTRING,
+)
+class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.num_labels = config.num_labels
+        self.longformer = TFLongformerModel(config=config)
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range)
+        )
+    
+    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="allenai/longformer-base-4096",
+        output_type=TFTokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
+        """
+        return_dict = return_dict if return_dict is not None else self.longformer.return_dict
+
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+        
+        outputs = self.longformer(
+            inputs,
+            attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = outputs[0]
+        sequence_output = self.dropout(sequence_output, training=training)
+        logits = self.classifier(sequence_output)
+        loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFTokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
