@@ -22,30 +22,6 @@ import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras.layers import Dense, LayerNormalization
 
-## Uncomment this one, for colab interactive experiment
-# from transformers.activations_tf import ACT2FN
-# from transformers.modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFBaseModelOutputWithPooling
-
-# # Public API
-# from transformers.modeling_tf_utils import (
-#     DUMMY_INPUTS,
-#     TFPreTrainedModel,
-#     TFSharedEmbeddings,
-#     TFWrappedEmbeddings,
-#     cast_bool_to_primitive,
-#     keras_serializable,
-#     shape_list,
-#     get_initializer,
-# )
-# from transformers.modeling_tf_bert import TFBertModel, TFBertMainLayer
-
-# from transformers.configuration_dpr import DPRConfig
-# from transformers.file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-# from transformers.utils import logging
-
-# from transformers.tokenization_utils import BatchEncoding
-
-## Uncomment this one, for github experiment
 from .activations_tf import ACT2FN
 from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFBaseModelOutputWithPooling
 
@@ -392,7 +368,21 @@ DPR_START_DOCSTRING = r"""
     This model is also a Tensorflow `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
     Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
     usage and behavior.
-
+    
+    .. note::
+        TF 2.0 models accepts two formats as inputs:
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    
     Parameters:
         config (:class:`~transformers.DPRConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
