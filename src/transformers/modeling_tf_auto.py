@@ -42,6 +42,7 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 from .configuration_blenderbot import BlenderbotConfig
+from .configuration_dpr import DPRConfig
 from .configuration_marian import MarianConfig
 from .configuration_mbart import MBartConfig
 from .configuration_pegasus import PegasusConfig
@@ -84,6 +85,11 @@ from .modeling_tf_distilbert import (
     TFDistilBertForSequenceClassification,
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
+)
+from .modeling_tf_dpr import (
+    TFDPRQuestionEncoder,
+    TFDPRContextEncoder,
+    TFDPRReader,
 )
 from .modeling_tf_electra import (
     TFElectraForMaskedLM,
@@ -187,6 +193,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
         (FunnelConfig, TFFunnelModel),
+        (DPRConfig, TFDPRQuestionEncoder),
     ]
 )
 
