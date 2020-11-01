@@ -2161,7 +2161,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
             return_dict=return_dict,
         )
         sequence_output = outputs[0]
-        sequence_output = self.dropout(sequence_output, training=training)
+        sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
         loss = None if labels is None else self.compute_loss(labels, logits)
 
