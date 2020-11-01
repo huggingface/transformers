@@ -15,8 +15,11 @@
 """ Tokenization class for TAPAS model."""
 
 
-import ast
+
 import collections
+import os
+import unicodedata
+import ast
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Text, Tuple, Union
 
