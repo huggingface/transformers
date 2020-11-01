@@ -1844,6 +1844,31 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         )
 
 
+class TFLongformerClassificationHead(tf.keras.layers.Layer):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
+        )
+
+    def call(self, features, training=False):
+        hidden_states = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
+        output = self.out_proj(hidden_states)
+        return output
+
+
 @add_start_docstrings(
     """
     Longformer Model transformer with a sequence classification/regression head on top (a linear layer on top of the
@@ -1858,9 +1883,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         self.num_labels = config.num_labels
 
         self.longformer = TFLongformerModel(config=config,)
-        self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
-        )
+        self.classifier = TFLongformerClassificationHead(config)
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1890,12 +1913,17 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
                 inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
+            input_ids = inputs.get("input_ids")
 
         if global_attention_mask is None:
             logger.info("Initializing global attention on CLS token...")
-            global_attention_mask = tf.zeros_like(inputs)
-            # global attention on cls token
-            global_attention_mask[:, 0] = 1
+            # global attention on cls token, is there better way to do it ???
+            global_attention_mask = tf.zeros_like(input_ids)
+            global_attention_mask = tf.tensor_scatter_nd_update(
+                global_attention_mask,
+                [[i, 0] for i in range(input_ids.shape[0])],
+                [1 for _ in range(input_ids.shape[0])]
+            )
 
         outputs = self.longformer(
             input_ids,
