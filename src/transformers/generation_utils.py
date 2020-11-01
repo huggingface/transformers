@@ -39,20 +39,20 @@ logger = logging.get_logger(__name__)
 
 class GenerationMixin:
     """
-    A class contraining all of the functions supporting generation, to be used as a mixin in
-    :class:`~transfomers.PreTrainedModel`.
+    A class containing all of the functions supporting generation, to be used as a mixin in
+    :class:`~transformers.PreTrainedModel`.
     """
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
         """
-        Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to prepare inputs in the
+        Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to prepare inputs in the
         generate method.
         """
         return {"input_ids": input_ids}
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
-        Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to adjust the logits in
+        Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to adjust the logits in
         the generate method.
         """
         return logits
@@ -412,6 +412,7 @@ class GenerationMixin:
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
+
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -774,7 +775,7 @@ class GenerationMixin:
 
             if beam_scorer.is_done:
                 break
-
+           
         decoded = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
         )
@@ -874,7 +875,7 @@ def top_k_top_p_filtering(
     min_tokens_to_keep: int = 1,
 ) -> torch.FloatTensor:
     """
-    Filter a distribution of logits using top-k and/or nucleus (top-p) filterin
+    Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
 
     Args:
         logits: logits distribution shape (batch size, vocabulary size)

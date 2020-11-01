@@ -134,6 +134,8 @@ class PretrainedConfig(object):
 
     Parameters linked to the tokenizer
 
+        - **tokenizer_class** (:obj:`str`, `optional`) -- The name of the associated tokenizer class to use (if none is
+          set, will use the tokenizer associated to the model by default).
         - **prefix** (:obj:`str`, `optional`) -- A specific prompt that should be added at the beginning of each text
           before calling the model.
         - **bos_token_id** (:obj:`int`, `optional`)) -- The id of the `beginning-of-stream` token.

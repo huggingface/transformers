@@ -33,7 +33,7 @@ def main(args):
     remaining_count = 0  # Number of remaining (not pruned) params in the encoder
     encoder_count = 0  # Number of params in the encoder
 
-    print("name".ljust(60, " "), "Remaining Weights %", "Remaning Weight")
+    print("name".ljust(60, " "), "Remaining Weights %", "Remaining Weight")
     for name, param in st.items():
         if "encoder" not in name:
             continue

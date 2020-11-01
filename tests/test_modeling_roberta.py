@@ -398,6 +398,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
 @require_sentencepiece
 @require_tokenizers
+@require_torch
 class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):

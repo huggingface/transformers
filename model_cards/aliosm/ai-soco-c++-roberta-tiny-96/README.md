@@ -51,5 +51,5 @@ The model trained on Google Colab platform with 8 TPU cores for 200 epochs, 16\*
 ```
 
 <a href="https://huggingface.co/exbert/?model=aliosm/ai-soco-c++-roberta-tiny-96">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>

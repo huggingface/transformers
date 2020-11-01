@@ -30,7 +30,7 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -427,7 +427,6 @@ class DecoderLayer(nn.Module):
         output_attentions=False,
     ):
         residual = x
-
         if layer_state is None:
             layer_state = {}
         if self.normalize_before:
@@ -447,7 +446,7 @@ class DecoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
 
-        # Cross attention
+        # Cross-Attention Block
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
@@ -628,7 +627,6 @@ class BartDecoder(nn.Module):
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -846,7 +844,7 @@ class BartModel(PretrainedBartModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
@@ -906,7 +904,7 @@ class BartModel(PretrainedBartModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=False
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -981,7 +979,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(BART_GENERATION_EXAMPLE)
     def forward(
@@ -1147,7 +1145,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
@@ -1234,7 +1232,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
 
         self.model._init_weights(self.qa_outputs)
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",

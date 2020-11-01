@@ -172,7 +172,7 @@ class MemorySummary(NamedTuple):
     `MemorySummary` namedtuple otherwise with the fields:
 
         - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace` by
-          substracting the memory after executing each line from the memory before executing said line.
+          subtracting the memory after executing each line from the memory before executing said line.
         - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
           obtained by summing repeated memory increase for a line if it's executed several times. The list is sorted
           from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory
@@ -208,7 +208,7 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
 
     Returns:
 
-        - `max_memory`: (`int`) cosumed memory peak in Bytes
+        - `max_memory`: (`int`) consumed memory peak in Bytes
     """
 
     def get_cpu_memory(process_id: int) -> int:
@@ -221,7 +221,7 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
 
         Returns
 
-            - `memory`: (`int`) cosumed memory in Bytes
+            - `memory`: (`int`) consumed memory in Bytes
         """
         process = psutil.Process(process_id)
         try:
@@ -367,7 +367,7 @@ def start_memory_tracing(
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing comunication with GPU. " "We won't perform GPU memory tracing.")
+            logger.warning("Error while initializing communication with GPU. " "We won't perform GPU memory tracing.")
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
@@ -472,9 +472,10 @@ def stop_memory_tracing(
 
     Args:
 
-        - `memory_trace` (optional output of start_memory_tracing, default: None): memory trace to convert in summary
-        - `ignore_released_memory` (boolean, default: None): if True we only sum memory increase to compute total
-          memory
+        `memory_trace` (optional output of start_memory_tracing, default: None):
+            memory trace to convert in summary
+        `ignore_released_memory` (boolean, default: None):
+            if True we only sum memory increase to compute total memory
 
     Return:
 
@@ -482,7 +483,7 @@ def stop_memory_tracing(
         - `MemorySummary` namedtuple otherwise with the fields:
 
             - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace` by
-              substracting the memory after executing each line from the memory before executing said line.
+              subtracting the memory after executing each line from the memory before executing said line.
             - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each
               line obtained by summing repeated memory increase for a line if it's executed several times. The list is
               sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative

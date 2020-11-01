@@ -26,7 +26,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 from .modeling_utils import PreTrainedModel
 from .utils import logging
@@ -830,7 +835,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         return new_mems
 
-    @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="transfo-xl-wt103",
@@ -1018,7 +1023,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def init_mems(self, bsz):
         return self.transformer.init_mems(bsz)
 
-    @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="transfo-xl-wt103",

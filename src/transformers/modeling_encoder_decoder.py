@@ -19,7 +19,7 @@ from typing import Optional
 
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .modeling_outputs import Seq2SeqLMOutput
 from .modeling_utils import PreTrainedModel
 from .utils import logging
@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
 ENCODER_DECODER_START_DOCSTRING = r"""
-    This class can be used to inialize a sequence-to-sequnece model with any pretrained autoencoding model as the
+    This class can be used to initialize a sequence-tsequencece model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
     :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
@@ -335,7 +335,7 @@ class EncoderDecoderModel(PreTrainedModel):
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
-    @add_start_docstrings_to_callable(ENCODER_DECODER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ENCODER_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

@@ -129,7 +129,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
         delimiter (:obj:`str`, `optional`):
-            The delimiter used btween tokens.
+            The delimiter used between tokens.
         vocab_file (:obj:`str`, `optional`):
             File containing the vocabulary (from the original implementation).
         pretrained_vocab_file (:obj:`str`, `optional`):

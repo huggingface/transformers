@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from transformers.modeling_bert import (
     BERT_INPUTS_DOCSTRING,
     BERT_START_DOCSTRING,
@@ -134,7 +134,7 @@ class DeeBertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -198,7 +198,7 @@ class DeeBertModel(BertPreTrainedModel):
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
@@ -260,7 +260,7 @@ class BertHighway(nn.Module):
 
         # BertModel
         bmodel_output = (pooler_input, pooler_output) + encoder_outputs[1:]
-        # "return" bodel_output
+        # "return" bmodel_output
 
         # Dropout and classification
         pooled_output = bmodel_output[1]
@@ -288,7 +288,7 @@ class DeeBertForSequenceClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,

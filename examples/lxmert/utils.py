@@ -236,7 +236,7 @@ def compare(in_tensor):
     ), f"{sum([1 for x in np.isclose(n1, n2, rtol=0.01, atol=0.1).flatten() if x == False])/len(n1.flatten())*100:.4f} % element-wise mismatch"
     raise Exception("tensors are all good")
 
-    # Hugging face functiions below
+    # Hugging face functions below
 
 
 def is_remote_url(url_or_filename):
@@ -520,7 +520,7 @@ def get_image_from_url(url):
     return img
 
 
-# to load legace frcnn checkpoint from detectron
+# to load legacy frcnn checkpoint from detectron
 def load_frcnn_pkl_from_url(url):
     fn = url.split("/")[-1]
     if fn not in os.listdir(os.getcwd()):

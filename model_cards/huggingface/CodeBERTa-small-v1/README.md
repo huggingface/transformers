@@ -1,6 +1,6 @@
 ---
 language: code
-thumbnail: https://hf-dinosaur.huggingface.co/CodeBERTa/CodeBERTa.png
+thumbnail: https://cdn-media.huggingface.co/CodeBERTa/CodeBERTa.png
 ---
 
 # CodeBERTa
@@ -26,7 +26,7 @@ The (small) **model** is a 6-layer, 84M parameters, RoBERTa-like Transformer mod
 
 ### Tensorboard for this training ⤵️
 
-[![tb](https://hf-dinosaur.huggingface.co/CodeBERTa/tensorboard.png)](https://tensorboard.dev/experiment/irRI7jXGQlqmlxXS0I07ew/#scalars)
+[![tb](https://cdn-media.huggingface.co/CodeBERTa/tensorboard.png)](https://tensorboard.dev/experiment/irRI7jXGQlqmlxXS0I07ew/#scalars)
 
 ## Quick start: masked language modeling prediction
 

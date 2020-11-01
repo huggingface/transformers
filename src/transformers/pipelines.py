@@ -122,7 +122,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
 
     Args:
         targeted_task (:obj:`Dict` ):
-           Dictionnary representing the given task, that should contain default models
+           Dictionary representing the given task, that should contain default models
 
         framework (:obj:`str`, None)
            "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
@@ -150,9 +150,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     else:
         # XXX This error message needs to be updated to be more generic if more tasks are going to become
         # parametrized
-        raise ValueError(
-            'The task defaults can\'t be correctly selectionned. You probably meant "translation_XX_to_YY"'
-        )
+        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_XX_to_YY"')
 
     if framework is None:
         framework = "pt"
@@ -695,7 +693,7 @@ class Pipeline(_ScikitCompat):
         Internal framework specific forward dispatching
 
         Args:
-            inputs: dict holding all the keyworded arguments for required by the model forward method.
+            inputs: dict holding all the keyword arguments for required by the model forward method.
             return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
 
         Returns:
@@ -874,7 +872,7 @@ class TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1085,8 +1083,8 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
     pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the candidate
-    label being valid. Any NLI model can be used as long as the first output logit corresponds to `contradiction` and
-    the last to `entailment`.
+    label being valid. Any NLI model can be used, but the id of the `entailment` label must be included in the model
+    config's :attr:`~transformers.PretrainedConfig.label2id`.
 
     This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task identifier:
     :obj:`"zero-shot-classification"`.
@@ -1097,6 +1095,18 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
+        if self.entailment_id == -1:
+            logger.warning(
+                "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
+                "-1. Define a descriptive label2id mapping in the model config to ensure correct outputs."
+            )
+
+    @property
+    def entailment_id(self):
+        for label, ind in self.model.config.label2id.items():
+            if label.lower().startswith("entail"):
+                return ind
+        return -1
 
     def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
@@ -1115,7 +1125,8 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
         """
-        Classify the sequence(s) given as inputs.
+        Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
+        documentation for more information.
 
         Args:
             sequences (:obj:`str` or :obj:`List[str]`):
@@ -1153,11 +1164,13 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         if not multi_class:
             # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., -1]
+            entail_logits = reshaped_outputs[..., self.entailment_id]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
-            entail_contr_logits = reshaped_outputs[..., [0, -1]]
+            entailment_id = self.entailment_id
+            contradiction_id = -1 if entailment_id == 0 else 0
+            entail_contr_logits = reshaped_outputs[..., [contradiction_id, entailment_id]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[..., 1]
 
@@ -1695,7 +1708,7 @@ class QuestionAnsweringPipeline(Pipeline):
             question (:obj:`str` or :obj:`List[str]`):
                 One or several question(s) (must be used in conjunction with the :obj:`context` argument).
             context (:obj:`str` or :obj:`List[str]`):
-                One or several context(s) associated with the qustion(s) (must be used in conjunction with the
+                One or several context(s) associated with the question(s) (must be used in conjunction with the
                 :obj:`question` argument).
             topk (:obj:`int`, `optional`, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood).
@@ -1944,7 +1957,7 @@ class SummarizationPipeline(Pipeline):
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
@@ -2062,7 +2075,7 @@ class TranslationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Texts to be translated.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -2173,7 +2186,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Input text for the encoder.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -2238,8 +2251,8 @@ class Conversation:
     :class:`~transformers.ConversationalPipeline`. The conversation contains a number of utility function to manage the
     addition of new user input and generated model responses. A conversation needs to contain an unprocessed user input
     before being passed to the :class:`~transformers.ConversationalPipeline`. This user input is either created when
-    the class is instantiated, or by calling :obj:`conversional_pipeline.append_response("input")` after a conversation
-    turn.
+    the class is instantiated, or by calling :obj:`conversational_pipeline.append_response("input")` after a
+    conversation turn.
 
     Arguments:
         text (:obj:`str`, `optional`):
@@ -2656,8 +2669,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - :obj:`"conversational"`
 
     Returns:
-        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionnary required to initialize
-        the pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
+        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
+        pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
@@ -2719,12 +2732,17 @@ def pipeline(
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default configuration file for the requested model will be used. That means that if
+            :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
+            this :obj:`task`'s default model's config is used instead.
         tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default tokenizer for the given :obj:`model` will be loaded (if it is a string). If
+            :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
+            it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
+            for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
