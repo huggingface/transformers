@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from .file_utils import add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
@@ -46,7 +46,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 class LogitsProcessor(ABC):
     """Abstract base class for all logit processors that can be applied during generation."""
 
-    @add_start_docstrings_to_callable(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """Torch method for processing logits."""
         raise NotImplementedError(
@@ -61,7 +61,7 @@ class LogitsProcessorList(list):
     method to apply each :class:`~transformers.generation_logits_processor.LogitsProcessor` to the inputs.
     """
 
-    @add_start_docstrings_to_callable(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         for processor in self:
             scores = processor(input_ids, scores)
