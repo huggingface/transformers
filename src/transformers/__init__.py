@@ -742,7 +742,9 @@ if is_tf_available():
         TFLongformerForQuestionAnswering,
         TFLongformerModel,
         TFLongformerSelfAttention,
-        TFLongformerForSequenceClassification
+        TFLongformerForSequenceClassification,
+        TFLongformerForMultipleChoice,
+        TFLongformerForTokenClassification
     )
     from .modeling_tf_lxmert import (
         TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,

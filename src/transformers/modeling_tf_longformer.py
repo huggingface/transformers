@@ -2027,20 +2027,29 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
 
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
-        # set global attention on question tokens
-        if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on multiple choice...")
-            # put global attention on all tokens after `config.sep_token_id`
-            global_attention_mask = _compute_global_attention_mask(
-                shape_list(input_ids), self.config.sep_token_id, before_sep_token=False
-            )
-
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
             seq_length = shape_list(input_ids)[2]
         else:
             num_choices = shape_list(inputs_embeds)[1]
             seq_length = shape_list(inputs_embeds)[2]
+
+        # set global attention on question tokens
+        if global_attention_mask is None and input_ids is not None:
+            logger.info("Initializing global attention on multiple choice...")
+            # global attention on cls token, is there better way to do it ???
+            global_attention_mask = []
+            for i in range(num_choices):
+                sep_token_indices = tf.where(input_ids[:, i] == self.config.sep_token_id)
+                _global_attention_mask = _compute_global_attention_mask(
+                    input_ids_shape=input_ids[:, i].shape,
+                    sep_token_indices=sep_token_indices,
+                    before_sep_token=False
+                )
+                global_attention_mask.append(_global_attention_mask)
+
+            global_attention_mask = tf.stack(global_attention_mask, axis=1)
+
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
