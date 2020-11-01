@@ -66,6 +66,9 @@ class PretrainedConfig(object):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which
             consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
+        tie_encoder_decoder_word_embeds (:obj:`bool`, `optional`, defaults to :obj:`True`)
+            Whether encoder and decoder should share word embeddings. If True, encoder word embeddings are assigned to
+            decoder word embeddings.
         tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
@@ -178,6 +181,7 @@ class PretrainedConfig(object):
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
         self.add_cross_attention = kwargs.pop("add_cross_attention", False)
+        self.tie_encoder_decoder_word_embeds = kwargs.pop("tie_encoder_decoder_word_embeds", True)
         self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
 
         # Parameters for sequence generation

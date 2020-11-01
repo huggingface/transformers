@@ -174,6 +174,8 @@ class EncoderDecoderModel(PreTrainedModel):
         self.tie_weights()
 
     def tie_weights(self):
+        if self.config.tie_encoder_decoder_word_embeds:
+            self._tie_encoder_decoder_word_embeddings(self.encoder, self.decoder)
         # tie encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
