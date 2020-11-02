@@ -113,6 +113,7 @@ else:
     T5Tokenizer = None
     XLMRobertaTokenizer = None
     XLNetTokenizer = None
+    XLMProphetNetTokenizer = None
 
 if is_tokenizers_available():
     from .tokenization_albert_fast import AlbertTokenizerFast
