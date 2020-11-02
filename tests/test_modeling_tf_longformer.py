@@ -29,7 +29,10 @@ if is_tf_available():
     from transformers import (
         LongformerConfig,
         TFLongformerForMaskedLM,
+        TFLongformerForMultipleChoice,
         TFLongformerForQuestionAnswering,
+        TFLongformerForSequenceClassification,
+        TFLongformerForTokenClassification,
         TFLongformerModel,
         TFLongformerSelfAttention,
     )
@@ -214,6 +217,40 @@ class TFLongformerModelTester:
         self.parent.assertListEqual(shape_list(result["start_logits"]), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(shape_list(result["end_logits"]), [self.batch_size, self.seq_length])
 
+    def create_and_check_longformer_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = TFLongformerForSequenceClassification(config=config)
+        loss, output = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+        )
+        self.parent.assertListEqual(shape_list(output), [self.batch_size, self.num_labels])
+
+    def create_and_check_longformer_for_token_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFLongformerForTokenClassification(config=config)
+        loss, output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertListEqual(shape_list(output), [self.batch_size, self.num_labels])
+
+    def create_and_check_longformer_for_multiple_choice(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_choices = self.num_choices
+        model = TFLongformerForMultipleChoice(config=config)
+        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+        loss, output = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            global_attention_mask=multiple_choice_input_mask,
+            token_type_ids=multiple_choice_token_type_ids,
+            labels=choice_labels,
+        )
+        self.parent.assertListEqual(list(output.shape), [self.batch_size, self.num_choices])
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -270,6 +307,9 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
             TFLongformerModel,
             TFLongformerForMaskedLM,
             TFLongformerForQuestionAnswering,
+            TFLongformerForSequenceClassification,
+            TFLongformerForMultipleChoice,
+            TFLongformerForTokenClassification,
         )
         if is_tf_available()
         else ()
@@ -301,6 +341,18 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_longformer_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
         self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_saved_model_with_attentions_output(self):

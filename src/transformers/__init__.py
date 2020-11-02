@@ -739,12 +739,12 @@ if is_tf_available():
     from .modeling_tf_longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLongformerForMaskedLM,
+        TFLongformerForMultipleChoice,
         TFLongformerForQuestionAnswering,
+        TFLongformerForSequenceClassification,
+        TFLongformerForTokenClassification,
         TFLongformerModel,
         TFLongformerSelfAttention,
-        TFLongformerForSequenceClassification,
-        TFLongformerForMultipleChoice,
-        TFLongformerForTokenClassification
     )
     from .modeling_tf_lxmert import (
         TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,

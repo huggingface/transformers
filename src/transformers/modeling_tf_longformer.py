@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2020 The Allen Institute for AI team and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,21 +24,21 @@ from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
+    TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
-    TFMultipleChoiceModelOutput,
-    TFTokenClassifierOutput
+    TFTokenClassifierOutput,
 )
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,
     shape_list,
-    TFSequenceClassificationLoss,
-    TFMultipleChoiceLoss,
-    TFTokenClassificationLoss
 )
 from .tokenization_utils import BatchEncoding
 from .utils import logging
@@ -177,9 +178,9 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         Returns: tf.Tensor
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
-        incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
+        incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
-        return incremental_indicies + self.padding_idx
+        return incremental_indices + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
@@ -565,7 +566,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
         # which is the attention weights from tokens with global attention to all tokens
         # It doesn't not return local attention
-        # In case of variable number of global attantion in the rows of a batch,
+        # In case of variable number of global attention in the rows of a batch,
         # attn_probs are padded with -10000.0 attention scores
         # LOCAL ATTN:
         # without global attention, return local attention probabilities
@@ -623,7 +624,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         chunked_query = self._chunk(query, window_overlap)
         chunked_key = self._chunk(key, window_overlap)
 
-        # matrix multipication
+        # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcyd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcxy: batch_size * num_heads x chunks x 2window_overlap x 2window_overlap
@@ -831,7 +832,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                                        -0.7584,  0.4206, -0.0405,  0.1599,
                                        2.0514, -1.1600,  0.5372,  0.2629 ]
               window_overlap = num_rows = 4
-             (pad & diagonilize) =>
+             (pad & diagonalize) =>
              [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
                0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
                0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
@@ -858,7 +859,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
     @staticmethod
     def _chunk(hidden_states, window_overlap):
-        """convert into overlapping chunkings. Chunk size = 2w, overlap size = w"""
+        """convert into overlapping chunks. Chunk size = 2w, overlap size = w"""
         batch_size, seq_length, hidden_dim = shape_list(hidden_states)
         num_output_chunks = 2 * (seq_length // (2 * window_overlap)) - 1
 
@@ -1562,7 +1563,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         global_attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to decide the attention given on each token, local attention or global attenion. Tokens with global
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
@@ -1882,7 +1883,9 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
 
         self.num_labels = config.num_labels
 
-        self.longformer = TFLongformerModel(config=config,)
+        self.longformer = TFLongformerModel(
+            config=config,
+        )
         self.classifier = TFLongformerClassificationHead(config)
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1890,7 +1893,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",
         output_type=TFSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC
+        config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
@@ -1922,7 +1925,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             global_attention_mask = tf.tensor_scatter_nd_update(
                 global_attention_mask,
                 [[i, 0] for i in range(input_ids.shape[0])],
-                [1 for _ in range(input_ids.shape[0])]
+                [1 for _ in range(input_ids.shape[0])],
             )
 
         outputs = self.longformer(
@@ -1966,9 +1969,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
 
         self.longformer = TFLongformerModel(config)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
-            1, kernel_initializer=get_initializer(config.initializer_range)
-        )
+        self.classifier = tf.keras.layers.Dense(1, kernel_initializer=get_initializer(config.initializer_range))
 
     @add_start_docstrings_to_model_forward(
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
@@ -2042,14 +2043,11 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             for i in range(num_choices):
                 sep_token_indices = tf.where(input_ids[:, i] == self.config.sep_token_id)
                 _global_attention_mask = _compute_global_attention_mask(
-                    input_ids_shape=input_ids[:, i].shape,
-                    sep_token_indices=sep_token_indices,
-                    before_sep_token=False
+                    input_ids_shape=input_ids[:, i].shape, sep_token_indices=sep_token_indices, before_sep_token=False
                 )
                 global_attention_mask.append(_global_attention_mask)
 
             global_attention_mask = tf.stack(global_attention_mask, axis=1)
-
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
@@ -2114,7 +2112,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range)
         )
-    
+
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -2148,7 +2146,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
                 inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
-        
+
         outputs = self.longformer(
             inputs,
             attention_mask=attention_mask,
