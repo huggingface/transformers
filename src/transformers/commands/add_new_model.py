@@ -15,7 +15,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 def add_new_model_command_factory(args: Namespace):
-    return AddNewModelCommand(args.testing)
+    return AddNewModelCommand(args.testing, args.testing_file)
 
 
 class AddNewModelCommand(BaseTransformersCLICommand):
@@ -23,10 +23,12 @@ class AddNewModelCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         add_new_model_parser = parser.add_parser("add-new-model")
         add_new_model_parser.add_argument("--testing", action="store_true", help="If in testing mode.")
+        add_new_model_parser.add_argument("--testing_file", type=str, help="Configuration file on which to run.")
         add_new_model_parser.set_defaults(func=add_new_model_command_factory)
 
-    def __init__(self, testing: bool, *args):
+    def __init__(self, testing: bool, testing_file: str, *args):
         self._testing = testing
+        self._testing_file = testing_file
 
     def run(self):
         # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
@@ -42,7 +44,12 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         path_to_cookiecutter = path_to_transformer_root / "templates" / "cookiecutter"
 
         # Execute cookiecutter
-        cookiecutter(str(path_to_cookiecutter))
+        if not self._testing:
+            cookiecutter(str(path_to_cookiecutter))
+        else:
+            with open(str(path_to_cookiecutter) + f"/tests/{self._testing_file}", "r") as configuration_file:
+                testing_configuration = json.load(configuration_file)
+            cookiecutter(str(path_to_cookiecutter), no_input=True, extra_context=testing_configuration)
 
         directory = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]][0]
 
