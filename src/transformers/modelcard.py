@@ -145,7 +145,7 @@ class ModelCard:
             model_card_file = pretrained_model_name_or_path
         else:
             model_card_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False, mirror=None
+                pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None
             )
 
         if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:

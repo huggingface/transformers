@@ -217,6 +217,8 @@ DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
+HUGGINGFACE_CO_PREFIX = "http://huggingface.test/{model_id}/resolve/{revision}/{filename}"
+# HUGGINGFACE_CO_PREFIX = "https://moon-preprod.huggingface.co/{model_id}/resolve/{revision}/{filename}"
 PRESET_MIRROR_DICT = {
     "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
     "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
@@ -825,31 +827,31 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(model_id: str, filename: str, use_cdn=True, mirror=None) -> str:
+def hf_bucket_url(model_id: str, filename: str, revision="main", mirror=None) -> str:
     """
-    Resolve a model identifier, and a file name, to a HF-hosted url on either S3 or Cloudfront (a Content Delivery
-    Network, or CDN).
+    Resolve a model identifier, and a file name, to a huggingface.co-hosted url, potentially redirecting to Cloudfront
+    (a Content Delivery Network, or CDN).
 
     Cloudfront is replicated over the globe so downloads are way faster for the end user (and it also lowers our
     bandwidth costs). However, it is more aggressively cached by default, so may not always reflect the latest changes
     to the underlying file (default TTL is 24 hours).
 
-    In terms of client-side caching from this library, even though Cloudfront relays the ETags from S3, using one or
+    This is not an issue here however, because since migrating to git-based model versioning on huggingface.co,
+    we now store the files on S3/Cloudfront in a content-addressable way (i.e., the file name is its hash).
+
+    TODO(update) In terms of client-side caching from this library, even though Cloudfront relays the ETags from S3, using one or
     the other (or switching from one to the other) will affect caching: cached files are not shared between the two
     because the cached file's name contains a hash of the url.
     """
-    endpoint = (
-        PRESET_MIRROR_DICT.get(mirror, mirror)
-        if mirror
-        else CLOUDFRONT_DISTRIB_PREFIX
-        if use_cdn
-        else S3_BUCKET_PREFIX
-    )
-    legacy_format = "/" not in model_id
-    if legacy_format:
-        return f"{endpoint}/{model_id}-{filename}"
-    else:
-        return f"{endpoint}/{model_id}/{filename}"
+    if mirror:
+        endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
+        legacy_format = "/" not in model_id
+        if legacy_format:
+            return f"{endpoint}/{model_id}-{filename}"
+        else:
+            return f"{endpoint}/{model_id}/{filename}"
+
+    return HUGGINGFACE_CO_PREFIX.format(model_id=model_id, revision=revision, filename=filename)
 
 
 def url_to_filename(url, etag=None):

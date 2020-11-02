@@ -436,7 +436,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3)
 
     def test_layer_local_attn(self):
-        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny", use_cdn=False)
+        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
         layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
         batch_size, seq_length, hidden_size = hidden_states.shape
@@ -460,7 +460,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
 
     def test_layer_global_attn(self):
-        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny", use_cdn=False)
+        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
         layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
 

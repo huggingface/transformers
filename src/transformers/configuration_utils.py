@@ -362,6 +362,7 @@ class PretrainedConfig(object):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
         if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
@@ -369,7 +370,7 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         else:
             config_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+                pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
             )
 
         try:

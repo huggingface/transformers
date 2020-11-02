@@ -523,9 +523,11 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`main`):
+                Whether to pin to a specific model version (can be a branch name, a tag name, or a commit id).
+                We use a git-based model for storing models and other artefacts on huggingface.co, so ``revision``
+                is any identifier allowed by git.
+                TODO(if agreed upon, duplicate this doc elsewhere.)
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
