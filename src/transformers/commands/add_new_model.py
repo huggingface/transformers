@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 from argparse import ArgumentParser
@@ -39,34 +40,51 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         # Execute cookiecutter
         cookiecutter(str(path_to_cookiecutter))
 
-        # Find the model name chosen by the user
         directory = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]][0]
-        lowercase_model_name = [file for file in os.listdir(directory) if file.endswith(".rst")][0][:-4]
+
+        # Retrieve configuration
+        with open(directory + "/configuration.json", 'r') as configuration_file:
+            configuration = json.load(configuration_file)
+
+        lowercase_model_name = configuration["lowercase_modelname"]
+        pytorch_or_tensorflow = configuration["generate_tensorflow_and_pytorch"]
+        os.remove(f"{directory}/configuration.json")
+
+        output_pytorch = "PyTorch" in pytorch_or_tensorflow
+        output_tensorflow = "TensorFlow" in pytorch_or_tensorflow
 
         shutil.move(
             f"{directory}/configuration_{lowercase_model_name}.py",
             f"{path_to_transformer_root}/src/transformers/configuration_{lowercase_model_name}.py",
         )
 
-        shutil.move(
-            f"{directory}/modeling_{lowercase_model_name}.py",
-            f"{path_to_transformer_root}/src/transformers/modeling_{lowercase_model_name}.py",
-        )
+        if output_pytorch:
+            shutil.move(
+                f"{directory}/modeling_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/src/transformers/modeling_{lowercase_model_name}.py",
+            )
 
-        shutil.move(
-            f"{directory}/test_modeling_{lowercase_model_name}.py",
-            f"{path_to_transformer_root}/tests/test_modeling_{lowercase_model_name}.py",
-        )
+            shutil.move(
+                f"{directory}/test_modeling_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/test_modeling_{lowercase_model_name}.py",
+            )
+        else:
+            os.remove(f"{directory}/modeling_{lowercase_model_name}.py")
+            os.remove(f"{directory}/test_modeling_{lowercase_model_name}.py")
 
-        shutil.move(
-            f"{directory}/modeling_tf_{lowercase_model_name}.py",
-            f"{path_to_transformer_root}/src/transformers/modeling_tf_{lowercase_model_name}.py",
-        )
+        if output_tensorflow:
+            shutil.move(
+                f"{directory}/modeling_tf_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/src/transformers/modeling_tf_{lowercase_model_name}.py",
+            )
 
-        shutil.move(
-            f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
-            f"{path_to_transformer_root}/tests/test_modeling_tf_{lowercase_model_name}.py",
-        )
+            shutil.move(
+                f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/test_modeling_tf_{lowercase_model_name}.py",
+            )
+        else:
+            os.remove(f"{directory}/modeling_tf_{lowercase_model_name}.py")
+            os.remove(f"{directory}/test_modeling_tf_{lowercase_model_name}.py")
 
         shutil.move(
             f"{directory}/{lowercase_model_name}.rst",
@@ -105,16 +123,29 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             # Move new file
             move(abs_path, original_file)
 
+        def skip_units(line):
+            return (
+                ("generating PyTorch" in line and not output_pytorch)
+                or
+                ("generating TensorFlow" in line and not output_tensorflow)
+            )
+
         def replace_in_files(path_to_datafile):
             with open(path_to_datafile) as datafile:
                 lines_to_copy = []
+                skip_file = False
+                skip_snippet = False
                 for line in datafile:
                     if "# To replace in: " in line and "##" not in line:
                         file_to_replace_in = line.split('"')[1]
+                        skip_file = skip_units(line)
                     elif "# Below: " in line and "##" not in line:
                         line_to_copy_below = line.split('"')[1]
+                        skip_snippet = skip_units(line)
                     elif "# End." in line and "##" not in line:
-                        replace(file_to_replace_in, line_to_copy_below, lines_to_copy)
+                        if not skip_file and not skip_snippet:
+                            replace(file_to_replace_in, line_to_copy_below, lines_to_copy)
+
                         lines_to_copy = []
                     elif "# Replace with" in line and "##" not in line:
                         lines_to_copy = []

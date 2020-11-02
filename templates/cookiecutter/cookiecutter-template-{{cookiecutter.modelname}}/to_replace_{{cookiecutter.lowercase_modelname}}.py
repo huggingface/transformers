@@ -12,7 +12,7 @@
 
 
 # To replace in: "src/transformers/__init__.py"
-# Below: "if is_torch_available():"
+# Below: "if is_torch_available():" if generating PyTorch
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     from .modeling_{{cookiecutter.lowercase_modelname}} import (
@@ -39,7 +39,7 @@
 {% endif -%}
 # End.
 
-# Below: "if is_tf_available():"
+# Below: "if is_tf_available():" if generating TensorFlow
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
@@ -94,7 +94,7 @@ from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.u
 
 
 
-# To replace in: "src/transformers/modeling_auto.py"
+# To replace in: "src/transformers/modeling_auto.py" if generating PyTorch
 # Below: "from .configuration_auto import ("
 # Replace with:
     {{cookiecutter.camelcase_modelname}}Config,
@@ -180,7 +180,7 @@ from .modeling_{{cookiecutter.lowercase_modelname}} import (
 {% endif -%}
 # End.
 
-# To replace in: "src/transformers/modeling_tf_auto.py"
+# To replace in: "src/transformers/modeling_tf_auto.py" if generating TensorFlow
 # Below: "from .configuration_auto import ("
 # Replace with:
     {{cookiecutter.camelcase_modelname}}Config,
