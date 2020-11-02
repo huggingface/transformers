@@ -59,11 +59,11 @@ jobs:
       - name: Create model files
         run: |
           source .env/bin/activate
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/encoder-bert-tokenizer.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/pt-encoder-bert-tokenizer.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/seq-to-seq-roberta-tokenizer.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/standalone.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/tf-encoder-bert-tokenizer.json
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/encoder-bert-tokenizer.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/pt-encoder-bert-tokenizer.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/seq-to-seq-roberta-tokenizer.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/standalone.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/tf-encoder-bert-tokenizer.json --path=templates/cookiecutter
 
       - name: Run all non-slow tests on GPU
         env:
@@ -129,11 +129,11 @@ jobs:
       - name: Create model files
         run: |
           source .env/bin/activate
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/encoder-bert-tokenizer.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/pt-encoder-bert-tokenizer.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/seq-to-seq-roberta-tokenizer.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/standalone.json
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/tf-encoder-bert-tokenizer.json
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/encoder-bert-tokenizer.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/pt-encoder-bert-tokenizer.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/seq-to-seq-roberta-tokenizer.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/standalone.json --path=templates/cookiecutter
+          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/tf-encoder-bert-tokenizer.json --path=templates/cookiecutter
 
       - name: Run all non-slow tests on GPU
         env:
