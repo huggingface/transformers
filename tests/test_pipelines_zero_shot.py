@@ -17,7 +17,7 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         sum = 0.0
         for score in result["scores"]:
             sum += score
-        self.assertAlmostEqual(sum, 1.0)
+        self.assertAlmostEqual(sum, 1.0, places=5)
 
     def _test_entailment_id(self, nlp: Pipeline):
         config = nlp.model.config
