@@ -64,7 +64,7 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/report_test_torch_failures_short.txt
+        run: cat reports/report_tests_torch_failures_short.txt
         
       - name: Run examples tests on GPU
         if: ${{ always() }}
@@ -158,7 +158,21 @@ jobs:
           
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/report_test_tf_failures_short.txt
+        run: cat reports/report_tests_tf_failures_short.txt
+
+      - name: Run all pipeline tests on GPU
+        env:
+          TF_FORCE_GPU_ALLOW_GROWTH: "true"
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+          RUN_PIPELINE_TESTS: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s tests -m is_pipeline_test --make_reports=tests_tf_pipelines tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/report_tests_tf_pipelines_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -177,7 +191,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0.1-slow_tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-slow_tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -222,22 +236,8 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/report_test_torch_failures_short.txt
+        run: cat reports/report_tests_torch_failures_short.txt
         
-      - name: Run examples tests on GPU
-        if: ${{ always() }}
-        env:
-          OMP_NUM_THREADS: 1
-          RUN_SLOW: yes
-        run: |
-          source .env/bin/activate
-          pip install -r examples/requirements.txt
-          python -m pytest -n 1 --dist=loadfile -s --make_reports=examples_torch examples
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/report_examples_torch_failures_short.txt
-
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -270,7 +270,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v0.1-slow_tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-slow_tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -311,7 +311,11 @@ jobs:
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s ./tests/ --durations=0
+          python -m pytest -n 1 --dist=loadfile -s tests --make_reports=tests_tf tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/report_tests_tf_failures_short.txt
 
       - name: Run all pipeline tests on GPU
         env:
@@ -321,11 +325,11 @@ jobs:
           RUN_PIPELINE_TESTS: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s ./tests/ -m is_pipeline_test --durations=50
+          python -m pytest -n 1 --dist=loadfile -s tests -m is_pipeline_test --make_reports=tests_tf_pipelines tests
           
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/report_test_tf_failures_short.txt
+        run: cat reports/report_tests_tf_pipelines_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
