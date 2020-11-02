@@ -494,8 +494,8 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                     - The model is a model provided by the library (loaded with the `shortcut name` string of a
                       pretrained model).
                     - The model was saved using :meth:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
-                      by suppling the save directory.
-                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      by supplying the save directory.
+                    - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
             state_dict (`Dict[str, torch.Tensor]`, `optional`):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.
