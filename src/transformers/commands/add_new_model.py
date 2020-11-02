@@ -24,7 +24,9 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         add_new_model_parser = parser.add_parser("add-new-model")
         add_new_model_parser.add_argument("--testing", action="store_true", help="If in testing mode.")
         add_new_model_parser.add_argument("--testing_file", type=str, help="Configuration file on which to run.")
-        add_new_model_parser.add_argument("--path", type=str, help="Path to cookiecutter.")
+        add_new_model_parser.add_argument(
+            "--path", type=str, help="Path to cookiecutter. Should only be used for testing purposes."
+        )
         add_new_model_parser.set_defaults(func=add_new_model_command_factory)
 
     def __init__(self, testing: bool, testing_file: str, path=None, *args):
@@ -42,7 +44,9 @@ class AddNewModelCommand(BaseTransformersCLICommand):
                 "change your working directory."
             )
 
-        path_to_transformer_root = Path(__file__).parent.parent.parent.parent
+        path_to_transformer_root = (
+            Path(__file__).parent.parent.parent.parent if self._path is None else Path(self._path).parent.parent
+        )
         path_to_cookiecutter = path_to_transformer_root / "templates" / "cookiecutter"
 
         # Execute cookiecutter
@@ -55,7 +59,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             cookiecutter(
                 str(path_to_cookiecutter if self._path is None else self._path),
                 no_input=True,
-                extra_context=testing_configuration
+                extra_context=testing_configuration,
             )
 
         directory = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]][0]
