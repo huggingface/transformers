@@ -63,11 +63,11 @@ class TapasConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        positive_weight (:obj:`float`, `optional`, defaults to 10.0):
+        positive_label_weight (:obj:`float`, `optional`, defaults to 10.0):
             Weight for positive labels.
         num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
             The number of aggregation operators to predict.
-        aggregation_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
+        aggregation_loss_weight (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the aggregation loss.
         use_answer_as_supervision (:obj:`bool`, `optional`, defaults to :obj:`None`):
             Whether to use the answer as the only supervision for aggregation examples.
@@ -88,7 +88,9 @@ class TapasConfig(PretrainedConfig):
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
             Method to calculate expected average of cells in the relaxed case.
         cell_select_pref: (:obj:`float`, `optional`, defaults to None):
-            Preference for cell selection in ambiguous cases.
+            Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for aggregation (WTQ, WikiSQL).
+            If the total mass of the aggregation probabilities (excluding the "NONE" operator) is higher than this hyperparameter, 
+            then aggregation is predicted for an example.
         answer_loss_cutoff: (:obj:`float`, `optional`, defaults to None):
             Ignore examples with answer loss larger than cutoff.
         max_num_rows: (:obj:`int`, `optional`, defaults to 64):
@@ -139,9 +141,9 @@ class TapasConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         gradient_checkpointing=False,
-        positive_weight=10.0,
+        positive_label_weight=10.0,
         num_aggregation_labels=0,
-        aggregation_loss_importance=1.0,
+        aggregation_loss_weight=1.0,
         use_answer_as_supervision=None,
         answer_loss_importance=1.0,
         use_normalized_answer_loss=False,
@@ -183,9 +185,9 @@ class TapasConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
 
         # Fine-tuning task hyperparameters
-        self.positive_weight = positive_weight
+        self.positive_label_weight = positive_label_weight
         self.num_aggregation_labels = num_aggregation_labels
-        self.aggregation_loss_importance = aggregation_loss_importance
+        self.aggregation_loss_weight = aggregation_loss_weight
         self.use_answer_as_supervision = use_answer_as_supervision
         self.answer_loss_importance = answer_loss_importance
         self.use_normalized_answer_loss = use_normalized_answer_loss

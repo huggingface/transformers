@@ -1227,7 +1227,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 weight = torch.where(
                     label_ids == 0,
                     torch.ones_like(label_ids, dtype=torch.float32),
-                    self.config.positive_weight * torch.ones_like(label_ids, dtype=torch.float32),
+                    self.config.positive_label_weight * torch.ones_like(label_ids, dtype=torch.float32),
                 )
                 selection_loss_per_token = -dist_per_token.log_prob(label_ids) * weight
                 selection_loss_per_example = torch.sum(selection_loss_per_token * input_mask_float, dim=1) / (
@@ -2062,7 +2062,7 @@ def _calculate_aggregation_loss(logits_aggregation, aggregate_mask, aggregation_
     if config.use_answer_as_supervision:
         # Add aggregation loss for numeric answers that need aggregation.
         per_example_aggregation_loss += _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask)
-    return config.aggregation_loss_importance * per_example_aggregation_loss
+    return config.aggregation_loss_weight * per_example_aggregation_loss
 
 
 def _calculate_expected_result(
