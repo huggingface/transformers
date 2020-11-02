@@ -1,0 +1,11 @@
+{
+  "modelname": "SeqToSeqRoBERTa",
+  "uppercase_modelname": "SEQ_TO_SEQ_ROBERTA",
+  "lowercase_modelname": "seq_to_seq_roberta",
+  "camelcase_modelname": "SeqToSeqRoberta",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "brand-new-roberta-base-cased",
+  "tokenizer_type": "Based on BERT",
+  "is_encoder_decoder_model": "True",
+  "generate_tensorflow_and_pytorch": "PyTorch & TensorFlow"
+}
