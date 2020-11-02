@@ -118,7 +118,6 @@ from .modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
     {{cookiecutter.camelcase_modelname}}Model,
-    Pretrained{{cookiecutter.camelcase_modelname}}Model,
 )
 {% endif -%}
 # End.
@@ -202,17 +201,13 @@ from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
 from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
     TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
     TF{{cookiecutter.camelcase_modelname}}Model,
-    TFPretrained{{cookiecutter.camelcase_modelname}}Model,
 )
 {% endif -%}
 # End.
 
 # Below: "# Base model mapping"
 # Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}Model),
-{% else -%}
-{% endif -%}
 # End.
 
 # Below: "# Model with LM heads mapping"

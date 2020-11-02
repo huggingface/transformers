@@ -1,7 +1,7 @@
 import json
 import os
 import shutil
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List
 
@@ -14,15 +14,19 @@ from ..utils import logging
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-def add_new_model_command_factory(args):
-    return AddNewModelCommand()
+def add_new_model_command_factory(args: Namespace):
+    return AddNewModelCommand(args.testing)
 
 
 class AddNewModelCommand(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
-        download_parser = parser.add_parser("add-new-model")
-        download_parser.set_defaults(func=add_new_model_command_factory)
+        add_new_model_parser = parser.add_parser("add-new-model")
+        add_new_model_parser.add_argument("--testing", action="store_true", help="If in testing mode.")
+        add_new_model_parser.set_defaults(func=add_new_model_command_factory)
+
+    def __init__(self, testing: bool, *args):
+        self._testing = testing
 
     def run(self):
         # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
@@ -43,7 +47,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         directory = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]][0]
 
         # Retrieve configuration
-        with open(directory + "/configuration.json", 'r') as configuration_file:
+        with open(directory + "/configuration.json", "r") as configuration_file:
             configuration = json.load(configuration_file)
 
         lowercase_model_name = configuration["lowercase_modelname"]
@@ -58,7 +62,18 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             f"{path_to_transformer_root}/src/transformers/configuration_{lowercase_model_name}.py",
         )
 
+        def remove_copy_lines(path):
+            with open(path, "r") as f:
+                lines = f.readlines()
+            with open(path, "w") as f:
+                for line in lines:
+                    if "# Copied from transformers." not in line:
+                        f.write(line)
+
         if output_pytorch:
+            if not self._testing:
+                remove_copy_lines(f"{directory}/modeling_{lowercase_model_name}.py")
+
             shutil.move(
                 f"{directory}/modeling_{lowercase_model_name}.py",
                 f"{path_to_transformer_root}/src/transformers/modeling_{lowercase_model_name}.py",
@@ -73,6 +88,9 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             os.remove(f"{directory}/test_modeling_{lowercase_model_name}.py")
 
         if output_tensorflow:
+            if not self._testing:
+                remove_copy_lines(f"{directory}/modeling_tf_{lowercase_model_name}.py")
+
             shutil.move(
                 f"{directory}/modeling_tf_{lowercase_model_name}.py",
                 f"{path_to_transformer_root}/src/transformers/modeling_tf_{lowercase_model_name}.py",
@@ -124,10 +142,8 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             move(abs_path, original_file)
 
         def skip_units(line):
-            return (
-                ("generating PyTorch" in line and not output_pytorch)
-                or
-                ("generating TensorFlow" in line and not output_tensorflow)
+            return ("generating PyTorch" in line and not output_pytorch) or (
+                "generating TensorFlow" in line and not output_tensorflow
             )
 
         def replace_in_files(path_to_datafile):

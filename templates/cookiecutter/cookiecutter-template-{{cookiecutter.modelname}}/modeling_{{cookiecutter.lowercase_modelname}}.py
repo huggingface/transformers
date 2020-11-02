@@ -20,8 +20,6 @@
 import math
 import os
 import warnings
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -31,19 +29,15 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .activations import gelu, gelu_new, swish
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 from .file_utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
-    replace_return_docstrings,
 )
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    CausalLMOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
-    NextSentencePredictorOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -150,6 +144,7 @@ def mish(x):
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 
+# Copied from transformers.modeling_bert.BertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -192,6 +187,7 @@ class {{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.modeling_bert.BertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -270,6 +266,7 @@ class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.modeling_bert.BertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}SelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -284,6 +281,7 @@ class {{cookiecutter.camelcase_modelname}}SelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertAttention with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -331,6 +329,7 @@ class {{cookiecutter.camelcase_modelname}}Attention(nn.Module):
         return outputs
 
 
+# Copied from transformers.modeling_bert.BertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Intermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -346,6 +345,7 @@ class {{cookiecutter.camelcase_modelname}}Intermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertOutput with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Output(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -360,6 +360,7 @@ class {{cookiecutter.camelcase_modelname}}Output(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertLayer with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Layer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -419,6 +420,7 @@ class {{cookiecutter.camelcase_modelname}}Layer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.modeling_bert.BertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -483,6 +485,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         )
 
 
+# Copied from transformers.modeling_bert.BertPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}PredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -500,6 +503,7 @@ class {{cookiecutter.camelcase_modelname}}PredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}LMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -520,6 +524,7 @@ class {{cookiecutter.camelcase_modelname}}LMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling_bert.BertOnlyMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}OnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1245,7 +1250,6 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
         )
 
 {% else %}
-import random
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -1575,7 +1579,6 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
             x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
 
             if output_attentions:
@@ -1760,7 +1763,6 @@ class {{cookiecutter.camelcase_modelname}}Decoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (x,)
-            dropout_probability = random.uniform(0, 1)
             layer_state = past_key_values[idx] if past_key_values is not None else None
 
             x, layer_self_attn, layer_past = decoder_layer(

@@ -72,11 +72,8 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
-import json
-import os
 import warnings
 
-import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -288,6 +285,7 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = None
         if "is_pretokenized" in kwargs:
             warnings.warn(
                 "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
@@ -299,6 +297,7 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
         return super()._batch_encode_plus(*args, **kwargs)
 
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = None
         if "is_pretokenized" in kwargs:
             warnings.warn(
                 "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
