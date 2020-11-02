@@ -10,35 +10,41 @@ Most of those are only useful if you are studying the code of the generate metho
 LogitsProcessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A :class:`~transformers.generation_logits_process.LogitsProcessor` can be used to modify the prediction scores of a
-language model head for generation.
+A :class:`~transformers.LogitsProcessor` can be used to modify the prediction scores of a language model head for
+generation.
 
-.. autoclass:: transformers.generation_logits_process.LogitsProcessor
+.. autoclass:: transformers.LogitsProcessor
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.LogitsProcessorList
+.. autoclass:: transformers.LogitsProcessorList
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.MinLengthLogitsProcessor
+.. autoclass:: transformers.MinLengthLogitsProcessor
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.TemperatureLogitsWarper
+.. autoclass:: transformers.TemperatureLogitsWarper
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.RepetitionPenaltyLogitsProcessor
+.. autoclass:: transformers.RepetitionPenaltyLogitsProcessor
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.TopPLogitsWarper
+.. autoclass:: transformers.TopPLogitsWarper
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.TopKLogitsWarper
+.. autoclass:: transformers.TopKLogitsWarper
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.NoRepeatNGramLogitsProcessor
+.. autoclass:: transformers.NoRepeatNGramLogitsProcessor
     :members: __call__
 
-.. autoclass:: transformers.generation_logits_process.NoBadWordsLogitsProcessor
+.. autoclass:: transformers.NoBadWordsLogitsProcessor
     :members: __call__
 
 BeamSearch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BeamScorer
+    :members: process, finalize
+
+.. autoclass:: transformers.BeamSearchScorer
+    :members: process, finalize

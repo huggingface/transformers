@@ -119,16 +119,14 @@ class BeamSearchTester:
         tokens[0, :] = self.eos_token_id
 
         with self.parent.assertRaises(ValueError):
-            beam_scorer.update_beams(input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id)
+            beam_scorer.process(input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id)
 
         # check all batches are done
         beam_scorer = self.prepare_beam_scorer()
 
         tokens = next_tokens.clone()
         tokens[:, : self.num_beams] = self.eos_token_id
-        _, _, _ = beam_scorer.update_beams(
-            input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id
-        )
+        beam_scorer.process(input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id)
         # beam scorer should be done
         self.parent.assertTrue(beam_scorer.is_done)
 
@@ -137,9 +135,12 @@ class BeamSearchTester:
 
         tokens = next_tokens.clone()
         tokens[:, 1] = self.eos_token_id
-        output_scores, output_tokens, output_indices = beam_scorer.update_beams(
+        beam_outputs = beam_scorer.process(
             input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id
         )
+        output_scores = beam_outputs["next_beam_scores"]
+        output_tokens = beam_outputs["next_beam_tokens"]
+        output_indices = beam_outputs["next_beam_indices"]
 
         def cut_expected_tensor(tensor):
             return torch.cat([tensor[:, :1], tensor[:, 2 : self.num_beams + 1]], dim=1).flatten()
@@ -179,9 +180,13 @@ class BeamSearchTester:
         tokens[0, 0] = self.eos_token_id
         # make sure corresponding score is as good as possible to surely be picked first
         next_scores[0, 0] = 0.0
-        output_scores, output_tokens, output_indices = beam_scorer.update_beams(
+        beam_outputs = beam_scorer.process(
             input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id
         )
+        output_scores = beam_outputs["next_beam_scores"]
+        output_tokens = beam_outputs["next_beam_tokens"]
+        output_indices = beam_outputs["next_beam_indices"]
+
         input_ids = torch.cat([input_ids[output_indices, :], output_tokens.unsqueeze(-1)], dim=-1)
 
         # finalize

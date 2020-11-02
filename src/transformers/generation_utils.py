@@ -206,12 +206,12 @@ class GenerationMixin:
     def _reorder_cache(past: Tuple[torch.Tensor], beam_idx: torch.Tensor) -> Tuple[torch.Tensor]:
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
-    def get_logits_warper(
+    def _get_logits_warper(
         self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
     ) -> LogitsProcessorList:
         """
-        This class returns a `LogitsProcessorList` object, that contains all distribution pre processing functions that
-        are ONLY related to sampling
+        This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
+        :obj:`~transformers.LogitsWarper` instances used for multinomial sampling.
         """
 
         # init warp parameters
@@ -231,7 +231,7 @@ class GenerationMixin:
             warpers.append(TemperatureLogitsWarper(temperature))
         return warpers
 
-    def get_logits_processor(
+    def _get_logits_processor(
         self,
         repetition_penalty: float,
         no_repeat_ngram_size: int,
@@ -240,8 +240,8 @@ class GenerationMixin:
         eos_token_id: int,
     ) -> LogitsProcessorList:
         """
-        This class returns a `LogitsProcessorList` object, that contains all distribution pre processing functions that
-        are related to all generation functions.
+        This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
+        :obj:`~transformers.LogitsProcessor` instances used to modify the scores of the language model head.
         """
 
         # init warp parameters
@@ -293,10 +293,7 @@ class GenerationMixin:
     ) -> torch.LongTensor:
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
-        beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
-
-        Adapted in part from `Facebook's XLM beam search code
-        <https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529>`__.
+        multinomial sampling, beam-search decoding, and beam-search multinomial sampling.
 
         Apart from :obj:`input_ids` and :obj:`attention_mask`, all the arguments below will default to the value of the
         attribute of the same name inside the :class:`~transformers.PretrainedConfig` of the model. The default values
@@ -325,7 +322,7 @@ class GenerationMixin:
             top_k (:obj:`int`, `optional`, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (:obj:`float`, `optional`, defaults to 1.0):
-                If set to float < 1, only the most probable tokens with probabilities that add up to :ob:`top_p` or
+                If set to float < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or
                 higher are kept for generation.
             repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
                 The parameter for repetition penalty. 1.0 means no penalty. See `this paper
@@ -344,7 +341,8 @@ class GenerationMixin:
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(:obj:`List[List[int]]`, `optional`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
-                should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+                should not appear in the generated text, use :obj:`tokenizer(bad_word,
+                add_prefix_space=True).input_ids`.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
             attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -370,38 +368,36 @@ class GenerationMixin:
         Examples::
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             outputs = model.generate(max_length=40)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
-            tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
-            input_context = 'The dog'
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
-            for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
+            tokenizer = AutoTokenizer.from_pretrained('t5-base')   # Initialize tokenizer
+            model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
+            document = "at least two people were killed in a suspected bomb attack on a passenger bus in the strife-torn southern philippines on monday , the military said."
+            input_ids = tokenizer(document, return_tensors='pt').input_ids  # encode input context
+            outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3)  # generate 3 independent sequences using beam search decoding (5 beams) with T5 encoder-decoder model conditioned on short news article.
+            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
+            input_ids = tokenizer(input_context, return_tensors='pt').input_ids  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)  # generate 3 candidates using sampling
-            for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
+            print("Generated", tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
+            input_ids = tokenizer(input_context, return_tensors='pt').input_ids  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
             input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
-            bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
+            bad_words_ids = [tokenizer.input_ids(bad_word, add_prefix_space=True).input_ids for bad_word in ['idiot', 'stupid', 'shut up']]
+            input_ids = tokenizer(input_context, return_tensors='pt').input_ids  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
         """
 
@@ -455,7 +451,7 @@ class GenerationMixin:
         model_kwargs["use_cache"] = use_cache
 
         # get distribution pre_processing samplers
-        logits_processor = self.get_logits_processor(
+        logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             bad_words_ids=bad_words_ids,
@@ -481,7 +477,7 @@ class GenerationMixin:
 
         elif is_sample_gen_mode:
             # get probability distribution warper
-            logits_warper = self.get_logits_warper(
+            logits_warper = self._get_logits_warper(
                 top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
             )
 
@@ -537,7 +533,7 @@ class GenerationMixin:
             )
 
         elif is_beam_sample_gen_mode:
-            logits_warper = self.get_logits_warper(
+            logits_warper = self._get_logits_warper(
                 top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
             )
 
@@ -581,6 +577,49 @@ class GenerationMixin:
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
+        r"""
+        Generates sequences for models with a language modeling head using greedy decoding.
+
+        Parameters:
+
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+                An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
+                :class:`~transformers.LogitsProcessor` used to modify the prediction scores of the language modeling
+                head applied at each generation step.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
+                model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
+
+        Return:
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
+
+        Examples::
+
+            from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList, MinLengthLogitsProcessor
+            tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
+            model = AutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            model.config.pad_token_id = model.config.eos_token_id
+
+            input_prompt = "Today is a beautiful day, and"
+            input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
+            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id)])  # instantiate logits processors
+
+            outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
+
+            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        """
+
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
@@ -644,6 +683,106 @@ class GenerationMixin:
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
+        r"""
+        Generates sequences for models with a language modeling head using multinomial sampling.
+
+        Parameters:
+
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+                An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
+                :class:`~transformers.LogitsProcessor` used to modify the prediction scores of the language modeling
+                head applied at each generation step.
+            logits_warper (:obj:`LogitsProcessorList`, `optional`):
+                An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
+                :class:`~transformers.LogitsWarper` used to warp the prediction score distribution of the language
+                modeling head applied before multinomial sampling at each generation step.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
+                model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
+
+        Return:
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
+
+        Examples::
+
+            from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList, MinLengthLogitsProcessor, TopKLogitsWarper, TemperatureLogitsWarper
+            tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
+            model = AutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            model.config.pad_token_id = model.config.eos_token_id
+
+            input_prompt = "Today is a beautiful day, and"
+            input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
+
+            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id)])  # instantiate logits processors
+            logits_warper = LogitsProcessorList([TopKLogitsWarper(50), TemperatureLogitsWarper(0.7)])  # instantiate logits processors
+
+            outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
+            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        """
+
+        # init values
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        max_length = max_length if max_length is not None else self.config.max_length
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+
+        # init sequence length tensors
+        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
+            input_ids, max_length
+        )
+
+        while cur_len < max_length:
+            # prepare model inputs
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            # forward pass to get next token
+            outputs = self(**model_inputs, return_dict=True)
+            next_token_logits = outputs.logits[:, -1, :]
+
+            # pre-process distribution
+            scores = logits_processor(input_ids, next_token_logits)
+
+            # argmax
+            next_tokens = torch.argmax(scores, dim=-1)
+
+            # add code that transfomers next_tokens to tokens_to_add
+            if eos_token_id is not None:
+                assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
+                next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+
+            # add token and increase length by one
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+
+            # update sequence length
+            if eos_token_id is not None:
+                sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
+                    sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
+                )
+
+            # update model kwargs
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            if unfinished_sequences.max() == 0:
+                break
+
+            # increase cur_len
+            cur_len = cur_len + 1
+
+        return input_ids
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
@@ -709,6 +848,65 @@ class GenerationMixin:
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
+        r"""
+        Generates sequences for models with a language modeling head using beam search decoding.
+
+        Parameters:
+
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            beam_scorer (:obj:`BeamScorer`):
+                An derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
+                constructed, stored and sorted during generation. For more information, the documentation of
+                :class:`~transformers.BeamScorer` should be read.
+            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+                An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
+                :class:`~transformers.LogitsProcessor` used to modify the prediction scores of the language modeling
+                head applied at each generation step.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
+                model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
+
+        Return:
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
+
+        Examples::
+
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, LogitsProcessorList, MinLengthLogitsProcessor, BeamSearchScorer
+            import torch
+
+            tokenizer = AutoTokenizer.from_pretrained('t5-base')   # Initialize tokenizer
+            model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
+
+            encoder_input_str = "translate English to German: How old are you?"
+            encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+
+
+            num_beams = 3
+            input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long) * model.config.decoder_start_token_id
+            model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)}
+
+            beam_scorer = BeamSearchScorer(
+                batch_size=1,
+                max_length=model.config.max_length,
+                num_beams=num_beams,
+                device=model.device,
+            )
+            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)])  # instantiate logits processors
+
+            outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        """
+
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
@@ -755,7 +953,7 @@ class GenerationMixin:
             next_tokens = next_tokens % vocab_size
 
             # stateless
-            beam_scores, beam_next_tokens, beam_idx = beam_scorer.update_beams(
+            beam_outputs = beam_scorer.process(
                 input_ids,
                 next_token_scores,
                 next_tokens,
@@ -763,6 +961,9 @@ class GenerationMixin:
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
             )
+            beam_scores = beam_outputs["next_beam_scores"]
+            beam_next_tokens = beam_outputs["next_beam_tokens"]
+            beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
@@ -793,6 +994,68 @@ class GenerationMixin:
         eos_token_id: Optional[int] = None,
         **model_kwargs
     ):
+        r"""
+        Generates sequences for models with a language modeling head using beam search with multinomial sampling.
+
+        Parameters:
+
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
+                :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            beam_scorer (:obj:`BeamScorer`):
+                An derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
+                constructed, stored and sorted during generation. For more information, the documentation of
+                :class:`~transformers.BeamScorer` should be read.
+            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+                An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
+                :class:`~transformers.LogitsProcessor` used to modify the prediction scores of the language modeling
+                head applied at each generation step.
+            logits_warper (:obj:`LogitsProcessorList`, `optional`):
+                An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
+                :class:`~transformers.LogitsWarper` used to warp the prediction score distribution of the language
+                modeling head applied before multinomial sampling at each generation step.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
+                model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
+
+        Return:
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
+
+        Examples::
+
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, LogitsProcessorList, MinLengthLogitsProcessor, TopKLogitsWarper, TemperatureLogitsWarper, BeamSearchScorer
+            import torch
+
+            tokenizer = AutoTokenizer.from_pretrained('t5-base')   # Initialize tokenizer
+            model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
+
+            encoder_input_str = "translate English to German: How old are you?"
+            encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+
+            num_beams = 3
+            input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long) * model.config.decoder_start_token_id
+            model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)}
+
+            beam_scorer = BeamSearchScorer(
+                batch_size=1,
+                max_length=model.config.max_length,
+                num_beams=num_beams,
+                device=model.device,
+            )
+            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)])  # instantiate logits processors
+            logits_warper = LogitsProcessorList([TopKLogitsWarper(50), TemperatureLogitsWarper(0.7)])  # instantiate logits processors
+
+            outputs = model.beam_sample(input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs)
+            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
@@ -839,7 +1102,7 @@ class GenerationMixin:
             next_tokens = next_tokens % vocab_size
 
             # stateless
-            beam_scores, beam_next_tokens, beam_idx = beam_scorer.update_beams(
+            beam_outputs = beam_scorer.process(
                 input_ids,
                 next_token_scores,
                 next_tokens,
@@ -847,6 +1110,9 @@ class GenerationMixin:
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
             )
+            beam_scores = beam_outputs["next_beam_scores"]
+            beam_next_tokens = beam_outputs["next_beam_tokens"]
+            beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1

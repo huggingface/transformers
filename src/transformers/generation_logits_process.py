@@ -37,9 +37,9 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax.
 
-    Returns:
-        scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`): The processed prediction
-        scores.
+    Return:
+        :obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`: The processed prediction scores.
+
 """
 
 
@@ -54,11 +54,23 @@ class LogitsProcessor(ABC):
         )
 
 
+class LogitsWarper(ABC):
+    """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """Torch method for warping logits."""
+        raise NotImplementedError(
+            f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
+        )
+
+
 class LogitsProcessorList(list):
     """
-    This class can be used to create a list of :class:`~transformers.generation_logits_processor.LogitsProcessor` to
-    subsequently process a :obj:`scores` input tensor. This class inherits from list and adds a specific `__call__`
-    method to apply each :class:`~transformers.generation_logits_processor.LogitsProcessor` to the inputs.
+    This class can be used to create a list of :class:`~transformers.LogitsProcessor` or
+    :class:`~transformers.LogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits from
+    list and adds a specific `__call__` method to apply each :class:`~transformers.LogitsProcessor` or
+    :class:`~transformers.LogitsProcessor` to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -70,8 +82,7 @@ class LogitsProcessorList(list):
 
 class MinLengthLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.generation_logits_processor.LogitsProcessor` enforcing a min-length by setting EOS probability
-    to 0.
+    :class:`transformers.LogitsProcessor` enforcing a min-length by setting EOS probability to 0.
 
     Args:
         min_length (:obj:`int`):
@@ -97,10 +108,9 @@ class MinLengthLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class TemperatureLogitsWarper(LogitsProcessor):
+class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    :class:`transformers.generation_logits_processor.LogitsProcessor` for temperature (exponential scaling output
-    probability distribution).
+    :class:`transformers.LogitsWarper` for temperature (exponential scaling output probability distribution).
 
     Args:
         temperature (:obj:`float`):
@@ -120,8 +130,7 @@ class TemperatureLogitsWarper(LogitsProcessor):
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.generation_logits_processor.LogitsProcessor` enforcing an exponential penalty on repeated
-    sequences.
+    :class:`transformers.LogitsProcessor` enforcing an exponential penalty on repeated sequences.
 
     Args:
         repetition_penalty (:obj:`float`):
@@ -146,10 +155,10 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class TopPLogitsWarper(LogitsProcessor):
+class TopPLogitsWarper(LogitsWarper):
     """
-    :class:`transformers.generation_logits_processor.LogitsProcessor` that performs top-p, i.e. restricting to top
-    tokens summing to prob_cut_off <= prob_cut_off.
+    :class:`transformers.LogitsWarper` that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
+    prob_cut_off.
 
     Args:
         top_p (:obj:`float`):
@@ -188,10 +197,9 @@ class TopPLogitsWarper(LogitsProcessor):
         return scores
 
 
-class TopKLogitsWarper(LogitsProcessor):
+class TopKLogitsWarper(LogitsWarper):
     r"""
-    :class:`transformers.generation_logits_processor.LogitsProcessor` that performs top-k, i.e. restricting to the k
-    highest probability elements.
+    :class:`transformers.LogitsWarper` that performs top-k, i.e. restricting to the k highest probability elements.
 
     Args:
         top_k (:obj:`int`):
@@ -220,8 +228,7 @@ class TopKLogitsWarper(LogitsProcessor):
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.generation_logits_processor.LogitsProcessor` that enforces no repetition of n-grams. See
-    Fairseq:
+    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See Fairseq:
     https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345.
 
     Args:
@@ -271,13 +278,13 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
 class NoBadWordsLogitsProcessor(LogitsProcessor):
     """
-    :class:`transformers.generation_logits_processor.LogitsProcessor` that enforces that specified sequences will never
-    be sampled.
+    :class:`transformers.LogitsProcessor` that enforces that specified sequences will never be sampled.
 
     Args:
         bad_words_ids (:obj:`List[List[int]]`):
             List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
-            that should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+            that should not appear in the generated text, use :obj:`tokenizer(bad_word,
+            add_prefix_space=True).input_ids`.
         eos_token_id (:obj:`int`):
             The id of the `end-of-sequence` token.
     """

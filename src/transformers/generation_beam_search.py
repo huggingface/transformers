@@ -14,14 +14,80 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
+from collections import UserDict
 from typing import Optional, Tuple
 
 import torch
 
+from .file_utils import add_start_docstrings
+
+
+PROCESS_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        next_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2 * num_beams)`):
+            Current scores of the top :obj:`2 * num_beams` non-finished beam hypotheses.
+        next_tokens (:obj:`torch.LongTensor` of shape :obj:`(batch_size, 2 * num_beams)`):
+            :obj:`input_ids` of the tokens corresponding to the top :obj:`2 * num_beams` non-finished beam hypotheses.
+        next_indices (:obj:`torch.LongTensor` of shape :obj:`(batch_size, 2 * num_beams)`):
+            beam indices indicating to which beam hypothesis the :obj:`next_tokens` correspond.
+        kwargs:
+            Additional kwargs including special tokens, such as :obj:`eos_token_id` and :obj:`pad_token_id`.
+
+    Return: :obj:`UserDict` composed of the fields as defined above:
+
+            - next_beam_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- updated scores of
+              all non-finished beams.
+            - next_beam_tokens (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- next tokens to be
+              added to the non-finished beam_hypotheses.
+            - next_beam_indices (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- beam indices
+              indicating to which beam the next tokens shall be added.
+
+"""
+
+FINALIZE_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        final_beam_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`):
+            The final scores of all non-finished beams.
+        final_beam_tokens (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`):
+            The last tokens to be added to the non-finished beam_hypotheses.
+        final_beam_indices (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`):
+            The beam indices indicating to which beam the :obj:`final_beam_tokens` shall be added.
+        kwargs:
+            Additional kwargs including special tokens, such as :obj:`eos_token_id` and :obj:`pad_token_id`.
+
+    Return:
+        :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+        sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
+        batches finished early due to the :obj:`eos_token_id`.
+
+"""
+
 
 class BeamScorer(ABC):
+    """
+    Abstract base class for all beam scorers that are used for :meth:`~transformers.PretrainedModel.beam_search` and
+    :meth:`~transformers.PretrainedModel.beam_sample`.
+    """
+
     @abstractmethod
-    def update_beams(
+    @add_start_docstrings(PROCESS_INPUTS_DOCSTRING)
+    def process(
         self,
         input_ids: torch.LongTensor,
         next_scores: torch.FloatTensor,
@@ -32,6 +98,7 @@ class BeamScorer(ABC):
         raise NotImplementedError("This is an abstract method.")
 
     @abstractmethod
+    @add_start_docstrings(FINALIZE_INPUTS_DOCSTRING)
     def finalize(
         self,
         input_ids: torch.LongTensor,
@@ -44,6 +111,33 @@ class BeamScorer(ABC):
 
 
 class BeamSearchScorer(BeamScorer):
+    r"""
+    :class:`transformers.BeamScorer` implementing standard beam search decoding.
+
+    Adapted in part from `Facebook's XLM beam search code
+    <https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529>`__.
+
+    Args:
+        batch_size (:obj:`int`):
+            Batch Size of :obj:`input_ids` for which beam search decoding is run in parallel.
+        max_length (:obj:`int`):
+            The maximum length of the sequence to be generated.
+        num_beams (:obj:`int`):
+            Number of beams for beam search.
+        device (:obj:`torch.device`):
+            Defines the device type (*e.g.*, :obj:`"cpu"` or :obj:`"cuda"`) on which `BeamSearchScorer` will be
+            allocated.
+        length_penalty (:obj:`float`, `optional`, defaults to 1.0):
+            Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
+            model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
+            sequences.
+        do_early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to stop the beam search when at least ``num_beams`` sentences are finished per batch or not.
+        num_beam_hyps_to_keep (:obj:`int`, `optional`, defaults to 1):
+            The number of beam hypotheses that shall be returned upon calling
+            :meth:`~transformer.BeamSearchScorer.finalize`.
+    """
+
     def __init__(
         self,
         batch_size: int,
@@ -73,11 +167,16 @@ class BeamSearchScorer(BeamScorer):
         ]
         self._done = torch.tensor([False for _ in range(batch_size)], dtype=torch.bool, device=self.device)
 
+        if not isinstance(num_beams, int) or num_beams <= 1:
+            raise ValueError(
+                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
+            )
+
     @property
     def is_done(self) -> bool:
         return self._done.all()
 
-    def update_beams(
+    def process(
         self,
         input_ids: torch.LongTensor,
         next_scores: torch.FloatTensor,
@@ -93,9 +192,9 @@ class BeamSearchScorer(BeamScorer):
         assert batch_size == (input_ids.shape[0] // self.num_beams)
 
         device = input_ids.device
-        next_beam_next_scores = torch.zeros((batch_size, self.num_beams), dtype=next_scores.dtype, device=device)
+        next_beam_scores = torch.zeros((batch_size, self.num_beams), dtype=next_scores.dtype, device=device)
         next_beam_tokens = torch.zeros((batch_size, self.num_beams), dtype=next_tokens.dtype, device=device)
-        next_beam_indexes = torch.zeros((batch_size, self.num_beams), dtype=next_indices.dtype, device=device)
+        next_beam_indices = torch.zeros((batch_size, self.num_beams), dtype=next_indices.dtype, device=device)
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -106,9 +205,9 @@ class BeamSearchScorer(BeamScorer):
                     eos_token_id is not None and pad_token_id is not None
                 ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                 # pad the batch
-                next_beam_next_scores[batch_idx, :] = 0
+                next_beam_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
-                next_beam_indexes[batch_idx, :] = 0
+                next_beam_indices[batch_idx, :] = 0
                 continue
 
             # next tokens for this sentence
@@ -129,9 +228,9 @@ class BeamSearchScorer(BeamScorer):
                     )
                 else:
                     # add next predicted token since it is not eos_token
-                    next_beam_next_scores[batch_idx, beam_idx] = next_score
+                    next_beam_scores[batch_idx, beam_idx] = next_score
                     next_beam_tokens[batch_idx, beam_idx] = next_token
-                    next_beam_indexes[batch_idx, beam_idx] = batch_beam_idx
+                    next_beam_indices[batch_idx, beam_idx] = batch_beam_idx
                     beam_idx += 1
 
                 # once the beam for next step is full, don't add more tokens to it.
@@ -148,14 +247,20 @@ class BeamSearchScorer(BeamScorer):
                 next_scores[batch_idx].max().item(), cur_len
             )
 
-        return next_beam_next_scores.view(-1), next_beam_tokens.view(-1), next_beam_indexes.view(-1)
+        return UserDict(
+            {
+                "next_beam_scores": next_beam_scores.view(-1),
+                "next_beam_tokens": next_beam_tokens.view(-1),
+                "next_beam_indices": next_beam_indices.view(-1),
+            }
+        )
 
     def finalize(
         self,
         input_ids: torch.LongTensor,
-        next_scores: torch.FloatTensor,
-        next_tokens: torch.LongTensor,
-        next_indices: torch.LongTensor,
+        final_beam_scores: torch.FloatTensor,
+        final_beam_tokens: torch.LongTensor,
+        final_beam_indices: torch.LongTensor,
         **kwargs
     ) -> torch.LongTensor:
         pad_token_id = kwargs.get("pad_token_id", None)
@@ -171,7 +276,7 @@ class BeamSearchScorer(BeamScorer):
             # need to add best num_beams hypotheses to generated hyps
             for beam_id in range(self.num_beams):
                 batch_beam_idx = batch_idx * self.num_beams + beam_id
-                final_score = next_scores[batch_beam_idx].item()
+                final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
                 beam_hyp.add(final_tokens, final_score)
 
