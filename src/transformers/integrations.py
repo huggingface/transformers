@@ -175,14 +175,16 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     _tb_writer = trainer.pop_callback(TensorBoardCallback)
     trainer.model = None
     # Setup default `resources_per_trial` and `reporter`.
-    if "resources_per_trial" not in kwargs and trainer.args.n_gpu > 0:
+    if "resources_per_trial" not in kwargs and "n_jobs" in kwargs:
+        n_jobs = int(kwargs.pop("n_jobs", 1))
+        num_cpus_per_trial = int(math.ceil(os.cpu_count() / n_jobs))
         # `args.n_gpu` is considered the total number of GPUs that will be split
         # among the `n_jobs`
-        n_jobs = int(kwargs.pop("n_jobs", 1))
-        num_gpus_per_trial = trainer.args.n_gpu
-        if num_gpus_per_trial / n_jobs >= 1:
-            num_gpus_per_trial = int(math.ceil(num_gpus_per_trial / n_jobs))
-        kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
+        total_gpus = trainer.args.n_gpu or 0
+        gpu_fraction = total_gpus / n_jobs
+        if gpu_fraction >= 1:
+            gpu_fraction = int(math.ceil(gpu_fraction))
+        kwargs["resources_per_trial"] = {"cpu": num_cpus_per_trial, "gpu": gpu_fraction}
 
     if "progress_reporter" not in kwargs:
         from ray.tune import CLIReporter
