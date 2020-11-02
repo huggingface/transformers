@@ -80,7 +80,7 @@ python run_clm.py \
 If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
 concatenates all texts and then splits them in blocks of the same length).
 
-**Note:** On TPU, you should the flag `--pad_to_nax_length` in conjunction with the `--line_by_line` flag to make
+**Note:** On TPU, you should the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
 sure all your batches have the same length.
 
 ### Whole word masking
@@ -150,7 +150,7 @@ python run_mlm_wwm.py \
     --output_dir /tmp/test-mlm-wwm
 ```
 
-**Note:** On TPU, you should the flag `--pad_to_nax_length` to make sure all your batches have the same length.
+**Note:** On TPU, you should the flag `--pad_to_max_length` to make sure all your batches have the same length.
 
 ### XLNet and permutation language modeling
 
@@ -191,5 +191,5 @@ python run_plm.py \
 If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
 concatenates all texts and then splits them in blocks of the same length).
 
-**Note:** On TPU, you should the flag `--pad_to_nax_length` in conjunction with the `--line_by_line` flag to make
+**Note:** On TPU, you should the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
 sure all your batches have the same length.
