@@ -39,6 +39,7 @@ Tips:
 
 
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+{% if "PyTorch" in cookiecutter.generate_tensorflow_and_pytorch -%}
 {{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -80,6 +81,8 @@ Tips:
 .. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
     :members: forward
 
+{% endif -%}
+{% if "TensorFlow" in cookiecutter.generate_tensorflow_and_pytorch -%}
 
 TF{{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -123,7 +126,9 @@ TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
     :members: call
 
 
+{% endif -%}
 {% else -%}
+{% if "PyTorch" in cookiecutter.generate_tensorflow_and_pytorch -%}
 
 {{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -155,6 +160,8 @@ TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
     :members: forward
 
 
+{% endif -%}
+{% if "TensorFlow" in cookiecutter.generate_tensorflow_and_pytorch -%}
 
 TF{{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -168,4 +175,5 @@ TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
 .. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
     :members: call
+{% endif -%}
 {% endif -%}
