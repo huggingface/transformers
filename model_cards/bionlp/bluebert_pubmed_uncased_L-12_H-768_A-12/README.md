@@ -1,11 +1,9 @@
 ---
 language: 
 - en
-thumbnail: 
 tags:
 - bluebert
 - bert
-- 
 license: 
 - PUBLIC DOMAIN NOTICE
 datasets:
