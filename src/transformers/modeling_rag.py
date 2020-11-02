@@ -1394,7 +1394,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
 
-        pre_processor = self.get_logits_processor(
+        pre_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             bad_words_ids=bad_words_ids,

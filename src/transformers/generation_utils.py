@@ -739,59 +739,6 @@ class GenerationMixin:
             outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
             print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
-
-        # init values
-        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
-        max_length = max_length if max_length is not None else self.config.max_length
-        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-
-        # init sequence length tensors
-        sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
-            input_ids, max_length
-        )
-
-        while cur_len < max_length:
-            # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # forward pass to get next token
-            outputs = self(**model_inputs, return_dict=True)
-            next_token_logits = outputs.logits[:, -1, :]
-
-            # pre-process distribution
-            scores = logits_processor(input_ids, next_token_logits)
-
-            # argmax
-            next_tokens = torch.argmax(scores, dim=-1)
-
-            # add code that transfomers next_tokens to tokens_to_add
-            if eos_token_id is not None:
-                assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
-                next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
-
-            # add token and increase length by one
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-
-            # update sequence length
-            if eos_token_id is not None:
-                sequence_lengths, unfinished_sequences = self._update_seq_length_for_generation(
-                    sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
-                )
-
-            # update model kwargs
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
-            )
-
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
-            if unfinished_sequences.max() == 0:
-                break
-
-            # increase cur_len
-            cur_len = cur_len + 1
-
-        return input_ids
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
