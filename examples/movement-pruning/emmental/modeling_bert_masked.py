@@ -32,6 +32,7 @@ from transformers.file_utils import add_start_docstrings, add_start_docstrings_t
 from transformers.modeling_bert import ACT2FN, load_tf_weights_in_bert
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
+
 BertLayerNorm = torch.nn.LayerNorm
 
 logger = logging.getLogger(__name__)
