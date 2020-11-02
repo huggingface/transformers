@@ -77,6 +77,12 @@ python run_clm.py \
     --output_dir /tmp/test-clm
 ```
 
+If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
+concatenates all texts and then splits them in blocks of the same length).
+
+**Note:** On TPU, you should the flag `--pad_to_nax_length` in conjucntion with the `--line_by_line` flag to make
+sure all your batches have the same length.
+
 ### Whole word masking
 
 The BERT authors released a new version of BERT using Whole Word Masking in May 2019. Instead of masking randomly
@@ -144,6 +150,8 @@ python run_mlm_wwm.py \
     --output_dir /tmp/test-mlm-wwm
 ```
 
+**Note:** On TPU, you should the flag `--pad_to_nax_length` to make sure all your batches have the same length.
+
 ### XLNet and permutation language modeling
 
 XLNet uses a different training objective, which is permutation language modeling. It is an autoregressive method 
@@ -179,3 +187,9 @@ python run_plm.py \
     --do_eval \
     --output_dir /tmp/test-plm
 ```
+
+If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
+concatenates all texts and then splits them in blocks of the same length).
+
+**Note:** On TPU, you should the flag `--pad_to_nax_length` in conjucntion with the `--line_by_line` flag to make
+sure all your batches have the same length.
