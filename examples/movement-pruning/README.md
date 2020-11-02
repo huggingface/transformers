@@ -49,8 +49,16 @@ Below, we detail how to reproduce the results reported in the paper. We use SQuA
 The following command fine-prunes a pre-trained `BERT-base` on SQuAD using movement pruning towards 15% of remaining weights (85% sparsity). Note that we freeze all the embeddings modules (from their pre-trained value) and only prune the Fully Connected layers in the encoder (12 layers of Transformer Block).
 
 ```bash
+
 SERIALIZATION_DIR=<OUTPUT_DIR>
-SQUAD_DATA=<SQUAD_DATA>
+SQUAD_DATA=squad_data
+
+mkdir $SQUAD_DATA
+cd $SQUAD_DATA
+wget -q https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json
+wget -q https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json
+cd ..
+
 
 python examples/movement-pruning/masked_run_squad.py \
     --output_dir $SERIALIZATION_DIR \
