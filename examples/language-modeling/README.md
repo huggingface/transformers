@@ -77,10 +77,16 @@ python run_clm.py \
     --output_dir /tmp/test-clm
 ```
 
+If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
+concatenates all texts and then splits them in blocks of the same length).
+
+**Note:** On TPU, you should use the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
+sure all your batches have the same length.
+
 ### Whole word masking
 
 The BERT authors released a new version of BERT using Whole Word Masking in May 2019. Instead of masking randomly
-selected tokens (which may be aprt of words), they mask randomly selected words (masking all the tokens corresponding
+selected tokens (which may be part of words), they mask randomly selected words (masking all the tokens corresponding
 to that word). This technique has been refined for Chinese in [this paper](https://arxiv.org/abs/1906.08101).
 
 To fine-tune a model using whole word masking, use the following script:
@@ -111,8 +117,8 @@ It works well on so many Chines Task like CLUE (Chinese GLUE). They use LTP, so 
 we need LTP.
 
 Now LTP only only works well on `transformers==3.2.0`. So we don't add it to requirements.txt.
-You need to create a separate enviromnent with this version of Transformers to run the `run_chinese_ref.py` script that
-will create the reference files. The script is in `examples/contrib`. Once in the proper enviromnent, run the
+You need to create a separate environment with this version of Transformers to run the `run_chinese_ref.py` script that
+will create the reference files. The script is in `examples/contrib`. Once in the proper environment, run the
 following:
 
 
@@ -143,6 +149,8 @@ python run_mlm_wwm.py \
     --do_eval \
     --output_dir /tmp/test-mlm-wwm
 ```
+
+**Note:** On TPU, you should the flag `--pad_to_max_length` to make sure all your batches have the same length.
 
 ### XLNet and permutation language modeling
 
@@ -179,3 +187,9 @@ python run_plm.py \
     --do_eval \
     --output_dir /tmp/test-plm
 ```
+
+If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
+concatenates all texts and then splits them in blocks of the same length).
+
+**Note:** On TPU, you should use the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
+sure all your batches have the same length.

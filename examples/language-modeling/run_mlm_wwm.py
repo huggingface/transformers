@@ -120,6 +120,13 @@ class DataTrainingArguments:
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
+    pad_to_max_length: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to pad all samples to `max_seq_length`. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+        },
+    )
 
     def __post_init__(self):
         if self.train_file is not None:
@@ -253,10 +260,12 @@ def main():
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+    padding = "max_length" if data_args.pad_to_max_length else False
+
     def tokenize_function(examples):
         # Remove empty lines
         examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-        return tokenizer(examples["text"], truncation=True, max_length=data_args.max_seq_length)
+        return tokenizer(examples["text"], padding=padding, truncation=True, max_length=data_args.max_seq_length)
 
     tokenized_datasets = datasets.map(
         tokenize_function,
