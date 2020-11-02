@@ -120,6 +120,13 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
     )
+    pad_to_max_length: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to pad all samples to `max_seq_length`. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+        },
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -252,10 +259,12 @@ def main():
 
     if data_args.line_by_line:
         # When using line_by_line, we just tokenize each nonempty line.
+        padding = "max_length" if data_args.pad_to_max_length else False
+
         def tokenize_function(examples):
             # Remove empty lines
             examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-            return tokenizer(examples["text"], truncation=True, max_length=data_args.max_seq_length)
+            return tokenizer(examples["text"], padding=padding, truncation=True, max_length=data_args.max_seq_length)
 
         tokenized_datasets = datasets.map(
             tokenize_function,
@@ -278,14 +287,14 @@ def main():
         )
 
         if data_args.max_seq_length is None:
-            max_seq_length = tokenizer.max_len
+            max_seq_length = tokenizer.model_max_length
         else:
-            if data_args.max_seq_length > tokenizer.max_len:
+            if data_args.max_seq_length > tokenizer.model_max_length:
                 logger.warn(
                     f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-                    f"model ({tokenizer.max_len}). Using max_seq_length={tokenizer.max_len}."
+                    f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
                 )
-            max_seq_length = min(data_args.max_seq_length, tokenizer.max_len)
+            max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
         # Main data processing function that will concatenate all texts from our dataset and generate chunks of
         # max_seq_length.
