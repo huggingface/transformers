@@ -896,7 +896,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             # first, generate beams from documents:
             generator_input_ids = context_input_ids[index * n_docs : (index + 1) * n_docs]  # (n_docs, max_len)
 
-            output_sequences = self.generator.generate(generator_input_ids, **kwargs,)  # n_docs * n_beam, tgt_len
+            output_sequences = self.generator.generate(
+                generator_input_ids,
+                **kwargs,
+            )  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication, max_output_len
                 output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
