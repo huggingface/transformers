@@ -47,7 +47,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         if not self._testing:
             cookiecutter(str(path_to_cookiecutter))
         else:
-            with open(str(path_to_cookiecutter) + f"/tests/{self._testing_file}", "r") as configuration_file:
+            with open(self._testing_file, "r") as configuration_file:
                 testing_configuration = json.load(configuration_file)
             cookiecutter(str(path_to_cookiecutter), no_input=True, extra_context=testing_configuration)
 
