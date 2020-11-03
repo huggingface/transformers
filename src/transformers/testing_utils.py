@@ -709,7 +709,7 @@ def pytest_addoption_shared(parser):
     option.
 
     """
-    option = "--make_reports"
+    option = "--make-reports"
     if option not in pytest_opt_registered:
         parser.addoption(
             option,
