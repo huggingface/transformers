@@ -567,6 +567,8 @@ class GenerationMixin:
                 past = outputs.past_key_values
             elif "mems" in outputs:
                 past = outputs.mems
+            elif "past_buckets_states" in outputs:
+                past = outputs.past_buckets_states
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
