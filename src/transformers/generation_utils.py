@@ -189,6 +189,8 @@ class GenerationMixin:
             model_kwargs["past"] = outputs.past_key_values
         elif "mems" in outputs:
             model_kwargs["past"] = outputs.mems
+        elif "past_buckets_states" in outputs:
+            model_kwargs["past"] = outputs.past_buckets_states
         else:
             model_kwargs["past"] = None
 
