@@ -162,9 +162,7 @@ class TFLongformerModelTester:
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
         )
-        result = model(
-            input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask
-        )
+        result = model(input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask)
         result = model(input_ids, global_attention_mask=global_attention_mask)
 
         self.parent.assertListEqual(
@@ -176,12 +174,8 @@ class TFLongformerModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLongformerForMaskedLM(config=config)
-        result = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
-        )
-        self.parent.assertListEqual(
-            shape_list(result.logits), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertListEqual(shape_list(result.logits), [self.batch_size, self.seq_length, self.vocab_size])
 
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
