@@ -103,9 +103,13 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
-    chinese_ref_file: Optional[str] = field(
+    train_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input ref data file for whole word mask in Chinees."},
+        metadata={"help": "An optional input train ref data file for whole word mask in Chinese."},
+    )
+    eval_ref_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input eval ref data file for whole word mask in Chinese."},
     )
     line_by_line: bool = field(
         default=False,
@@ -148,16 +152,16 @@ def get_dataset(
     evaluate: bool = False,
     cache_dir: Optional[str] = None,
 ):
-    def _dataset(file_path):
+    def _dataset(file_path, ref_path=None):
         if args.line_by_line:
-            if args.chinese_ref_file is not None:
+            if ref_path is not None:
                 if not args.whole_word_mask or not args.mlm:
                     raise ValueError("You need to set world whole masking and mlm to True for Chinese Whole Word Mask")
                 return LineByLineWithRefDataset(
                     tokenizer=tokenizer,
                     file_path=file_path,
                     block_size=args.block_size,
-                    ref_path=args.chinese_ref_file,
+                    ref_path=ref_path,
                 )
 
             return LineByLineTextDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size)
@@ -171,11 +175,11 @@ def get_dataset(
             )
 
     if evaluate:
-        return _dataset(args.eval_data_file)
+        return _dataset(args.eval_data_file, args.eval_ref_file)
     elif args.train_data_files:
         return ConcatDataset([_dataset(f) for f in glob(args.train_data_files)])
     else:
-        return _dataset(args.train_data_file)
+        return _dataset(args.train_data_file, args.train_ref_file)
 
 
 def main():

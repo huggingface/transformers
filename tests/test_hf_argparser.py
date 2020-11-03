@@ -93,13 +93,13 @@ class HfArgumentParserTest(unittest.TestCase):
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", action="store_true")
-        expected.add_argument("--no-baz", action="store_false", dest="baz")
+        expected.add_argument("--no_baz", action="store_false", dest="baz")
         self.argparsersEqual(parser, expected)
 
         args = parser.parse_args([])
         self.assertEqual(args, Namespace(foo=False, baz=True))
 
-        args = parser.parse_args(["--foo", "--no-baz"])
+        args = parser.parse_args(["--foo", "--no_baz"])
         self.assertEqual(args, Namespace(foo=True, baz=False))
 
     def test_with_enum(self):

@@ -30,7 +30,7 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -68,14 +68,15 @@ BART_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 
 """
 
@@ -103,14 +104,13 @@ BART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.BartTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -127,16 +127,16 @@ BART_INPUTS_DOCSTRING = r"""
             modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
             information on the default strategy.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a
-            sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
-            the decoder.
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
+            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
+            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+            cross-attention of the decoder.
         past_key_values (:obj:`Tuple[Dict[str: tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last
-            ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -160,9 +160,10 @@ def invert_mask(attention_mask):
 def _prepare_bart_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, causal_mask_dtype=torch.float32
 ):
-    """Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if
-    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
-    Note: this is not called during generation
+    """
+    Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if none are provided.
+    This mimics the default behavior in fairseq. To override it pass in masks. Note: this is not called during
+    generation
     """
     pad_token_id = config.pad_token_id
     if decoder_input_ids is None:
@@ -292,8 +293,8 @@ class EncoderLayer(nn.Module):
 
 class BartEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
-    is a :class:`EncoderLayer`.
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    :class:`EncoderLayer`.
 
     Args:
         config: BartConfig
@@ -334,14 +335,14 @@ class BartEncoder(nn.Module):
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (torch.LongTensor): indicating which indices are padding tokens.
+            attention_mask (torch.LongTensor): indicating which indices are padding tokens
+
         Returns:
             BaseModelOutput or Tuple comprised of:
-                - **x** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate
-                  hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *output_hidden_states:* is True.
+
+                - **x** (Tensor): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
+                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate hidden states of shape `(src_len,
+                  batch, embed_dim)`. Only populated if *output_hidden_states:* is True.
                 - **all_attentions** (tuple(torch.FloatTensor)): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -426,7 +427,6 @@ class DecoderLayer(nn.Module):
         output_attentions=False,
     ):
         residual = x
-
         if layer_state is None:
             layer_state = {}
         if self.normalize_before:
@@ -446,7 +446,7 @@ class DecoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
 
-        # Cross attention
+        # Cross-Attention Block
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
@@ -482,8 +482,8 @@ class DecoderLayer(nn.Module):
 
 class BartDecoder(nn.Module):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer
-    is a :class:`DecoderLayer`.
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DecoderLayer`
+
     Args:
         config: BartConfig
         embed_tokens (torch.nn.Embedding): output embedding
@@ -530,8 +530,8 @@ class BartDecoder(nn.Module):
         **unused,
     ):
         """
-        Includes several features from "Jointly Learning to Align and
-        Translate with Transformer Models" (Garg et al., EMNLP 2019).
+        Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
+        EMNLP 2019).
 
         Args:
             input_ids (LongTensor): previous decoder outputs of shape
@@ -543,6 +543,7 @@ class BartDecoder(nn.Module):
 
         Returns:
             BaseModelOutputWithPast or tuple:
+
                 - the decoder's features of shape `(batch, tgt_len, embed_dim)`
                 - the cache
                 - hidden states
@@ -626,7 +627,6 @@ class BartDecoder(nn.Module):
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -783,10 +783,9 @@ class BartClassificationHead(nn.Module):
 
 class LearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
@@ -845,7 +844,7 @@ class BartModel(PretrainedBartModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
@@ -905,7 +904,7 @@ class BartModel(PretrainedBartModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=False
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -980,7 +979,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(BART_GENERATION_EXAMPLE)
     def forward(
@@ -1000,10 +999,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-            with labels in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
 
@@ -1086,7 +1084,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1128,7 +1126,10 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    """Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE tasks. """,
+    """
+    Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """,
     BART_START_DOCSTRING,
 )
 class BartForSequenceClassification(PretrainedBartModel):
@@ -1144,7 +1145,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
@@ -1166,9 +1167,8 @@ class BartForSequenceClassification(PretrainedBartModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
@@ -1214,8 +1214,10 @@ class BartForSequenceClassification(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    """BART Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    BART Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     BART_START_DOCSTRING,
 )
 class BartForQuestionAnswering(PretrainedBartModel):
@@ -1230,7 +1232,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
 
         self.model._init_weights(self.qa_outputs)
 
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
@@ -1254,12 +1256,12 @@ class BartForQuestionAnswering(PretrainedBartModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if start_positions is not None and end_positions is not None:
@@ -1326,23 +1328,23 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions, embedding_dim, padding_idx=None):
         super().__init__(num_positions, embedding_dim)
-        if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
         self.weight = self._init_weight(self.weight)
 
     @staticmethod
     def _init_weight(out: nn.Parameter):
-        """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
-        The cos features are in the 2nd half of the vector. [dim // 2:]
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
         """
         n_pos, dim = out.shape
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
-        out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         out.detach_()
-        out.requires_grad = False
         return out
 
     @torch.no_grad()

@@ -23,9 +23,8 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from itertools import chain
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
 import numpy as np
@@ -122,13 +121,14 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
 
     Args:
         targeted_task (:obj:`Dict` ):
-           Dictionnary representing the given task, that should contain default models
+           Dictionary representing the given task, that should contain default models
 
         framework (:obj:`str`, None)
            "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
 
         task_options (:obj:`Any`, None)
-           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for translation task.
+           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
+           translation task.
 
     Returns
 
@@ -149,9 +149,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     else:
         # XXX This error message needs to be updated to be more generic if more tasks are going to become
         # parametrized
-        raise ValueError(
-            'The task defaults can\'t be correctly selectionned. You probably meant "translation_XX_to_YY"'
-        )
+        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_XX_to_YY"')
 
     if framework is None:
         framework = "pt"
@@ -186,61 +184,11 @@ class ArgumentHandler(ABC):
         raise NotImplementedError()
 
 
-class DefaultArgumentHandler(ArgumentHandler):
-    """
-    Default argument parser handling parameters for each :class:`~transformers.pipelines.Pipeline`.
-    """
-
-    @staticmethod
-    def handle_kwargs(kwargs: Dict) -> List:
-        if len(kwargs) == 1:
-            output = list(kwargs.values())
-        else:
-            output = list(chain(kwargs.values()))
-
-        return DefaultArgumentHandler.handle_args(output)
-
-    @staticmethod
-    def handle_args(args: Sequence[Any]) -> List[str]:
-
-        # Only one argument, let's do case by case
-        if len(args) == 1:
-            if isinstance(args[0], str):
-                return [args[0]]
-            elif not isinstance(args[0], list):
-                return list(args)
-            else:
-                return args[0]
-
-        # Multiple arguments (x1, x2, ...)
-        elif len(args) > 1:
-            if all([isinstance(arg, str) for arg in args]):
-                return list(args)
-
-            # If not instance of list, then it should instance of iterable
-            elif isinstance(args, Iterable):
-                return list(chain.from_iterable(chain(args)))
-            else:
-                raise ValueError(
-                    "Invalid input type {}. Pipeline supports Union[str, Iterable[str]]".format(type(args))
-                )
-        else:
-            return []
-
-    def __call__(self, *args, **kwargs):
-        if len(kwargs) > 0 and len(args) > 0:
-            raise ValueError("Pipeline cannot handle mixed args and kwargs")
-
-        if len(kwargs) > 0:
-            return DefaultArgumentHandler.handle_kwargs(kwargs)
-        else:
-            return DefaultArgumentHandler.handle_args(args)
-
-
 class PipelineDataFormat:
     """
-    Base class for all the pipeline supported data format both for reading and writing.
-    Supported data formats currently includes:
+    Base class for all the pipeline supported data format both for reading and writing. Supported data formats
+    currently includes:
+
     - JSON
     - CSV
     - stdin/stdout (pipe)
@@ -323,8 +271,8 @@ class PipelineDataFormat:
         overwrite=False,
     ) -> "PipelineDataFormat":
         """
-        Creates an instance of the right subclass of :class:`~transformers.pipelines.PipelineDataFormat` depending
-        on :obj:`format`.
+        Creates an instance of the right subclass of :class:`~transformers.pipelines.PipelineDataFormat` depending on
+        :obj:`format`.
 
         Args:
             format: (:obj:`str`):
@@ -440,8 +388,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
 
 class PipedPipelineDataFormat(PipelineDataFormat):
     """
-    Read data from piped input to the python process.
-    For multi columns data, columns should separated by \t
+    Read data from piped input to the python process. For multi columns data, columns should separated by \t
 
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
 
@@ -517,16 +464,16 @@ PIPELINE_INIT_ARGS = r"""
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
 
-            If no framework is specified, will default to the one currently installed. If no framework is specified
-            and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no
-            model is provided.
+            If no framework is specified, will default to the one currently installed. If no framework is specified and
+            both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
+            is provided.
         task (:obj:`str`, defaults to :obj:`""`):
             A task-identifier for the pipeline.
         args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (:obj:`int`, `optional`, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model
-            on the associated CUDA device id.
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
+            the associated CUDA device id.
         binary_output (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -538,8 +485,8 @@ class Pipeline(_ScikitCompat):
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across
     different pipelines.
 
-    Base class implementing pipelined operations.
-    Pipeline workflow is defined as a sequence of the following operations:
+    Base class implementing pipelined operations. Pipeline workflow is defined as a sequence of the following
+    operations:
 
         Input -> Tokenization -> Model Inference -> Post-Processing (task dependent) -> Output
 
@@ -575,7 +522,6 @@ class Pipeline(_ScikitCompat):
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else "cuda:{}".format(device))
         self.binary_output = binary_output
-        self._args_parser = args_parser or DefaultArgumentHandler()
 
         # Special handling
         if self.framework == "pt" and self.device.type == "cuda":
@@ -670,12 +616,11 @@ class Pipeline(_ScikitCompat):
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
             )
 
-    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
             inputs,
             add_special_tokens=add_special_tokens,
@@ -691,10 +636,12 @@ class Pipeline(_ScikitCompat):
 
     def _forward(self, inputs, return_tensors=False):
         """
-        Internal framework specific forward dispatching.
+        Internal framework specific forward dispatching
+
         Args:
-            inputs: dict holding all the keyworded arguments for required by the model forward method.
-            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array.
+            inputs: dict holding all the keyword arguments for required by the model forward method.
+            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array
+
         Returns:
             Numpy array
         """
@@ -740,16 +687,16 @@ class FeatureExtractionPipeline(Pipeline):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
 
-            If no framework is specified, will default to the one currently installed. If no framework is specified
-            and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no
-            model is provided.
+            If no framework is specified, will default to the one currently installed. If no framework is specified and
+            both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
+            is provided.
         task (:obj:`str`, defaults to :obj:`""`):
             A task-identifier for the pipeline.
         args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (:obj:`int`, `optional`, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model
-            on the associated CUDA device id.
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
+            the associated CUDA device id.
     """
 
     def __init__(
@@ -796,25 +743,23 @@ class TextGenerationPipeline(Pipeline):
     task identifier: :obj:`"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
-    objective, which includes the uni-directional models in the library (e.g. gpt2).
-    See the list of available community models on
-    `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
+    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available
+    community models on `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
     # in https://github.com/rusiaaman/XLNet-gen#methodology
     # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
 
-    XL_PREFIX = """In 1991, the remains of Russian Tsar Nicholas II and his family
-    (except for Alexei and Maria) are discovered.
-    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
-    remainder of the story. 1883 Western Siberia,
-    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
-    Rasputin has a vision and denounces one of the men as a horse thief. Although his
-    father initially slaps him for making such an accusation, Rasputin watches as the
-    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
-    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
-    with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
+    XL_PREFIX = """
+    In 1991, the remains of Russian Tsar Nicholas II and his family (except for Alexei and Maria) are discovered. The
+    voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the remainder of the story. 1883 Western
+    Siberia, a young Grigori Rasputin is asked by his father and a group of men to perform magic. Rasputin has a vision
+    and denounces one of the men as a horse thief. Although his father initially slaps him for making such an
+    accusation, Rasputin watches as the man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous, with people, even a bishop,
+    begging for his blessing. <eod> </s> <eos>
+    """
 
     ALLOWED_MODELS = [
         "XLNetLMHeadModel",
@@ -837,7 +782,7 @@ class TextGenerationPipeline(Pipeline):
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
 
-    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
@@ -846,7 +791,6 @@ class TextGenerationPipeline(Pipeline):
             tokenizer_kwargs = {"add_space_before_punct_symbol": True}
         else:
             tokenizer_kwargs = {}
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
             inputs,
             add_special_tokens=add_special_tokens,
@@ -859,7 +803,7 @@ class TextGenerationPipeline(Pipeline):
 
     def __call__(
         self,
-        *args,
+        text_inputs,
         return_tensors=False,
         return_text=True,
         clean_up_tokenization_spaces=False,
@@ -873,7 +817,7 @@ class TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -881,19 +825,19 @@ class TextGenerationPipeline(Pipeline):
             prefix (:obj:`str`, `optional`):
                 Prefix added to prompt.
             generate_kwargs:
-                Additional keyword arguments to pass along to the generate method of the model (see the generate
-                method corresponding to your framework `here <./model.html#generative-models>`__).
+                Additional keyword arguments to pass along to the generate method of the model (see the generate method
+                corresponding to your framework `here <./model.html#generative-models>`__).
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the
-            following keys:
+            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **generated_text** (:obj:`str`, present when ``return_text=True``) -- The generated text.
             - **generated_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
               -- The token ids of the generated text.
         """
-        text_inputs = self._args_parser(*args)
 
+        if isinstance(text_inputs, str):
+            text_inputs = [text_inputs]
         results = []
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
@@ -985,19 +929,19 @@ class TextGenerationPipeline(Pipeline):
 )
 class TextClassificationPipeline(Pipeline):
     """
-    Text classification pipeline using any :obj:`ModelForSequenceClassification`. See the
-    `sequence classification examples <../task_summary.html#sequence-classification>`__ for more information.
+    Text classification pipeline using any :obj:`ModelForSequenceClassification`. See the `sequence classification
+    examples <../task_summary.html#sequence-classification>`__ for more information.
 
     This text classification pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
     task identifier: :obj:`"sentiment-analysis"` (for classifying sequences according to positive or negative
     sentiments).
 
-    If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run
-    a softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
+    If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run a
+    softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
 
-    The models that this pipeline can use are models that have been fine-tuned on a sequence classification task.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=text-classification>`__.
+    The models that this pipeline can use are models that have been fine-tuned on a sequence classification task. See
+    the up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=text-classification>`__.
     """
 
     def __init__(self, return_all_scores: bool = False, **kwargs):
@@ -1020,8 +964,7 @@ class TextClassificationPipeline(Pipeline):
                 One or several texts (or one list of prompts) to classify.
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
-            following keys:
+            A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the following keys:
 
             - **label** (:obj:`str`) -- The label predicted.
             - **score** (:obj:`float`) -- The corresponding probability.
@@ -1085,28 +1028,42 @@ class ZeroShotClassificationPipeline(Pipeline):
     language inference) tasks.
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
-    pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the
-    candidate label being valid. Any NLI model can be used as long as the first output logit corresponds to
-    `contradiction` and the last to `entailment`.
+    pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the candidate
+    label being valid. Any NLI model can be used, but the id of the `entailment` label must be included in the model
+    config's :attr:`~transformers.PretrainedConfig.label2id`.
 
-    This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"zero-shot-classification"`.
+    This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task identifier:
+    :obj:`"zero-shot-classification"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on an NLI task.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
+    The models that this pipeline can use are models that have been fine-tuned on an NLI task. See the up-to-date list
+    of available models on `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
     """
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, args_parser=args_parser, **kwargs)
+        super().__init__(*args, **kwargs)
+        self._args_parser = args_parser
+        if self.entailment_id == -1:
+            logger.warning(
+                "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
+                "-1. Define a descriptive label2id mapping in the model config to ensure correct outputs."
+            )
 
-    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+    @property
+    def entailment_id(self):
+        for label, ind in self.model.config.label2id.items():
+            if label.lower().startswith("entail"):
+                return ind
+        return -1
+
+    def _parse_and_tokenize(
+        self, sequences, candidal_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+    ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        inputs = self._args_parser(*args, **kwargs)
+        sequence_pairs = self._args_parser(sequences, candidal_labels, hypothesis_template)
         inputs = self.tokenizer(
-            inputs,
+            sequence_pairs,
             add_special_tokens=add_special_tokens,
             return_tensors=self.framework,
             padding=padding,
@@ -1115,9 +1072,16 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         return inputs
 
-    def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
+    def __call__(
+        self,
+        sequences: Union[str, List[str]],
+        candidate_labels,
+        hypothesis_template="This example is {}.",
+        multi_class=False,
+    ):
         """
-        Classify the sequence(s) given as inputs.
+        Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
+        documentation for more information.
 
         Args:
             sequences (:obj:`str` or :obj:`List[str]`):
@@ -1126,28 +1090,30 @@ class ZeroShotClassificationPipeline(Pipeline):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
                 comma-separated labels, or a list of labels.
             hypothesis_template (:obj:`str`, `optional`, defaults to :obj:`"This example is {}."`):
-                The template used to turn each label into an NLI-style hypothesis. This template must include a {}
-                or similar syntax for the candidate label to be inserted into the template. For example, the default
+                The template used to turn each label into an NLI-style hypothesis. This template must include a {} or
+                similar syntax for the candidate label to be inserted into the template. For example, the default
                 template is :obj:`"This example is {}."` With the candidate label :obj:`"sports"`, this would be fed
                 into the model like :obj:`"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
                 default template works well in many cases, but it may be worthwhile to experiment with different
                 templates depending on the task setting.
             multi_class (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not multiple candidate labels can be true. If :obj:`False`, the scores are normalized
-                such that the sum of the label likelihoods for each sequence is 1. If :obj:`True`, the labels are
-                considered independent and probabilities are normalized for each candidate by doing a softmax of
-                the entailment score vs. the contradiction score.
+                Whether or not multiple candidate labels can be true. If :obj:`False`, the scores are normalized such
+                that the sum of the label likelihoods for each sequence is 1. If :obj:`True`, the labels are considered
+                independent and probabilities are normalized for each candidate by doing a softmax of the entailment
+                score vs. the contradiction score.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the
-            following keys:
+            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **sequence** (:obj:`str`) -- The sequence for which this is the output.
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
+        if sequences and isinstance(sequences, str):
+            sequences = [sequences]
+
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
-        num_sequences = 1 if isinstance(sequences, str) else len(sequences)
+        num_sequences = len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
         reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
 
@@ -1156,11 +1122,13 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         if not multi_class:
             # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[..., -1]
+            entail_logits = reshaped_outputs[..., self.entailment_id]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
-            entail_contr_logits = reshaped_outputs[..., [0, -1]]
+            entailment_id = self.entailment_id
+            contradiction_id = -1 if entailment_id == 0 else 0
+            entail_contr_logits = reshaped_outputs[..., [contradiction_id, entailment_id]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[..., 1]
 
@@ -1188,15 +1156,14 @@ class ZeroShotClassificationPipeline(Pipeline):
 )
 class FillMaskPipeline(Pipeline):
     """
-    Masked language modeling prediction pipeline using any :obj:`ModelWithLMHead`. See the
-    `masked language modeling examples <../task_summary.html#masked-language-modeling>`__ for more information.
+    Masked language modeling prediction pipeline using any :obj:`ModelWithLMHead`. See the `masked language modeling
+    examples <../task_summary.html#masked-language-modeling>`__ for more information.
 
-    This mask filling pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"fill-mask"`.
+    This mask filling pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
+    identifier: :obj:`"fill-mask"`.
 
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
-    which includes the bi-directional models in the library.
-    See the up-to-date list of available models on
+    which includes the bi-directional models in the library. See the up-to-date list of available models on
     `huggingface.co/models <https://huggingface.co/models?filter=masked-lm>`__.
 
     .. note::
@@ -1262,14 +1229,13 @@ class FillMaskPipeline(Pipeline):
                 One or several texts (or one list of prompts) with masked tokens.
             targets (:obj:`str` or :obj:`List[str]`, `optional`):
                 When passed, the model will return the scores for the passed token or tokens rather than the top k
-                predictions in the entire vocabulary. If the provided targets are not in the model vocab, they will
-                be tokenized and the first resulting token will be used (with a warning).
+                predictions in the entire vocabulary. If the provided targets are not in the model vocab, they will be
+                tokenized and the first resulting token will be used (with a warning).
             top_k (:obj:`int`, `optional`):
                 When passed, overrides the number of predictions to return.
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
-            following keys:
+            A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the following keys:
 
             - **sequence** (:obj:`str`) -- The corresponding input with the mask token prediction.
             - **score** (:obj:`float`) -- The corresponding probability.
@@ -1392,16 +1358,16 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
 )
 class TokenClassificationPipeline(Pipeline):
     """
-    Named Entity Recognition pipeline using any :obj:`ModelForTokenClassification`. See the
-    `named entity recognition examples <../task_summary.html#named-entity-recognition>`__ for more information.
+    Named Entity Recognition pipeline using any :obj:`ModelForTokenClassification`. See the `named entity recognition
+    examples <../task_summary.html#named-entity-recognition>`__ for more information.
 
     This token recognition pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
     task identifier: :obj:`"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location
     or miscellaneous).
 
-    The models that this pipeline can use are models that have been fine-tuned on a token classification task.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=token-classification>`__.
+    The models that this pipeline can use are models that have been fine-tuned on a token classification task. See the
+    up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=token-classification>`__.
     """
 
     default_input_names = "sequences"
@@ -1442,12 +1408,12 @@ class TokenClassificationPipeline(Pipeline):
         self.grouped_entities = grouped_entities
         self.ignore_subwords = ignore_subwords
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
         Classify each token of the text(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`):
+            inputs (:obj:`str` or :obj:`List[str]`):
                 One or several texts (or one list of texts) for token classification.
 
         Return:
@@ -1462,7 +1428,11 @@ class TokenClassificationPipeline(Pipeline):
               corresponding token in the sentence.
         """
 
-        inputs, offset_mappings = self._args_parser(*args, **kwargs)
+        if isinstance(inputs, str):
+            inputs = [inputs]
+            
+        offset_mappings = kwargs["offset_mappings"]
+        
         answers = []
 
         for i, sentence in enumerate(inputs):
@@ -1620,11 +1590,11 @@ NerPipeline = TokenClassificationPipeline
 
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
     """
-    QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped
-    to internal :class:`~transformers.SquadExample`.
+    QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped to
+    internal :class:`~transformers.SquadExample`.
 
-    QuestionAnsweringArgumentHandler manages all the possible to create a :class:`~transformers.SquadExample` from
-    the command-line supplied arguments.
+    QuestionAnsweringArgumentHandler manages all the possible to create a :class:`~transformers.SquadExample` from the
+    command-line supplied arguments.
     """
 
     def __call__(self, *args, **kwargs):
@@ -1683,15 +1653,15 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class QuestionAnsweringPipeline(Pipeline):
     """
-    Question Answering pipeline using any :obj:`ModelForQuestionAnswering`. See the
-    `question answering examples <../task_summary.html#question-answering>`__ for more information.
+    Question Answering pipeline using any :obj:`ModelForQuestionAnswering`. See the `question answering examples
+    <../task_summary.html#question-answering>`__ for more information.
 
     This question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
     task identifier: :obj:`"question-answering"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a question answering task.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=question-answering>`__.
+    The models that this pipeline can use are models that have been fine-tuned on a question answering task. See the
+    up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=question-answering>`__.
     """
 
     default_input_names = "question,context"
@@ -1711,12 +1681,12 @@ class QuestionAnsweringPipeline(Pipeline):
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            args_parser=QuestionAnsweringArgumentHandler(),
             device=device,
             task=task,
             **kwargs,
         )
 
+        self._args_parser = QuestionAnsweringArgumentHandler()
         self.check_model_type(
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
         )
@@ -1726,9 +1696,8 @@ class QuestionAnsweringPipeline(Pipeline):
         question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
-        QuestionAnsweringPipeline leverages the :class:`~transformers.SquadExample` internally.
-        This helper method encapsulate all the logic for converting question(s) and context(s) to
-        :class:`~transformers.SquadExample`.
+        QuestionAnsweringPipeline leverages the :class:`~transformers.SquadExample` internally. This helper method
+        encapsulate all the logic for converting question(s) and context(s) to :class:`~transformers.SquadExample`.
 
         We currently support extractive question answering.
 
@@ -1737,8 +1706,8 @@ class QuestionAnsweringPipeline(Pipeline):
             context (:obj:`str` or :obj:`List[str]`): The context(s) in which we will look for the answer.
 
         Returns:
-            One or a list of :class:`~transformers.SquadExample`: The corresponding
-            :class:`~transformers.SquadExample` grouping question and context.
+            One or a list of :class:`~transformers.SquadExample`: The corresponding :class:`~transformers.SquadExample`
+            grouping question and context.
         """
         if isinstance(question, list):
             return [SquadExample(None, q, c, None, None, None) for q, c in zip(question, context)]
@@ -1753,15 +1722,15 @@ class QuestionAnsweringPipeline(Pipeline):
             args (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`):
                 One or several :class:`~transformers.SquadExample` containing the question and context.
             X (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context
-                (will be treated the same way as if passed as the first positional argument).
+                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
+                the same way as if passed as the first positional argument).
             data (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context
-                (will be treated the same way as if passed as the first positional argument).
+                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
+                the same way as if passed as the first positional argument).
             question (:obj:`str` or :obj:`List[str]`):
                 One or several question(s) (must be used in conjunction with the :obj:`context` argument).
             context (:obj:`str` or :obj:`List[str]`):
-                One or several context(s) associated with the qustion(s) (must be used in conjunction with the
+                One or several context(s) associated with the question(s) (must be used in conjunction with the
                 :obj:`question` argument).
             topk (:obj:`int`, `optional`, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood).
@@ -1779,8 +1748,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 Whether or not we accept impossible as an answer.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the
-            following keys:
+            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **score** (:obj:`float`) -- The probability associated to the answer.
             - **start** (:obj:`int`) -- The start index of the answer (in the tokenized version of the input).
@@ -1885,12 +1853,12 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be
-        the actual answer.
+        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be the
+        actual answer.
 
-        In addition, it filters out some unwanted/impossible cases like answer len being greater than
-        max_answer_len or answer end position being before the starting position.
-        The method supports output the k-best answer through the topk argument.
+        In addition, it filters out some unwanted/impossible cases like answer len being greater than max_answer_len or
+        answer end position being before the starting position. The method supports output the k-best answer through
+        the topk argument.
 
         Args:
             start (:obj:`np.ndarray`): Individual start probabilities for each token.
@@ -1926,8 +1894,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
         """
-        When decoding from token probabilities, this method maps token indexes to actual word in
-        the initial context.
+        When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 
         Args:
             text (:obj:`str`): The actual context to extract the answer from.
@@ -1974,13 +1941,12 @@ class SummarizationPipeline(Pipeline):
     """
     Summarize news articles and other documents.
 
-    This summarizing pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"summarization"`.
+    This summarizing pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
+    identifier: :obj:`"summarization"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a summarization task,
-    which is currently, '`bart-large-cnn`', '`t5-small`', '`t5-base`', '`t5-large`', '`t5-3b`', '`t5-11b`'.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=summarization>`__.
+    The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
+    currently, '`bart-large-cnn`', '`t5-small`', '`t5-base`', '`t5-large`', '`t5-3b`', '`t5-11b`'. See the up-to-date
+    list of available models on `huggingface.co/models <https://huggingface.co/models?filter=summarization>`__.
 
     Usage::
 
@@ -2013,21 +1979,20 @@ class SummarizationPipeline(Pipeline):
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
-                Additional keyword arguments to pass along to the generate method of the model (see the generate
-                method corresponding to your framework `here <./model.html#generative-models>`__).
+                Additional keyword arguments to pass along to the generate method of the model (see the generate method
+                corresponding to your framework `here <./model.html#generative-models>`__).
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the
-            following keys:
+            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **summary_text** (:obj:`str`, present when ``return_text=True``) -- The summary of the corresponding
               input.
-            - **summary_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
-              -- The token ids of the summary.
+            - **summary_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``) --
+              The token ids of the summary.
         """
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
         assert len(documents) > 0, "Please provide a document to summarize"
@@ -2103,12 +2068,12 @@ class TranslationPipeline(Pipeline):
     """
     Translates from one language to another.
 
-    This translation pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"translation_xx_to_yy"`.
+    This translation pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
+    identifier: :obj:`"translation_xx_to_yy"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a translation task.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=translation>`__.
+    The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
+    up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=translation>`__.
 
     Usage::
         en_fr_translator = pipeline("translation_en_to_fr")
@@ -2132,18 +2097,17 @@ class TranslationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Texts to be translated.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
-                Additional keyword arguments to pass along to the generate method of the model (see the generate
-                method corresponding to your framework `here <./model.html#generative-models>`__).
+                Additional keyword arguments to pass along to the generate method of the model (see the generate method
+                corresponding to your framework `here <./model.html#generative-models>`__).
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the
-            following keys:
+            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **translation_text** (:obj:`str`, present when ``return_text=True``) -- The translation.
             - **translation_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
@@ -2213,12 +2177,11 @@ class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
 
-    This Text2TextGenerationPipeline pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"text2text-generation"`.
+    This Text2TextGenerationPipeline pipeline can currently be loaded from :func:`~transformers.pipeline` using the
+    following task identifier: :obj:`"text2text-generation"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a translation task.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=seq2seq>`__.
+    The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
+    up-to-date list of available models on `huggingface.co/models <https://huggingface.co/models?filter=seq2seq>`__.
 
     Usage::
 
@@ -2245,18 +2208,17 @@ class Text2TextGenerationPipeline(Pipeline):
             args (:obj:`str` or :obj:`List[str]`):
                 Input text for the encoder.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to include the tensors of predictions (as token indinces) in the outputs.
+                Whether or not to include the tensors of predictions (as token indices) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
-                Additional keyword arguments to pass along to the generate method of the model (see the generate
-                method corresponding to your framework `here <./model.html#generative-models>`__).
+                Additional keyword arguments to pass along to the generate method of the model (see the generate method
+                corresponding to your framework `here <./model.html#generative-models>`__).
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the
-            following keys:
+            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **generated_text** (:obj:`str`, present when ``return_text=True``) -- The generated text.
             - **generated_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
@@ -2311,8 +2273,8 @@ class Conversation:
     :class:`~transformers.ConversationalPipeline`. The conversation contains a number of utility function to manage the
     addition of new user input and generated model responses. A conversation needs to contain an unprocessed user input
     before being passed to the :class:`~transformers.ConversationalPipeline`. This user input is either created when
-    the class is instantiated, or by calling :obj:`conversional_pipeline.append_response("input")` after a conversation
-    turn.
+    the class is instantiated, or by calling :obj:`conversational_pipeline.append_response("input")` after a
+    conversation turn.
 
     Arguments:
         text (:obj:`str`, `optional`):
@@ -2406,10 +2368,8 @@ class Conversation:
         Return:
             :obj:`str`:
 
-            Example:
-            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114
-            user >> Going to the movies tonight - any suggestions?
-            bot >> The Big Lebowski
+            Example: Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114 user >> Going to the movies tonight - any
+            suggestions? bot >> The Big Lebowski
         """
         output = "Conversation id: {} \n".format(self.uuid)
         for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
@@ -2431,13 +2391,13 @@ class ConversationalPipeline(Pipeline):
     """
     Multi-turn conversational pipeline.
 
-    This conversational pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"conversational"`.
+    This conversational pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
+    identifier: :obj:`"conversational"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
-    currently: `'microsoft/DialoGPT-small'`, `'microsoft/DialoGPT-medium'`, `'microsoft/DialoGPT-large'`.
-    See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=conversational>`__.
+    currently: `'microsoft/DialoGPT-small'`, `'microsoft/DialoGPT-medium'`, `'microsoft/DialoGPT-large'`. See the
+    up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=conversational>`__.
 
     Usage::
 
@@ -2479,14 +2439,16 @@ class ConversationalPipeline(Pipeline):
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
-                Additional keyword arguments to pass along to the generate method of the model (see the generate
-                method corresponding to your framework `here <./model.html#generative-models>`__).
+                Additional keyword arguments to pass along to the generate method of the model (see the generate method
+                corresponding to your framework `here <./model.html#generative-models>`__).
 
         Returns:
             :class:`~transformers.Conversation` or a list of :class:`~transformers.Conversation`: Conversation(s) with
             updated generated responses for those containing a new user input.
         """
 
+        if isinstance(conversations, Conversation):
+            conversations = [conversations]
         # Input validation
         if isinstance(conversations, list):
             for conversation in conversations:
@@ -2503,8 +2465,6 @@ class ConversationalPipeline(Pipeline):
             assert (
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
-        elif isinstance(conversations, Conversation):
-            conversations = [conversations]
         else:
             raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
 
@@ -2533,30 +2493,42 @@ class ConversationalPipeline(Pipeline):
                 **generate_kwargs,
             )
 
-            cleaned_history = self._clean_padding_history(generated_responses)
+            if self.model.config.is_encoder_decoder:
+                if self.framework == "pt":
+                    history = torch.cat((inputs["input_ids"], generated_responses[:, 1:]), 1)
+                elif self.framework == "tf":
+                    history = tf.concat([inputs["input_ids"], generated_responses[:, 1:]], 1)
+            else:
+                history = generated_responses
+
+            history = self._clean_padding_history(history)
+            if self.model.config.is_encoder_decoder:
+                start_position = 1
+            else:
+                start_position = input_length
+
             output = []
             for conversation_index, conversation in enumerate(conversations):
                 conversation.mark_processed()
                 conversation.generated_responses.append(
                     self.tokenizer.decode(
-                        cleaned_history[conversation_index][input_length:],
+                        generated_responses[conversation_index][start_position:],
                         skip_special_tokens=True,
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 )
-                conversation.set_history(cleaned_history[conversation_index])
+                conversation.set_history(history[conversation_index])
                 output.append(conversation)
             if len(output) == 1:
                 return output[0]
             else:
                 return output
 
-    def _parse_and_tokenize(self, *args, **kwargs):
+    def _parse_and_tokenize(self, inputs, **kwargs):
         """
         Parse arguments and tokenize, adding an EOS token at the end of the user input
         """
         # Parse arguments
-        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
         for input in inputs:
             input.append(self.tokenizer.eos_token_id)
@@ -2566,8 +2538,9 @@ class ConversationalPipeline(Pipeline):
         """
         Cleans the padding history. Padding may be generated in two places when multiple conversations are provided as
         an input:
+
             - at the end of the concatenated history and new user input, so that all input to the model have the same
-                length
+              length
             - at the end of the generated response, as some responses will be longer than others
         This method cleans up these padding token so that the history for each conversation is not impacted by the
         batching process.
@@ -2578,6 +2551,8 @@ class ConversationalPipeline(Pipeline):
             is_previous_pad = False
             for token in sequence:
                 if token == self.tokenizer.pad_token_id:
+                    if self.tokenizer.pad_token_id != self.tokenizer.eos_token_id:
+                        continue
                     if is_previous_pad:
                         continue
                     else:
@@ -2711,8 +2686,8 @@ SUPPORTED_TASKS = {
 
 def check_task(task: str) -> Tuple[Dict, Any]:
     """
-    Checks an incoming task string, to validate it's correct and return the
-    default Pipeline and Model classes, and default models if they exist.
+    Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
+    default models if they exist.
 
     Args:
         task (:obj:`str`):
@@ -2730,9 +2705,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - :obj:`"conversational"`
 
     Returns:
-        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None))
-            The actual dictionnary required to initialize the pipeline and some
-            extra task options for parametrized tasks like "translation_XX_to_YY"
+        (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
+        pipeline and some extra task options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
@@ -2794,20 +2768,24 @@ def pipeline(
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default configuration file for the requested model will be used. That means that if
+            :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
+            this :obj:`task`'s default model's config is used instead.
         tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
-            identifier or an actual pretrained tokenizer inheriting from
-            :class:`~transformers.PreTrainedTokenizer`.
+            identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
-            If not provided, the default for the :obj:`task` will be loaded.
+            If not provided, the default tokenizer for the given :obj:`model` will be loaded (if it is a string). If
+            :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
+            it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
+            for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
 
-            If no framework is specified, will default to the one currently installed. If no framework is specified
-            and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no
-            model is provided.
+            If no framework is specified, will default to the one currently installed. If no framework is specified and
+            both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
+            is provided.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:

@@ -266,14 +266,14 @@ def find_top_rpn_proposals(
 ):
     """Args:
         proposals (list[Tensor]): (L, N, Hi*Wi*A, 4).
-        pred_objectness_logits: tensors of lenngth L.
+        pred_objectness_logits: tensors of length L.
         nms_thresh (float): IoU threshold to use for NMS
         pre_nms_topk (int): before nms
         post_nms_topk (int): after nms
         min_box_side_len (float): minimum proposal box side
         training (bool): True if proposals are to be used in training,
     Returns:
-        resuls (List[Dict]): stores post_nms_topk object proposals for image i.
+        results (List[Dict]): stores post_nms_topk object proposals for image i.
     """
     num_images = len(images)
     device = proposals[0].device
@@ -648,7 +648,7 @@ class RPNOutputs(object):
             images (ImageList): :class:`ImageList` instance representing N input images
             pred_objectness_logits (list[Tensor]): A list of L elements. Element i is a tensor of shape (N, A, Hi, W)
             pred_anchor_deltas (list[Tensor]): A list of L elements. Element i is a tensor of shape (N, A*4, Hi, Wi)
-            anchors (list[torch.Tensor]): nested list ofboxes. anchors[i][j] at (n, l) stores anchor array for feature map l
+            anchors (list[torch.Tensor]): nested list of boxes. anchors[i][j] at (n, l) stores anchor array for feature map l
             boundary_threshold (int): if >= 0, then anchors that extend beyond the image boundary by more than boundary_thresh are not used in training.
             gt_boxes (list[Boxes], optional): A list of N elements.
             smooth_l1_beta (float): The transition point between L1 and L2 lossn. When set to 0, the loss becomes L1. When +inf, it is ignored
@@ -1186,7 +1186,7 @@ class ROIOutputs(object):
         attr_probs_all, attrs_all = self._predict_attrs(attr_logits, preds_per_image)
         features = features.split(preds_per_image, dim=0)
 
-        # fun for each image too, also I can expirement and do multiple images
+        # fun for each image too, also I can experiment and do multiple images
         final_results = []
         zipped = zip(boxes_all, obj_scores_all, attr_probs_all, attrs_all, sizes)
         for i, (boxes, obj_scores, attr_probs, attrs, size) in enumerate(zipped):
@@ -1412,7 +1412,7 @@ class AnchorGenerator(nn.Module):
 
     def generate_cell_anchors(self, sizes=(32, 64, 128, 256, 512), aspect_ratios=(0.5, 1, 2)):
         """
-        anchors are continious geometric rectangles
+        anchors are continuous geometric rectangles
         centered on one feature map point sample.
         We can later build the set of anchors
         for the entire feature map by tiling these tensors
@@ -1865,7 +1865,7 @@ class GeneralizedRCNN(nn.Module):
         scales_yx=None,
         **kwargs,
     ):
-        # run images through bacbone
+        # run images through backbone
         original_sizes = image_shapes * scales_yx
         features = self.backbone(images)
 

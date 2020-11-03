@@ -23,7 +23,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import SAVE_STATE_WARNING
+from packaging import version
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
@@ -33,6 +33,11 @@ from .utils import logging
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
+
+if version.parse(torch.__version__) <= version.parse("1.4.1"):
+    SAVE_STATE_WARNING = ""
+else:
+    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
 
 logger = logging.get_logger(__name__)
 
@@ -135,14 +140,12 @@ def torch_distributed_zero_first(local_rank: int):
 
 class SequentialDistributedSampler(Sampler):
     """
-    Distributed Sampler that subsamples indicies sequentially,
-    making it easier to collate all results at the end.
+    Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
 
-    Even though we only use this sampler for eval and predict (no training),
-    which means that the model params won't have to be synced (i.e. will not hang
-    for synchronization even if varied number of forward passes), we still add extra
-    samples to the sampler to make it evenly divisible (like in `DistributedSampler`)
-    to make it easy to `gather` or `reduce` resulting tensors at the end of the loop.
+    Even though we only use this sampler for eval and predict (no training), which means that the model params won't
+    have to be synced (i.e. will not hang for synchronization even if varied number of forward passes), we still add
+    extra samples to the sampler to make it evenly divisible (like in `DistributedSampler`) to make it easy to `gather`
+    or `reduce` resulting tensors at the end of the loop.
     """
 
     def __init__(self, dataset, num_replicas=None, rank=None):
@@ -203,16 +206,15 @@ def nested_truncate(tensors, limit):
 
 class DistributedTensorGatherer:
     """
-    A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU
-    by chunks.
+    A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU by chunks.
 
-    If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on
-    CPU at every step, our sampler will generate the following indices:
+    If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on CPU at every
+    step, our sampler will generate the following indices:
 
         :obj:`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
 
-    to get something of size a multiple of 3 (so that each process gets the same dataset length). Then
-    process 0, 1 and 2 will be responsible of making predictions for the following samples:
+    to get something of size a multiple of 3 (so that each process gets the same dataset length). Then process 0, 1 and
+    2 will be responsible of making predictions for the following samples:
 
         - P0: :obj:`[0, 1, 2, 3, 4, 5]`
         - P1: :obj:`[6, 7, 8, 9, 10, 11]`
@@ -224,13 +226,13 @@ class DistributedTensorGatherer:
         - P1: :obj:`[6, 7]`
         - P2: :obj:`[12, 13]`
 
-    So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor)
-    corresponding to the following indices:
+    So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor) corresponding to
+    the following indices:
 
         :obj:`[0, 1, 6, 7, 12, 13]`
 
-    If we directly concatenate our results without taking any precautions, the user will then get
-    the predictions for the indices in this order at the end of the prediction loop:
+    If we directly concatenate our results without taking any precautions, the user will then get the predictions for
+    the indices in this order at the end of the prediction loop:
 
         :obj:`[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
 
