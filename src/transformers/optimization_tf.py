@@ -19,6 +19,7 @@ import re
 from typing import Callable, List, Optional, Union
 
 import tensorflow as tf
+import keras.backend as K
 
 
 class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -89,6 +90,8 @@ def create_optimizer(
     adam_epsilon: float = 1e-8,
     weight_decay_rate: float = 0.0,
     power: float = 1.0,
+    gradient_accumulation_steps: int = 1,
+    max_grad_norm: float = 1.0,
     include_in_weight_decay: Optional[List[str]] = None,
 ):
     """
@@ -113,6 +116,10 @@ def create_optimizer(
             The weight decay to use.
         power (:obj:`float`, `optional`, defaults to 1.0):
             The power to use for PolynomialDecay.
+        gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
+            Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
+        max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
+            Maximum gradient norm (for gradient clipping).
         include_in_weight_decay (:obj:`List[str]`, `optional`):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters except bias and layer norm parameters.
@@ -120,10 +127,11 @@ def create_optimizer(
     # Implements linear decay of the learning rate.
     lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
         initial_learning_rate=init_lr,
-        decay_steps=num_train_steps - num_warmup_steps,
+        decay_steps=((num_train_steps // gradient_accumulation_steps) - 1) - num_warmup_steps, # minus 1 because the iteration in the optimizer starts at 0
         end_learning_rate=init_lr * min_lr_ratio,
         power=power,
     )
+
     if num_warmup_steps:
         lr_schedule = WarmUp(
             initial_learning_rate=init_lr,
@@ -144,9 +152,10 @@ def create_optimizer(
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=lr_schedule, beta_1=adam_beta1, beta_2=adam_beta2, epsilon=adam_epsilon
         )
-    # We return the optimizer and the LR scheduler in order to better track the
-    # evolution of the LR independently of the optimizer.
-    return optimizer, lr_schedule
+
+    optimizer = AccumulationOptimizer(optimizer=optimizer, accumulation_steps=gradient_accumulation_steps, clipnorm=max_grad_norm)
+
+    return optimizer
 
 
 class AdamWeightDecay(tf.keras.optimizers.Adam):
@@ -276,6 +285,145 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
                 if re.search(r, param_name) is not None:
                     return False
         return True
+
+
+class AccumulationOptimizer(tf.keras.optimizers.Optimizer):
+    """
+    Inherit from a Keras Optimizer and wrapps the original optimizer
+    to achieve a gradient accumulation.
+    
+    Args:
+        optimizer (:obj:`tf.keras.optimizers.Optimizer]):
+            The optimizer to wrap to add the accumulation feature.
+        accumulation_steps (:obj:`int`, `optional`, default to 1):
+            the number of accumulation steps.
+        clipnorm (:obj:`float`, `optional`, defaults to 1.0):
+            Maximum gradient norm (for gradient clipping).
+    """
+    def __init__(self, optimizer, accumulation_steps=1, clipnorm=1.0, name="AccumulationOptimizer"):
+        if accumulation_steps < 1:
+            raise ValueError("accumulation_steps cannot be lower than 1")
+        
+        if clipnorm < 1.0:
+            raise ValueError("clipnorm cannot be lower than 1.0")
+
+        super().__init__(name=name)
+
+        self._accumulation_steps = accumulation_steps
+        self._accumulation_steps_tensor = None
+        self._optimizer = optimizer
+        self._track_trackable(self._optimizer, "acc_optimizer")
+        self._clipnorm = clipnorm
+        _ = self.iterations
+
+    def _create_slots(self, var_list):
+        self._optimizer._create_slots(var_list)
+        for v in var_list:
+            self.add_slot(v, "grad_acc")
+    
+    def _create_hypers(self):
+        self._optimizer._create_hypers()
+
+    def _prepare(self, var_list):
+        self._optimizer._prepare(var_list)
+        self._accumulation_steps_tensor = tf.convert_to_tensor(self._accumulation_steps, name="accumulation_steps")
+
+    def _prepare_local(self, var_device, var_dtype, apply_state):
+        self._optimizer._prepare_local(var_device, var_dtype, apply_state)
+
+    def _apply_cond(self, apply_fn, grad, var, *args, **kwargs):
+        grad_acc = self.get_slot(var, "grad_acc")
+
+        def apply_accumulated_gradients(grad_acc, apply_fn, grad, var, *args, **kwargs):
+            total_grad = (grad_acc + grad) / tf.cast(self._accumulation_steps_tensor, grad.dtype)
+            update_op = apply_fn(total_grad, var, *args, **kwargs)
+            with tf.control_dependencies([update_op]):
+                grad_acc_to_zero_op = grad_acc.assign(tf.zeros_like(grad_acc),
+                                                    use_locking=self._use_locking)
+            return tf.group(update_op, grad_acc_to_zero_op)
+
+        def accumulate_gradient(grad_acc, grad):
+            assign_op = grad_acc.assign_add(grad, use_locking=self._use_locking)
+            return tf.group(assign_op)  # Strip return value
+
+        return tf.cond(
+            tf.equal((self._iterations + 1) % tf.cast(self._accumulation_steps_tensor, self._iterations.dtype), 0),
+            lambda: apply_accumulated_gradients(grad_acc, apply_fn, grad, var, *args, **kwargs),
+            lambda: accumulate_gradient(grad_acc, grad))
+
+    def _resource_apply_dense(self, grad, var, apply_state=None):
+        return self._apply_cond(
+            self._optimizer._resource_apply_dense, grad, var)
+
+    def _apply_sparse_shared(self, grad, var, indices, scatter_add, apply_state=None):
+        return self._apply_cond(
+            self._optimizer._apply_sparse_shared, grad, var,
+            indices, scatter_add)
+
+    def _resource_apply_sparse_duplicate_indices(self, grad, var, indices, **kwargs):
+        # AccumulationOptimizer does not support sparse updates
+        dense_grad = tf.convert_to_tensor(
+            tf.IndexedSlices(values=grad, indices=indices,
+                            dense_shape=tf.shape(var)))
+        return self._apply_cond(
+            self._optimizer._resource_apply_dense,
+            dense_grad, var)
+
+    def apply_gradients(self, grads_and_vars, name=None, **kwargs):
+        gradients, tvars = list(zip(*grads_and_vars))
+        gradients = map(lambda x: tf.clip_by_norm(x, self._clipnorm), gradients)
+        self._optimizer._iterations.assign(self._iterations // self._accumulation_steps)
+
+        return super().apply_gradients(zip(gradients, tvars))
+
+    @property
+    def iterations(self):
+        if self._iterations is None:
+            with self._distribution_strategy_scope():
+                self._iterations = self.add_weight(
+                    "iter",
+                    shape=[],
+                    dtype=tf.int64,
+                    trainable=False,
+                    aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA)
+            self._weights.append(self._iterations)
+        return self._optimizer.iterations
+    
+    @property
+    def weights(self):
+        return self._weights + self._optimizer.weights
+
+    @property
+    def lr(self):
+        return self._optimizer._get_hyper("learning_rate")
+
+    @lr.setter
+    def lr(self, lr):
+        self._optimizer._set_hyper("learning_rate", lr)
+
+    @property
+    def learning_rate(self):
+        return self._optimizer._get_hyper("learning_rate")
+
+    @learning_rate.setter
+    def learning_rate(self, learning_rate):
+        self._optimizer._set_hyper("learning_rate", learning_rate)
+  
+    def get_config(self):
+        config = {
+            "optimizer": tf.keras.optimizers.serialize(self._optimizer),
+            "accumulation_steps": self._accumulation_steps,
+            "clipnorm": self._clipnorm,
+        }
+        base_config = super().get_config()
+        return {**base_config, **config}
+    
+    @classmethod
+    def from_config(cls, config, custom_objects=None):
+        optimizer = tf.keras.optimizers.deserialize(
+            config.pop("optimizer"), custom_objects=custom_objects
+        )
+        return cls(optimizer, **config)
 
 
 # Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py

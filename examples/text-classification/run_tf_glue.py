@@ -15,31 +15,29 @@
 # limitations under the License.
 """ Fine-tuning the library models for sequence classification."""
 
-
-import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Optional
 
-import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
 from transformers import (
     AutoConfig,
     AutoTokenizer,
-    EvalPrediction,
     HfArgumentParser,
     PreTrainedTokenizer,
     TFAutoModelForSequenceClassification,
     TFTrainer,
     TFTrainingArguments,
-    glue_compute_metrics,
     glue_convert_examples_to_features,
     glue_output_modes,
     glue_processors,
     glue_tasks_num_labels,
+    logging,
+    F1AndAccuracyMeanScore,
+    F1Score,
 )
 from transformers.utils import logging as hf_logging
 
@@ -47,6 +45,39 @@ from transformers.utils import logging as hf_logging
 hf_logging.set_verbosity_info()
 hf_logging.enable_default_handler()
 hf_logging.enable_explicit_format()
+
+
+def glue_metrics(task_name):
+    if task_name == "sst-2":
+        return ["accuracy"]
+    elif task_name == "mrpc":
+        return ["accuracy"]
+    elif task_name == "qqp":
+        return ["accuracy"]
+    elif task_name == "mnli":
+        return ["accuracy"]
+    elif task_name == "mnli-mm":
+        return ["accuracy"]
+    elif task_name == "qnli":
+        return ["accuracy"]
+    elif task_name == "rte":
+        return ["accuracy"]
+    elif task_name == "wnli":
+        return ["accuracy"]
+    elif task_name == "hans":
+        return ["accuracy"]
+    else:
+        raise KeyError(task_name)
+    """
+    elif task_name == "cola":
+        return [matthews_corrcoef]
+    elif task_name == "sts-b":
+        return [pearsonr, spearmanr, corr]
+    """
+
+
+logging.set_verbosity_info()
+logging.enable_explicit_format()
 
 
 class Split(Enum):
@@ -82,7 +113,7 @@ def get_tfds(
     return ds
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger()
 
 
 @dataclass
@@ -153,12 +184,6 @@ def main():
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
 
-    # Setup logging
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
-    )
     logger.info(
         "n_replicas: %s, distributed training: %s, 16-bits training: %s",
         training_args.n_replicas,
@@ -184,6 +209,7 @@ def main():
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
+        return_dict=True,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -221,12 +247,19 @@ def main():
         else None
     )
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
-        if output_mode == "classification":
-            preds = np.argmax(p.predictions, axis=1)
-        elif output_mode == "regression":
-            preds = np.squeeze(p.predictions)
-        return glue_compute_metrics(data_args.task_name, preds, p.label_ids)
+    metrics = []
+
+    if data_args.task_name in ["sst-2", "mnli", "mnli-mm", "qnli", "rte", "wnli", "hans"]:
+        metrics.append("accuracy")
+    elif data_args.task_name in ["mrpc", "qqp"]:
+        with training_args.strategy.scope():
+            f1_acc_metric = F1AndAccuracyMeanScore(num_classes=num_labels, average="micro")
+            f1_metric = F1Score(num_classes=num_labels, average="micro")
+
+        metrics.extend(["accuracy", f1_metric, f1_acc_metric])
+    else:
+        raise KeyError(data_args.task_name)
+
 
     # Initialize our Trainer
     trainer = TFTrainer(
@@ -234,7 +267,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
+        compute_metrics=metrics,
     )
 
     # Training
@@ -250,7 +283,7 @@ def main():
 
         result = trainer.evaluate()
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-
+        
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results *****")
 
