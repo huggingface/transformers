@@ -30,7 +30,6 @@ arg_to_scheduler = {
     "constant": get_constant_schedule,
     "constant_w_warmup": get_constant_schedule_with_warmup,
 }
-arg_to_scheduler_choices = sorted(arg_to_scheduler.keys())
 
 
 class Seq2SeqTrainer(Trainer):
