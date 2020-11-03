@@ -133,8 +133,6 @@ class BartSummarizationDistiller(SummarizationModule):
             decoder_input_ids = shift_tokens_right(labels, pad_token_id)
 
         # noinspection PyCallingNonCallable
-        #lm_logits, dec_hidden, enc_outputs, enc_hidden_state = 
-        # logits, decoder_hidden_states, encoder_last_hidden_state, encoder_hidden_states
         output = self(
             input_ids,
             attention_mask=src_mask,
@@ -189,7 +187,11 @@ class BartSummarizationDistiller(SummarizationModule):
         loss_ce = self.calc_ce_loss(dec_mask, output.logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
             hid_loss_dec = self.calc_hidden_loss(
-                dec_mask, output.decoder_hidden_states, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
+                dec_mask,
+                output.decoder_hidden_states,
+                tdec_hidden,
+                self.d_matches,
+                normalize_hidden=self.hparams.normalize_hidden,
             )
 
         blended_loss = (
