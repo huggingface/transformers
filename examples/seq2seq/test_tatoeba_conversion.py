@@ -7,7 +7,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import slow
 
 
-@unittest.skipUnless(os.path.exists(DEFAULT_REPO))
+@unittest.skipUnless(os.path.exists(DEFAULT_REPO), "Tatoeba directory does not exist.")
 class TatoebaConversionTester(unittest.TestCase):
     @cached_property
     def resolver(self):

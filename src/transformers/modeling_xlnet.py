@@ -1300,7 +1300,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
-    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1333,7 +1333,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_cache": kwargs["use_cache"],
+            "use_cache": use_cache,
         }
 
         # if past is defined in model kwargs then use it for faster decoding
