@@ -26,6 +26,8 @@ import tensorflow_datasets as tfds
 from transformers import (
     AutoConfig,
     AutoTokenizer,
+    F1AndAccuracyMeanScore,
+    F1Score,
     HfArgumentParser,
     PreTrainedTokenizer,
     TFAutoModelForSequenceClassification,
@@ -36,8 +38,6 @@ from transformers import (
     glue_processors,
     glue_tasks_num_labels,
     logging,
-    F1AndAccuracyMeanScore,
-    F1Score,
 )
 from transformers.utils import logging as hf_logging
 
@@ -45,35 +45,6 @@ from transformers.utils import logging as hf_logging
 hf_logging.set_verbosity_info()
 hf_logging.enable_default_handler()
 hf_logging.enable_explicit_format()
-
-
-def glue_metrics(task_name):
-    if task_name == "sst-2":
-        return ["accuracy"]
-    elif task_name == "mrpc":
-        return ["accuracy"]
-    elif task_name == "qqp":
-        return ["accuracy"]
-    elif task_name == "mnli":
-        return ["accuracy"]
-    elif task_name == "mnli-mm":
-        return ["accuracy"]
-    elif task_name == "qnli":
-        return ["accuracy"]
-    elif task_name == "rte":
-        return ["accuracy"]
-    elif task_name == "wnli":
-        return ["accuracy"]
-    elif task_name == "hans":
-        return ["accuracy"]
-    else:
-        raise KeyError(task_name)
-    """
-    elif task_name == "cola":
-        return [matthews_corrcoef]
-    elif task_name == "sts-b":
-        return [pearsonr, spearmanr, corr]
-    """
 
 
 logging.set_verbosity_info()
@@ -260,7 +231,6 @@ def main():
     else:
         raise KeyError(data_args.task_name)
 
-
     # Initialize our Trainer
     trainer = TFTrainer(
         model=model,
@@ -283,7 +253,7 @@ def main():
 
         result = trainer.evaluate()
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        
+
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results *****")
 

@@ -207,6 +207,7 @@ class TFSequenceClassificationLoss:
     """
     Loss function suitable for sequence classification.
     """
+
     @staticmethod
     def compute_loss(labels, logits):
         if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
@@ -668,15 +669,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
             loss = self.compiled_loss(y, y_pred.logits, regularization_losses=self.losses)
-            
+
         gradients = tape.gradient(loss, self.trainable_variables)
-        
+
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        
+
         self.compiled_metrics.update_state(y, y_pred.logits)
 
         return {m.name: m.result() for m in self.metrics}
-    
+
     def test_step(self, data):
         x, y = data
         y_pred = self(x, training=False)
@@ -1332,6 +1333,7 @@ class TFConv1D(tf.keras.layers.Layer):
         kwargs:
             Additional keyword arguments passed along to the :obj:`__init__` of :obj:`tf.keras.layers.Layer`.
     """
+
     def __init__(self, nf, nx, initializer_range=0.02, **kwargs):
         super().__init__(**kwargs)
         self.nf = nf

@@ -17,7 +17,7 @@ import datetime
 import math
 import os
 import warnings
-from typing import Dict, Optional, List, Union
+from typing import Dict, List, Optional, Union
 
 from .file_utils import ENV_VARS_TRUE_VALUES
 
@@ -34,9 +34,9 @@ from packaging.version import parse
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import create_optimizer
+from .trainer_tf_callbacks import LearningRateLoggingCallback
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
-from .trainer_tf_callbacks import LearningRateLoggingCallback
 from .utils import logging
 
 
@@ -74,11 +74,10 @@ class TFTrainer:
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
         optimizers (:obj:`tf.keras.optimizers.Optimizer`, `optional`):
-            The optimizer to use. The optimizer default to an instance of :class:`~transformers.AccumulationOptimizer` with a the
-            following wrapped optimizer:
-            :class:`tf.keras.optimizers.Adam` if :obj:`args.weight_decay_rate` is 0 else an instance of
-            :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
-            :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else an
+            The optimizer to use. The optimizer default to an instance of :class:`~transformers.AccumulationOptimizer`
+            with a the following wrapped optimizer: :class:`tf.keras.optimizers.Adam` if :obj:`args.weight_decay_rate`
+            is 0 else an instance of :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance
+            of :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else an
             instance of :class:`~transformers.WarmUp`.
     """
 
@@ -129,14 +128,16 @@ class TFTrainer:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        # As the accumulation is done directly inside the optimizer we don't batch the dataset to "train_batch_size * gradient_accumulation_steps" 
+        # As the accumulation is done directly inside the optimizer we don't batch the dataset to "train_batch_size * gradient_accumulation_steps"
         # but to usual train_batch_size. The "gradient_accumulation_steps" value is used in the decay of the optimizer where we divide the total number
         # of steps by the "gradient_accumulation_steps" value.
         self.total_train_batch_size = self.args.train_batch_size
         self.num_train_examples = self.train_dataset.cardinality().numpy()
 
         if self.num_train_examples < 0:
-            raise ValueError("The training dataset must have an asserted cardinality. Use the tf.data.experimental.assert_cardinality method when creating your dataset.")
+            raise ValueError(
+                "The training dataset must have an asserted cardinality. Use the tf.data.experimental.assert_cardinality method when creating your dataset."
+            )
 
         ds = (
             self.train_dataset.repeat()
@@ -149,16 +150,16 @@ class TFTrainer:
 
     def get_test_eval_tfdataset(self, test_eval_dataset: Optional[tf.data.Dataset] = None) -> tf.data.Dataset:
         """
-        Returns a test :class:`~tf.data.Dataset`. If ``test_eval_dataset`` is empty with run the test/evaluation
-        over ``self.eval_dataset``.
+        Returns a test :class:`~tf.data.Dataset`. If ``test_eval_dataset`` is empty with run the test/evaluation over
+        ``self.eval_dataset``.
 
         Args:
             test_eval_dataset (:class:`~tf.data.Dataset`):
-                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is
-                a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
-                calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such
-                as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
-                by calling ``model(features, **labels)``.
+                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is a
+                dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is calculated
+                by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when using
+                a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+                ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -332,16 +333,19 @@ class TFTrainer:
 
         with self.args.strategy.scope():
             self.create_optimizer_and_scheduler(num_training_steps=t_total)
-            self.model.compile(loss=self.model.compute_loss, optimizer=self.optimizer, experimental_steps_per_execution=np.gcd.reduce([self.steps_per_epoch, self.args.logging_steps]), metrics=self.compute_metrics)
-            
+            self.model.compile(
+                loss=self.model.compute_loss,
+                optimizer=self.optimizer,
+                experimental_steps_per_execution=np.gcd.reduce([self.steps_per_epoch, self.args.logging_steps]),
+                metrics=self.compute_metrics,
+            )
+
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
             epochs_trained = 0
             latest = tf.train.latest_checkpoint(folder)
 
             if latest is not None:
-                logger.info(
-                    "Checkpoint file %s found and restoring from checkpoint", latest
-                )
+                logger.info("Checkpoint file %s found and restoring from checkpoint", latest)
                 self.model.load_weights(latest)
 
                 # Here we take the total number of iterations (with optimizer._iterations) and not the total number of updates (with optimizer.iterations)
@@ -354,13 +358,17 @@ class TFTrainer:
             logger.info("  Num examples = %d", self.num_train_examples)
             logger.info("  Num Epochs = %d", epochs)
             logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
-            logger.info(
-                "  Total train batch size (w. parallel, distributed) = %d", self.total_train_batch_size
-            )
+            logger.info("  Total train batch size (w. parallel, distributed) = %d", self.total_train_batch_size)
             logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
             logger.info("  Steps per epoch = %d", self.steps_per_epoch)
-            logger.info("  Optimization steps per epoch (w. gradient accumulation) = %d", self.steps_per_epoch // self.args.gradient_accumulation_steps)
-            logger.info("  Total optimization steps (w. gradient accumulation) = %d", t_total // self.args.gradient_accumulation_steps)
+            logger.info(
+                "  Optimization steps per epoch (w. gradient accumulation) = %d",
+                self.steps_per_epoch // self.args.gradient_accumulation_steps,
+            )
+            logger.info(
+                "  Total optimization steps (w. gradient accumulation) = %d",
+                t_total // self.args.gradient_accumulation_steps,
+            )
             logger.info("  Total training steps = %d", t_total)
 
             eval_ds, steps, _ = self.get_test_eval_tfdataset()
@@ -369,12 +377,22 @@ class TFTrainer:
                 filepath=os.path.join(folder, "weights.{epoch:04d}.ckpt"),
                 save_weights_only=True,
             )
-            callbacks = [tf.keras.callbacks.TensorBoard(log_dir=self.args.logging_dir, update_freq=self.args.logging_steps)]
+            callbacks = [
+                tf.keras.callbacks.TensorBoard(log_dir=self.args.logging_dir, update_freq=self.args.logging_steps)
+            ]
 
             callbacks.append(LearningRateLoggingCallback())
             callbacks.append(model_checkpoint_callback)
 
-            self.model.fit(train_ds, validation_data=eval_ds, epochs=epochs, initial_epoch=epochs_trained, validation_steps=steps, steps_per_epoch=self.steps_per_epoch, callbacks=callbacks)
+            self.model.fit(
+                train_ds,
+                validation_data=eval_ds,
+                epochs=epochs,
+                initial_epoch=epochs_trained,
+                validation_steps=steps,
+                steps_per_epoch=self.steps_per_epoch,
+                callbacks=callbacks,
+            )
 
     def predict(self, test_dataset: tf.data.Dataset) -> PredictionOutput:
         """
@@ -400,7 +418,7 @@ class TFTrainer:
         """
         test_ds, steps, num_examples = self.get_test_eval_tfdataset(test_dataset)
 
-        #return self.prediction_loop(test_ds, steps, num_examples, description="Prediction")
+        # return self.prediction_loop(test_ds, steps, num_examples, description="Prediction")
 
     def save_model(self, output_dir: Optional[str] = None):
         """
