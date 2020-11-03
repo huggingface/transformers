@@ -82,10 +82,12 @@ jobs:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pt_tf_cross_test --durations=0 | tee output.txt
+            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf ./tests/ -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -106,7 +108,7 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=tests ./tests/ | tee tests_output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -132,10 +134,12 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf ./tests/ | tee tests_output.txt
             - store_artifacts:
-               path: ~/transformers/output.txt
-               destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_flax:
         working_directory: ~/transformers
         docker:
@@ -156,10 +160,12 @@ jobs:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax ./tests/ | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_pipelines_torch:
         working_directory: ~/transformers
         docker:
@@ -180,10 +186,12 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_pipelines_tf:
         working_directory: ~/transformers
         docker:
@@ -204,10 +212,12 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
-               path: ~/transformers/output.txt
-               destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
@@ -227,10 +237,12 @@ jobs:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
+            - run: python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
             - store_artifacts:
-                path: ~/transformers/output.txt
-                destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_examples_torch:
         working_directory: ~/transformers
         docker:
@@ -252,11 +264,12 @@ jobs:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=examples ./examples/ | tee examples_output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
+
     build_doc:
         working_directory: ~/transformers
         docker:
@@ -276,6 +289,7 @@ jobs:
             - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
+
     deploy_doc:
         working_directory: ~/transformers
         docker:
@@ -295,6 +309,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: ./.circleci/deploy.sh
+
     check_code_quality:
         working_directory: ~/transformers
         docker:
@@ -321,6 +336,7 @@ jobs:
             - run: python utils/check_copies.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
+
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
@@ -351,6 +367,7 @@ jobs:
             - setup_remote_docker
             - *build_push_docker
             - *deploy_cluster
+
     cleanup-gke-jobs:
         docker:
             - image: circleci/python:3.6
@@ -360,6 +377,7 @@ jobs:
                   cluster: $GKE_CLUSTER
                   perform-login: true
             - *delete_gke_jobs
+
 workflow_filters: &workflow_filters
     filters:
         branches:
