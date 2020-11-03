@@ -45,6 +45,15 @@ class DataCollatorForSOP:
         requires_pytorch(self)
 
 
+class DataCollatorForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DataCollatorForWholeWordMask:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
