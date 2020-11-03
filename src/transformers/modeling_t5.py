@@ -1232,7 +1232,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+    ):
 
         # cut decoder_input_ids if past is used
         if past is not None:
