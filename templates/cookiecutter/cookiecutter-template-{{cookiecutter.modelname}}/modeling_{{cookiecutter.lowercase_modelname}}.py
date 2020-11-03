@@ -26,12 +26,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import gelu, gelu_new, silu
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
 )
 from .modeling_outputs import (
     BaseModelOutput,
@@ -141,7 +141,7 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "silu": silu, "gelu_new": gelu_new, "mish": mish}
 
 
 # Copied from transformers.modeling_bert.BertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
@@ -666,7 +666,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -785,7 +785,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -911,7 +911,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.checkpoint_identifier}}",
@@ -991,7 +991,7 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/{{cookiecutter.lowercase_modelname}}-small-discriminator",
@@ -1081,7 +1081,7 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -1168,7 +1168,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.lowercase_modelname}}-base-uncased",
@@ -1264,7 +1264,7 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -2038,7 +2038,7 @@ class {{cookiecutter.camelcase_modelname}}Model(Pretrained{{cookiecutter.camelca
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.checkpoint_identifier}}",
@@ -2164,7 +2164,7 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Pretrained{{c
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings({{cookiecutter.uppercase_modelname}}_GENERATION_EXAMPLE)
     def forward(
@@ -2306,7 +2306,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification(Pretrained{{
         self.{{cookiecutter.lowercase_modelname}}._init_weights(self.classification_head.dense)
         self.{{cookiecutter.lowercase_modelname}}._init_weights(self.classification_head.out_proj)
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.checkpoint_identifier}}",
@@ -2392,7 +2392,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering(Pretrained{{cooki
 
         self.{{cookiecutter.lowercase_modelname}}._init_weights(self.qa_outputs)
 
-    @add_start_docstrings_to_callable({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.checkpoint_identifier}}",

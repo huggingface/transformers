@@ -9,6 +9,7 @@ on:
       - "src/**"
       - "tests/**"
       - ".github/**"
+      - "templates/**"
   # pull_request:
   repository_dispatch:
 
