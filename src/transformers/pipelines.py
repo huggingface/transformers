@@ -2430,18 +2430,31 @@ class ConversationalPipeline(Pipeline):
                 **generate_kwargs,
             )
 
-            cleaned_history = self._clean_padding_history(generated_responses)
+            if self.model.config.is_encoder_decoder:
+                if self.framework == "pt":
+                    history = torch.cat((inputs["input_ids"], generated_responses[:, 1:]), 1)
+                elif self.framework == "tf":
+                    history = tf.concat([inputs["input_ids"], generated_responses[:, 1:]], 1)
+            else:
+                history = generated_responses
+
+            history = self._clean_padding_history(history)
+            if self.model.config.is_encoder_decoder:
+                start_position = 1
+            else:
+                start_position = input_length
+
             output = []
             for conversation_index, conversation in enumerate(conversations):
                 conversation.mark_processed()
                 conversation.generated_responses.append(
                     self.tokenizer.decode(
-                        cleaned_history[conversation_index][input_length:],
+                        generated_responses[conversation_index][start_position:],
                         skip_special_tokens=True,
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 )
-                conversation.set_history(cleaned_history[conversation_index])
+                conversation.set_history(history[conversation_index])
                 output.append(conversation)
             if len(output) == 1:
                 return output[0]
@@ -2475,6 +2488,8 @@ class ConversationalPipeline(Pipeline):
             is_previous_pad = False
             for token in sequence:
                 if token == self.tokenizer.pad_token_id:
+                    if self.tokenizer.pad_token_id != self.tokenizer.eos_token_id:
+                        continue
                     if is_previous_pad:
                         continue
                     else:
