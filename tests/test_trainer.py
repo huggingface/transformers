@@ -18,13 +18,13 @@ import os
 import tempfile
 import unittest
 
-import datasets
 import numpy as np
 
 from transformers import AutoTokenizer, EvaluationStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
     get_tests_dir,
+    require_datasets,
     require_optuna,
     require_sentencepiece,
     require_tokenizers,
@@ -340,7 +340,10 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
         self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
+    @require_datasets
     def test_trainer_with_datasets(self):
+        import datasets
+
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
         y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,))
@@ -658,15 +661,17 @@ class TrainerHyperParameterIntegrationTest(unittest.TestCase):
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
 
-        trainer = get_regression_trainer(
-            learning_rate=0.1,
-            logging_steps=1,
-            evaluation_strategy=EvaluationStrategy.EPOCH,
-            num_train_epochs=4,
-            disable_tqdm=True,
-            load_best_model_at_end=True,
-            logging_dir="runs",
-            run_name="test",
-            model_init=model_init,
-        )
-        trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=4)
