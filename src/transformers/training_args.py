@@ -63,7 +63,7 @@ class TrainingArguments:
             Whether to run predictions on the test set or not.
             This argument is not directly used by :class:`~transformers.Trainer`,
             it's intended to be used by your training/evaluation scripts instead.
-            See the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`___
+            See the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__
             for more details.
         evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
             The evaluation strategy to adopt during training. Possible values are:
