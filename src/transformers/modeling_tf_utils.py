@@ -661,6 +661,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
     def train_step(self, data):
+        """
+        Model training step.
+
+        Args:
+            data (:obj:`tuple`):
+                Tuple that contains the data to train on.
+        """
         x, y = data
 
         with tf.GradientTape() as tape:
@@ -676,6 +683,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, data):
+        """
+        Model test step.
+
+        Args:
+            data (:obj:`tuple`):
+                Tuple that contains the data to test on.
+        """
         x, y = data
         y_pred = self(x, training=False)
 
