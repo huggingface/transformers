@@ -50,7 +50,7 @@ class TrainingArguments:
         do_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run training or not. This argument is not directly used by :class:`~transformers.Trainer`,
             it's intended to be used by your training/evaluation scripts instead.
-            See the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`___
+            See the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__
             for more details.
         do_eval (:obj:`bool`, `optional`):
             Whether to run evaluation on the dev set or not. Will be set to :obj:`True` if :obj:`evaluation_strategy`
