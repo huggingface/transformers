@@ -2,16 +2,24 @@
 import math
 import os
 
+from .utils import logging
 
-# Import 3rd-party integrations first:
+
+logger = logging.get_logger(__name__)
+
+
+# Import 3rd-party integrations before ML frameworks:
 
 try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
-    # XXX: there should be comet_ml.ensure_configured(), like `wandb`, for now emulate it
-    comet_ml.Experiment(project_name="ensure_configured")
-    _has_comet = True
+    if comet_ml.config.get_config("comet.api_key"):
+        _has_comet = True
+    else:
+        if os.getenv("COMET_MODE", "").upper() != "DISABLED":
+            logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+        _has_comet = False
 except (ImportError, ValueError):
     _has_comet = False
 
@@ -21,7 +29,8 @@ try:
     wandb.ensure_configured()
     if wandb.api.api_key is None:
         _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
+        if os.getenv("WANDB_DISABLED"):
+            logger.warning("W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable.")
     else:
         _has_wandb = False if os.getenv("WANDB_DISABLED") else True
 except (ImportError, AttributeError):
@@ -53,15 +62,25 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+try:
+    from azureml.core.run import Run  # noqa: F401
+
+    _has_azureml = True
+except ImportError:
+    _has_azureml = False
+
+try:
+    import mlflow  # noqa: F401
+
+    _has_mlflow = True
+except ImportError:
+    _has_mlflow = False
+
 # No transformer imports above this point
 
-from .file_utils import is_torch_tpu_available
-from .trainer_callback import TrainerCallback
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
+from .file_utils import is_torch_tpu_available  # noqa: E402
+from .trainer_callback import TrainerCallback  # noqa: E402
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # noqa: E402
 
 
 # Integration functions:
@@ -83,6 +102,14 @@ def is_optuna_available():
 
 def is_ray_available():
     return _has_ray
+
+
+def is_azureml_available():
+    return _has_azureml
+
+
+def is_mlflow_available():
+    return _has_mlflow
 
 
 def hp_params(trial):
@@ -255,7 +282,9 @@ class TensorBoardCallback(TrainerCallback):
                 if hasattr(model, "config") and model.config is not None:
                     model_config_json = model.config.to_json_string()
                     self.tb_writer.add_text("model_config", model_config_json)
-            self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
+            # Version of TensorBoard coming from tensorboardX does not have this method.
+            if hasattr(self.tb_writer, "add_hparams"):
+                self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero:
@@ -286,8 +315,7 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases
-    <https://www.wandb.com/>`__.
+    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases <https://www.wandb.com/>`__.
     """
 
     def __init__(self):
@@ -298,8 +326,8 @@ class WandbCallback(TrainerCallback):
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information
-        `here <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information `here
+        <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
@@ -356,8 +384,7 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML
-    <https://www.comet.ml/site/>`__.
+    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML <https://www.comet.ml/site/>`__.
     """
 
     def __init__(self):
@@ -376,8 +403,8 @@ class CometCallback(TrainerCallback):
             COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
                 Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
 
-        For a number of configurable items in the environment,
-        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
+        For a number of configurable items in the environment, see `here
+        <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
         """
         self._initialized = True
         if state.is_world_process_zero:
@@ -408,3 +435,99 @@ class CometCallback(TrainerCallback):
             experiment = comet_ml.config.get_global_experiment()
             if experiment is not None:
                 experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
+
+
+class AzureMLCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML
+    <https://pypi.org/project/azureml-sdk/>`__.
+    """
+
+    def __init__(self, azureml_run=None):
+        assert _has_azureml, "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        self.azureml_run = azureml_run
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.azureml_run is None and state.is_world_process_zero:
+            self.azureml_run = Run.get_context()
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if self.azureml_run:
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    self.azureml_run.log(k, v, description=k)
+
+
+class MLflowCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
+    """
+
+    MAX_LOG_SIZE = 100
+
+    def __init__(self):
+        assert _has_mlflow, "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
+        self._initialized = False
+        self._log_artifacts = False
+
+    def setup(self, args, state, model):
+        """
+        Setup the optional MLflow integration.
+
+        Environment:
+            HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
+                Whether to use MLflow .log_artifact() facility to log artifacts.
+
+                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
+                whatever is in TrainerArgument's output_dir to the local or remote artifact storage. Using it without a
+                remote storage will just copy the files to your artifact location.
+        """
+        log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
+        if log_artifacts in {"TRUE", "1"}:
+            self._log_artifacts = True
+        if state.is_world_process_zero:
+            mlflow.start_run()
+            combined_dict = args.to_dict()
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            # MLflow cannot log more than 100 values in one go, so we have to split it
+            combined_dict_items = list(combined_dict.items())
+            for i in range(0, len(combined_dict_items), MLflowCallback.MAX_LOG_SIZE):
+                mlflow.log_params(dict(combined_dict_items[i : i + MLflowCallback.MAX_LOG_SIZE]))
+        self._initialized = True
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model)
+
+    def on_log(self, args, state, control, logs, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    mlflow.log_metric(k, v, step=state.global_step)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" of type %s for key "%s" as a metric. '
+                        "MLflow's log_metric() only accepts float and "
+                        "int types so we dropped this attribute.",
+                        v,
+                        type(v),
+                        k,
+                    )
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero:
+            if self._log_artifacts:
+                logger.info("Logging artifacts. This may take time.")
+                mlflow.log_artifacts(args.output_dir)
+            mlflow.end_run()
+
+    def __del__(self):
+        # if the previous run is not terminated correctly, the fluent API will
+        # not let you start a new run before the previous one is killed
+        if mlflow.active_run is not None:
+            mlflow.end_run(status="KILLED")

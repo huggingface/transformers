@@ -20,7 +20,6 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.linen import compact
 
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings
@@ -40,14 +39,15 @@ BERT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 BERT_INPUTS_DOCSTRING = r"""
@@ -55,35 +55,33 @@ BERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -104,34 +102,29 @@ BERT_INPUTS_DOCSTRING = r"""
 
 
 class FlaxBertLayerNorm(nn.Module):
-    """Layer normalization (https://arxiv.org/abs/1607.06450).
-    Operates on the last axis of the input data.
+    """
+    Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
     """
 
     epsilon: float = 1e-6
-    dtype: jnp.dtype = jnp.float32
-    bias: bool = True
-    scale: bool = True
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    bias: bool = True  # If True, bias (beta) is added.
+    scale: bool = True  # If True, multiply by scale (gamma). When the next layer is linear
+    # (also e.g. nn.relu), this can be disabled since the scaling will be
+    # done by the next layer.
     bias_init: jnp.ndarray = nn.initializers.zeros
     scale_init: jnp.ndarray = nn.initializers.ones
 
-    @compact
+    @nn.compact
     def __call__(self, x):
-        """Applies layer normalization on the input.
-        It normalizes the activations of the layer for each given example in a
-        batch independently, rather than across a batch like Batch Normalization.
-        i.e. applies a transformation that maintains the mean activation within
-        each example close to 0 and the activation standard deviation close to 1.
+        """
+        Applies layer normalization on the input. It normalizes the activations of the layer for each given example in
+        a batch independently, rather than across a batch like Batch Normalization. i.e. applies a transformation that
+        maintains the mean activation within each example close to 0 and the activation standard deviation close to 1
+
         Args:
           x: the inputs
-          epsilon: A small float added to variance to avoid dividing by zero.
-          dtype: the dtype of the computation (default: float32).
-          bias:  If True, bias (beta) is added.
-          scale: If True, multiply by scale (gamma). When the next layer is linear
-            (also e.g. nn.relu), this can be disabled since the scaling will be done
-            by the next layer.
-          bias_init: Initializer for bias, by default, zero.
-          scale_init: Initializer for scale, by default, one.
+
         Returns:
           Normalized inputs (the same shape as inputs).
         """
@@ -150,16 +143,15 @@ class FlaxBertLayerNorm(nn.Module):
 
 class FlaxBertEmbedding(nn.Module):
     """
-    Specify a new class for doing the embedding stuff
-    as Flax's one use 'embedding' for the parameter name
-    and PyTorch use 'weight'
+    Specify a new class for doing the embedding stuff as Flax's one use 'embedding' for the parameter name and PyTorch
+    use 'weight'
     """
 
     vocab_size: int
     hidden_size: int
     emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)
 
-    @compact
+    @nn.compact
     def __call__(self, inputs):
         embedding = self.param("weight", self.emb_init, (self.vocab_size, self.hidden_size))
         return jnp.take(embedding, inputs, axis=0)
@@ -173,7 +165,7 @@ class FlaxBertEmbeddings(nn.Module):
     type_vocab_size: int
     max_length: int
 
-    @compact
+    @nn.compact
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
 
         # Embed
@@ -200,7 +192,7 @@ class FlaxBertAttention(nn.Module):
     num_heads: int
     head_size: int
 
-    @compact
+    @nn.compact
     def __call__(self, hidden_state, attention_mask):
         self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, name="self")(
             hidden_state, attention_mask
@@ -213,7 +205,7 @@ class FlaxBertAttention(nn.Module):
 class FlaxBertIntermediate(nn.Module):
     output_size: int
 
-    @compact
+    @nn.compact
     def __call__(self, hidden_state):
         # TODO: Add ACT2FN reference to change activation function
         dense = nn.Dense(features=self.output_size, name="dense")(hidden_state)
@@ -221,7 +213,7 @@ class FlaxBertIntermediate(nn.Module):
 
 
 class FlaxBertOutput(nn.Module):
-    @compact
+    @nn.compact
     def __call__(self, intermediate_output, attention_output):
         hidden_state = nn.Dense(attention_output.shape[-1], name="dense")(intermediate_output)
         hidden_state = FlaxBertLayerNorm(name="layer_norm")(hidden_state + attention_output)
@@ -233,7 +225,7 @@ class FlaxBertLayer(nn.Module):
     head_size: int
     intermediate_size: int
 
-    @compact
+    @nn.compact
     def __call__(self, hidden_state, attention_mask):
         attention = FlaxBertAttention(self.num_heads, self.head_size, name="attention")(hidden_state, attention_mask)
         intermediate = FlaxBertIntermediate(self.intermediate_size, name="intermediate")(attention)
@@ -252,7 +244,7 @@ class FlaxBertLayerCollection(nn.Module):
     head_size: int
     intermediate_size: int
 
-    @compact
+    @nn.compact
     def __call__(self, inputs, attention_mask):
         assert self.num_layers > 0, f"num_layers should be >= 1, got ({self.num_layers})"
 
@@ -272,7 +264,7 @@ class FlaxBertEncoder(nn.Module):
     head_size: int
     intermediate_size: int
 
-    @compact
+    @nn.compact
     def __call__(self, hidden_state, attention_mask):
         layer = FlaxBertLayerCollection(
             self.num_layers, self.num_heads, self.head_size, self.intermediate_size, name="layer"
@@ -281,7 +273,7 @@ class FlaxBertEncoder(nn.Module):
 
 
 class FlaxBertPooler(nn.Module):
-    @compact
+    @nn.compact
     def __call__(self, hidden_state):
         cls_token = hidden_state[:, 0]
         out = nn.Dense(hidden_state.shape[-1], name="dense")(cls_token)
@@ -298,7 +290,7 @@ class FlaxBertModule(nn.Module):
     head_size: int
     intermediate_size: int
 
-    @compact
+    @nn.compact
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
 
         # Embedding
@@ -321,11 +313,10 @@ class FlaxBertModule(nn.Module):
 )
 class FlaxBertModel(FlaxPreTrainedModel):
     """
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is all you need
-    <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
-    Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
     model_class = FlaxBertModule

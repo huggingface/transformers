@@ -63,14 +63,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 @lru_cache()
 def bytes_to_unicode():
     """
-    Returns list of utf-8 byte and a mapping to unicode strings.
-    We specifically avoids mapping to whitespace/control characters the bpe code barfs on.
+    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
+    characters the bpe code barfs on.
 
-    The reversible bpe codes work on unicode strings.
-    This means you need a large # of unicode characters in your vocab if you want to avoid UNKs.
-    When you're at something like a 10B token dataset you end up needing around 5K for decent coverage.
-    This is a signficant percentage of your normal, say, 32K bpe vocab.
-    To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a signficant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
     """
     bs = (
         list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
@@ -87,7 +86,8 @@ def bytes_to_unicode():
 
 
 def get_pairs(word):
-    """Return set of symbol pairs in a word.
+    """
+    Return set of symbol pairs in a word.
 
     Word is represented as tuple of symbols (symbols being variable-length strings).
     """
@@ -120,7 +120,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
     .. note::
 
-        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first one).
+        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first
+        one).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
@@ -164,7 +165,14 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)

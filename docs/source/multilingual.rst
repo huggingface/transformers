@@ -1,9 +1,9 @@
 Multi-lingual models
 =======================================================================================================================
 
-Most of the models available in this library are mono-lingual models (English, Chinese and German). A few
-multi-lingual models are available and have a different mechanisms than mono-lingual models.
-This page details the usage of these models.
+Most of the models available in this library are mono-lingual models (English, Chinese and German). A few multi-lingual
+models are available and have a different mechanisms than mono-lingual models. This page details the usage of these
+models.
 
 The two models that currently support multiple languages are BERT and XLM.
 
@@ -28,8 +28,8 @@ This section concerns the following checkpoints:
 
 These checkpoints require language embeddings that will specify the language used at inference time. These language
 embeddings are represented as a tensor that is of the same shape as the input ids passed to the model. The values in
-these tensors depend on the language used and are identifiable using the ``lang2id`` and ``id2lang`` attributes
-from the tokenizer.
+these tensors depend on the language used and are identifiable using the ``lang2id`` and ``id2lang`` attributes from
+the tokenizer.
 
 Here is an example using the ``xlm-clm-enfr-1024`` checkpoint (Causal language modeling, English-French):
 
@@ -78,8 +78,9 @@ You can then feed it all as input to your model:
     >>> outputs = model(input_ids, langs=langs)
 
 
-The example `run_generation.py <https://github.com/huggingface/transformers/blob/master/examples/text-generation/run_generation.py>`__
-can generate text using the CLM checkpoints from XLM, using the language embeddings.
+The example `run_generation.py
+<https://github.com/huggingface/transformers/blob/master/examples/text-generation/run_generation.py>`__ can generate
+text using the CLM checkpoints from XLM, using the language embeddings.
 
 XLM without Language Embeddings
 -----------------------------------------------------------------------------------------------------------------------
@@ -89,8 +90,8 @@ This section concerns the following checkpoints:
 - ``xlm-mlm-17-1280`` (Masked language modeling, 17 languages)
 - ``xlm-mlm-100-1280`` (Masked language modeling, 100 languages)
 
-These checkpoints do not require language embeddings at inference time. These models are used to have generic
-sentence representations, differently from previously-mentioned XLM checkpoints.
+These checkpoints do not require language embeddings at inference time. These models are used to have generic sentence
+representations, differently from previously-mentioned XLM checkpoints.
 
 
 BERT
@@ -101,15 +102,15 @@ BERT has two checkpoints that can be used for multi-lingual tasks:
 - ``bert-base-multilingual-uncased`` (Masked language modeling + Next sentence prediction, 102 languages)
 - ``bert-base-multilingual-cased`` (Masked language modeling + Next sentence prediction, 104 languages)
 
-These checkpoints do not require language embeddings at inference time. They should identify the language
-used in the context and infer accordingly.
+These checkpoints do not require language embeddings at inference time. They should identify the language used in the
+context and infer accordingly.
 
 XLM-RoBERTa
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-XLM-RoBERTa was trained on 2.5TB of newly created clean CommonCrawl data in 100 languages. It provides strong
-gains over previously released multi-lingual models like mBERT or XLM on downstream taks like classification,
-sequence labeling and question answering.
+XLM-RoBERTa was trained on 2.5TB of newly created clean CommonCrawl data in 100 languages. It provides strong gains
+over previously released multi-lingual models like mBERT or XLM on downstream taks like classification, sequence
+labeling and question answering.
 
 Two XLM-RoBERTa checkpoints can be used for multi-lingual tasks:
 

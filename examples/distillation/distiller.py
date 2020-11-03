@@ -265,7 +265,7 @@ class Distiller:
         -------
             token_ids: `torch.tensor(bs, seq_length)` - The token ids after the modifications for MLM.
             attn_mask: `torch.tensor(bs, seq_length)` - The attention mask for the self-attention.
-            clm_labels: `torch.tensor(bs, seq_length)` - The causal languge modeling labels. There is a -100 where there is nothing to predict.
+            clm_labels: `torch.tensor(bs, seq_length)` - The causal language modeling labels. There is a -100 where there is nothing to predict.
         """
         token_ids, lengths = batch
         token_ids, lengths = self.round_batch(x=token_ids, lengths=lengths)
@@ -401,9 +401,9 @@ class Distiller:
         # https://github.com/peterliht/knowledge-distillation-pytorch/blob/master/model/net.py#L100
         # https://github.com/peterliht/knowledge-distillation-pytorch/issues/2
         if self.params.restrict_ce_to_mask:
-            mask = (lm_labels > -1).unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
+            mask = (lm_labels > -1).unsqueeze(-1).expand_as(s_logits)  # (bs, seq_length, voc_size)
         else:
-            mask = attention_mask.unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
+            mask = attention_mask.unsqueeze(-1).expand_as(s_logits)  # (bs, seq_length, voc_size)
         s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
         s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
         t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask

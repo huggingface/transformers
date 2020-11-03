@@ -52,5 +52,5 @@ The model achieved 91.12%/91.02% accuracy on AI-SOCO task and ranked in the 7th 
 ```
 
 <a href="https://huggingface.co/exbert/?model=aliosm/ai-soco-c++-roberta-tiny-96-clas">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>

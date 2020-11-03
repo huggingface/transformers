@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 XLNet model.
+"""
+ TF 2.0 XLNet model.
 """
 
 
@@ -29,7 +30,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_utils import (
@@ -651,7 +652,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # data mask: input mask & perm mask
         assert input_mask is None or attention_mask is None, (
             "You can only use one of input_mask (uses 1 for padding) "
-            "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+            "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
         )
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - tf.cast(attention_mask, dtype=dtype_float)
@@ -787,8 +788,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
 
 class TFXLNetPreTrainedModel(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = XLNetConfig
@@ -811,13 +813,13 @@ class TFXLNetModelOutput(ModelOutput):
             The token ids which have their past given to this model should not be passed as :obj:`input_ids` as they
             have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -847,13 +849,13 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
             The token ids which have their past given to this model should not be passed as :obj:`input_ids` as they
             have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -881,13 +883,13 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
             The token ids which have their past given to this model should not be passed as :obj:`input_ids` as they
             have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -915,13 +917,13 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
             The token ids which have their past given to this model should not be passed as :obj:`input_ids` as they
             have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -951,13 +953,13 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
             The token ids which have their past given to this model should not be passed as :obj:`input_ids` as they
             have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -987,13 +989,13 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
             The token ids which have their past given to this model should not be passed as :obj:`input_ids` as they
             have already been computed.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -1013,9 +1015,9 @@ XLNET_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     .. note::
 
@@ -1024,11 +1026,11 @@ XLNET_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -1038,8 +1040,9 @@ XLNET_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.XLNetConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 XLNET_INPUTS_DOCSTRING = r"""
@@ -1047,14 +1050,13 @@ XLNET_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` and
-            :func:`transformers.PreTrainedTokenizer.encode` for details.
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1062,8 +1064,8 @@ XLNET_INPUTS_DOCSTRING = r"""
             `What are attention masks? <../glossary.html#attention-mask>`__
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (see :obj:`mems` output below) . Can be used to speed up sequential
-            decoding. The token ids which have their past given to this model should not be passed as
-            :obj:`input_ids` as they have already been computed.
+            decoding. The token ids which have their past given to this model should not be passed as :obj:`input_ids`
+            as they have already been computed.
 
             :obj::obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
         perm_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`):
@@ -1072,23 +1074,22 @@ XLNET_INPUTS_DOCSTRING = r"""
             - if ``perm_mask[k, i, j] = 0``, i attend to j in batch k;
             - if ``perm_mask[k, i, j] = 1``, i does not attend to j in batch k.
 
-            If not set, each token attends to all the others (full bidirectional attention).
-            Only used during pretraining (to define factorization order) or for sequential decoding (generation).
+            If not set, each token attends to all the others (full bidirectional attention). Only used during
+            pretraining (to define factorization order) or for sequential decoding (generation).
         target_mapping (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_predict, sequence_length)`, `optional`):
-            Mask to indicate the output tokens to use.
-            If ``target_mapping[k, i, j] = 1``, the i-th predict in batch k is on the j-th token.
+            Mask to indicate the output tokens to use. If ``target_mapping[k, i, j] = 1``, the i-th predict in batch k
+            is on the j-th token.
         token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
         input_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Negative of :obj:`attention_mask`, i.e. with 0 for real tokens and 1 for padding which is kept for
-            compatibility with the original code base.
+            Mask to avoid performing attention on padding token indices. Negative of :obj:`attention_mask`, i.e. with 0
+            for real tokens and 1 for padding which is kept for compatibility with the original code base.
 
             Mask values selected in ``[0, 1]``:
 
@@ -1097,8 +1098,7 @@ XLNET_INPUTS_DOCSTRING = r"""
 
             You can only uses one of :obj:`input_mask` and :obj:`attention_mask`.
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -1122,7 +1122,7 @@ XLNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XLNet Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare XLNet Model transformer outputting raw hidden-states without any specific head on top.",
     XLNET_START_DOCSTRING,
 )
 class TFXLNetModel(TFXLNetPreTrainedModel):
@@ -1130,7 +1130,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1143,8 +1143,9 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLNet Model with a language modeling head on top
-    (linear layer with weights tied to the input embeddings). """,
+    """
+    XLNet Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    """,
     XLNET_START_DOCSTRING,
 )
 class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
@@ -1196,7 +1197,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         return inputs
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFXLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -1218,8 +1219,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss.
-            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
+            config.vocab_size - 1]``.
 
         Return:
 
@@ -1256,17 +1257,17 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         transformer_outputs = self.transformer(
             inputs,
-            attention_mask=None,
-            mems=None,
-            perm_mask=None,
-            target_mapping=None,
-            token_type_ids=None,
-            input_mask=None,
-            head_mask=None,
-            inputs_embeds=None,
-            use_cache=True,
-            output_attentions=None,
-            output_hidden_states=None,
+            attention_mask=attention_mask,
+            mems=mems,
+            perm_mask=perm_mask,
+            target_mapping=target_mapping,
+            token_type_ids=token_type_ids,
+            input_mask=input_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
         )
@@ -1294,8 +1295,10 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
 
 @add_start_docstrings(
-    """XLNet Model with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    XLNet Model with a sequence classification/regression head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
+    """,
     XLNET_START_DOCSTRING,
 )
 class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassificationLoss):
@@ -1311,7 +1314,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1338,9 +1341,8 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
+            config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
@@ -1387,8 +1389,10 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
 
 
 @add_start_docstrings(
-    """XLNET Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    XLNET Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     XLNET_START_DOCSTRING,
 )
 class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
@@ -1405,14 +1409,15 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1439,9 +1444,9 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1531,8 +1536,10 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
 
 
 @add_start_docstrings(
-    """XLNet Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    XLNet Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     XLNET_START_DOCSTRING,
 )
 class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificationLoss):
@@ -1545,7 +1552,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1572,8 +1579,8 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
@@ -1618,8 +1625,10 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
 
 
 @add_start_docstrings(
-    """XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     XLNET_START_DOCSTRING,
 )
 class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnsweringLoss):
@@ -1630,7 +1639,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1659,12 +1668,12 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
@@ -1718,120 +1727,3 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-
-# @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-#     the hidden-states output to compute `span start logits` and `span end logits`). """,
-#     XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
-# class TFXLNetForQuestionAnswering(TFXLNetPreTrainedModel):
-#     r"""
-#     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-#         **start_top_log_probs**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-#             ``tf.Tensor`` of shape ``(batch_size, config.start_n_top)``
-#             Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-#         **start_top_index**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-#             ``tf.Tensor`` of shape ``(batch_size, config.start_n_top)``
-#             Indices for the top config.start_n_top start token possibilities (beam-search).
-#         **end_top_log_probs**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-#             ``tf.Tensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
-#             Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
-#         **end_top_index**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-#             ``tf.Tensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
-#             Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
-#         **cls_logits**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-#             ``tf.Tensor`` of shape ``(batch_size,)``
-#             Log probabilities for the ``is_impossible`` label of the answers.
-#         **mems**:
-#             list of ``tf.Tensor`` (one for each layer):
-#             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-#             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
-#             See details in the docstring of the `mems` input above.
-#         **hidden_states**: (`optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``)
-#             list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
-#             of shape ``(batch_size, sequence_length, hidden_size)``:
-#             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-#         **attentions**: (`optional`, returned when ``output_attentions=True``)
-#             list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-#             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-#     Examples::
-
-#         # For example purposes. Not runnable.
-#         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-#         model = XLMForQuestionAnswering.from_pretrained('xlnet-large-cased')
-#         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-#         start_positions = tf.constant([1])
-#         end_positions = tf.constant([3])
-#         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-#         loss, start_scores, end_scores = outputs[:2]
-
-#     """
-#     def __init__(self, config, *inputs, **kwargs):
-#         super().__init__(config, *inputs, **kwargs)
-#         self.start_n_top = config.start_n_top
-#         self.end_n_top = config.end_n_top
-
-#         self.transformer = TFXLNetMainLayer(config, name='transformer')
-#         self.start_logits = TFPoolerStartLogits(config, name='start_logits')
-#         self.end_logits = TFPoolerEndLogits(config, name='end_logits')
-#         self.answer_class = TFPoolerAnswerClass(config, name='answer_class')
-
-#     def call(self, inputs, training=False):
-#         transformer_outputs = self.transformer(inputs, training=training)
-#         hidden_states = transformer_outputs[0]
-#         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
-
-#         outputs = transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
-
-#         if start_positions is not None and end_positions is not None:
-#             # If we are on multi-GPU, let's remove the dimension added by batch splitting
-#             for x in (start_positions, end_positions, cls_index, is_impossible):
-#                 if x is not None and x.dim() > 1:
-#                     x.squeeze_(-1)
-
-#             # during training, compute the end logits based on the ground truth of the start position
-#             end_logits = self.end_logits(hidden_states, start_positions=start_positions, p_mask=p_mask)
-
-#             loss_fct = CrossEntropyLoss()
-#             start_loss = loss_fct(start_logits, start_positions)
-#             end_loss = loss_fct(end_logits, end_positions)
-#             total_loss = (start_loss + end_loss) / 2
-
-#             if cls_index is not None and is_impossible is not None:
-#                 # Predict answerability from the representation of CLS and START
-#                 cls_logits = self.answer_class(hidden_states, start_positions=start_positions, cls_index=cls_index)
-#                 loss_fct_cls = nn.BCEWithLogitsLoss()
-#                 cls_loss = loss_fct_cls(cls_logits, is_impossible)
-
-#                 # note(zhiliny): by default multiply the loss by 0.5 so that the scale is comparable to start_loss and end_loss
-#                 total_loss += cls_loss * 0.5
-
-#             outputs = (total_loss,) + outputs
-
-#         else:
-#             # during inference, compute the end logits based on beam search
-#             bsz, slen, hsz = hidden_states.size()
-#             start_log_probs = F.softmax(start_logits, dim=-1) # shape (bsz, slen)
-
-#             start_top_log_probs, start_top_index = torch.topk(start_log_probs, self.start_n_top, dim=-1) # shape (bsz, start_n_top)
-#             start_top_index_exp = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
-#             start_states = torch.gather(hidden_states, -2, start_top_index_exp) # shape (bsz, start_n_top, hsz)
-#             start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1) # shape (bsz, slen, start_n_top, hsz)
-
-#             hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(start_states) # shape (bsz, slen, start_n_top, hsz)
-#             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
-#             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-#             end_log_probs = F.softmax(end_logits, dim=1) # shape (bsz, slen, start_n_top)
-
-#             end_top_log_probs, end_top_index = torch.topk(end_log_probs, self.end_n_top, dim=1) # shape (bsz, end_n_top, start_n_top)
-#             end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)
-#             end_top_index = end_top_index.view(-1, self.start_n_top * self.end_n_top)
-
-#             start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)  # get the representation of START as weighted sum of hidden states
-#             cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)  # Shape (batch size,): one single `cls_logits` for each sample
-
-#             outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits) + outputs
-
-#         # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits
-#         # or (if labels are provided) (total_loss,)
-#         return outputs

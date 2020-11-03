@@ -302,6 +302,10 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
         self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
 
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        pass
+
 
 @require_tf
 @require_sentencepiece
