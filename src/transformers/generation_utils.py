@@ -376,52 +376,55 @@ class GenerationMixin:
 
         Examples::
 
-            from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
+            >>> from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
-            tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-            model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-            # do greedy decoding without providing a prompt
-            outputs = model.generate(max_length=40)
-            print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
+            >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+            >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+            >>> # do greedy decoding without providing a prompt
+            >>> outputs = model.generate(max_length=40)
+            >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
 
-            tokenizer = AutoTokenizer.from_pretrained("t5-base")
-            model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
-            document = "at least two people were killed in a suspected bomb attack on a passenger bus in the strife-torn southern philippines on monday , the military said."
-            # encode input contex
-            input_ids = tokenizer(document, return_tensors="pt").input_ids
-            # generate 3 independent sequences using beam search decoding (5 beams)
-            # with T5 encoder-decoder model conditioned on short news article.
-            outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3)
-            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+            >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+            >>> document = (
+            ... "at least two people were killed in a suspected bomb attack on a passenger bus "
+            ... "in the strife-torn southern philippines on monday , the military said."
+            ... )
+            >>> # encode input contex
+            >>> input_ids = tokenizer(document, return_tensors="pt").input_ids
+            >>> # generate 3 independent sequences using beam search decoding (5 beams)
+            >>> # with T5 encoder-decoder model conditioned on short news article.
+            >>> outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3)
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
-            tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-            model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-            input_context = "The dog"
-            # encode input context
-            input_ids = tokenizer(input_context, return_tensors="pt").input_ids
-            # generate 3 candidates using sampling
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)
-            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+            >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+            >>> input_context = "The dog"
+            >>> # encode input context
+            >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
+            >>> # generate 3 candidates using sampling
+            >>> outputs = model.generate(input_ids=input_ids, max_length=20, num_return_sequences=3, do_sample=True)
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
-            tokenizer = AutoTokenizer.from_pretrained("ctrl")
-            model = AutoModelForCausalLM.from_pretrained("ctrl")
-            # "Legal" is one of the control codes for ctrl
-            input_context = "Legal My neighbor is"
-            # encode input context
-            input_ids = tokenizer(input_context, return_tensors="pt").input_ids
-            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)
-            print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
+            >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
+            >>> model = AutoModelForCausalLM.from_pretrained("ctrl")
+            >>> # "Legal" is one of the control codes for ctrl
+            >>> input_context = "Legal My neighbor is"
+            >>> # encode input context
+            >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
+            >>> outputs = model.generate(input_ids=input_ids, max_length=20, repetition_penalty=1.2)
+            >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
 
-            tokenizer = AutoTokenizer.from_pretrained("gpt2")
-            model = AutoModelForCausalLM.from_pretrained("gpt2")
-            input_context = "My cute dog"
-            # get tokens of words that should not be generated
-            bad_words_ids = [tokenizer(bad_word, add_prefix_space=True).input_ids for bad_word in ["idiot", "stupid", "shut up"]]
-            # encode input context
-            input_ids = tokenizer(input_context, return_tensors="pt").input_ids
-            # generate sequences without allowing bad_words to be generated
-            outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
-            print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
+            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+            >>> input_context = "My cute dog"
+            >>> # get tokens of words that should not be generated
+            >>> bad_words_ids = [tokenizer(bad_word, add_prefix_space=True).input_ids for bad_word in ["idiot", "stupid", "shut up"]]
+            >>> # encode input context
+            >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
+            >>> # generate sequences without allowing bad_words to be generated
+            >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
+            >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
 
         # set init values
@@ -629,23 +632,30 @@ class GenerationMixin:
 
         Examples::
 
-            from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList, MinLengthLogitsProcessor
+            >>> from transformers import (
+            ... AutoTokenizer,
+            ... AutoModelForCausalLM,
+            ... LogitsProcessorList,
+            ... MinLengthLogitsProcessor,
+            ... )
 
-            tokenizer = AutoTokenizer.from_pretrained("gpt2")
-            model = AutoModelForCausalLM.from_pretrained("gpt2")
+            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
 
-            # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
-            model.config.pad_token_id = model.config.eos_token_id
+            >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+            >>> model.config.pad_token_id = model.config.eos_token_id
 
-            input_prompt = "Today is a beautiful day, and"
-            input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
+            >>> input_prompt = "Today is a beautiful day, and"
+            >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
 
-            # instantiate logits processors
-            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id)])
+            >>> # instantiate logits processors
+            >>> logits_processor = LogitsProcessorList([
+            ...     MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+            ... ])
 
-            outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
+            >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
 
-            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
 
         # init values
@@ -744,32 +754,37 @@ class GenerationMixin:
 
         Examples::
 
-            from transformers import (
-                AutoTokenizer,
-                AutoModelForCausalLM,
-                LogitsProcessorList,
-                MinLengthLogitsProcessor,
-                TopKLogitsWarper,
-                TemperatureLogitsWarper,
-            )
+            >>> from transformers import (
+            ...    AutoTokenizer,
+            ...    AutoModelForCausalLM,
+            ...    LogitsProcessorList,
+            ...    MinLengthLogitsProcessor,
+            ...    TopKLogitsWarper,
+            ...    TemperatureLogitsWarper,
+            ... )
 
-            tokenizer = AutoTokenizer.from_pretrained("gpt2")
-            model = AutoModelForCausalLM.from_pretrained("gpt2")
+            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
 
-            # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
-            model.config.pad_token_id = model.config.eos_token_id
+            >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+            >>> model.config.pad_token_id = model.config.eos_token_id
 
-            input_prompt = "Today is a beautiful day, and"
-            input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
+            >>> input_prompt = "Today is a beautiful day, and"
+            >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
 
-            # instantiate logits processors
-            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id)])
-            # instantiate logits processors
-            logits_warper = LogitsProcessorList([TopKLogitsWarper(50), TemperatureLogitsWarper(0.7)])
+            >>> # instantiate logits processors
+            >>> logits_processor = LogitsProcessorList([
+            ...     MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+            ... ])
+            >>> # instantiate logits processors
+            >>> logits_warper = LogitsProcessorList([
+            ...     TopKLogitsWarper(50),
+            ...     TemperatureLogitsWarper(0.7),
+            ... ])
 
-            outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
+            >>> outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
 
-            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
 
         # init values
@@ -870,46 +885,49 @@ class GenerationMixin:
 
         Examples::
 
-            from transformers import (
-                AutoTokenizer,
-                AutoModelForSeq2SeqLM,
-                LogitsProcessorList,
-                MinLengthLogitsProcessor,
-                BeamSearchScorer,
-            )
-            import torch
+            >>> from transformers import (
+            ...    AutoTokenizer,
+            ...    AutoModelForSeq2SeqLM,
+            ...    LogitsProcessorList,
+            ...    MinLengthLogitsProcessor,
+            ...    BeamSearchScorer,
+            ... )
+            >>> import torch
 
-            tokenizer = AutoTokenizer.from_pretrained("t5-base")
-            model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+            >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+            >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
 
-            encoder_input_str = "translate English to German: How old are you?"
-            encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+            >>> encoder_input_str = "translate English to German: How old are you?"
+            >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
 
-            # lets run beam search using 3 beams
-            num_beams = 3
-            # define decoder start token ids
-            input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long) * model.config.decoder_start_token_id
+            >>> # lets run beam search using 3 beams
+            >>> num_beams = 3
+            >>> # define decoder start token ids
+            >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
+            >>> input_ids = input_ids * model.config.decoder_start_token_id
 
-            # add encoder_outputs to model keyword arguments
-            model_kwargs = {
-                "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
-            }
+            >>> # add encoder_outputs to model keyword arguments
+            >>> model_kwargs = {
+            ...     "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
+            ... }
 
-            # instantiate beam scorer
-            beam_scorer = BeamSearchScorer(
-                batch_size=1,
-                max_length=model.config.max_length,
-                num_beams=num_beams,
-                device=model.device,
-            )
+            >>> # instantiate beam scorer
+            >>> beam_scorer = BeamSearchScorer(
+            ...     batch_size=1,
+            ...     max_length=model.config.max_length,
+            ...     num_beams=num_beams,
+            ...     device=model.device,
+            ... )
 
-            # instantiate logits processors
-            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)])
+            >>> # instantiate logits processors
+            >>> logits_processor = LogitsProcessorList([
+            ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
+            ... ])
 
-            outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+            >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
-            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
 
         # init values
@@ -1036,51 +1054,57 @@ class GenerationMixin:
 
         Examples::
 
-            from transformers import (
-                AutoTokenizer,
-                AutoModelForSeq2SeqLM,
-                LogitsProcessorList,
-                MinLengthLogitsProcessor,
-                TopKLogitsWarper,
-                TemperatureLogitsWarper,
-                BeamSearchScorer,
-            )
-            import torch
+            >>> from transformers import (
+            ...     AutoTokenizer,
+            ...     AutoModelForSeq2SeqLM,
+            ...     LogitsProcessorList,
+            ...     MinLengthLogitsProcessor,
+            ...     TopKLogitsWarper,
+            ...     TemperatureLogitsWarper,
+            ...     BeamSearchScorer,
+            ... )
+            >>> import torch
 
-            tokenizer = AutoTokenizer.from_pretrained("t5-base")
-            model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+            >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+            >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
 
-            encoder_input_str = "translate English to German: How old are you?"
-            encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+            >>> encoder_input_str = "translate English to German: How old are you?"
+            >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
-            # lets run beam search using 3 beams
-            num_beams = 3
-            # define decoder start token ids
-            input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long) * model.config.decoder_start_token_id
+            >>> # lets run beam search using 3 beams
+            >>> num_beams = 3
+            >>> # define decoder start token ids
+            >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
+            >>> input_ids = input_ids * model.config.decoder_start_token_id
 
-            # add encoder_outputs to model keyword arguments
-            model_kwargs = {
-                "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
-            }
+            >>> # add encoder_outputs to model keyword arguments
+            >>> model_kwargs = {
+            ...     "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
+            ... }
 
-            # instantiate beam scorer
-            beam_scorer = BeamSearchScorer(
-                batch_size=1,
-                max_length=model.config.max_length,
-                num_beams=num_beams,
-                device=model.device,
-            )
+            >>> # instantiate beam scorer
+            >>> beam_scorer = BeamSearchScorer(
+            ...     batch_size=1,
+            ...     max_length=model.config.max_length,
+            ...     num_beams=num_beams,
+            ...     device=model.device,
+            ... )
 
-            # instantiate logits processors
-            logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)])
-            # instantiate logits processors
-            logits_warper = LogitsProcessorList([TopKLogitsWarper(50), TemperatureLogitsWarper(0.7)])
+            >>> # instantiate logits processors
+            >>> logits_processor = LogitsProcessorList([
+            ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)
+            ... ])
+            >>> # instantiate logits processors
+            >>> logits_warper = LogitsProcessorList([
+            ...     TopKLogitsWarper(50),
+            ...     TemperatureLogitsWarper(0.7),
+            ... ])
 
-            outputs = model.beam_sample(
-                input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs
-            )
+            >>> outputs = model.beam_sample(
+            ...     input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs
+            ... )
 
-            print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
 
         # init values
