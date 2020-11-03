@@ -57,7 +57,7 @@ class TrainingArguments:
             is different from :obj:`"no"`.
             This argument is not directly used by :class:`~transformers.Trainer`,
             it's intended to be used by your training/evaluation scripts instead.
-            See the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`___
+            See the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__
             for more details.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not.
