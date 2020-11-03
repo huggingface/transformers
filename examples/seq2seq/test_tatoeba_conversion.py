@@ -1,11 +1,13 @@
+import os
 import tempfile
 import unittest
 
-from transformers.convert_marian_tatoeba_to_pytorch import TatoebaConverter
+from transformers.convert_marian_tatoeba_to_pytorch import DEFAULT_REPO, TatoebaConverter
 from transformers.file_utils import cached_property
 from transformers.testing_utils import slow
 
 
+@unittest.skipUnless(os.path.exists(DEFAULT_REPO))
 class TatoebaConversionTester(unittest.TestCase):
     @cached_property
     def resolver(self):
