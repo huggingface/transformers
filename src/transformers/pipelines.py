@@ -836,6 +836,8 @@ class TextGenerationPipeline(Pipeline):
               -- The token ids of the generated text.
         """
 
+        if isinstance(text_inputs, str):
+            text_inputs = [text_inputs]
         results = []
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
