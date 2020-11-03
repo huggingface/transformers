@@ -112,7 +112,14 @@ from .modeling_tf_funnel import (
     TFFunnelModel,
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from .modeling_tf_longformer import (
+    TFLongformerForMaskedLM,
+    TFLongformerForMultipleChoice,
+    TFLongformerForQuestionAnswering,
+    TFLongformerForSequenceClassification,
+    TFLongformerForTokenClassification,
+    TFLongformerModel,
+)
 from .modeling_tf_marian import TFMarianMTModel
 from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
@@ -288,6 +295,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForSequenceClassification),
         (CamembertConfig, TFCamembertForSequenceClassification),
         (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
+        (LongformerConfig, TFLongformerForSequenceClassification),
         (RobertaConfig, TFRobertaForSequenceClassification),
         (BertConfig, TFBertForSequenceClassification),
         (XLNetConfig, TFXLNetForSequenceClassification),
@@ -325,6 +333,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertForTokenClassification),
         (XLMConfig, TFXLMForTokenClassification),
         (XLMRobertaConfig, TFXLMRobertaForTokenClassification),
+        (LongformerConfig, TFLongformerForTokenClassification),
         (RobertaConfig, TFRobertaForTokenClassification),
         (BertConfig, TFBertForTokenClassification),
         (MobileBertConfig, TFMobileBertForTokenClassification),
@@ -339,6 +348,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (CamembertConfig, TFCamembertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),
         (XLMRobertaConfig, TFXLMRobertaForMultipleChoice),
+        (LongformerConfig, TFLongformerForMultipleChoice),
         (RobertaConfig, TFRobertaForMultipleChoice),
         (BertConfig, TFBertForMultipleChoice),
         (DistilBertConfig, TFDistilBertForMultipleChoice),

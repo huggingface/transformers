@@ -1911,25 +1911,34 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            global_attention_mask = inputs[4] if len(inputs) > 4 else global_attention_mask
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
             labels = inputs[9] if len(inputs) > 9 else labels
-            if len(inputs) > 9:
-                inputs = inputs[:9]
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
             input_ids = inputs.get("input_ids")
-
-        if global_attention_mask is None:
-            logger.info("Initializing global attention on CLS token...")
-            # global attention on cls token, is there better way to do it ???
-            global_attention_mask = tf.zeros_like(input_ids)
-            global_attention_mask = tf.tensor_scatter_nd_update(
-                global_attention_mask,
-                [[i, 0] for i in range(input_ids.shape[0])],
-                [1 for _ in range(input_ids.shape[0])],
-            )
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 10, "Too many inputs."
+        else:
+            input_ids = inputs
 
         outputs = self.longformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
@@ -2026,7 +2035,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         else:
             input_ids = inputs
 
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -2138,7 +2147,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.longformer.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
