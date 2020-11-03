@@ -359,7 +359,7 @@ class ModuleUtilsMixin:
         Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
         batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
         tokens (valid if :obj:`12 * d_model << sequence_length`) as laid out in `this paper
-        <https://arxiv.org/pdf/2001.08361.pdf>`__ section 2.1. Should be overriden for transformers with parameter
+        <https://arxiv.org/pdf/2001.08361.pdf>`__ section 2.1. Should be overridden for transformers with parameter
         re-use e.g. Albert or Universal Transformers, or if doing long-range modeling with very high sequence lengths.
 
         Args:
@@ -784,8 +784,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     - The model is a model provided by the library (loaded with the `shortcut name` string of a
                       pretrained model).
                     - The model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
-                      by suppling the save directory.
-                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      by supplying the save directory.
+                    - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
             state_dict (:obj:`Dict[str, torch.Tensor]`, `optional`):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.

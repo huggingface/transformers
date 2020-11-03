@@ -97,7 +97,7 @@ def create_optimizer(
     Args:
         init_lr (:obj:`float`):
             The desired learning rate at the end of the warmup phase.
-        num_train_step (:obj:`int`):
+        num_train_steps (:obj:`int`):
             The total number of training steps.
         num_warmup_steps (:obj:`int`):
             The number of warmup steps.

@@ -47,5 +47,5 @@ Eprint = {arXiv:2005.07202},
 ```
 
 <a href="https://huggingface.co/exbert/?model=seiya/oubiobert-base-uncased&sentence=Coronavirus%20disease%20(COVID-19)%20is%20caused%20by%20SARS-COV2%20and%20represents%20the%20causative%20agent%20of%20a%20potentially%20fatal%20disease%20that%20is%20of%20great%20global%20public%20health%20concern.">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>

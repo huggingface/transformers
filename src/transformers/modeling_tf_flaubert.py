@@ -25,7 +25,12 @@ import tensorflow as tf
 from transformers.activations_tf import get_tf_activation
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from .modeling_tf_outputs import TFBaseModelOutput
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list
 from .modeling_tf_xlm import (
@@ -104,7 +109,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
             languages ids which can be obtained from the language names by using two conversion mappings provided in
             the configuration of the model (only provided for multilingual models). More precisely, the `language name
-            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary strring to int) and the
+            to language id` mapping is in :obj:`model.config.lang2id` (which is a dictionary string to int) and the
             `language id to language name` mapping is in :obj:`model.config.id2lang` (dictionary int to string).
 
             See usage examples detailed in the :doc:`multilingual documentation <../multilingual>`.
@@ -123,7 +128,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`__
         lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatbility. Indices selected in
+            also use `attention_mask` for the same result (see above), kept here for compatibility Indices selected in
             ``[0, ..., input_ids.size(-1)]``:
         cache (:obj:`Dict[str, tf.Tensor]`, `optional`):
             Dictionary string to ``tf.FloatTensor`` that contains precomputed hidden states (key and values in the
@@ -209,7 +214,7 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Flaubert Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare Flaubert Model transformer outputting raw hidden-states without any specific head on top.",
     FLAUBERT_START_DOCSTRING,
 )
 class TFFlaubertModel(TFFlaubertPreTrainedModel):
@@ -217,7 +222,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="jplu/tf-flaubert-small-cased",
@@ -721,7 +726,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
             langs = None
         return {"inputs": inputs, "langs": langs}
 
-    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="jplu/tf-flaubert-small-cased",

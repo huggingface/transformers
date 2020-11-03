@@ -148,7 +148,7 @@ class TrainerControl:
 
     def _new_step(self):
         """ Internal method that resets the variable for a new step. """
-        self.should_save_model = False
+        self.should_save = False
         self.should_evaluate = False
         self.should_log = False
 
@@ -325,7 +325,7 @@ class CallbackHandler(TrainerCallback):
 
     @property
     def callback_list(self):
-        return "\n".join(self.callbacks)
+        return "\n".join(cb.__class__.__name__ for cb in self.callbacks)
 
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_init_end", args, state, control)

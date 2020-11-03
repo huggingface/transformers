@@ -1,7 +1,7 @@
 .PHONY: modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
 
-check_dirs := examples templates tests src utils
+check_dirs := examples tests src utils
 
 # get modified files since the branch was made
 fork_point_sha := $(shell git merge-base --fork-point master)
@@ -15,7 +15,6 @@ modified_only_fixup:
 		black $(modified_py_files); \
 		isort $(modified_py_files); \
 		flake8 $(modified_py_files); \
-		python utils/style_doc.py $(modified_py_files) --max_len 119; \
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -26,6 +25,7 @@ extra_quality_checks:
 	python utils/check_copies.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
+	python utils/style_doc.py src/transformers docs/source --max_len 119
 
 # this target runs checks on all files
 quality:

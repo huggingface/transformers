@@ -273,6 +273,7 @@ class SqueezeBertModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_sentencepiece
 @require_tokenizers
+@require_torch
 class SqueezeBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_head(self):

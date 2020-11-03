@@ -23,7 +23,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import SAVE_STATE_WARNING
+from packaging import version
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
@@ -33,6 +33,11 @@ from .utils import logging
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
+
+if version.parse(torch.__version__) <= version.parse("1.4.1"):
+    SAVE_STATE_WARNING = ""
+else:
+    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
 
 logger = logging.get_logger(__name__)
 
@@ -135,7 +140,7 @@ def torch_distributed_zero_first(local_rank: int):
 
 class SequentialDistributedSampler(Sampler):
     """
-    Distributed Sampler that subsamples indicies sequentially, making it easier to collate all results at the end.
+    Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
 
     Even though we only use this sampler for eval and predict (no training), which means that the model params won't
     have to be synced (i.e. will not hang for synchronization even if varied number of forward passes), we still add

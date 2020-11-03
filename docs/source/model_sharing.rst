@@ -119,7 +119,7 @@ Other files can safely be deleted.
 Upload your model with the CLI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Now go in a terminal and run the following command. It should be in the virtual enviromnent where you installed 🤗
+Now go in a terminal and run the following command. It should be in the virtual environment where you installed 🤗
 Transformers, since that command :obj:`transformers-cli` comes from the library.
 
 .. code-block::

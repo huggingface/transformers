@@ -25,7 +25,7 @@ from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
 )
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
@@ -346,7 +346,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
         Returns:
             hidden_state: tf.Tensor(bs, seq_length, dim)
-                Sequence of hiddens states in the last (top) layer
+                Sequence of hidden states in the last (top) layer
             all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
@@ -552,7 +552,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        iinputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
@@ -571,7 +571,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare DistilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
+    "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertModel(TFDistilBertPreTrainedModel):
@@ -579,7 +579,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -630,7 +630,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     def get_output_embeddings(self):
         return self.vocab_projector.input_embeddings
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -718,7 +718,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         )
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -800,7 +800,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -895,7 +895,9 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
@@ -1007,7 +1009,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
-    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",

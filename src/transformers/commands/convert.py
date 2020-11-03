@@ -41,7 +41,7 @@ class ConvertCommand(BaseTransformersCLICommand):
             "--tf_checkpoint", type=str, required=True, help="TensorFlow checkpoint path or folder."
         )
         train_parser.add_argument(
-            "--pytorch_dump_output", type=str, required=True, help="Path to the PyTorch savd model output."
+            "--pytorch_dump_output", type=str, required=True, help="Path to the PyTorch saved model output."
         )
         train_parser.add_argument("--config", type=str, default="", help="Configuration file path or folder.")
         train_parser.add_argument(

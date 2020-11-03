@@ -69,6 +69,7 @@ class SelectiveCommonTest(unittest.TestCase):
 
 class ModelManagementTests(unittest.TestCase):
     @slow
+    @require_torch
     def test_model_names(self):
         model_list = HfApi().model_list()
         model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
@@ -137,7 +138,7 @@ class MarianIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
@@ -243,6 +244,8 @@ class TestMarian_RU_FR(MarianIntegrationTest):
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_MT_EN(MarianIntegrationTest):
+    """Cover low resource/high perplexity setting. This breaks without adjust_logits_generation overwritten"""
+
     src = "mt"
     tgt = "en"
     src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
