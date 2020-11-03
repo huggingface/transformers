@@ -299,6 +299,19 @@ if is_torch_available():
         TextDataset,
         TextDatasetForNextSentencePrediction,
     )
+    from .generation_beam_search import BeamScorer, BeamSearchScorer
+    from .generation_logits_process import (
+        LogitsProcessor,
+        LogitsProcessorList,
+        LogitsWarper,
+        MinLengthLogitsProcessor,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        RepetitionPenaltyLogitsProcessor,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
+    )
     from .generation_utils import top_k_top_p_filtering
     from .modeling_albert import (
         ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

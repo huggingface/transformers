@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -357,11 +358,12 @@ class BertModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, unittest.TestCase):
+class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
             BertModel,
+            BertLMHeadModel,
             BertForMaskedLM,
             BertForMultipleChoice,
             BertForNextSentencePrediction,
@@ -373,6 +375,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = BertModelTester(self)

@@ -104,6 +104,66 @@ class TextDatasetForNextSentencePrediction:
         requires_pytorch(self)
 
 
+class BeamScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BeamSearchScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessorList:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MinLengthLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoBadWordsLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoRepeatNGramLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class RepetitionPenaltyLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TemperatureLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopKLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopPLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 def top_k_top_p_filtering(*args, **kwargs):
     requires_pytorch(top_k_top_p_filtering)
 
