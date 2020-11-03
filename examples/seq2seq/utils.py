@@ -60,13 +60,14 @@ class AverageMetric(Metric):
     def __init__(self, dist_sync_on_step=False):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.add_state("loss", default=torch.tensor(0.0, dtype=torch.float16), dist_reduce_fx="sum")
+        self.add_state("loss", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, value):
         # preds, target = self._input_format(preds, target)
         # assert preds.shape == target.shape
-        self.loss += torch.tensor(value, dtype=torch.float32)
+        # import ipdb; ipdb.set_trace()
+        self.loss += torch.tensor(value, dtype=self.loss.dtype, device=self.loss.device)
         self.total += 1
 
     # def score(self, *args, **kwargs):
