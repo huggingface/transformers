@@ -55,22 +55,24 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
 
 from pytorch_lightning.metrics import Metric
 
-class MyAccuracy(Metric):
+
+class AverageMetric(Metric):
     def __init__(self, dist_sync_on_step=False):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("loss", default=torch.tensor(0.0, dtype=torch.float32), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
-        preds, target = self._input_format(preds, target)
-        assert preds.shape == target.shape
+    def update(self, value):
+        # preds, target = self._input_format(preds, target)
+        # assert preds.shape == target.shape
+        self.loss += torch.tensor(value)
+        self.total += 1
 
-        self.correct += torch.sum(preds == target)
-        self.total += target.numel()
-
+    # def score(self, *args, **kwargs):
     def compute(self):
-        return self.correct.float() / self.total
+        return self.loss.float() / self.total
+
 
 def lmap(f: Callable, x: Iterable) -> List:
     """list(map(f, x))"""

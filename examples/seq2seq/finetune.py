@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from datasets import load_metric
 from torch.utils.data import DataLoader
 
 from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
@@ -20,6 +21,7 @@ from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 from utils import (
     ROUGE_KEYS,
+    AverageMetric,
     LegacySeq2SeqDataset,
     Seq2SeqDataset,
     assert_all_frozen,
@@ -36,7 +38,6 @@ from utils import (
     save_git_info,
     save_json,
     use_task_specific_params,
-    MyAccuracy,
 )
 
 
@@ -105,16 +106,19 @@ class SummarizationModule(BaseTransformer):
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
-        self.dataset_class = (
-            Seq2SeqDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
-        )
+        # if prepare_seq2seq_batch raises NotImplementedError, replace this with LegacyDataset
+        self.dataset_class = Seq2SeqDataset
         self.already_saved_batch = False
         self.eval_beams = self.model.config.num_beams if self.hparams.eval_beams is None else self.hparams.eval_beams
         if self.hparams.eval_max_gen_length is not None:
             self.eval_max_length = self.hparams.eval_max_gen_length
         else:
             self.eval_max_length = self.model.config.max_length
+
         self.val_metric = self.default_val_metric if self.hparams.val_metric is None else self.hparams.val_metric
+        self.metric_stores = {
+            k: AverageMetric() for k in self.metric_names + ["gen_time", "gen_len"] + self.loss_names
+        }
 
     def save_readable_batch(self, batch: Dict[str, torch.Tensor]) -> Dict[str, List[str]]:
         """A debugging utility"""
@@ -189,6 +193,7 @@ class SummarizationModule(BaseTransformer):
         generative_metrics = {
             k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
         }
+
         metric_val = (
             generative_metrics[self.val_metric] if self.val_metric in generative_metrics else losses[self.val_metric]
         )
@@ -197,7 +202,9 @@ class SummarizationModule(BaseTransformer):
         losses.update(generative_metrics)
         all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         all_metrics["step_count"] = self.step_count
-        self.metrics[prefix].append(all_metrics)  # callback writes this to self.metrics_save_path
+        self.metrics[prefix].append(all_metrics)  # written to self.metrics_save_path
+        pl_metrics = {f"pl_{prefix}_avg_{k}": v.compute().item() for k, v in self.metric_stores.items()}
+        all_metrics.update(pl_metrics)
         preds = flatten_list([x["preds"] for x in outputs])
         return {
             "log": all_metrics,
@@ -229,6 +236,9 @@ class SummarizationModule(BaseTransformer):
         rouge: Dict = self.calc_generative_metrics(preds, target)
         summ_len = np.mean(lmap(len, generated_ids))
         base_metrics.update(gen_time=gen_time, gen_len=summ_len, preds=preds, target=target, **rouge)
+        for k, v in base_metrics.items():
+            if k in self.metric_stores:
+                self.metric_stores[k].update(base_metrics[k])
         return base_metrics
 
     def test_step(self, batch, batch_idx):
