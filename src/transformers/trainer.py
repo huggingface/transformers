@@ -1298,6 +1298,7 @@ class Trainer:
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
+            The dictionary also contains the epoch number which comes from the training state. It can just be ignored.
         """
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
