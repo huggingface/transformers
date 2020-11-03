@@ -133,7 +133,9 @@ class BartSummarizationDistiller(SummarizationModule):
             decoder_input_ids = shift_tokens_right(labels, pad_token_id)
 
         # noinspection PyCallingNonCallable
-        lm_logits, dec_hidden, enc_outputs, enc_hidden_state = self(
+        #lm_logits, dec_hidden, enc_outputs, enc_hidden_state = 
+        # logits, decoder_hidden_states, encoder_last_hidden_state, encoder_hidden_states
+        output = self(
             input_ids,
             attention_mask=src_mask,
             decoder_input_ids=decoder_input_ids,
@@ -143,13 +145,13 @@ class BartSummarizationDistiller(SummarizationModule):
         )
 
         # Same cross entropy vs. label smoothing logic as finetune.py
-        assert lm_logits.shape[-1] == self.model.config.vocab_size
+        assert output.logits.shape[-1] == self.model.config.vocab_size
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
-            student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+            student_lm_loss = loss_fct(output.logits.view(-1, output.logits.shape[-1]), labels.view(-1))
         else:
-            lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
+            lprobs = torch.nn.functional.log_softmax(output.logits, dim=-1)
             student_lm_loss, _ = label_smoothed_nll_loss(
                 lprobs, labels, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
@@ -166,7 +168,7 @@ class BartSummarizationDistiller(SummarizationModule):
 
             hid_loss_enc = self.calc_hidden_loss(
                 src_mask,
-                enc_hidden_state,
+                output.encoder_hidden_states,
                 teacher_enc_hid,
                 self.e_matches,
                 normalize_hidden=self.hparams.normalize_hidden,
@@ -176,7 +178,7 @@ class BartSummarizationDistiller(SummarizationModule):
             outputs = self.teacher(
                 input_ids,
                 attention_mask=src_mask,
-                encoder_outputs=(enc_outputs,),
+                encoder_outputs=(output.encoder_last_hidden_state,),
                 decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
@@ -184,10 +186,10 @@ class BartSummarizationDistiller(SummarizationModule):
             )
             tlogits, tdec_hidden = outputs.logits, outputs.decoder_hidden_states
         dec_mask = decoder_input_ids.ne(pad_token_id)
-        loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
+        loss_ce = self.calc_ce_loss(dec_mask, output.logits, tlogits)
         if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
             hid_loss_dec = self.calc_hidden_loss(
-                dec_mask, dec_hidden, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
+                dec_mask, output.decoder_hidden_states, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
             )
 
         blended_loss = (
