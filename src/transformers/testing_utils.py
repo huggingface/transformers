@@ -695,6 +695,31 @@ def mockenv(**kwargs):
     return unittest.mock.patch.dict(os.environ, kwargs)
 
 
+# --- pytest conf functions --- #
+
+# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+pytest_opt_registered = {}
+
+
+def pytest_addoption_shared(parser):
+    """
+    This function is to be called from `conftest.py` via `pytest_addoption` wrapper that has to be defined there.
+
+    It allows loading both `conftest.py` files at once without causing a failure due to adding the same `pytest`
+    option.
+
+    """
+    option = "--make-reports"
+    if option not in pytest_opt_registered:
+        parser.addoption(
+            option,
+            action="store",
+            default=False,
+            help="generate report files. The value of this option is used as a prefix to report names",
+        )
+        pytest_opt_registered[option] = 1
+
+
 def pytest_terminal_summary_main(tr, id):
     """
     Generate multiple reports at the end of test suite run - each report goes into a dedicated file in the current
@@ -728,7 +753,7 @@ def pytest_terminal_summary_main(tr, id):
     dir = "reports"
     Path(dir).mkdir(parents=True, exist_ok=True)
     report_files = {
-        k: f"{dir}/report_{id}_{k}.txt"
+        k: f"{dir}/{id}_{k}.txt"
         for k in [
             "durations",
             "errors",
@@ -824,7 +849,7 @@ def pytest_terminal_summary_main(tr, id):
     config.option.tbstyle = orig_tbstyle
 
 
-# the following code deals with async io between processes
+# --- distributed testing functions --- #
 
 # adapted from https://stackoverflow.com/a/59041913/9201239
 import asyncio  # noqa

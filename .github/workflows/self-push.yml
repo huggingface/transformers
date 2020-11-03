@@ -61,7 +61,19 @@ jobs:
           CUDA_VISIBLE_DEVICES: 0
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s ./tests/
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_torch_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_gpu_failures_short.txt
+        
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_torch_gpu_test_reports
+          path: reports
+                  
 
   run_tests_tf_gpu:
     runs-on: [self-hosted, single-gpu]
@@ -110,7 +122,18 @@ jobs:
           CUDA_VISIBLE_DEVICES: 0
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s ./tests/
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_tf_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_gpu_failures_short.txt
+        
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_tf_gpu_test_reports
+          path: reports
 
   run_tests_torch_multiple_gpu:
     runs-on: [self-hosted, multi-gpu]
@@ -158,7 +181,18 @@ jobs:
           OMP_NUM_THREADS: 1
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s ./tests/
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_torch_multiple_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_multiple_gpu_failures_short.txt          
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_torch_multi_gpu_test_reports
+          path: reports
 
   run_tests_tf_multiple_gpu:
     runs-on: [self-hosted, multi-gpu]
@@ -206,4 +240,16 @@ jobs:
           OMP_NUM_THREADS: 1
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s ./tests/
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_tf_multiple_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_multiple_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_tf_multi_gpu_test_reports
+          path: reports
+          

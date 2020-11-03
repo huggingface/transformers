@@ -17,17 +17,14 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_addoption(parser):
-    parser.addoption(
-        "--make_reports",
-        action="store",
-        default=False,
-        help="generate report files - the value will be used as a `report_`+val+`reportname.txt`",
-    )
+    from transformers.testing_utils import pytest_addoption_shared
+
+    pytest_addoption_shared(parser)
 
 
 def pytest_terminal_summary(terminalreporter):
     from transformers.testing_utils import pytest_terminal_summary_main
 
-    make_reports = terminalreporter.config.getoption("--make_reports")
+    make_reports = terminalreporter.config.getoption("--make-reports")
     if make_reports:
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
