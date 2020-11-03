@@ -1430,9 +1430,9 @@ class TokenClassificationPipeline(Pipeline):
 
         if isinstance(inputs, str):
             inputs = [inputs]
-            
-        offset_mappings = kwargs["offset_mappings"]
-        
+
+        offset_mappings = kwargs.get("offset_mappings")
+
         answers = []
 
         for i, sentence in enumerate(inputs):
