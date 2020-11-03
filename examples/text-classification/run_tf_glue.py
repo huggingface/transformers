@@ -18,7 +18,7 @@
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional
+from typing import Optional
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -34,7 +34,6 @@ from transformers import (
     TFTrainer,
     TFTrainingArguments,
     glue_convert_examples_to_features,
-    glue_output_modes,
     glue_processors,
     glue_tasks_num_labels,
     logging,
@@ -165,7 +164,6 @@ def main():
 
     try:
         num_labels = glue_tasks_num_labels["mnli" if data_args.task_name == "mnli-mm" else data_args.task_name]
-        output_mode = glue_output_modes[data_args.task_name]
     except KeyError:
         raise ValueError("Task not found: %s" % (data_args.task_name))
 

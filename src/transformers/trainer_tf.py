@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tensorflow trainer class."""
 
-import datetime
 import math
 import os
 import warnings
