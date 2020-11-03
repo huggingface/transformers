@@ -20,7 +20,7 @@ from typing import Callable, List, Optional, Union
 
 import tensorflow as tf
 
-import keras.backend as K
+import tensorflow.keras.backend as K
 
 
 class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
