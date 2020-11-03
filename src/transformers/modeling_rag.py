@@ -1439,7 +1439,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 **model_kwargs,
             )
         else:
-            raise ValueError(f"`num_beams` has to be strictly positive (> 0), but is {num_beams}")
+            raise ValueError(f"`num_beams` has to be an integer strictly superior to 0 (≥ 1), but is {num_beams}")
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()

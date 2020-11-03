@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 HuggingFace Inc.
+# Copyright 2020 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            Indices can be obtained using any class inheriting from :class:`~transformers.PretrainedTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -37,17 +37,20 @@ PROCESS_INPUTS_DOCSTRING = r"""
         next_tokens (:obj:`torch.LongTensor` of shape :obj:`(batch_size, 2 * num_beams)`):
             :obj:`input_ids` of the tokens corresponding to the top :obj:`2 * num_beams` non-finished beam hypotheses.
         next_indices (:obj:`torch.LongTensor` of shape :obj:`(batch_size, 2 * num_beams)`):
-            beam indices indicating to which beam hypothesis the :obj:`next_tokens` correspond.
-        kwargs:
-            Additional kwargs including special tokens, such as :obj:`eos_token_id` and :obj:`pad_token_id`.
+            Beam indices indicating to which beam hypothesis the :obj:`next_tokens` correspond.
+        pad_token_id (:obj:`int`, `optional`):
+            The id of the `padding` token.
+        eos_token_id (:obj:`int`, `optional`):
+            The id of the `end-of-sequence` token.
 
-    Return: :obj:`UserDict` composed of the fields as defined above:
+    Return:
+        :obj:`UserDict`: A dictionary composed of the fields as defined above:
 
-            - next_beam_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- updated scores of
-              all non-finished beams.
-            - next_beam_tokens (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- next tokens to be
-              added to the non-finished beam_hypotheses.
-            - next_beam_indices (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- beam indices
+            - **next_beam_scores** (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- Updated
+              scores of all non-finished beams.
+            - **next_beam_tokens** (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- Next tokens
+              to be added to the non-finished beam_hypotheses.
+            - **next_beam_indices** (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`) -- Beam indices
               indicating to which beam the next tokens shall be added.
 
 """
@@ -57,7 +60,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            Indices can be obtained using any class inheriting from :class:`~transformers.PretrainedTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -68,8 +71,10 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             The last tokens to be added to the non-finished beam_hypotheses.
         final_beam_indices (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams)`):
             The beam indices indicating to which beam the :obj:`final_beam_tokens` shall be added.
-        kwargs:
-            Additional kwargs including special tokens, such as :obj:`eos_token_id` and :obj:`pad_token_id`.
+        pad_token_id (:obj:`int`, `optional`):
+            The id of the `padding` token.
+        eos_token_id (:obj:`int`, `optional`):
+            The id of the `end-of-sequence` token.
 
     Return:
         :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -125,8 +130,8 @@ class BeamSearchScorer(BeamScorer):
         num_beams (:obj:`int`):
             Number of beams for beam search.
         device (:obj:`torch.device`):
-            Defines the device type (*e.g.*, :obj:`"cpu"` or :obj:`"cuda"`) on which `BeamSearchScorer` will be
-            allocated.
+            Defines the device type (*e.g.*, :obj:`"cpu"` or :obj:`"cuda"`) on which this instance of
+            :obj:`BeamSearchScorer` will be allocated.
         length_penalty (:obj:`float`, `optional`, defaults to 1.0):
             Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
             model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
@@ -145,7 +150,7 @@ class BeamSearchScorer(BeamScorer):
         num_beams: int,
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
-        do_early_stopping: Optional[bool] = True,
+        do_early_stopping: Optional[bool] = False,
         num_beam_hyps_to_keep: Optional[int] = 1,
     ):
         self.max_length = max_length
@@ -182,11 +187,9 @@ class BeamSearchScorer(BeamScorer):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
-        **kwargs
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
     ) -> Tuple[torch.Tensor]:
-        pad_token_id = kwargs.get("pad_token_id", None)
-        eos_token_id = kwargs.get("eos_token_id", None)
-
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
         assert batch_size == (input_ids.shape[0] // self.num_beams)
@@ -261,11 +264,9 @@ class BeamSearchScorer(BeamScorer):
         final_beam_scores: torch.FloatTensor,
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
-        **kwargs
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
     ) -> torch.LongTensor:
-        pad_token_id = kwargs.get("pad_token_id", None)
-        eos_token_id = kwargs.get("eos_token_id", None)
-
         batch_size = len(self._beam_hyps)
 
         # finalize all open beam hypotheses and add to generated hypotheses

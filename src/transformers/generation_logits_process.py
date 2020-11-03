@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 HuggingFace Inc.
+# Copyright 2020 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -228,8 +228,8 @@ class TopKLogitsWarper(LogitsWarper):
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See Fairseq:
-    https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345.
+    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See `Fairseq
+    <https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345>`__.
 
     Args:
         ngram_size (:obj:`int`):
@@ -349,9 +349,9 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
         list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
 
-            Args:
-                scores: logits distribution of shape (batch size, vocabulary size)
-                banned_tokens: list of list of tokens to ban of length (batch_size)
+        Args:
+            scores: logits distribution of shape (batch size, vocabulary size)
+            banned_tokens: list of list of tokens to ban of length (batch_size)
         """
         banned_mask_list = []
         for idx, batch_banned_tokens in enumerate(banned_tokens):
