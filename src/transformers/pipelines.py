@@ -836,6 +836,8 @@ class TextGenerationPipeline(Pipeline):
               -- The token ids of the generated text.
         """
 
+        if isinstance(text_inputs, str):
+            text_inputs = [text_inputs]
         results = []
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
@@ -2382,6 +2384,8 @@ class ConversationalPipeline(Pipeline):
             updated generated responses for those containing a new user input.
         """
 
+        if isinstance(conversations, Conversation):
+            conversations = [conversations]
         # Input validation
         if isinstance(conversations, list):
             for conversation in conversations:
@@ -2398,8 +2402,6 @@ class ConversationalPipeline(Pipeline):
             assert (
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
-        elif isinstance(conversations, Conversation):
-            conversations = [conversations]
         else:
             raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
 
