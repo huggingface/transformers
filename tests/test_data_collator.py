@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from transformers import BertTokenizer, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
@@ -17,18 +17,8 @@ if is_torch_available():
         DataCollatorForSOP,
         DataCollatorForTokenClassification,
         DataCollatorWithPadding,
-        GlueDataset,
-        GlueDataTrainingArguments,
-        LineByLineTextDataset,
-        LineByLineWithSOPTextDataset,
-        TextDataset,
-        TextDatasetForNextSentencePrediction,
         default_data_collator,
     )
-
-
-PATH_SAMPLE_TEXT = "./tests/fixtures/sample_text.txt"
-PATH_SAMPLE_TEXT_DIR = "./tests/fixtures/tests_samples/wiki_text"
 
 
 @require_torch
