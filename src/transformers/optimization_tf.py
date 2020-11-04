@@ -153,10 +153,9 @@ def create_optimizer(
             learning_rate=lr_schedule, beta_1=adam_beta1, beta_2=adam_beta2, epsilon=adam_epsilon
         )
 
-    if gradient_accumulation_steps > 1:
-        optimizer = AccumulationOptimizer(
-            optimizer=optimizer, accumulation_steps=gradient_accumulation_steps, clipnorm=max_grad_norm
-        )
+    optimizer = AccumulationOptimizer(
+        optimizer=optimizer, accumulation_steps=gradient_accumulation_steps, clipnorm=max_grad_norm
+    )
 
     return optimizer
 

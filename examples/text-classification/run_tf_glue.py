@@ -20,9 +20,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-import tensorflow as tf
-import tensorflow_datasets as tfds
-
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -44,6 +41,9 @@ from transformers.utils import logging as hf_logging
 hf_logging.set_verbosity_info()
 hf_logging.enable_default_handler()
 hf_logging.enable_explicit_format()
+
+import tensorflow as tf
+import tensorflow_datasets as tfds
 
 
 logging.set_verbosity_info()
@@ -79,7 +79,7 @@ def get_tfds(
     ds, info = tfds.load("glue/" + tfds_name, split=mode.value, with_info=True, data_dir=data_dir)
     ds = glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
     ds = ds.apply(tf.data.experimental.assert_cardinality(info.splits[mode.value].num_examples))
-
+    
     return ds
 
 

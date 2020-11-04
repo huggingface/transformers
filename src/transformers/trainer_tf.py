@@ -15,6 +15,7 @@
 
 import math
 import os
+import sys
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -29,7 +30,6 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import tensorflow as tf
-from packaging.version import parse
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import create_optimizer
@@ -39,11 +39,12 @@ from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
 
-if is_wandb_available():
-    import wandb
-
 if is_comet_available():
     import comet_ml
+
+if is_wandb_available():
+    import wandb
+    from wandb.keras import WandbCallback
 
 logger = logging.get_logger(__name__)
 
@@ -87,6 +88,7 @@ class TFTrainer:
         train_dataset: Optional[tf.data.Dataset] = None,
         eval_dataset: Optional[tf.data.Dataset] = None,
         compute_metrics: Optional[List[Union[tf.keras.metrics.Metric, str]]] = None,
+        callbacks: Optional[List[tf.keras.callbacks.Callback]] = [],
         optimizer: Optional[tf.keras.optimizers.Optimizer] = None,
         **kwargs,
     ):
@@ -95,6 +97,7 @@ class TFTrainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
+        self.callbacks = callbacks
         self.optimizer = optimizer
         self.global_step = 0
         self.epoch_logging = 0
@@ -248,31 +251,8 @@ class TFTrainer:
             experiment = comet_ml.OfflineExperiment(**args)
             logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
         if experiment is not None:
-            experiment._set_model_graph(self.model, framework="transformers")
-            experiment._log_parameters(self.args, prefix="args/", framework="transformers")
-            experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
-
-    def log(self, logs: Dict[str, float]) -> None:
-        """
-        Log :obj:`logs` on the various objects watching training.
-
-        Subclass and override this method to inject custom behavior.
-
-        Args:
-            logs (:obj:`Dict[str, float]`):
-                The values to log.
-        """
-        logs["epoch"] = self.epoch_logging
-
-        if is_wandb_available():
-            wandb.log(logs, step=self.global_step)
-
-        if is_comet_available():
-            experiment = comet_ml.config.get_global_experiment()
-            if experiment is not None:
-                experiment._log_metrics(
-                    logs, step=self.global_step, epoch=self.epoch_logging, framework="transformers"
-                )
+            experiment._log_parameters(self.args, prefix="args/")
+            experiment._log_parameters(self.model.config, prefix="config/")
 
     def evaluate(self, eval_dataset: Optional[tf.data.Dataset] = None) -> Dict[str, float]:
         """
@@ -376,12 +356,15 @@ class TFTrainer:
                 filepath=os.path.join(folder, "weights.{epoch:04d}.ckpt"),
                 save_weights_only=True,
             )
-            callbacks = [
-                tf.keras.callbacks.TensorBoard(log_dir=self.args.logging_dir, update_freq=self.args.logging_steps)
-            ]
 
-            callbacks.append(LearningRateLoggingCallback())
-            callbacks.append(model_checkpoint_callback)
+            self.callbacks.append(
+                tf.keras.callbacks.TensorBoard(log_dir=self.args.logging_dir, update_freq=self.args.logging_steps)
+            )
+            self.callbacks.append(LearningRateLoggingCallback())
+            self.callbacks.append(model_checkpoint_callback)
+
+            if is_wandb_available():
+                self.callbacks.append(WandbCallback(save_model=False, log_weights=True, log_batch_frequency=self.args.logging_steps))
 
             self.model.fit(
                 train_ds,
@@ -390,7 +373,7 @@ class TFTrainer:
                 initial_epoch=epochs_trained,
                 validation_steps=steps,
                 steps_per_epoch=self.steps_per_epoch,
-                callbacks=callbacks,
+                callbacks=self.callbacks,
             )
 
     def predict(self, test_dataset: tf.data.Dataset) -> PredictionOutput:

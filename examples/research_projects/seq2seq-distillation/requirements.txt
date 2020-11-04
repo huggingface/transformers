@@ -4,6 +4,7 @@ psutil
 sacrebleu
 rouge-score
 tensorflow_datasets
+tensorflow-model-optimization
 pytorch-lightning==1.0.4
 matplotlib
 git-python==1.0.3
