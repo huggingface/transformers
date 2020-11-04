@@ -274,6 +274,7 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
+        resource_class: large
         steps:
             - checkout
             - restore_cache:
@@ -294,6 +295,7 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
+        resource_class: large
         steps:
             - add_ssh_keys:
                 fingerprints:
