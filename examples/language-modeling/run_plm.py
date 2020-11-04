@@ -198,7 +198,7 @@ def main():
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
-            data_files["validation"] = data_args.train_file
+            data_files["validation"] = data_args.validation_file
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
