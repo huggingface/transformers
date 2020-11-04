@@ -192,7 +192,7 @@ def _collate_batch(examples, tokenizer):
     if tokenizer._pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
-            f" ({tokenizer.__class__.__name__}) does not have one."
+            f" ({tokenizer.__class__.__name__}) does not have a pad token."
         )
 
     # Creating the full tensor and filling it with our data.
@@ -238,7 +238,7 @@ class DataCollatorForLanguageModeling:
         if self.mlm and self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
-                "You should pass `mlm=False`."
+                "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
     def __call__(
