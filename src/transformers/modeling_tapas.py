@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (...) and The HuggingFace Inc. team.
+# Copyright 2020 Google Research and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1206,7 +1206,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                     aggregate_mask = _calculate_aggregate_mask(
                         answer,
                         pooled_output,
-                        self.config.cell_select_pref,
+                        self.config.cell_selection_preference,
                         label_ids,
                         self.aggregation_classifier
                     )
@@ -1922,7 +1922,7 @@ def compute_token_logits(sequence_output, temperature, output_weights, output_bi
     return logits
 
 
-def _calculate_aggregate_mask(answer, pooled_output, cell_select_pref, label_ids, aggregation_classifier):
+def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, label_ids, aggregation_classifier):
     """Finds examples where the model should select cells with no aggregation.
 
     Returns a mask that determines for which examples should the model select
@@ -1933,13 +1933,13 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_select_pref, label_ids
     answer is a number that also appears in the table. In this case we use the
     aggregation function probabilities predicted by the model to decide whether
     to select or aggregate. The threshold for this is a hyperparameter
-    `cell_select_pref`
+    `cell_selection_preference`
     Args:
         answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`):
             Answer for every example in the batch. Nan if there is no scalar answer.
         pooled_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
             Output of the pooler (BertPooler) on top of the encoder layer.
-        cell_select_pref (:obj:`float`):
+        cell_selection_preference (:obj:`float`):
             Preference for cell selection in ambiguous cases.
         label_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Labels per token.
@@ -1957,7 +1957,7 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_select_pref, label_ids
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)
 
     # Cell selection examples according to current model.
-    is_pred_cell_selection = aggregation_ops_total_mass <= cell_select_pref
+    is_pred_cell_selection = aggregation_ops_total_mass <= cell_selection_preference
 
     # Examples with non-empty cell selection supervision.
     is_cell_supervision_available = torch.sum(label_ids, dim=1) > 0
@@ -2122,16 +2122,16 @@ def _calculate_expected_result(
     else:
         raise ValueError(f"Invalid average_approximation_function: {config.average_approximation_function}")
 
-    if config.use_gumbel_for_agg:
+    if config.use_gumbel_for_aggregation:
         gumbel_dist = torch.distributions.RelaxedOneHotCategorical(
-            config.agg_temperature, logits=logits_aggregation[:, 1:]
+            config.aggregation_temperature, logits=logits_aggregation[:, 1:]
         )
         # <float32>[batch_size, num_aggregation_labels - 1]
         aggregation_op_only_probs = gumbel_dist.sample()
     else:
         # <float32>[batch_size, num_aggregation_labels - 1]
         aggregation_op_only_probs = torch.nn.functional.softmax(
-            logits_aggregation[:, 1:] / config.agg_temperature, dim=-1
+            logits_aggregation[:, 1:] / config.aggregation_temperature, dim=-1
         )
 
     all_results = torch.cat(

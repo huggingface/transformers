@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (...) and The HuggingFace Inc. team.
+# Copyright 2020 Google Research and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,9 +34,8 @@ class TapasConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.BertModel` or
-            :class:`~transformers.TFBertModel`.
+            Vocabulary size of the TAPAS model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.TapasModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -79,15 +78,15 @@ class TapasConfig(PretrainedConfig):
             Delta parameter used to calculate the regression loss.
         temperature: (:obj:`float`, `optional`, defaults to 1.0):
             Scales cell logits to control the skewness of probabilities.
-        agg_temperature: (:obj:`float`, `optional`, defaults to 1.0):
+        aggregation_temperature: (:obj:`float`, `optional`, defaults to 1.0):
             Scales aggregation logits to control the skewness of probabilities.
         use_gumbel_for_cells: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Applies Gumbel-Softmax to cell selection.
-        use_gumbel_for_agg: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_gumbel_for_aggregationregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Applies Gumbel-Softmax to aggregation selection.
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
             Method to calculate expected average of cells in the relaxed case.
-        cell_select_pref: (:obj:`float`, `optional`, defaults to None):
+        cell_selection_preference: (:obj:`float`, `optional`, defaults to None):
             Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for aggregation (WTQ, WikiSQL).
             If the total mass of the aggregation probabilities (excluding the "NONE" operator) is higher than this hyperparameter, 
             then aggregation is predicted for an example.
@@ -149,11 +148,11 @@ class TapasConfig(PretrainedConfig):
         use_normalized_answer_loss=False,
         huber_loss_delta=None,
         temperature=1.0,
-        agg_temperature=1.0,
+        aggregation_temperature=1.0,
         use_gumbel_for_cells=False,
-        use_gumbel_for_agg=False,
+        use_gumbel_for_aggregationregation=False,
         average_approximation_function="ratio",
-        cell_select_pref=None,
+        cell_selection_preference=None,
         answer_loss_cutoff=None,
         max_num_rows=64,
         max_num_columns=32,
@@ -193,11 +192,11 @@ class TapasConfig(PretrainedConfig):
         self.use_normalized_answer_loss = use_normalized_answer_loss
         self.huber_loss_delta = huber_loss_delta
         self.temperature = temperature
-        self.agg_temperature = agg_temperature
+        self.aggregation_temperature = aggregation_temperature
         self.use_gumbel_for_cells = use_gumbel_for_cells
-        self.use_gumbel_for_agg = use_gumbel_for_agg
+        self.use_gumbel_for_aggregation = use_gumbel_for_aggregation
         self.average_approximation_function = average_approximation_function
-        self.cell_select_pref = cell_select_pref
+        self.cell_selection_preference = cell_selection_preference
         self.answer_loss_cutoff = answer_loss_cutoff
         self.max_num_rows = max_num_rows
         self.max_num_columns = max_num_columns

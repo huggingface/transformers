@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 (...) and The HuggingFace Inc. team.
+# Copyright 2020 Google Research and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,6 +48,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+
+from .utils import logging
+
+logger = logging.get_logger(__name__)
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
@@ -433,6 +437,14 @@ class TapasTokenizer(PreTrainedTokenizer):
         return len(question_tokens) + 2
 
     def _get_token_budget(self, question_tokens):
+        """Computes the number of tokens left for the table after tokenizing a question,
+        taking into account the max sequence length of the model. 
+
+        Args:
+            question_tokens (:obj:`List[String]`): 
+                List of question tokens.
+        Returns: :obj:`int`: the number of tokens left for the table, given the model max length. 
+        """
         return self.model_max_length - self._question_encoding_cost(question_tokens)
     
     def _get_table_values(self, table, num_columns, num_rows, num_tokens):
