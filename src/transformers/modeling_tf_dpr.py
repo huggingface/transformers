@@ -185,10 +185,12 @@ class TFDPREncoder(TFPreTrainedModel):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = False,
+        return_dict: bool = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[Tensor, ...]]:
-
+        
+        return_dict = return_dict if return_dict is not None else self.bert_model.return_dict
+        
         outputs = self.bert_model(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -502,7 +504,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=False,
+        return_dict=None,
         training: bool = False
     ) -> Union[TFDPRContextEncoderOutput, Tuple[Tensor, ...]]:
         r"""
@@ -524,7 +526,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
             output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
             return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 5, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -532,7 +534,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 5, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -599,7 +601,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=False,
+        return_dict=None,
         training: bool = False
     ) -> Union[TFDPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
         r"""
@@ -621,7 +623,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
             output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
             return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 5, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -629,7 +631,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 5, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -695,7 +697,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
-        return_dict=False,
+        return_dict=None,
         training: bool = False
     ) -> Union[TFDPRReaderOutput, Tuple[Tensor, ...]]:
         r"""
@@ -725,7 +727,7 @@ class TFDPRReader(TFDPRPretrainedReader):
             output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
             output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
             return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 5, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -733,7 +735,7 @@ class TFDPRReader(TFDPRPretrainedReader):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 5, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
