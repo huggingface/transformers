@@ -22,6 +22,7 @@ import sys
 import uuid
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
@@ -1597,55 +1598,52 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
     command-line supplied arguments.
     """
 
+    def normalize(self, item):
+        if isinstance(item, SquadExample):
+            return item
+        elif isinstance(item, dict):
+            for k in ["question", "context"]:
+                if k not in item:
+                    raise KeyError("You need to provide a dictionary with keys {question:..., context:...}")
+                elif item[k] is None:
+                    raise ValueError("`{}` cannot be None".format(k))
+                elif isinstance(item[k], str) and len(item[k]) == 0:
+                    raise ValueError("`{}` cannot be empty".format(k))
+
+            return QuestionAnsweringPipeline.create_sample(**item)
+        raise ValueError("{} argument needs to be of type (SquadExample, dict)".format(item))
+
     def __call__(self, *args, **kwargs):
-        # Position args, handling is sensibly the same as X and data, so forwarding to avoid duplicating
+        # Detect where the actual inputs are
         if args is not None and len(args) > 0:
             if len(args) == 1:
-                kwargs["X"] = args[0]
+                inputs = args[0]
+            elif len(args) == 2 and {type(el) for el in args} == {str}:
+                inputs = [{"question": args[0], "context": args[1]}]
             else:
-                kwargs["X"] = list(args)
-
+                inputs = list(args)
         # Generic compatibility with sklearn and Keras
         # Batched data
-        if "X" in kwargs or "data" in kwargs:
-            inputs = kwargs["X"] if "X" in kwargs else kwargs["data"]
-
-            if isinstance(inputs, dict):
-                inputs = [inputs]
-            else:
-                # Copy to avoid overriding arguments
-                inputs = [i for i in inputs]
-
-            for i, item in enumerate(inputs):
-                if isinstance(item, dict):
-                    if any(k not in item for k in ["question", "context"]):
-                        raise KeyError("You need to provide a dictionary with keys {question:..., context:...}")
-
-                    inputs[i] = QuestionAnsweringPipeline.create_sample(**item)
-
-                elif not isinstance(item, SquadExample):
-                    raise ValueError(
-                        "{} argument needs to be of type (list[SquadExample | dict], SquadExample, dict)".format(
-                            "X" if "X" in kwargs else "data"
-                        )
-                    )
-
-            # Tabular input
+        elif "X" in kwargs:
+            inputs = kwargs["X"]
+        elif "data" in kwargs:
+            inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
-            if isinstance(kwargs["question"], str):
-                kwargs["question"] = [kwargs["question"]]
-
-            if isinstance(kwargs["context"], str):
-                kwargs["context"] = [kwargs["context"]]
-
-            inputs = [
-                QuestionAnsweringPipeline.create_sample(q, c) for q, c in zip(kwargs["question"], kwargs["context"])
-            ]
+            inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
         else:
             raise ValueError("Unknown arguments {}".format(kwargs))
 
-        if not isinstance(inputs, list):
+        # Normalize inputs
+        if isinstance(inputs, dict):
             inputs = [inputs]
+        elif isinstance(inputs, Iterable):
+            # Copy to avoid overriding arguments
+            inputs = [i for i in inputs]
+        else:
+            raise ValueError("Invalid arguments {}".format(inputs))
+
+        for i, item in enumerate(inputs):
+            inputs[i] = self.normalize(item)
 
         return inputs
 
