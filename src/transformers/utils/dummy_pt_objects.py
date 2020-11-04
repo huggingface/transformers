@@ -26,11 +26,6 @@ class DataCollatorForLanguageModeling:
         requires_pytorch(self)
 
 
-class DataCollatorForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class DataCollatorForPermutationLanguageModeling:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

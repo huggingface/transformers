@@ -281,7 +281,6 @@ if is_torch_available():
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
-        DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSOP,
         DataCollatorForTokenClassification,

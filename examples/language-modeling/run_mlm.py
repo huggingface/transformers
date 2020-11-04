@@ -264,7 +264,15 @@ def main():
         def tokenize_function(examples):
             # Remove empty lines
             examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-            return tokenizer(examples["text"], padding=padding, truncation=True, max_length=data_args.max_seq_length)
+            return tokenizer(
+                examples["text"],
+                padding=padding,
+                truncation=True,
+                max_length=data_args.max_seq_length,
+                # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
+                # receives the `special_tokens_mask`.
+                return_special_tokens_mask=True,
+            )
 
         tokenized_datasets = datasets.map(
             tokenize_function,
@@ -275,8 +283,10 @@ def main():
         )
     else:
         # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
+        # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
+        # efficient when it receives the `special_tokens_mask`.
         def tokenize_function(examples):
-            return tokenizer(examples[text_column_name])
+            return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
 
         tokenized_datasets = datasets.map(
             tokenize_function,
