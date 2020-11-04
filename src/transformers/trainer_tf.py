@@ -364,7 +364,9 @@ class TFTrainer:
             self.callbacks.append(model_checkpoint_callback)
 
             if is_wandb_available():
-                self.callbacks.append(WandbCallback(save_model=False, log_weights=True, log_batch_frequency=self.args.logging_steps))
+                self.callbacks.append(
+                    WandbCallback(save_model=False, log_weights=True, log_batch_frequency=self.args.logging_steps)
+                )
 
             self.model.fit(
                 train_ds,
