@@ -51,6 +51,15 @@ if is_torch_available():
 if is_flax_available():
     import jax.numpy as jnp
 
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_jax(x):
+    return isinstance(x, jnp.ndarray)
+
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
@@ -583,16 +592,20 @@ class BatchEncoding(UserDict):
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
             as_tensor = tf.constant
+            already_right_type = tf.is_tensor
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             as_tensor = torch.tensor
+            already_right_type = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             as_tensor = jnp.array
+            already_right_type = _is_jax
         else:
             as_tensor = np.asarray
+            already_right_type = _is_numpy
         # (mfuntowicz: This code is unreachable)
         # else:
         #     raise ImportError(
@@ -604,6 +617,10 @@ class BatchEncoding(UserDict):
             try:
                 if prepend_batch_axis:
                     value = [value]
+
+                # don't reconvert if it's the right type already
+                if already_right_type(value):
+                    continue
 
                 tensor = as_tensor(value)
 
