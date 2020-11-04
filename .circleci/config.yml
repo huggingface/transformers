@@ -286,7 +286,7 @@ jobs:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: cd docs && make html SPHINXOPTS="-W" 
+            - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
 
