@@ -160,7 +160,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             return self.cache[token]
         token = re.sub("([.,!?()])", r" \1", token)
         token = re.sub("(')", r" \1 ", token)
-        token = re.sub("\s{2,}", " ", token)
+        token = re.sub(r"\s{2,}", " ", token)
         if "\n" in token:
             token = token.replace("\n", " __newln__")
 
