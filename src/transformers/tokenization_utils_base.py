@@ -592,20 +592,20 @@ class BatchEncoding(UserDict):
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
             as_tensor = tf.constant
-            already_right_type = tf.is_tensor
+            is_tensor = tf.is_tensor
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             as_tensor = torch.tensor
-            already_right_type = torch.is_tensor
+            is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             as_tensor = jnp.array
-            already_right_type = _is_jax
+            is_tensor = _is_jax
         else:
             as_tensor = np.asarray
-            already_right_type = _is_numpy
+            is_tensor = _is_numpy
         # (mfuntowicz: This code is unreachable)
         # else:
         #     raise ImportError(
@@ -619,7 +619,7 @@ class BatchEncoding(UserDict):
                     value = [value]
 
                 # don't reconvert if it's the right type already
-                if already_right_type(value):
+                if is_tensor(value):
                     continue
 
                 tensor = as_tensor(value)
