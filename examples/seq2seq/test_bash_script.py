@@ -3,19 +3,17 @@
 import argparse
 import os
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import pytorch_lightning as pl
 import timeout_decorator
 import torch
 
 from distillation import BartSummarizationDistiller, distill_main
 from finetune import SummarizationModule, main
-from test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
+from test_seq2seq_examples import MBART_TINY
 from transformers import BartForConditionalGeneration, MarianMTModel
-from transformers.testing_utils import TestCasePlus, slow, require_torch_gpu
+from transformers.testing_utils import TestCasePlus, require_torch_gpu, slow
 from utils import load_json
 
 
@@ -35,7 +33,7 @@ class TestAll(TestCasePlus):
     @slow
     @require_torch_gpu
     def test_train_mbart_cc25_enro_script(self):
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        data_dir = f"{self.test_file_dir_str}/test_data/wmt_en_ro"
         env_vars_to_replace = {
             "--fp16_opt_level=O1": "",
             "$MAX_LEN": 128,
@@ -48,7 +46,7 @@ class TestAll(TestCasePlus):
         }
 
         # Clean up bash script
-        bash_script = Path("examples/seq2seq/train_mbart_cc25_enro.sh").open().read().split("finetune.py")[1].strip()
+        bash_script = (self.test_file_dir / "train_mbart_cc25_enro.sh").open().read().split("finetune.py")[1].strip()
         bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
         for k, v in env_vars_to_replace.items():
             bash_script = bash_script.replace(k, str(v))
@@ -111,7 +109,7 @@ class TestAll(TestCasePlus):
     @slow
     @require_torch_gpu
     def test_opus_mt_distill_script(self):
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        data_dir = f"{self.test_file_dir_str}/test_data/wmt_en_ro"
         env_vars_to_replace = {
             "--fp16_opt_level=O1": "",
             "$MAX_LEN": 128,
@@ -124,7 +122,7 @@ class TestAll(TestCasePlus):
 
         # Clean up bash script
         bash_script = (
-            Path("examples/seq2seq/distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
+            (self.test_file_dir / "distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
         )
         bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
         bash_script = bash_script.replace("--fp16 ", " ")
