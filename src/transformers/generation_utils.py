@@ -670,6 +670,9 @@ class GenerationMixin:
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
             input_ids, max_length
         )
+        import ipdb
+
+        ipdb.set_trace()
 
         while cur_len < max_length:
             # prepare model inputs
