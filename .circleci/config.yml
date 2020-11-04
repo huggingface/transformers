@@ -274,7 +274,7 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.6
-        resource_class: large
+        resource_class: xlarge
         steps:
             - checkout
             - restore_cache:
@@ -287,7 +287,7 @@ jobs:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: cd docs && make html -j 4 SPHINXOPTS="-W" 
+            - run: cd docs && make html SPHINXOPTS="-W" 
             - store_artifacts:
                 path: ./docs/_build
 
