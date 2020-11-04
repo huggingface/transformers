@@ -28,3 +28,8 @@ class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase
         expected_cnn_summary = " The Palestinian Authority becomes the 123rd member of the International Criminal Court . The move gives the court jurisdiction over alleged crimes in Palestinian territories . Israel and the United States opposed the Palestinians' efforts to join the court . Rights group Human Rights Watch welcomes the move, says governments seeking to penalize Palestine should end pressure ."
         result = nlp(cnn_article)
         self.assertEqual(result[0]["summary_text"], expected_cnn_summary)
+
+    @require_torch
+    @slow
+    def test_integration_torch_summarization_pegasus(self):
+        pipeline(task="summarization", model="google/pegasus-xsum")

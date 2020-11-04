@@ -233,6 +233,7 @@ MODEL_MAPPING = OrderedDict(
         (AlbertConfig, AlbertModel),
         (CamembertConfig, CamembertModel),
         (XLMRobertaConfig, XLMRobertaModel),
+        (PegasusConfig, PegasusForConditionalGeneration),
         (BartConfig, BartModel),
         (LongformerConfig, LongformerModel),
         (RobertaConfig, RobertaModel),
