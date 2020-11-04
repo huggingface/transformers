@@ -867,8 +867,8 @@ class TFBertModel(TFBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with two heads on top as done during the pre-training:
-    a `masked language modeling` head and a `next sentence prediction (classification)` head.
+    Bert Model with two heads on top as done during the pre-training: a `masked language modeling` head and a `next
+    sentence prediction (classification)` head.
     """,
     BERT_START_DOCSTRING,
 )
@@ -879,7 +879,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, name="bert")
         self.nsp = TFBertNSPHead(config=config, name="nsp___cls")
-        self.mlm = TFBertMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls")
+        self.mlm = TFBertMLMHead(
+            config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls"
+        )
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -989,7 +991,9 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
-        self.mlm = TFBertMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls")
+        self.mlm = TFBertMLMHead(
+            config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls"
+        )
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -1095,7 +1099,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
-        self.mlm = TFBertMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls")
+        self.mlm = TFBertMLMHead(
+            config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls"
+        )
 
     def get_output_embeddings(self):
         return self.bert.embeddings
