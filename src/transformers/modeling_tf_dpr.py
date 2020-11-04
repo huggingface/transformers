@@ -493,7 +493,10 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         self.config = config
         self.ctx_encoder = TFDPREncoder(config, name = 'ctx_encoder')
         self.init_weights()
-
+    
+    def get_input_embeddings(self):
+        return self.ctx_encoder.bert_model.get_input_embeddings()
+    
     @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -590,7 +593,10 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         self.config = config
         self.question_encoder = TFDPREncoder(config, name = 'question_encoder')
         self.init_weights()
-
+    
+    def get_input_embeddings(self):
+        return self.question_encoder.bert_model.get_input_embeddings()
+    
     @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -687,7 +693,10 @@ class TFDPRReader(TFDPRPretrainedReader):
         self.config = config
         self.span_predictor = TFDPRSpanPredictor(config, name = 'span_predictor')
         self.init_weights()
-
+    
+    def get_input_embeddings(self):
+        return self.span_predictor.encoder.bert_model.get_input_embeddings()
+    
     @add_start_docstrings_to_model_forward(DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
