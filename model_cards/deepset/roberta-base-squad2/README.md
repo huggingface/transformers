@@ -5,7 +5,7 @@ datasets:
 
 # roberta-base for QA 
 
-NOTE: This model has been superceded by deepset/roberta-base-squad2-v2. For an explanation of why, see [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository.
+NOTE: This model has been superseded by deepset/roberta-base-squad2-v2. For an explanation of why, see [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository.
 
 ## Overview
 **Language model:** roberta-base  
