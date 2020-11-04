@@ -82,7 +82,7 @@ class TapasConfig(PretrainedConfig):
             Scales aggregation logits to control the skewness of probabilities.
         use_gumbel_for_cells: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Applies Gumbel-Softmax to cell selection.
-        use_gumbel_for_aggregationregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_gumbel_for_aggregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Applies Gumbel-Softmax to aggregation selection.
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
             Method to calculate expected average of cells in the relaxed case.
@@ -150,7 +150,7 @@ class TapasConfig(PretrainedConfig):
         temperature=1.0,
         aggregation_temperature=1.0,
         use_gumbel_for_cells=False,
-        use_gumbel_for_aggregationregation=False,
+        use_gumbel_for_aggregation=False,
         average_approximation_function="ratio",
         cell_selection_preference=None,
         answer_loss_cutoff=None,
