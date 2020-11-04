@@ -364,7 +364,7 @@ def load_tf_weights(model, resolved_archive_file):
         renamed_saved_h5_model_layers_names = set()
 
         for layer_name in saved_h5_model_layers_name:
-            name = layer_name.replace("nsp___", "").replace("mlm___", "")
+            name = layer_name
 
             renamed_saved_h5_model_layers_names.add(name)
 
@@ -375,15 +375,15 @@ def load_tf_weights(model, resolved_archive_file):
         weight_value_tuples = []
 
         for layer_name in saved_h5_model_layers_name:
-            if layer_name.replace("nsp___", "").replace("mlm___", "") in model_layers_name:
+            if layer_name in model_layers_name:
                 g = f[layer_name]
                 saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
-                layer = model_layers_name_value[layer_name.replace("nsp___", "").replace("mlm___", "")]
+                layer = model_layers_name_value[layer_name]
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weight_names_values = {}
 
                 for weight_name in saved_weight_names:
-                    name = "/".join(weight_name.split("/")[1:]).replace("nsp___", "").replace("mlm___", "")
+                    name = "/".join(weight_name.split("/")[1:])
                     saved_weight_names_values[name] = np.asarray(g[weight_name])
 
                     saved_weight_names_set.add(name)

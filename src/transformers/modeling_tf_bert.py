@@ -507,50 +507,30 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFBertOnlyMLMHead(tf.keras.layers.Layer):
+class TFBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
-        self.predictions = TFBertLMPredictionHead(config=config, input_embeddings=input_embeddings, name="predictions")
+        self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
 
     def call(self, sequence_output):
-        prediction_scores = self.predictions(hidden_states=sequence_output)
+        prediction_scores = self.predictions(sequence_output)
 
         return prediction_scores
 
 
-class TFBertOnlyNSPHead(tf.keras.layers.Layer):
+class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.seq_relationship = tf.keras.layers.Dense(
-            units=2,
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
-            name="seq_relationship",
+            2, kernel_initializer=get_initializer(config.initializer_range), name="seq_relationship"
         )
 
     def call(self, pooled_output):
         seq_relationship_score = self.seq_relationship(pooled_output)
 
         return seq_relationship_score
-
-
-class TFBertPreTrainingHeads(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(**kwargs)
-
-        self.predictions = TFBertLMPredictionHead(config=config, input_embeddings=input_embeddings, name="predictions")
-        self.seq_relationship = tf.keras.layers.Dense(
-            units=2,
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
-            name="seq_relationship",
-        )
-
-    def call(self, sequence_output, pooled_output):
-        prediction_scores = self.predictions(hidden_states=sequence_output)
-        seq_relationship_score = self.seq_relationship(inputs=pooled_output)
-
-        return prediction_scores, seq_relationship_score
 
 
 @keras_serializable
@@ -887,7 +867,7 @@ class TFBertModel(TFBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-Bert Model with two heads on top as done during the pre-training:
+    Bert Model with two heads on top as done during the pre-training:
     a `masked language modeling` head and a `next sentence prediction (classification)` head.
     """,
     BERT_START_DOCSTRING,
@@ -898,9 +878,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, name="bert")
-        self.cls = TFBertPreTrainingHeads(
-            config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="cls"
-        )
+        self.nsp = TFBertNSPHead(config=config, name="nsp___cls")
+        self.mlm = TFBertMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -909,7 +888,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
         if new_num_tokens is not None:
-            self.cls.predictions.bias = self.add_weight(
+            self.mlm.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
             )
 
@@ -975,9 +954,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             training=inputs["training"],
         )
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, seq_relationship_score = self.cls(
-            sequence_output=sequence_output, pooled_output=pooled_output
-        )
+        prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
+        seq_relationship_score = self.nsp(pooled_output=pooled_output, training=training)
         total_loss = None
 
         if inputs["labels"] is not None and inputs["next_sentence_label"] is not None:
@@ -1011,7 +989,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
-        self.cls = TFBertOnlyMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="cls")
+        self.mlm = TFBertMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -1020,7 +998,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
         if new_num_tokens is not None:
-            self.cls.predictions.bias = self.add_weight(
+            self.mlm.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
             )
 
@@ -1080,7 +1058,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output=sequence_output, training=training)
+        prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
         lm_loss = None
 
         if inputs["labels"] is not None:
@@ -1117,7 +1095,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         self.initializer_range = config.initializer_range
         self.bert = TFBertMainLayer(config=config, add_pooling_layer=False, name="bert")
-        self.cls = TFBertOnlyMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="cls")
+        self.mlm = TFBertMLMHead(config=config, input_embeddings=self.bert.embeddings.word_embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
@@ -1126,7 +1104,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
         if new_num_tokens is not None:
-            self.cls.predictions.bias = self.add_weight(
+            self.mlm.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
             )
 
@@ -1186,7 +1164,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output=sequence_output, training=training)
+        prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
         masked_lm_loss = (
             None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
         )
@@ -1214,8 +1192,13 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
+<<<<<<< HEAD
         self.bert = TFBertMainLayer(config, name="bert")
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
+=======
+        self.bert = TFBertMainLayer(config=config, name="bert")
+        self.nsp = TFBertNSPHead(config=config, name="nsp___cls")
+>>>>>>> 90d98725... Remove naming exceptions
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
@@ -1276,8 +1259,12 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             training=inputs["training"],
         )
         pooled_output = outputs[1]
+<<<<<<< HEAD
         seq_relationship_scores = self.nsp(pooled_output)
 
+=======
+        seq_relationship_scores = self.nsp(pooled_output=pooled_output, training=training)
+>>>>>>> 90d98725... Remove naming exceptions
         next_sentence_loss = (
             None
             if inputs["next_sentence_label"] is None
