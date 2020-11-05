@@ -37,16 +37,16 @@ logger = logging.get_logger(__name__)
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer, orig_answer_text):
     """Returns tokenized answer spans that better match the annotated answer."""
+
+    candidate_cleaned_forms = []
+    candidate_cleaned_forms.append(" ".join(tokenizer.tokenize(orig_answer_text)))
     if tokenizer.__class__.__name__ in NEED_PREFIX_SPACE_TOKENIZERS_SET:
-        sub_tokens = tokenizer.tokenize(orig_answer_text, add_prefix_space=True)
-    else:
-        sub_tokens = tokenizer.tokenize(orig_answer_text)
-    tok_answer_text = " ".join(sub_tokens)
+        candidate_cleaned_forms.append(" ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=True)))
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
             text_span = " ".join(doc_tokens[new_start : (new_end + 1)])
-            if text_span == tok_answer_text:
+            if text_span in candidate_cleaned_forms:
                 return (new_start, new_end)
 
     return (input_start, input_end)
