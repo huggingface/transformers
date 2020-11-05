@@ -23,9 +23,19 @@ According to the abstract,
   state-of-the-art results on a range of abstractive dialogue, question answering, and summarization tasks, with gains
   of up to 6 ROUGE.
 
-The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`__. An example
-of how to train Bart for conditional generation such as summarisation can be found in `this 
+The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`__. An example of
+how to train Bart for conditional generation such as summarisation can be found in `this
 <https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904>`__ forum discussion.
+
+
+Examples
+_______________________________________________________________________________________________________________________
+
+- Examples and scripts for fine-tuning BART and other models for sequence to sequence tasks can be found in
+  `examples/seq2seq/ <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- An example of how to train :class:`~transformers.BartForConditionalGeneration` with a Hugging Face :obj:`datasets` object
+  can be found in this
+  `forum discussion <https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904>`__.
 
 
 Implementation Notes
