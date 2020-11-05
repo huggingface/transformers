@@ -17,8 +17,10 @@ import collections
 import os
 from typing import List, Optional, Tuple
 
+from .file_utils import add_start_docstrings
 from .tokenization_bert import BasicTokenizer, WordpieceTokenizer
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .utils import logging
 
 
