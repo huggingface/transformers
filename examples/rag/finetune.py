@@ -55,7 +55,7 @@ from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
 # need the parent dir module
 sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
-from examples.lightning_base import BaseTransformer, add_generic_args, \
+from lightning_base import BaseTransformer, add_generic_args, \
     generic_train
 # noqa
 
@@ -95,8 +95,8 @@ class GenerativeQAModule(BaseTransformer):
         config_class = RagConfig if self.is_rag_model else AutoConfig
         config = config_class.from_pretrained(hparams.model_name_or_path)
         # Use legacy index.
-        config.index_name = "legacy"
-        config.use_dummy_dataset = False
+        #config.index_name = "legacy"
+        #config.use_dummy_dataset = False
 
         # set retriever parameters
         config.index_name = args.index_name or config.index_name
@@ -110,6 +110,7 @@ class GenerativeQAModule(BaseTransformer):
                 config.generator.prefix = args.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
+            #import ipdb; ipdb.set_trace()
             if hparams.distributed_retriever == "pytorch":
                 retriever = RagPyTorchDistributedRetriever.from_pretrained(
                     hparams.model_name_or_path, config=config)
