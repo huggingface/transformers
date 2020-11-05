@@ -96,7 +96,6 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
             --model_name Helsinki-NLP/opus-mt-en-ro
             --save_dir {output_dir}
             --data_dir test_data/wmt_en_ro
-            --n_obs 100
             --num_beams 2
             --task translation
         """.split()
