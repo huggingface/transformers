@@ -496,13 +496,6 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         hidden_states = tf.concat([self._get_hidden_states(), self._get_hidden_states() - 0.5], axis=0)
         batch_size, seq_length, hidden_size = hidden_states.shape
 
-        #        attention_mask = tf.zeros((batch_size, 1, 1, seq_length), dtype=tf.dtypes.float32)
-        #
-        # create attn mask
-        #        attention_mask[0, -2:] = 10000.0
-        #        attention_mask[0, -1:] = -10000.0
-        #        attention_mask[1, 1:] = 10000.0
-
         # create attn mask
         attention_mask_1 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
         attention_mask_2 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
