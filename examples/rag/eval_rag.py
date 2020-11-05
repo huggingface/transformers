@@ -15,7 +15,7 @@ from transformers import logging as transformers_logging
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # isort:skip
-from examples.rag.utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
+from utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def get_precision_at_k(args, preds_path, gold_data_path):
     em = total = 0
     for hypo, reference in zip(hypos, references):
         hypo_provenance = set(hypo.split("\t")[:k])
-        ref_provenance = set(reference.split("\t")[1 : (k + 1)])
+        ref_provenance = set(reference.split("\t"))
         total += 1
         em += len(hypo_provenance & ref_provenance) / k
 
@@ -176,7 +176,7 @@ def get_args():
         choices=["e2e", "retrieval"],
         default="e2e",
         type=str,
-        help="Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calulates precision@k.",
+        help="Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calculates precision@k.",
     )
     parser.add_argument("--k", default=1, type=int, help="k for the precision@k calculation")
     parser.add_argument(
@@ -206,7 +206,7 @@ def get_args():
         "--predictions_path",
         type=str,
         default="predictions.txt",
-        help="Name of the predictions file, to be stored in the checkpoints directry",
+        help="Name of the predictions file, to be stored in the checkpoints directory",
     )
     parser.add_argument(
         "--eval_all_checkpoints",

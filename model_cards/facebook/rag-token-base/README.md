@@ -1,3 +1,10 @@
+---
+language: en
+license: apache-2.0
+datasets:
+- wiki_dpr
+thumbnail: https://huggingface.co/front/thumbnails/facebook.png
+---
 ## RAG
 
 This is a non-finetuned version of the RAG-Token model of the the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/pdf/2005.11401.pdf) 

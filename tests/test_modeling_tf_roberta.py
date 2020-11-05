@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import RobertaConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -222,6 +222,8 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):

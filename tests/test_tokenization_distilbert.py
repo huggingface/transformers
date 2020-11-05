@@ -14,18 +14,18 @@
 # limitations under the License.
 
 
-from transformers.testing_utils import slow
-from transformers.tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from transformers import DistilBertTokenizer, DistilBertTokenizerFast
+from transformers.testing_utils import require_tokenizers, slow
 
 from .test_tokenization_bert import BertTokenizationTest
 
 
+@require_tokenizers
 class DistilBertTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DistilBertTokenizer
-
-    def get_rust_tokenizer(self, **kwargs):
-        return DistilBertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    rust_tokenizer_class = DistilBertTokenizerFast
+    test_rust_tokenizer = True
 
     @slow
     def test_sequence_builders(self):

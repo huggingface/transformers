@@ -94,7 +94,7 @@ fill_mask(PYTHON_CODE3)
 
 > Great! 🎉
 
-## This work is heavely inspired on [CodeBERTa](https://github.com/huggingface/transformers/blob/master/model_cards/huggingface/CodeBERTa-small-v1/README.md) by huggingface team
+## This work is heavily inspired on [CodeBERTa](https://github.com/huggingface/transformers/blob/master/model_cards/huggingface/CodeBERTa-small-v1/README.md) by huggingface team
 
 <br>
 

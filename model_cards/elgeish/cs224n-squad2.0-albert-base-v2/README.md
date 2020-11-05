@@ -17,7 +17,7 @@ set, students must make sure not to use the official SQuAD2.0 dev set in any way
 used the official SQuAD2.0 dev set for model selection.
 
 <a href="https://huggingface.co/exbert/?model=elgeish/cs224n-squad2.0-albert-base-v2">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>
 
 ## Results
