@@ -978,12 +978,13 @@ class TextClassificationPipeline(Pipeline):
         outputs = super().__call__(*args, **kwargs)
 
         if self.return_raw_outputs:
+            scores = outputs
+        else:
             if self.model.config.num_labels == 1:
                 scores = 1.0 / (1.0 + np.exp(-outputs))
             else:
                 scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
-        else:
-            scores = outputs
+
         if self.return_all_scores:
             return [
                 [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
