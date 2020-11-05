@@ -51,7 +51,7 @@ class TestAll(TestCasePlus):
             "$ENRO_DIR": data_dir,
             "facebook/mbart-large-cc25": MARIAN_MODEL,
             # "val_check_interval=0.25": "val_check_interval=1.0",
-            "--learning_rate=3e-5": "--learning_rate=3e-4",
+            "--learning_rate=3e-5": "--learning_rate 3e-4",
             "--num_train_epochs 6": "--num_train_epochs 1",
         }
 
@@ -66,18 +66,18 @@ class TestAll(TestCasePlus):
 
         # bash_script = bash_script.replace("--fp16 ", "")
         args = f"""
-            --output_dir={output_dir}
-            --gpus=1
-            --freeze_encoder
-            --learning_rate=3e-4
+            --output_dir {output_dir}
             --tokenizer_name Helsinki-NLP/opus-mt-en-ro
+            --sortish_sampler
+            --do_predict
+            --gpus 1
+            --freeze_encoder
             --n_train 100000
             --n_val 500
             --n_test 500
-            --fp16_opt_level=O1
-            --num_sanity_val_steps=0
-            --sortish_sampler
-            --do_predict
+            --fp16_opt_level O1
+            --num_sanity_val_steps 0
+            --eval_beams 2
         """.split()
         # XXX: args.gpus > 1 : handle multigpu in the future
 
