@@ -96,6 +96,9 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
             --model_name Helsinki-NLP/opus-mt-en-ro
             --save_dir {output_dir}
             --data_dir test_data/wmt_en_ro
+            --n_obs 100
+            --num_beams 2
+            --task translation
         """.split()
 
         # we want this test to run even if there is only one GPU, but if there are more we use them all
@@ -108,10 +111,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
         cmd = [sys.executable] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
 
-        metrics_save_path = os.path.join(output_dir, "test_rouge.json")
+        metrics_save_path = os.path.join(output_dir, "test_bleu.json")
         metrics = load_json(metrics_save_path)
         # print(metrics)
-        self.assertGreaterEqual(metrics["rouge1"], 63)
-        self.assertGreaterEqual(metrics["rouge2"], 40)
-        self.assertGreaterEqual(metrics["rougeL"], 55)
-        self.assertGreaterEqual(metrics["rougeLsum"], 60)
+        self.assertGreaterEqual(metrics["bleu"], 25)
