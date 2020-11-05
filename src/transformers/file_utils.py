@@ -1119,7 +1119,7 @@ def get_from_cache(
             else:
                 resume_size = 0
         else:
-            temp_file_manager = partial(tempfile.NamedTemporaryFile, dir=cache_dir, delete=False)
+            temp_file_manager = partial(tempfile.NamedTemporaryFile, mode="wb", dir=cache_dir, delete=False)
             resume_size = 0
 
         # Download to temporary file, then copy to cache dir once finished.
