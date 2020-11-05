@@ -1146,15 +1146,15 @@ class LongformerLMHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states, **kwargs):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = gelu(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
+    def forward(self, features, **kwargs):
+        x = self.dense(features)
+        x = gelu(x)
+        x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        hidden_states = self.decoder(hidden_states)
+        x = self.decoder(x)
 
-        return hidden_states
+        return x
 
 
 class LongformerPreTrainedModel(PreTrainedModel):
