@@ -110,7 +110,7 @@ class GenerativeQAModule(BaseTransformer):
                 config.generator.prefix = args.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
-            import ipdb; ipdb.set_trace()
+            #import ipdb; ipdb.set_trace()
             if hparams.distributed_retriever == "pytorch":
                 retriever = RagPyTorchDistributedRetriever.from_pretrained(
                     hparams.model_name_or_path, config=config)
