@@ -45,7 +45,7 @@ class TestAll(TestCasePlus):
         data_dir = self.data_dir
         env_vars_to_replace = {
             "--fp16_opt_level=O1": "",
-            "$MAX_LEN": 128,
+            "$MAX_LEN": 64,
             "$BS": 64,
             "$GAS": 1,
             "$ENRO_DIR": data_dir,
