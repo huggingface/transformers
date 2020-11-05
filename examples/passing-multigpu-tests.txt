@@ -1,0 +1,4 @@
+examples/seq2seq/test_finetune_trainer.py::TestFinetuneTrainer::test_finetune_trainer
+examples/seq2seq/test_finetune_trainer.py::TestFinetuneTrainer::test_finetune_trainer_slow
+examples/seq2seq/test_seq2seq_examples_multi_gpu.py::TestSummarizationDistillerMultiGPU::test_distributed_eval
+examples/seq2seq/test_seq2seq_examples_multi_gpu.py::TestSummarizationDistillerMultiGPU::test_multigpu

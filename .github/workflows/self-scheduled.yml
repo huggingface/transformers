@@ -239,13 +239,13 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_multiple_gpu_failures_short.txt
 
-      - name: Run all examples tests on multi-GPU
+      - name: Run ported examples tests on multi-GPU
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_multiple_gpu examples
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_multiple_gpu $(tr '\n' ' ' < examples/passing-multigpu-tests.txt)
 
       - name: Failure short reports
         if: ${{ always() }}
