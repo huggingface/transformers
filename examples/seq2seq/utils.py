@@ -269,7 +269,7 @@ class Seq2SeqDataCollator:
         ), f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
         self.data_args = data_args
         self.tpu_num_cores = tpu_num_cores
-        self.dataset_kwargs = {"add_prefix_space": isinstance(tokenizer, BartTokenizer)}
+        self.dataset_kwargs = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
         if data_args.src_lang is not None:
             self.dataset_kwargs["src_lang"] = data_args.src_lang
         if data_args.tgt_lang is not None:
