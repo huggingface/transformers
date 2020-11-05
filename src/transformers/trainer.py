@@ -1333,6 +1333,12 @@ class Trainer:
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
+        .. note::
+
+            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            padding in a token classification task) the predictions will be padded (on the right) to allow for
+            concatenation into one array. The padding index is -100.
+
         Returns: `NamedTuple` A namedtuple with the following keys:
 
             - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
