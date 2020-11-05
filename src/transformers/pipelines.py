@@ -516,7 +516,7 @@ class Pipeline(_ScikitCompat):
         if framework is None:
             framework = get_framework(model)
 
-        self.task = task
+        self.task = task or self.task
         self.model = model
         self.tokenizer = tokenizer
         self.modelcard = modelcard
@@ -530,8 +530,8 @@ class Pipeline(_ScikitCompat):
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
-        if task_specific_params is not None and task in task_specific_params:
-            self.model.config.update(task_specific_params.get(task))
+        if task_specific_params is not None and self.task in task_specific_params:
+            self.model.config.update(task_specific_params.get(self.task))
 
     def save_pretrained(self, save_directory: str):
         """
@@ -947,7 +947,9 @@ class TextClassificationPipeline(Pipeline):
     <https://huggingface.co/models?filter=text-classification>`__.
     """
 
-    def __init__(self, return_all_scores: bool = False, return_raw_outputs: bool = False, **kwargs):
+    task = "text-classification"
+
+    def __init__(self, return_all_scores: bool = False, return_raw_outputs: bool = None, **kwargs):
         super().__init__(**kwargs)
 
         self.check_model_type(
@@ -956,8 +958,11 @@ class TextClassificationPipeline(Pipeline):
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
         )
 
+        if hasattr(self.model.config, "return_raw_outputs") and return_raw_outputs is None:
+            return_raw_outputs = self.model.config.return_raw_outputs
+
         self.return_all_scores = return_all_scores
-        self.return_raw_outputs = return_raw_outputs
+        self.return_raw_outputs = return_raw_outputs if return_raw_outputs is not None else False
 
     def __call__(self, *args, **kwargs):
         """
