@@ -44,8 +44,8 @@ _default_log_level = logging.WARNING
 
 def _get_default_logging_level():
     """
-    If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level.
-    If it is not - fall back to ``_default_log_level``
+    If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level. If it is
+    not - fall back to ``_default_log_level``
     """
     env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
     if env_level_str:
@@ -194,8 +194,8 @@ def enable_default_handler() -> None:
 
 
 def disable_propagation() -> None:
-    """Disable propagation of the library log outputs.
-    Note that log propagation is disabled by default.
+    """
+    Disable propagation of the library log outputs. Note that log propagation is disabled by default.
     """
 
     _configure_library_root_logger()
@@ -203,9 +203,9 @@ def disable_propagation() -> None:
 
 
 def enable_propagation() -> None:
-    """Enable propagation of the library log outputs.
-    Please disable the HuggingFace Transformers's default handler to prevent double logging if the root logger has
-    been configured.
+    """
+    Enable propagation of the library log outputs. Please disable the HuggingFace Transformers's default handler to
+    prevent double logging if the root logger has been configured.
     """
 
     _configure_library_root_logger()

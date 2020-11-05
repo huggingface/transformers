@@ -28,8 +28,8 @@ from .tokenization_utils_base import ExplicitEnum
 
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf``
-    (if installed).
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
+    installed).
 
     Args:
         seed (:obj:`int`): The seed to set.
@@ -114,12 +114,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
-    _ = metrics.pop("total_flos", None)
-    if len(metrics) != 0:
-        raise RuntimeError(
-            "Metrics contains more entries than just 'eval_loss', 'epoch' and 'total_flos', please provide your own compute_objective function."
-        )
-    return loss
+    return loss if len(metrics) == 0 else sum(metrics.values())
 
 
 def default_hp_space_optuna(trial) -> Dict[str, float]:

@@ -44,8 +44,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 def get_pairs(word):
     """
-    Return set of symbol pairs in a word.
-    word is represented as tuple of symbols (symbols being variable-length strings)
+    Return set of symbol pairs in a word. word is represented as tuple of symbols (symbols being variable-length
+    strings)
     """
     pairs = set()
     prev_char = word[0]
@@ -57,8 +57,7 @@ def get_pairs(word):
 
 def text_standardize(text):
     """
-    fixes some issues the spacy tokenizer had on books corpus
-    also does some whitespace standardization
+    fixes some issues the spacy tokenizer had on books corpus also does some whitespace standardization
     """
     text = text.replace("—", "-")
     text = text.replace("–", "-")
@@ -79,8 +78,8 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     - uses :obj:`SpaCy` tokenizer and :obj:`ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
       :obj:`BasicTokenizer` if not.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):

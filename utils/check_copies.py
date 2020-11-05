@@ -100,7 +100,7 @@ def is_copy_consistent(filename, overwrite=False):
         lines = f.readlines()
     diffs = []
     line_index = 0
-    # Not a foor loop cause `lines` is going to change (if `overwrite=True`).
+    # Not a for loop cause `lines` is going to change (if `overwrite=True`).
     while line_index < len(lines):
         search = _re_copy_warning.search(lines[line_index])
         if search is None:
@@ -164,9 +164,9 @@ def check_copies(overwrite: bool = False):
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
         raise Exception(
-            "Found the follwing copy inconsistencies:\n"
+            "Found the following copy inconsistencies:\n"
             + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies --fix_and_overwrite` to fix them."
+            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
     check_model_list_copy(overwrite=overwrite)
 

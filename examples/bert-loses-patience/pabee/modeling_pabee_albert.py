@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from transformers.modeling_albert import (
     ALBERT_INPUTS_DOCSTRING,
     ALBERT_START_DOCSTRING,
@@ -87,7 +87,7 @@ class AlbertModelWithPabee(AlbertModel):
         message = f"*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up = {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***"
         print(message)
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -230,7 +230,7 @@ class AlbertForSequenceClassificationWithPabee(AlbertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,

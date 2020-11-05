@@ -1,10 +1,9 @@
-AutoClasses
+Auto Classes
 -----------------------------------------------------------------------------------------------------------------------
 
 In many cases, the architecture you want to use can be guessed from the name or the path of the pretrained model you
-are supplying to the :obj:`from_pretrained()` method.
-AutoClasses are here to do this job for you so that you automatically retrieve the relevant model given the name/path
-to the pretrained weights/config/vocabulary.
+are supplying to the :obj:`from_pretrained()` method. AutoClasses are here to do this job for you so that you
+automatically retrieve the relevant model given the name/path to the pretrained weights/config/vocabulary.
 
 Instantiating one of :class:`~transformers.AutoConfig`, :class:`~transformers.AutoModel`, and
 :class:`~transformers.AutoTokenizer` will directly create a class of the relevant architecture. For instance
@@ -47,10 +46,24 @@ AutoModelForPreTraining
     :members:
 
 
-AutoModelWithLMHead
+AutoModelForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.AutoModelWithLMHead
+.. autoclass:: transformers.AutoModelForCausalLM
+    :members:
+
+
+AutoModelForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForMaskedLM
+    :members:
+
+
+AutoModelForSeq2SeqLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForSeq2SeqLM
     :members:
 
 
@@ -96,10 +109,24 @@ TFAutoModelForPreTraining
     :members:
 
 
-TFAutoModelWithLMHead
+TFAutoModelForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.TFAutoModelWithLMHead
+.. autoclass:: transformers.TFAutoModelForCausalLM
+    :members:
+
+
+TFAutoModelForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAutoModelForMaskedLM
+    :members:
+
+
+TFAutoModelForSeq2SeqLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAutoModelForSeq2SeqLM
     :members:
 
 

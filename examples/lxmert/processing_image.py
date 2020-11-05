@@ -116,7 +116,7 @@ class Preprocess:
             images = self.aug(images)
             # transpose images and convert to torch tensors
             # images = [torch.as_tensor(i.astype("float32")).permute(2, 0, 1).to(self.device) for i in images]
-            # now normalize before pad to aoid useless arithmatic
+            # now normalize before pad to avoid useless arithmetic
             images = [self.normalizer(x) for x in images]
             # now pad them to do the following operations
             images, sizes = self.pad(images)

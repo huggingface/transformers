@@ -5,6 +5,8 @@ language:
 license: apache-2.0
 datasets:
 - wmt14
+tags:
+- translation
 ---
 
 # bert2bert_L-24_wmt_en_de EncoderDecoder model
