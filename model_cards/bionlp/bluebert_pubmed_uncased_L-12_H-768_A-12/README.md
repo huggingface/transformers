@@ -3,11 +3,10 @@ language:
 - en
 tags:
 - bluebert
-- bert
 license: 
 - PUBLIC DOMAIN NOTICE
 datasets:
-- PubMed
+- pubmed
 
 ---
 
