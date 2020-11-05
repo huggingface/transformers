@@ -220,12 +220,13 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -235,8 +236,8 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
-            attentions = outputs["attentions"] if "attentions" in outputs.keys() else outputs[-1]
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -255,24 +256,17 @@ class ModelTesterMixin:
                 correct_outlen = (
                     self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 4
                 )
-                decoder_attention_idx = (
-                    self.model_tester.decoder_attention_idx
-                    if hasattr(self.model_tester, "decoder_attention_idx")
-                    else 1
-                )
 
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                    decoder_attention_idx += 1
                 # Question Answering model returns start_logits and end_logits
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                    decoder_attention_idx += 1
 
                 self.assertEqual(out_len, correct_outlen)
 
-                decoder_attentions = outputs[decoder_attention_idx]
+                decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
@@ -297,7 +291,8 @@ class ModelTesterMixin:
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs["attentions"] if "attentions" in outputs else outputs[-1]
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(

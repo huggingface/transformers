@@ -90,6 +90,32 @@ LongformerTokenizerFast
 .. autoclass:: transformers.LongformerTokenizerFast
     :members: 
 
+Longformer specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_longformer.LongformerBaseModelOutput
+    :members: 
+
+.. autoclass:: transformers.modeling_longformer.LongformerBaseModelOutputWithPooling
+    :members: 
+
+.. autoclass:: transformers.modeling_longformer.LongformerMultipleChoiceModelOutput
+    :members: 
+
+.. autoclass:: transformers.modeling_longformer.LongformerQuestionAnsweringModelOutput
+    :members: 
+
+.. autoclass:: transformers.modeling_tf_longformer.TFLongformerBaseModelOutput
+    :members: 
+
+.. autoclass:: transformers.modeling_tf_longformer.TFLongformerBaseModelOutputWithPooling
+    :members: 
+
+.. autoclass:: transformers.modeling_tf_longformer.TFLongformerQuestionAnsweringModelOutput
+    :members: 
+
+LongformerModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 LongformerModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
