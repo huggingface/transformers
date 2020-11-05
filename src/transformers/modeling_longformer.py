@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -90,7 +90,7 @@ class LongformerBaseModelOutput(ModelOutput):
             be accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, x, sequence_length)`, where `x` is the number of tokens with global
+            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
             attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
@@ -141,7 +141,7 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
             be accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, x, sequence_length)`, where `x` is the number of tokens with global
+            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
             attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
@@ -192,7 +192,7 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
             be accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, x, sequence_length)`, where `x` is the number of tokens with global
+            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
             attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
@@ -243,7 +243,7 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
             be accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, x, sequence_length)`, where `x` is the number of tokens with global
+            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
             attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
@@ -419,10 +419,7 @@ class LongformerSelfAttention(nn.Module):
         self.one_sided_attn_window_size = attention_window // 2
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, is_index_masked=None, is_index_global_attn=None, is_global_attn=None
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -434,13 +431,6 @@ class LongformerSelfAttention(nn.Module):
             +ve: global attention
 
         """
-        attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
-
-        # is index masked or global attention
-        is_index_masked = attention_mask < 0
-        is_index_global_attn = attention_mask > 0
-        is_global_attn = is_index_global_attn.flatten().any().item()
-
         hidden_states = hidden_states.transpose(0, 1)
 
         # project hidden states
@@ -459,7 +449,6 @@ class LongformerSelfAttention(nn.Module):
         query_vectors = query_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         key_vectors = key_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
 
-        # local_attn_probs = (batch_size, seq_len, num_heads, window*2+1)
         attn_scores = self._sliding_chunks_query_key_matmul(
             query_vectors, key_vectors, self.one_sided_attn_window_size
         )
@@ -548,7 +537,7 @@ class LongformerSelfAttention(nn.Module):
         # compute value for global attention and overwrite to attention output
         # TODO: remove the redundant computation
         if is_global_attn:
-            global_attn_probs, global_attn_output = self._compute_global_attn_output_from_hidden(
+            global_attn_output, global_attn_probs = self._compute_global_attn_output_from_hidden(
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
@@ -566,25 +555,14 @@ class LongformerSelfAttention(nn.Module):
             attn_output[is_index_global_attn_nonzero[::-1]] = nonzero_global_attn_output.view(
                 len(is_local_index_global_attn_nonzero[0]), -1
             )
+            # The attention weights for tokens with global attention are
+            # just filler values, they were never used to compute the output.
+            # Fill with 0 now, the correct values are in 'global_attn_probs'.
+            local_attn_probs[is_index_global_attn_nonzero] = 0
 
-        attn_output = attn_output.transpose(0, 1)
+        outputs = (attn_output.transpose(0, 1), local_attn_probs)
 
-        if output_attentions:
-            if is_global_attn:
-                # The attention weights for tokens with global attention are
-                # just filler values, they were never used to compute the output.
-                # Fill with 0 now, the correct values are in 'global_attn_probs'.
-                local_attn_probs[is_index_global_attn_nonzero] = 0
-            local_attn_probs = local_attn_probs.permute(0, 2, 1, 3)
-
-        outputs = (
-            (attn_output,)
-            if not output_attentions
-            else (attn_output, local_attn_probs, global_attn_probs)
-            if is_global_attn
-            else (attn_output, local_attn_probs)
-        )
-        return outputs
+        return outputs + (global_attn_probs,) if is_global_attn else outputs
 
     @staticmethod
     def _pad_and_transpose_last_two_dims(hidden_states_padded, padding):
@@ -937,7 +915,7 @@ class LongformerSelfAttention(nn.Module):
         global_attn_output = global_attn_output.view(
             batch_size, self.num_heads, max_num_global_attn_indices, self.head_dim
         )
-        return global_attn_probs, global_attn_output
+        return global_attn_output, global_attn_probs
 
 
 # Copied from transformers.modeling_bert.BertSelfOutput
@@ -981,18 +959,17 @@ class LongformerAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, is_index_masked=None, is_index_global_attn=None, is_global_attn=None
     ):
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            output_attentions,
+            attention_mask=attention_mask,
+            is_index_masked=is_index_masked,
+            is_index_global_attn=is_index_global_attn,
+            is_global_attn=is_global_attn,
         )
         attn_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attn_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attn_output,) + self_outputs[1:]
         return outputs
 
 
@@ -1037,18 +1014,17 @@ class LongformerLayer(nn.Module):
         self.seq_len_dim = 1
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, is_index_masked=None, is_index_global_attn=None, is_global_attn=None
     ):
         self_attn_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            output_attentions=output_attentions,
+            attention_mask=attention_mask,
+            is_index_masked=is_index_masked,
+            is_index_global_attn=is_index_global_attn,
+            is_global_attn=is_global_attn,
         )
         attn_output = self_attn_outputs[0]
-        outputs = self_attn_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attn_outputs[1:]
 
         layer_output = apply_chunking_to_forward(
             self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attn_output
@@ -1076,9 +1052,15 @@ class LongformerEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=False,
     ):
+
+        is_index_masked = attention_mask < 0
+        is_index_global_attn = attention_mask > 0
+        is_global_attn = is_index_global_attn.flatten().any().item()
+
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None  # All local attentions.
-        all_global_attentions = () if output_attentions else None
+        all_global_attentions = () if (output_attentions and is_global_attn) else None
+
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1095,20 +1077,27 @@ class LongformerEncoder(nn.Module):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
+                    is_index_masked,
+                    is_index_global_attn,
+                    is_global_attn,
                 )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
-                    attention_mask,
-                    output_attentions,
+                    attention_mask=attention_mask,
+                    is_index_masked=is_index_masked,
+                    is_index_global_attn=is_index_global_attn,
+                    is_global_attn=is_global_attn,
                 )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-                # Output global attentions if they exist.
-                if len(layer_outputs) > 2:
-                    all_global_attentions = all_global_attentions + (layer_outputs[2],)
+                # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
+                all_attentions = all_attentions + (layer_outputs[1].transpose(1, 2),)
+
+                if is_global_attn:
+                    # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
+                    all_global_attentions = all_global_attentions + (layer_outputs[2].transpose(2, 3),)
 
         # Add last layer
         if output_hidden_states:
@@ -1116,15 +1105,13 @@ class LongformerEncoder(nn.Module):
 
         if not return_dict:
             return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_attentions, all_global_attentions or None]
-                if v is not None
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_global_attentions] if v is not None
             )
         return LongformerBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
-            global_attentions=all_global_attentions or None,
+            global_attentions=all_global_attentions,
         )
 
 
@@ -1159,15 +1146,15 @@ class LongformerLMHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, features, **kwargs):
-        x = self.dense(features)
-        x = gelu(x)
-        x = self.layer_norm(x)
+    def forward(self, hidden_states, **kwargs):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = gelu(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
 
         # project back to size of vocabulary with bias
-        x = self.decoder(x)
+        hidden_states = self.decoder(hidden_states)
 
-        return x
+        return hidden_states
 
 
 class LongformerPreTrainedModel(PreTrainedModel):
@@ -1460,7 +1447,9 @@ class LongformerModel(LongformerPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)[
+            :, 0, 0, :
+        ]
 
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -1484,7 +1473,6 @@ class LongformerModel(LongformerPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        # FIXME: output global attention only if it exists XXX.
         return LongformerBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
