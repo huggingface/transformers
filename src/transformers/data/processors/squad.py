@@ -16,6 +16,15 @@ from .utils import DataProcessor
 # Store the tokenizers which insert 2 separators tokens
 MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
 
+# Store the tokenizers which require prefix space
+NEED_PREFIX_SPACE_TOKENIZERS_SET = {
+    "RobertaTokenizer",
+    "LongformerTokenizer",
+    "BartTokenizer",
+    "RobertaTokenizerFast",
+    "LongformerTokenizerFast",
+    "BartTokenizerFast",
+}
 
 if is_torch_available():
     import torch
@@ -26,10 +35,13 @@ if is_tf_available():
 
 logger = logging.get_logger(__name__)
 
-
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer, orig_answer_text):
     """Returns tokenized answer spans that better match the annotated answer."""
-    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
+    if tokenizer.__class__.__name__ in NEED_PREFIX_SPACE_TOKENIZERS_SET:
+        sub_tokens = tokenizer.tokenize(orig_answer_text, add_prefix_space=True)
+    else:
+        sub_tokens = tokenizer.tokenize(orig_answer_text)
+    tok_answer_text = " ".join(sub_tokens)
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
@@ -109,14 +121,7 @@ def squad_convert_example_to_features(
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        if tokenizer.__class__.__name__ in [
-            "RobertaTokenizer",
-            "LongformerTokenizer",
-            "BartTokenizer",
-            "RobertaTokenizerFast",
-            "LongformerTokenizerFast",
-            "BartTokenizerFast",
-        ]:
+        if tokenizer.__class__.__name__ in NEED_PREFIX_SPACE_TOKENIZERS_SET:
             sub_tokens = tokenizer.tokenize(token, add_prefix_space=True)
         else:
             sub_tokens = tokenizer.tokenize(token)
