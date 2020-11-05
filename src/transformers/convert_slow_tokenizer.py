@@ -12,10 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Utilities to convert slow tokenizers in their fast tokenizers counterparts.
+"""
+ Utilities to convert slow tokenizers in their fast tokenizers counterparts.
 
-    All the conversions are grouped here to gather SentencePiece dependencies outside of
-    the fast tokenizers files and allow to make our dependency on SentencePiece optional.
+    All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
+    allow to make our dependency on SentencePiece optional.
 """
 
 from typing import Dict, List, Tuple
@@ -31,8 +32,7 @@ from .file_utils import requires_sentencepiece
 
 class SentencePieceExtractor:
     """
-    Extractor implementation for SentencePiece trained models.
-    https://github.com/google/sentencepiece
+    Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
     """
 
     def __init__(self, model: str):
@@ -602,7 +602,8 @@ SLOW_TO_FAST_CONVERTERS = {
 
 
 def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
-    """Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
+    """
+    Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
         transformer_tokenizer (:class:`~transformers.tokenization_utils_base.PreTrainedTokenizer`):

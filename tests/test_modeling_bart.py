@@ -23,6 +23,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
@@ -128,7 +129,7 @@ def prepare_bart_inputs_dict(
 
 
 @require_torch
-class BARTModelTest(ModelTesterMixin, unittest.TestCase):
+class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
         if is_torch_available()
@@ -620,8 +621,8 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         self.assertListEqual(no_cache[-1].tolist(), yes_cache[0][0].tolist())
 
     def test_odd_embed_dim(self):
-        with self.assertRaises(NotImplementedError):
-            SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=0).to(torch_device)
+        # odd embedding_dim is allowed
+        SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=0).to(torch_device)
 
         # odd num_positions is allowed
         SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=0).to(torch_device)

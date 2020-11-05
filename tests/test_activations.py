@@ -20,6 +20,7 @@ class TestActivations(unittest.TestCase):
 
     def test_get_activation(self):
         get_activation("swish")
+        get_activation("silu")
         get_activation("relu")
         get_activation("tanh")
         get_activation("gelu_new")
