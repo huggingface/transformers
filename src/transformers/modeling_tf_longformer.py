@@ -28,12 +28,7 @@ from .file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from .modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
-    TFMaskedLMOutput,
-    TFQuestionAnsweringModelOutput,
-)
+from .modeling_tf_outputs import TFMaskedLMOutput, TFQuestionAnsweringModelOutput
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFPreTrainedModel,
@@ -1362,7 +1357,9 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_global_attentions] if v is not None
+            )
 
         return TFLongformerBaseModelOutput(
             last_hidden_state=hidden_states,
