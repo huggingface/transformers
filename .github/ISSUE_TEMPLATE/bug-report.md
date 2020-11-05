@@ -36,13 +36,15 @@ assignees: ''
  examples/distillation: @VictorSanh
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
- Text Generation: @TevenLeScao
+ Text Generation: @patrickvonplaten @TevenLeScao
  blenderbot: @mariamabarham
  Bart: @sshleifer
  Marian: @sshleifer
  T5: @patrickvonplaten
  Longformer/Reformer: @patrickvonplaten
- TransfoXL/XLNet: @TevenLeScao 
+ TransfoXL/XLNet: @TevenLeScao
+ RAG: @patrickvonplaten, @lhoestq
+ FSTM: @stas00
  examples/seq2seq: @sshleifer
  examples/bert-loses-patience: @JetRunner
  tensorflow: @jplu
