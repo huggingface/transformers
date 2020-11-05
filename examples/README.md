@@ -68,7 +68,7 @@ For example for `run_glue`:
 
 ```bash
 python examples/xla_spawn.py --num_cores 8 \
-	examples/text-classification/run_glue.py
+	examples/text-classification/run_glue.py \
 	--model_name_or_path bert-base-cased \
 	--task_name mnli \
 	--data_dir ./data/glue_data/MNLI \
