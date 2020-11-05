@@ -245,7 +245,7 @@ jobs:
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_multiple_gpu $(tr '\n' ' ' < examples/passing-multigpu-tests.txt)
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_multiple_gpu $(tr '\n' ' ' < examples/ported-multigpu-tests.txt)
 
       - name: Failure short reports
         if: ${{ always() }}
