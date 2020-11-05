@@ -580,8 +580,8 @@ class LongformerModelIntegrationTest(unittest.TestCase):
             is_global_attn=is_global_attn,
         )
 
-        self.assertTrue(local_attentions.shape, (2, 2, 4, 8))
-        self.assertTrue(global_attentions.shape, (2, 2, 3, 4))
+        self.assertEqual(local_attentions.shape, (2, 4, 2, 8))
+        self.assertEqual(global_attentions.shape, (2, 2, 3, 4))
 
         # All tokens with global attention have weight 0 in local attentions.
         self.assertTrue(torch.all(local_attentions[0, 2:4, :, :] == 0))
