@@ -236,7 +236,7 @@ def nested_expand_like(arrays, new_seq_length, pad_idx=-100):
         return type(arrays)(nested_expand_like(x, new_seq_length, pad_idx=pad_idx) for x in arrays)
 
     result = np.full_like(arrays, pad_idx, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
-    result[:, :new_seq_length] = arrays
+    result[:, :arrays.shape[1]] = arrays
     return result
 
 
