@@ -22,7 +22,12 @@ import tensorflow as tf
 from transformers.activations_tf import get_tf_activation
 
 from .configuration_longformer import LongformerConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -65,35 +70,32 @@ class TFLongformerBaseModelOutput(ModelOutput):
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of
-            tokens with global attention mask.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every
-            token with global attention (first `x` values) and to every token in the attention window
-            (remaining `attention_window + 1` values). Note that the first `x` values refer to tokens with
-            fixed positions in the text, but the remaining `attention_window + 1` values refer to tokens with
-            relative positions: the attention weight of a token to itself is located at index
-            `x + `attention_window / 2` and the `attention_window / 2` preceding (succeeding) values are the
-            attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention
-            window contains a token with global attention, the attention weight at the corresponding index is
-            set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should
-            be accessed from 'global_attentions'.
+            self-attention heads. Those are the attention weights from every token in the sequence to every token with
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + `attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
-            attention mask.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x)`,
+            where `x` is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to
-            every token in the sequence.
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
     """
 
     last_hidden_state: tf.Tensor
@@ -111,40 +113,36 @@ class TFLongformerBaseModelOutputWithPooling(ModelOutput):
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during pretraining.
+            Last layer hidden-state of the first token of the sequence (classification token) further processed by a
+            Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
+            prediction (classification) objective during pretraining.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of
-            tokens with global attention mask.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every
-            token with global attention (first `x` values) and to every token in the attention window
-            (remaining `attention_window + 1` values). Note that the first `x` values refer to tokens with
-            fixed positions in the text, but the remaining `attention_window + 1` values refer to tokens with
-            relative positions: the attention weight of a token to itself is located at index
-            `x + `attention_window / 2` and the `attention_window / 2` preceding (succeeding) values are the
-            attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention
-            window contains a token with global attention, the attention weight at the corresponding index is
-            set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should
-            be accessed from 'global_attentions'.
+            self-attention heads. Those are the attention weights from every token in the sequence to every token with
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + `attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
-            attention mask.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x)`,
+            where `x` is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to
-            every token in the sequence.
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
     """
 
     last_hidden_state: tf.Tensor
@@ -167,35 +165,32 @@ class TFLongformerQuestionAnsweringModelOutput(ModelOutput):
         end_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of
-            tokens with global attention mask.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every
-            token with global attention (first `x` values) and to every token in the attention window
-            (remaining `attention_window + 1` values). Note that the first `x` values refer to tokens with
-            fixed positions in the text, but the remaining `attention_window + 1` values refer to tokens with
-            relative positions: the attention weight of a token to itself is located at index
-            `x + `attention_window / 2` and the `attention_window / 2` preceding (succeeding) values are the
-            attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention
-            window contains a token with global attention, the attention weight at the corresponding index is
-            set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should
-            be accessed from 'global_attentions'.
+            self-attention heads. Those are the attention weights from every token in the sequence to every token with
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + `attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from 'global_attentions'.
         global_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, x)`, where `x` is the number of tokens with global
-            attention mask.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x)`,
+            where `x` is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to
-            every token in the sequence.
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
     """
 
     loss: Optional[tf.Tensor] = None
