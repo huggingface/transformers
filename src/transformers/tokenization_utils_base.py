@@ -1624,6 +1624,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
                         logger.debug(err)
+                        resolved_vocab_files[file_id] = None
                     else:
                         raise err
 

@@ -1087,7 +1087,7 @@ def get_from_cache(
             # between the HEAD and the GET (unlikely, but hey).
             if 300 <= r.status_code <= 399:
                 url_to_download = r.headers["Location"]
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             # etag is already None
             pass
 
