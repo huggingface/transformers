@@ -42,7 +42,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-def torch_pad_and_concatenate(tensor1, tensor2, pad_idx=-100):
+def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
     """Concatenates `tensor1` and `tensor2` on first axis, applying padding on the second if necessary."""
     if len(tensor1.shape) == 1 or tensor1.shape[1] == tensor2.shape[1]:
         return torch.cat((tensor1, tensor2), dim=0)
@@ -51,13 +51,13 @@ def torch_pad_and_concatenate(tensor1, tensor2, pad_idx=-100):
     new_shape = (tensor1.shape[0] + tensor2.shape[0], max(tensor1.shape[1], tensor2.shape[1])) + tensor1.shape[2:]
 
     # Now let's fill the result tensor
-    result = tensor1.new_full(new_shape, pad_idx)
+    result = tensor1.new_full(new_shape, padding_index)
     result[: tensor1.shape[0], : tensor1.shape[1]] = tensor1
     result[tensor1.shape[0] :, : tensor2.shape[1]] = tensor2
     return result
 
 
-def numpy_pad_and_concatenate(array1, array2, pad_idx=-100):
+def numpy_pad_and_concatenate(array1, array2, padding_index=-100):
     """Concatenates `array1` and `array2` on first axis, applying padding on the second if necessary."""
     if len(array1.shape) == 1 or array1.shape[1] == array2.shape[1]:
         return np.concatenate((array1, array2), dim=0)
@@ -66,13 +66,13 @@ def numpy_pad_and_concatenate(array1, array2, pad_idx=-100):
     new_shape = (array1.shape[0] + array2.shape[0], max(array1.shape[1], array2.shape[1])) + array1.shape[2:]
 
     # Now let's fill the result tensor
-    result = np.full_like(array1, pad_idx, shape=new_shape)
+    result = np.full_like(array1, padding_index, shape=new_shape)
     result[: array1.shape[0], : array1.shape[1]] = array1
     result[array1.shape[0] :, : array2.shape[1]] = array2
     return result
 
 
-def nested_concat(tensors, new_tensors, pad_idx=-100):
+def nested_concat(tensors, new_tensors, padding_index=-100):
     """
     Concat the `new_tensors` to `tensors` on the first dim and pad them on the second if needed. Works for tensors or
     nested list/tuples of tensors.
@@ -81,11 +81,11 @@ def nested_concat(tensors, new_tensors, pad_idx=-100):
         new_tensors
     ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
-        return type(tensors)(nested_concat(t, n, pad_idx=pad_idx) for t, n in zip(tensors, new_tensors))
+        return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
-        return torch_pad_and_concatenate(tensors, new_tensors, pad_idx=pad_idx)
+        return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     elif isinstance(tensors, np.ndarray):
-        return numpy_pad_and_concatenate(tensors, new_tensors, pad_idx=pad_idx)
+        return numpy_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     else:
         raise TypeError(f"Unsupported type for concatenation: got {type(tensors)}")
 
@@ -223,19 +223,19 @@ def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset):
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
 
 
-def nested_new_like(arrays, num_samples, pad_idx=-100):
+def nested_new_like(arrays, num_samples, padding_index=-100):
     """ Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
     if isinstance(arrays, (list, tuple)):
         return type(arrays)(nested_new_like(x, num_samples) for x in arrays)
-    return np.full_like(arrays, pad_idx, shape=(num_samples, *arrays.shape[1:]))
+    return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
 
 
-def nested_expand_like(arrays, new_seq_length, pad_idx=-100):
-    """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `pad_idx` for padding."""
+def nested_expand_like(arrays, new_seq_length, padding_index=-100):
+    """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
     if isinstance(arrays, (list, tuple)):
-        return type(arrays)(nested_expand_like(x, new_seq_length, pad_idx=pad_idx) for x in arrays)
+        return type(arrays)(nested_expand_like(x, new_seq_length, padding_index=padding_index) for x in arrays)
 
-    result = np.full_like(arrays, pad_idx, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
+    result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result
 
@@ -297,11 +297,11 @@ class DistributedTensorGatherer:
         make_multiple_of (:obj:`int`, `optional`):
             If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
             (by adding samples).
-        pad_idx (:obj:`int`, `optional`, defaults to -100):
+        padding_index (:obj:`int`, `optional`, defaults to -100):
             The padding index to use if the arrays don't all have the same sequence length.
     """
 
-    def __init__(self, world_size, num_samples, make_multiple_of=None, pad_idx=-100):
+    def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
         self.world_size = world_size
         self.num_samples = num_samples
         total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
@@ -309,7 +309,7 @@ class DistributedTensorGatherer:
         self.process_length = self.total_samples // world_size
         self._storage = None
         self._offsets = None
-        self.pad_idx = pad_idx
+        self.padding_index = padding_index
 
     def add_arrays(self, arrays):
         """
@@ -319,14 +319,14 @@ class DistributedTensorGatherer:
         if arrays is None:
             return
         if self._storage is None:
-            self._storage = nested_new_like(arrays, self.total_samples, pad_idx=self.pad_idx)
+            self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
             self._offsets = list(range(0, self.total_samples, self.process_length))
         else:
             storage_shape = _get_first_shape(self._storage)
             arrays_shape = _get_first_shape(arrays)
             if len(storage_shape) > 1 and storage_shape[1] < arrays_shape[1]:
                 # If we get new arrays that are too big too fit, we expand the shape fo the storage
-                self._storage = nested_expand_like(self._storage, arrays_shape[1], pad_idx=self.pad_idx)
+                self._storage = nested_expand_like(self._storage, arrays_shape[1], padding_index=self.padding_index)
         slice_len = self._nested_set_tensors(self._storage, arrays)
         for i in range(self.world_size):
             self._offsets[i] += slice_len
