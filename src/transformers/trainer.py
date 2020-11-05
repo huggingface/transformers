@@ -1412,9 +1412,9 @@ class Trainer:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if logits is not None:
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, dim=0)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, pad_idx=-100)
             if labels is not None:
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, dim=0)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, pad_idx=-100)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
