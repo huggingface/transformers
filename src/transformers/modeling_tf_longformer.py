@@ -259,15 +259,15 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
+    def call(self, features):
+        x = self.dense(features)
+        x = self.act(x)
+        x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        hidden_states = self.decoder(hidden_states, mode="linear") + self.bias
+        x = self.decoder(x, mode="linear") + self.bias
 
-        return hidden_states
+        return x
 
 
 # Copied from transformers.modeling_tf_roberta.TFRobertaEmbeddings
