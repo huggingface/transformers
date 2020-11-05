@@ -23,7 +23,9 @@ According to the abstract,
   state-of-the-art results on a range of abstractive dialogue, question answering, and summarization tasks, with gains
   of up to 6 ROUGE.
 
-The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`__.
+The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`__. An example
+of how to train Bart conditional generation such as summarisation can be found in `this 
+<https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904>`__ forum topic.
 
 
 Implementation Notes
