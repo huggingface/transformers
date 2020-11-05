@@ -91,7 +91,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
     @slow
     @require_torch_gpu
     def test_distributed_eval(self):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx")
+        output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
             --model_name Helsinki-NLP/opus-mt-en-ro
             --save_dir {output_dir}
