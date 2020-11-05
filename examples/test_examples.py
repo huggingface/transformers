@@ -43,6 +43,7 @@ if SRC_DIRS is not None:
     import run_clm
     import run_generation
     import run_glue
+    import run_mlm
     import run_ner_new as run_ner
     import run_pl_glue
     import run_squad
@@ -200,7 +201,7 @@ class ExamplesTests(TestCasePlus):
             run_ner.py
             --model_name_or_path bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
-            --validation_file tests/fixtures/tests_samples/conll/sample.json 
+            --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --do_train
@@ -216,7 +217,11 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_ner.main()
-            print(result)
+            self.assertGreaterEqual(result["eval_accuracy_score"], 0.75)
+            self.assertGreaterEqual(result["eval_precision"], 0.75)
+            self.assertGreaterEqual(result["eval_recall"], 0.2)
+            self.assertGreaterEqual(result["eval_f1"], 0.25)
+            self.assertLess(result["eval_loss"], 0.5)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
