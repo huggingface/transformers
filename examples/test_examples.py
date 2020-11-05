@@ -206,6 +206,7 @@ class ExamplesTests(TestCasePlus):
             --overwrite_output_dir
             --do_train
             --do_eval
+            --warmup_steps=2
             --learning_rate=2e-4
             --per_gpu_train_batch_size=2
             --per_gpu_eval_batch_size=2
