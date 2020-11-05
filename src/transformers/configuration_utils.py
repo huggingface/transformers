@@ -384,11 +384,10 @@ class PretrainedConfig(object):
                 local_files_only=local_files_only,
             )
             # Load config dict
-            if resolved_config_file is None:
-                raise EnvironmentError
             config_dict = cls._dict_from_json_file(resolved_config_file)
 
-        except EnvironmentError:
+        except EnvironmentError as err:
+            logger.error(err)
             msg = (
                 f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"

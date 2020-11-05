@@ -29,6 +29,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+import requests
+
 from .file_utils import (
     add_end_docstrings,
     cached_path,
@@ -1600,19 +1602,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
-                        full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, mirror=None
-                        )
+                        full_file_name = hf_bucket_url(pretrained_model_name_or_path, filename=file_name, mirror=None)
 
                     vocab_files[file_id] = full_file_name
 
         # Get files from url, cache, or disk depending on the case
-        try:
-            resolved_vocab_files = {}
-            for file_id, file_path in vocab_files.items():
-                if file_path is None:
-                    resolved_vocab_files[file_id] = None
-                else:
+        resolved_vocab_files = {}
+        for file_id, file_path in vocab_files.items():
+            if file_path is None:
+                resolved_vocab_files[file_id] = None
+            else:
+                try:
                     resolved_vocab_files[file_id] = cached_path(
                         file_path,
                         cache_dir=cache_dir,
@@ -1621,34 +1621,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         resume_download=resume_download,
                         local_files_only=local_files_only,
                     )
-        except EnvironmentError:
-            if pretrained_model_name_or_path in s3_models:
-                msg = "Couldn't reach server at '{}' to download vocabulary files."
-            else:
-                msg = (
-                    "Model name '{}' was not found in tokenizers model name list ({}). "
-                    "We assumed '{}' was a path or url to a directory containing vocabulary files "
-                    "named {}, but couldn't find such vocabulary files at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ", ".join(s3_models),
-                        pretrained_model_name_or_path,
-                        list(cls.vocab_files_names.values()),
-                    )
-                )
-
-            raise EnvironmentError(msg)
+                except requests.exceptions.HTTPError as err:
+                    if "404 Client Error" in str(err):
+                        logger.debug(err)
+                    else:
+                        raise err
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
-            raise EnvironmentError(
-                "Model name '{}' was not found in tokenizers model name list ({}). "
-                "We assumed '{}' was a path, a model identifier, or url to a directory containing vocabulary files "
-                "named {} but couldn't find such vocabulary files at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ", ".join(s3_models),
-                    pretrained_model_name_or_path,
-                    list(cls.vocab_files_names.values()),
-                )
+            msg = (
+                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
+            raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:

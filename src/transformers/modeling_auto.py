@@ -524,10 +524,9 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
             revision(:obj:`str`, `optional`, defaults to :obj:`main`):
-                Whether to pin to a specific model version (can be a branch name, a tag name, or a commit id).
-                We use a git-based model for storing models and other artefacts on huggingface.co, so ``revision``
-                is any identifier allowed by git.
-                TODO(if agreed upon, duplicate this doc elsewhere.)
+                Whether to pin to a specific model version (can be a branch name, a tag name, or a commit id). We use a
+                git-based model for storing models and other artefacts on huggingface.co, so ``revision`` is any
+                identifier allowed by git. TODO(if agreed upon, duplicate this doc elsewhere.)
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
