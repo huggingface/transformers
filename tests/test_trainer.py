@@ -357,7 +357,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
     def test_dynamic_shapes(self):
-        eval_dataset = DynamicShapesDataset(batch_size=8 * max(1, torch.cuda.device_count()))
+        eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
         model = RegressionModel(a=2, b=1)
         args = TrainingArguments("./regression")
         trainer = Trainer(model, args, eval_dataset=eval_dataset)
