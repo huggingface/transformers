@@ -43,8 +43,9 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     ]
 
     def __init__(self, **kwargs):
-        """This __init__ is there for legacy code. When removing
-        deprecated args completely, the class can simply be deleted
+        """
+        This __init__ is there for legacy code. When removing deprecated args completely, the class can simply be
+        deleted
         """
         for deprecated_arg in self.deprecated_args:
             if deprecated_arg in kwargs:

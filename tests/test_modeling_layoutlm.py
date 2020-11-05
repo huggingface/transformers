@@ -18,7 +18,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, require_torch_and_cuda, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -234,6 +234,6 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
         """Test loss/gradients same as reference implementation, for example."""
         pass
 
-    @require_torch_and_cuda
+    @require_torch_gpu
     def test_large_inputs_in_fp16_dont_cause_overflow(self):
         pass

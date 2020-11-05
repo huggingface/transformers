@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -302,8 +302,14 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
         self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
 
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        pass
+
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFLongformerModelIntegrationTest(unittest.TestCase):
     def _get_hidden_states(self):
         return tf.convert_to_tensor(

@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
@@ -27,6 +27,8 @@ if is_tf_available():
 
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFCamembertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
@@ -37,7 +39,7 @@ class TFCamembertModelIntegrationTest(unittest.TestCase):
             dtype=tf.int32,
         )  # J'aime le camembert !"
 
-        output = model(input_ids)["last_hidden_state"]
+        output = model(input_ids, return_dict=True)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 10, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.

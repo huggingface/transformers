@@ -12,13 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import unittest
 
 from transformers import T5Config, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -279,12 +277,21 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["t5-small"]:
-            model = TFT5Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = TFT5Model.from_pretrained("t5-small")
+        self.assertIsNotNone(model)
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        pass
+
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        pass
 
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFT5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):

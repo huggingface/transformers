@@ -30,7 +30,7 @@ class LightningModel(pl.LightningModule):
         self.num_labels = 2
         self.qa_outputs = torch.nn.Linear(self.model.config.hidden_size, self.num_labels)
 
-    # implement only because lighning requires to do so
+    # implement only because lightning requires to do so
     def forward(self):
         pass
 
@@ -57,7 +57,7 @@ def convert_longformer_qa_checkpoint_to_pytorch(
     # save model
     longformer_for_qa.save_pretrained(pytorch_dump_folder_path)
 
-    print("Conversion succesful. Model saved under {}".format(pytorch_dump_folder_path))
+    print("Conversion successful. Model saved under {}".format(pytorch_dump_folder_path))
 
 
 if __name__ == "__main__":
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path the official PyTorch Lighning Checkpoint.",
+        help="Path the official PyTorch Lightning Checkpoint.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

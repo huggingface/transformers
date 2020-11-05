@@ -17,7 +17,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -36,7 +36,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": None,
+    "camembert-base": 512,
 }
 
 SHARED_MODEL_IDENTIFIERS = [
@@ -66,23 +66,22 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the end
-                of sequence. The token used is the :obj:`sep_token`.
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -94,9 +93,8 @@ class CamembertTokenizer(PreTrainedTokenizer):
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
-    Attributes:
-        sp_model (:obj:`SentencePieceProcessor`):
-            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
+    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
+    conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -118,7 +116,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            max_len=512,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -143,9 +140,8 @@ class CamembertTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        An CamemBERT sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An CamemBERT sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
@@ -188,7 +184,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
@@ -200,8 +196,8 @@ class CamembertTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        CamemBERT, like RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. CamemBERT, like
+        RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -222,6 +218,11 @@ class CamembertTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.fairseq_tokens_to_ids) + len(self.sp_model)
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, text):
         return self.sp_model.EncodeAsPieces(text)
@@ -248,14 +249,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use CamembertTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -264,21 +257,13 @@ class CamembertTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

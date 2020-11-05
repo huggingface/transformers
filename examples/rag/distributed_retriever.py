@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RagPyTorchDistributedRetriever(RagRetriever):
     """
     A distributed retriever built on top of the ``torch.distributed`` communication package. During training all workers
-    initalize their own instance of the retriever, however, only the main worker loads the index into memory. The index is stored
+    initialize their own instance of the retriever, however, only the main worker loads the index into memory. The index is stored
     in cpu memory. The index will also work well in a non-distributed setup.
 
     Args:
@@ -27,20 +27,25 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             It is used to decode the question and then use the generator_tokenizer.
         generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
+        index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
+            If specified, use this index instead of the one built using the configuration
     """
 
     _init_retrieval = False
 
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer):
+    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None):
         super().__init__(
-            config, question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer
+            config,
+            question_encoder_tokenizer=question_encoder_tokenizer,
+            generator_tokenizer=generator_tokenizer,
+            index=index,
         )
 
         self.process_group = None
 
     def init_retrieval(self, distributed_port: int):
         """
-        Retriever initalization function, needs to be called from the training process. The function sets some common parameters
+        Retriever initialization function, needs to be called from the training process. The function sets some common parameters
         and environment variables. On top of that, (only) the main process in the process group loads the index into memory.
 
         Args:
@@ -51,7 +56,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
 
         logger.info("initializing retrieval")
 
-        # initializing a separate process group for retrievel as the default
+        # initializing a separate process group for retrieval as the default
         # nccl backend doesn't support gather/scatter operations while gloo
         # is too slow to replace nccl for the core gpu communication
         if dist.is_initialized():
@@ -96,7 +101,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             n_docs (:obj:`int`):
                 The number of docs retrieved per query.
 
-        Ouput:
+        Output:
             retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
                 The retrieval embeddings of the retrieved docs per query.
             doc_ids (:obj:`np.ndarray` of shape :obj:`batch_size, n_docs`)

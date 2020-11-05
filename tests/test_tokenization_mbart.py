@@ -1,11 +1,26 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer, is_torch_available
-from transformers.testing_utils import require_torch
+from transformers import (
+    SPIECE_UNDERLINE,
+    AutoTokenizer,
+    BatchEncoding,
+    MBartTokenizer,
+    MBartTokenizerFast,
+    is_torch_available,
+)
+from transformers.testing_utils import (
+    _sentencepiece_available,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .test_tokenization_xlm_roberta import SAMPLE_VOCAB, SPIECE_UNDERLINE
+
+
+if _sentencepiece_available:
+    from .test_tokenization_xlm_roberta import SAMPLE_VOCAB
 
 
 if is_torch_available():
@@ -15,8 +30,12 @@ EN_CODE = 250004
 RO_CODE = 250020
 
 
+@require_sentencepiece
+@require_tokenizers
 class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MBartTokenizer
+    rust_tokenizer_class = MBartTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
@@ -103,6 +122,8 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class MBartEnroIntegrationTest(unittest.TestCase):
     checkpoint_name = "facebook/mbart-large-en-ro"
     src_text = [
