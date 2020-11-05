@@ -1,3 +1,8 @@
+# configuration notes:
+#
+# - `source .env/bin/activate` is currently needed to be run first thing first in each step. Otherwise
+# the step uses the system-wide python interpreter.
+
 name: Self-hosted runner (scheduled)
 
 on:
