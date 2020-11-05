@@ -940,12 +940,14 @@ class TextClassificationPipeline(Pipeline):
     If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run a
     softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
 
+    If the :obj:`return_raw_outputs` option is set to :obj:`True`, will skip the softmax/sigmoid function.
+
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task. See
     the up-to-date list of available models on `huggingface.co/models
     <https://huggingface.co/models?filter=text-classification>`__.
     """
 
-    def __init__(self, return_all_scores: bool = False, **kwargs):
+    def __init__(self, return_all_scores: bool = False, return_raw_outputs: bool = False, **kwargs):
         super().__init__(**kwargs)
 
         self.check_model_type(
@@ -955,6 +957,7 @@ class TextClassificationPipeline(Pipeline):
         )
 
         self.return_all_scores = return_all_scores
+        self.return_raw_outputs = return_raw_outputs
 
     def __call__(self, *args, **kwargs):
         """
@@ -974,10 +977,13 @@ class TextClassificationPipeline(Pipeline):
         """
         outputs = super().__call__(*args, **kwargs)
 
-        if self.model.config.num_labels == 1:
-            scores = 1.0 / (1.0 + np.exp(-outputs))
+        if self.return_raw_outputs:
+            if self.model.config.num_labels == 1:
+                scores = 1.0 / (1.0 + np.exp(-outputs))
+            else:
+                scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         else:
-            scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+            scores = outputs
         if self.return_all_scores:
             return [
                 [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
