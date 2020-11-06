@@ -89,7 +89,7 @@ BaseModelOutputWithPast
 BaseModelOutputWithPastAndCrossAttentions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_outputs.BaseModelOutputWithPastAndCrossAttention
+.. autoclass:: transformers.modeling_outputs.BaseModelOutputWithPastAndCrossAttentions
     :members:
 
 
