@@ -830,19 +830,20 @@ def is_remote_url(url_or_filename):
 
 def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, mirror=None) -> str:
     """
-    Resolve a model identifier, and a file name, to a huggingface.co-hosted url, potentially redirecting to Cloudfront
-    (a Content Delivery Network, or CDN).
+    Resolve a model identifier, a file name, and an optional revision id, to a huggingface.co-hosted url, redirecting
+    to Cloudfront (a Content Delivery Network, or CDN) for large files.
 
     Cloudfront is replicated over the globe so downloads are way faster for the end user (and it also lowers our
-    bandwidth costs). However, it is more aggressively cached by default, so may not always reflect the latest changes
-    to the underlying file (default TTL is 24 hours).
+    bandwidth costs).
 
-    This is not an issue here however, because since migrating to git-based model versioning on huggingface.co, we now
-    store the files on S3/Cloudfront in a content-addressable way (i.e., the file name is its hash).
+    Cloudfront aggressively caches files by default (default TTL is 24 hours), however this is not an issue here
+    because we migrated to a git-based versioning system on huggingface.co, so we now store the files on S3/Cloudfront
+    in a content-addressable way (i.e., the file name is its hash). Using content-addressable filenames means cache
+    can't ever be stale.
 
-    TODO(update) In terms of client-side caching from this library, even though Cloudfront relays the ETags from S3,
-    using one or the other (or switching from one to the other) will affect caching: cached files are not shared
-    between the two because the cached file's name contains a hash of the url.
+    In terms of client-side caching from this library, we base our caching on the objects' ETag. An object' ETag is:
+    its sha1 if stored in git, or its sha256 if stored in git-lfs. Files cached locally from transformers before v3.5.0
+    are not shared with those new files, because the cached file's name contains a hash of the url (which changed).
     """
     if mirror:
         endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)

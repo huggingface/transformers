@@ -525,7 +525,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether or not to only look at local files (e.g., not try downloading the model).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based format for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
