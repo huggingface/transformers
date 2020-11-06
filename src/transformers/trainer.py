@@ -33,7 +33,11 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
-from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from .data.data_collator import (
+    DataCollator,
+    DataCollatorWithPadding,
+    default_data_collator,
+)
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
@@ -203,11 +207,16 @@ class Trainer:
         model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (
+            None,
+            None,
+        ),
         **kwargs,
     ):
         if args is None:
-            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
+            logger.info(
+                "No `TrainingArguments` passed, using the current path as `output_dir`."
+            )
             args = TrainingArguments("tmp_trainer")
         self.args = args
         # Seed must be set before instantiating the model when using model
@@ -225,22 +234,36 @@ class Trainer:
         if not self.args.model_parallel and self.model is not None:
             self.model = self.model.to(args.device)
 
-        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
-        self.data_collator = data_collator if data_collator is not None else default_collator
+        default_collator = (
+            default_data_collator
+            if tokenizer is None
+            else DataCollatorWithPadding(tokenizer)
+        )
+        self.data_collator = (
+            data_collator if data_collator is not None else default_collator
+        )
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
-        if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
+        if model_init is not None and (
+            self.optimizer is not None or self.lr_scheduler is not None
+        ):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
-        self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
-        self.add_callback(PrinterCallback if self.args.disable_tqdm else ProgressCallback)
+        callbacks = (
+            DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
+        )
+        self.callback_handler = CallbackHandler(
+            callbacks, self.model, self.optimizer, self.lr_scheduler
+        )
+        self.add_callback(
+            PrinterCallback if self.args.disable_tqdm else ProgressCallback
+        )
 
         # Deprecated arguments
         if "tb_writer" in kwargs:
@@ -273,7 +296,9 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
-        if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
+        if not callable(self.data_collator) and callable(
+            getattr(self.data_collator, "collate_batch", None)
+        ):
             self.data_collator = self.data_collator.collate_batch
             warnings.warn(
                 (
@@ -303,8 +328,14 @@ class Trainer:
             if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
             else ["labels"]
         )
-        self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+        self.label_names = (
+            default_label_names
+            if self.args.label_names is None
+            else self.args.label_names
+        )
+        self.control = self.callback_handler.on_init_end(
+            self.args, self.state, self.control
+        )
 
     def add_callback(self, callback):
         """
@@ -344,7 +375,9 @@ class Trainer:
         """
         self.callback_handler.remove_callback(callback)
 
-    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
+    def _remove_unused_columns(
+        self, dataset: "datasets.Dataset", description: Optional[str] = None
+    ):
         if not self.args.remove_unused_columns:
             return
         # Inspect model forward signature to keep only the arguments it accepts.
@@ -394,11 +427,15 @@ class Trainer:
             num_workers=self.args.dataloader_num_workers,
         )
 
-    def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
+    def _get_eval_sampler(
+        self, eval_dataset: Dataset
+    ) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             return None
         elif is_torch_tpu_available():
-            return SequentialDistributedSampler(eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+            return SequentialDistributedSampler(
+                eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+            )
         elif self.args.local_rank != -1:
             return SequentialDistributedSampler(eval_dataset)
         else:
@@ -420,7 +457,11 @@ class Trainer:
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        elif eval_dataset is not None and is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+        elif (
+            eval_dataset is not None
+            and is_datasets_available()
+            and isinstance(eval_dataset, datasets.Dataset)
+        ):
             self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
@@ -472,11 +513,19 @@ class Trainer:
             no_decay = ["bias", "LayerNorm.weight"]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "params": [
+                        p
+                        for n, p in self.model.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                    ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "params": [
+                        p
+                        for n, p in self.model.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                    ],
                     "weight_decay": 0.0,
                 },
             ]
@@ -488,7 +537,9 @@ class Trainer:
             )
         if self.lr_scheduler is None:
             self.lr_scheduler = get_linear_schedule_with_warmup(
-                self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+                self.optimizer,
+                num_warmup_steps=self.args.warmup_steps,
+                num_training_steps=num_training_steps,
             )
 
     def num_examples(self, dataloader: DataLoader) -> int:
@@ -501,7 +552,11 @@ class Trainer:
         """ HP search setup code """
         if self.hp_search_backend is None or trial is None:
             return
-        params = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
+        params = (
+            self.hp_space(trial)
+            if self.hp_search_backend == HPSearchBackend.OPTUNA
+            else trial
+        )
         for key, value in params.items():
             if not hasattr(self.args, key):
                 raise AttributeError(
@@ -516,7 +571,10 @@ class Trainer:
             logger.info("Trial:", trial.params)
 
     def _report_to_hp_search(
-        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
+        self,
+        trial: Union["optuna.Trial", Dict[str, Any]],
+        epoch: int,
+        metrics: Dict[str, float],
     ):
         if self.hp_search_backend is None or trial is None:
             return
@@ -535,12 +593,21 @@ class Trainer:
             return
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
             self.args.output_dir = checkpoint_dir
-            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
+            output_dir = os.path.join(
+                self.args.output_dir,
+                f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}",
+            )
             self.save_model(output_dir)
             if self.is_world_master():
                 self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                torch.save(
+                    self.optimizer.state_dict(),
+                    os.path.join(output_dir, "optimizer.pt"),
+                )
+                torch.save(
+                    self.lr_scheduler.state_dict(),
+                    os.path.join(output_dir, "scheduler.pt"),
+                )
 
     def call_model_init(self, trial=None):
         model_init_argcount = len(inspect.signature(self.model_init).parameters)
@@ -553,7 +620,11 @@ class Trainer:
 
         return model
 
-    def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
+    def train(
+        self,
+        model_path: Optional[str] = None,
+        trial: Union["optuna.Trial", Dict[str, Any]] = None,
+    ):
         """
         Main training entry point.
 
@@ -583,7 +654,9 @@ class Trainer:
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
-        num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
+        num_update_steps_per_epoch = (
+            len(train_dataloader) // self.args.gradient_accumulation_steps
+        )
         num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
         if self.args.max_steps > 0:
             max_steps = self.args.max_steps
@@ -606,18 +679,27 @@ class Trainer:
         ):
             # Load in optimizer and scheduler states
             self.optimizer.load_state_dict(
-                torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
+                torch.load(
+                    os.path.join(model_path, "optimizer.pt"),
+                    map_location=self.args.device,
+                )
             )
             with warnings.catch_warnings(record=True) as caught_warnings:
-                self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
+                self.lr_scheduler.load_state_dict(
+                    torch.load(os.path.join(model_path, "scheduler.pt"))
+                )
             reissue_pt_warnings(caught_warnings)
 
         # Mixed precision training with apex (torch < 1.6)
         model = self.model
         if self.args.fp16 and _use_apex:
             if not is_apex_available():
-                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
+                raise ImportError(
+                    "Please install apex from https://www.github.com/nvidia/apex to use fp16 training."
+                )
+            model, self.optimizer = amp.initialize(
+                model, self.optimizer, opt_level=self.args.fp16_opt_level
+            )
 
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1 and not self.args.model_parallel:
@@ -645,14 +727,26 @@ class Trainer:
             total_train_batch_size = (
                 self.args.train_batch_size
                 * self.args.gradient_accumulation_steps
-                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
+                * (
+                    torch.distributed.get_world_size()
+                    if self.args.local_rank != -1
+                    else 1
+                )
             )
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_examples(train_dataloader))
         logger.info("  Num Epochs = %d", num_train_epochs)
-        logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
-        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
-        logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
+        logger.info(
+            "  Instantaneous batch size per device = %d",
+            self.args.per_device_train_batch_size,
+        )
+        logger.info(
+            "  Total train batch size (w. parallel, distributed & accumulation) = %d",
+            total_train_batch_size,
+        )
+        logger.info(
+            "  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps
+        )
         logger.info("  Total optimization steps = %d", max_steps)
 
         self.state.epoch = 0
@@ -660,15 +754,28 @@ class Trainer:
         steps_trained_in_current_epoch = 0
 
         # Check if continuing training from a checkpoint
-        if model_path and os.path.isfile(os.path.join(model_path, "trainer_state.json")):
-            self.state = TrainerState.load_from_json(os.path.join(model_path, "trainer_state.json"))
+        if model_path and os.path.isfile(
+            os.path.join(model_path, "trainer_state.json")
+        ):
+            self.state = TrainerState.load_from_json(
+                os.path.join(model_path, "trainer_state.json")
+            )
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
-            steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
+            steps_trained_in_current_epoch = self.state.global_step % (
+                num_update_steps_per_epoch
+            )
 
-            logger.info("  Continuing training from checkpoint, will skip to saved global_step")
+            logger.info(
+                "  Continuing training from checkpoint, will skip to saved global_step"
+            )
             logger.info("  Continuing training from epoch %d", epochs_trained)
-            logger.info("  Continuing training from global step %d", self.state.global_step)
-            logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+            logger.info(
+                "  Continuing training from global step %d", self.state.global_step
+            )
+            logger.info(
+                "  Will skip the first %d steps in the first epoch",
+                steps_trained_in_current_epoch,
+            )
 
         # Update the references
         self.callback_handler.model = self.model
@@ -687,16 +794,20 @@ class Trainer:
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
-        self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
+        self.control = self.callback_handler.on_train_begin(
+            self.args, self.state, self.control
+        )
 
         for epoch in range(epochs_trained, num_train_epochs):
-            if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
+            if isinstance(train_dataloader, DataLoader) and isinstance(
+                train_dataloader.sampler, DistributedSampler
+            ):
                 train_dataloader.sampler.set_epoch(epoch)
 
             if is_torch_tpu_available():
-                parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
-                    self.args.device
-                )
+                parallel_loader = pl.ParallelLoader(
+                    train_dataloader, [self.args.device]
+                ).per_device_loader(self.args.device)
                 epoch_iterator = parallel_loader
             else:
                 epoch_iterator = train_dataloader
@@ -705,7 +816,9 @@ class Trainer:
             if self.args.past_index >= 0:
                 self._past = None
 
-            self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_epoch_begin(
+                self.args, self.state, self.control
+            )
 
             for step, inputs in enumerate(epoch_iterator):
 
@@ -715,7 +828,9 @@ class Trainer:
                     continue
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
-                    self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
+                    self.control = self.callback_handler.on_step_begin(
+                        self.args, self.state, self.control
+                    )
 
                 if (
                     ((step + 1) % self.args.gradient_accumulation_steps != 0)
@@ -735,11 +850,17 @@ class Trainer:
                 ):
                     if self.args.fp16 and _use_native_amp:
                         self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), self.args.max_grad_norm
+                        )
                     elif self.args.fp16 and _use_apex:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer), self.args.max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            amp.master_params(self.optimizer), self.args.max_grad_norm
+                        )
                     else:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), self.args.max_grad_norm
+                        )
 
                     if is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
@@ -753,14 +874,18 @@ class Trainer:
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / len(epoch_iterator)
-                    self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
+                    self.control = self.callback_handler.on_step_end(
+                        self.args, self.state, self.control
+                    )
 
                     self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
-            self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_epoch_end(
+                self.args, self.state, self.control
+            )
             self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
 
             if self.args.tpu_metrics_debug or self.args.debug:
@@ -779,8 +904,13 @@ class Trainer:
             # Clean the state at the end of training
             delattr(self, "_past")
 
-        logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        if self.args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
+        logger.info(
+            "\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n"
+        )
+        if (
+            self.args.load_best_model_at_end
+            and self.state.best_model_checkpoint is not None
+        ):
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
@@ -790,18 +920,26 @@ class Trainer:
                     self.model = model.to(self.args.device)
 
             else:
-                state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
+                state_dict = torch.load(
+                    os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+                )
                 self.model.load_state_dict(state_dict)
 
-        self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
+        self.control = self.callback_handler.on_train_end(
+            self.args, self.state, self.control
+        )
 
-        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
+        return TrainOutput(
+            self.state.global_step, tr_loss.item() / self.state.global_step
+        )
 
     def _maybe_log_save_evalute(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / self.args.logging_steps
+            logs["loss"] = (
+                tr_loss_scalar - self._logging_loss_scalar
+            ) / self.args.logging_steps
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
@@ -816,23 +954,35 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self.evaluate()
             self._report_to_hp_search(trial, epoch, metrics)
-            self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
+            self.control = self.callback_handler.on_evaluate(
+                self.args, self.state, self.control, metrics
+            )
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
-            self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_save(
+                self.args, self.state, self.control
+            )
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases (even distributed/parallel), self.model is always a reference
         # to the model we want to save.
         if hasattr(model, "module"):
-            assert model.module is self.model, f"Module {model.module} should be a reference to self.model"
+            assert (
+                model.module is self.model
+            ), f"Module {model.module} should be a reference to self.model"
         else:
-            assert model is self.model, f"Model {model} should be a reference to self.model"
+            assert (
+                model is self.model
+            ), f"Model {model} should be a reference to self.model"
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
         if self.hp_search_backend is not None and trial is not None:
-            run_id = trial.number if self.hp_search_backend == HPSearchBackend.OPTUNA else tune.get_trial_id()
+            run_id = (
+                trial.number
+                if self.hp_search_backend == HPSearchBackend.OPTUNA
+                else tune.get_trial_id()
+            )
             checkpoint_folder += f"-run-{run_id}"
         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
@@ -842,14 +992,24 @@ class Trainer:
         # Save optimizer and scheduler
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
-            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+            xm.save(
+                self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt")
+            )
             with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                xm.save(
+                    self.lr_scheduler.state_dict(),
+                    os.path.join(output_dir, "scheduler.pt"),
+                )
                 reissue_pt_warnings(caught_warnings)
         elif self.is_world_process_zero():
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+            torch.save(
+                self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt")
+            )
             with warnings.catch_warnings(record=True) as caught_warnings:
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                torch.save(
+                    self.lr_scheduler.state_dict(),
+                    os.path.join(output_dir, "scheduler.pt"),
+                )
             reissue_pt_warnings(caught_warnings)
 
         # Determine the new best metric / best model checkpoint
@@ -883,7 +1043,7 @@ class Trainer:
         n_trials: int = 20,
         direction: str = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
-        **kwargs
+        **kwargs,
     ) -> BestRun:
         """
         Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
@@ -934,7 +1094,9 @@ class Trainer:
                 )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
-            raise RuntimeError("You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
+            raise RuntimeError(
+                "You picked the optuna backend, but it is not installed. Use `pip install optuna`."
+            )
         if backend == HPSearchBackend.RAY and not is_ray_available():
             raise RuntimeError(
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
@@ -947,9 +1109,17 @@ class Trainer:
             )
 
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
-        self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
+        self.compute_objective = (
+            default_compute_objective
+            if compute_objective is None
+            else compute_objective
+        )
 
-        run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
+        run_hp_search = (
+            run_hp_search_optuna
+            if backend == HPSearchBackend.OPTUNA
+            else run_hp_search_ray
+        )
         best_run = run_hp_search(self, n_trials, direction, **kwargs)
 
         self.hp_search_backend = None
@@ -977,11 +1147,15 @@ class Trainer:
         if self._total_flos is not None:
             self.store_flos()
             logs["total_flos"] = self.state.total_flos
-        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+        self.control = self.callback_handler.on_log(
+            self.args, self.state, self.control, logs
+        )
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
 
-    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
+    def _prepare_inputs(
+        self, inputs: Dict[str, Union[torch.Tensor, Any]]
+    ) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
@@ -995,7 +1169,9 @@ class Trainer:
 
         return inputs
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
+    ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -1029,7 +1205,7 @@ class Trainer:
         else:
             loss = self.compute_loss(model, inputs)
 
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
         if self.args.gradient_accumulation_steps > 1:
@@ -1067,7 +1243,10 @@ class Trainer:
 
             This method is deprecated, use :meth:`~transformers.Trainer.is_local_process_zero` instead.
         """
-        warnings.warn("This method is deprecated, use `Trainer.is_local_process_zero()` instead.", FutureWarning)
+        warnings.warn(
+            "This method is deprecated, use `Trainer.is_local_process_zero()` instead.",
+            FutureWarning,
+        )
         return self.is_local_process_zero()
 
     def is_local_process_zero(self) -> bool:
@@ -1089,7 +1268,10 @@ class Trainer:
 
             This method is deprecated, use :meth:`~transformers.Trainer.is_world_process_zero` instead.
         """
-        warnings.warn("This method is deprecated, use `Trainer.is_world_process_zero()` instead.", FutureWarning)
+        warnings.warn(
+            "This method is deprecated, use `Trainer.is_world_process_zero()` instead.",
+            FutureWarning,
+        )
         return self.is_world_process_zero()
 
     def is_world_process_zero(self) -> bool:
@@ -1126,7 +1308,9 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
-            logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+            logger.info(
+                "Trainer.model is not a `PreTrainedModel`, only saving its state dict."
+            )
             state_dict = self.model.state_dict()
             xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
@@ -1141,7 +1325,9 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
-            logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+            logger.info(
+                "Trainer.model is not a `PreTrainedModel`, only saving its state dict."
+            )
             state_dict = self.model.state_dict()
             torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
@@ -1156,14 +1342,20 @@ class Trainer:
         # Storing the number of floating-point operations that went into the model
         if self._total_flos is not None:
             if self.args.local_rank != -1:
-                self.state.total_flos = distributed_broadcast_scalars([self._total_flos]).sum().item()
+                self.state.total_flos = (
+                    distributed_broadcast_scalars([self._total_flos]).sum().item()
+                )
             else:
                 self.state.total_flos = self._total_flos
 
-    def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
+    def _sorted_checkpoints(
+        self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
+    ) -> List[str]:
         ordering_and_checkpoint_path = []
 
-        glob_checkpoints = [str(x) for x in Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")]
+        glob_checkpoints = [
+            str(x) for x in Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")
+        ]
 
         for path in glob_checkpoints:
             if use_mtime:
@@ -1171,14 +1363,21 @@ class Trainer:
             else:
                 regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
                 if regex_match and regex_match.groups():
-                    ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+                    ordering_and_checkpoint_path.append(
+                        (int(regex_match.groups()[0]), path)
+                    )
 
         checkpoints_sorted = sorted(ordering_and_checkpoint_path)
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
         # Make sure we don't delete the best model.
         if self.state.best_model_checkpoint is not None:
-            best_model_index = checkpoints_sorted.index(self.state.best_model_checkpoint)
-            checkpoints_sorted[best_model_index], checkpoints_sorted[best_model_index][-1] = (
+            best_model_index = checkpoints_sorted.index(
+                self.state.best_model_checkpoint
+            )
+            (
+                checkpoints_sorted[best_model_index],
+                checkpoints_sorted[best_model_index][-1],
+            ) = (
                 checkpoints_sorted[-1],
                 checkpoints_sorted[best_model_index],
             )
@@ -1193,10 +1392,16 @@ class Trainer:
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 
-        number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - self.args.save_total_limit)
+        number_of_checkpoints_to_delete = max(
+            0, len(checkpoints_sorted) - self.args.save_total_limit
+        )
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
         for checkpoint in checkpoints_to_be_deleted:
-            logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
+            logger.info(
+                "Deleting older checkpoint [{}] due to args.save_total_limit".format(
+                    checkpoint
+                )
+            )
             shutil.rmtree(checkpoint)
 
     def evaluate(self, eval_dataset: Optional[Dataset] = None) -> Dict[str, float]:
@@ -1254,7 +1459,10 @@ class Trainer:
         return self.prediction_loop(test_dataloader, description="Prediction")
 
     def prediction_loop(
-        self, dataloader: DataLoader, description: str, prediction_loss_only: Optional[bool] = None
+        self,
+        dataloader: DataLoader,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
@@ -1266,10 +1474,14 @@ class Trainer:
                 "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
                 FutureWarning,
             )
-            return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
+            return self._prediction_loop(
+                dataloader, description, prediction_loss_only=prediction_loss_only
+            )
 
         prediction_loss_only = (
-            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
+            prediction_loss_only
+            if prediction_loss_only is not None
+            else self.args.prediction_loss_only
         )
 
         model = self.model
@@ -1291,7 +1503,9 @@ class Trainer:
         model.eval()
 
         if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+            dataloader = pl.ParallelLoader(
+                dataloader, [self.args.device]
+            ).per_device_loader(self.args.device)
 
         if self.args.past_index >= 0:
             self._past = None
@@ -1299,15 +1513,23 @@ class Trainer:
         self.callback_handler.eval_dataloader = dataloader
 
         for inputs in dataloader:
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            loss, logits, labels = self.prediction_step(
+                model, inputs, prediction_loss_only
+            )
             batch_size = inputs[list(inputs.keys())[0]].shape[0]
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
                 preds = logits if preds is None else nested_concat(preds, logits, dim=0)
             if labels is not None:
-                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
-            self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
+                label_ids = (
+                    labels
+                    if label_ids is None
+                    else nested_concat(label_ids, labels, dim=0)
+                )
+            self.control = self.callback_handler.on_prediction_step(
+                self.args, self.state, self.control
+            )
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -1316,9 +1538,13 @@ class Trainer:
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
             if preds is not None:
-                preds = distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
+                preds = distributed_concat(
+                    preds, num_total_examples=self.num_examples(dataloader)
+                )
             if label_ids is not None:
-                label_ids = distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
+                label_ids = distributed_concat(
+                    label_ids, num_total_examples=self.num_examples(dataloader)
+                )
         elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
@@ -1326,7 +1552,9 @@ class Trainer:
             if label_ids is not None:
                 label_ids = nested_xla_mesh_reduce(label_ids, "eval_label_ids")
             if eval_losses is not None:
-                eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
+                eval_losses = xm.mesh_reduce(
+                    "eval_losses", torch.tensor(eval_losses), torch.cat
+                ).tolist()
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
@@ -1334,14 +1562,22 @@ class Trainer:
         if label_ids is not None:
             label_ids = nested_numpify(label_ids)
 
-        if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+        if (
+            self.compute_metrics is not None
+            and preds is not None
+            and label_ids is not None
+        ):
+            metrics = self.compute_metrics(
+                EvalPrediction(predictions=preds, label_ids=label_ids)
+            )
         else:
             metrics = {}
         if len(eval_losses) > 0:
             if self.args.local_rank != -1:
                 metrics["eval_loss"] = (
-                    distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
+                    distributed_broadcast_scalars(
+                        eval_losses, num_total_examples=self.num_examples(dataloader)
+                    )
                     .mean()
                     .item()
                 )
@@ -1356,7 +1592,10 @@ class Trainer:
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def prediction_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+        self,
+        model: nn.Module,
+        inputs: Dict[str, Union[torch.Tensor, Any]],
+        prediction_loss_only: bool,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
@@ -1392,9 +1631,13 @@ class Trainer:
                 # Slicing so we get a tuple even if `outputs` is a `ModelOutput`.
                 logits = outputs[:]
             if self.args.past_index >= 0:
-                self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+                self._past = outputs[
+                    self.args.past_index if has_labels else self.args.past_index - 1
+                ]
                 # Remove the past from the logits.
-                logits = logits[: self.args.past_index - 1] + logits[self.args.past_index :]
+                logits = (
+                    logits[: self.args.past_index - 1] + logits[self.args.past_index :]
+                )
 
         if prediction_loss_only:
             return (loss, None, None)
@@ -1438,7 +1681,11 @@ class Trainer:
 
     @staticmethod
     def _actual_model(
-        model: Union[torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel, torch.nn.modules.Module]
+        model: Union[
+            torch.nn.DataParallel,
+            torch.nn.parallel.DistributedDataParallel,
+            torch.nn.modules.Module,
+        ]
     ) -> torch.nn.modules.Module:
         """
 
@@ -1449,7 +1696,9 @@ class Trainer:
         Returns:
             :obj:`torch.nn.modules.Module`: unwrapped module
         """
-        if isinstance(model, torch.nn.DataParallel) or isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        if isinstance(model, torch.nn.DataParallel) or isinstance(
+            model, torch.nn.parallel.DistributedDataParallel
+        ):
             model = model.module
         else:
             model = model
