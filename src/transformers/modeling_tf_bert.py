@@ -571,12 +571,11 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
-
         inputs = input_analysis(
             func=self.call,
             inputs=input_ids,
@@ -590,11 +589,31 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             return_dict=return_dict,
             training=training,
         )
-        output_attentions = inputs["output_attentions"] if tf.executing_eagerly() else self.output_attentions
-        output_hidden_states = (
-            inputs["output_hidden_states"] if tf.executing_eagerly() is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() is not None else self.return_dict
+
+        if tf.executing_eagerly():
+            output_attentions = (
+                inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+            )
+            output_hidden_states = (
+                inputs["output_hidden_states"]
+                if inputs["output_hidden_states"] is not None
+                else self.output_hidden_states
+            )
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
+        else:
+            if (
+                inputs["output_attentions"] is not None
+                or inputs["output_hidden_states"] is not None
+                or (inputs["return_dict"] is not None and not inputs["return_dict"])
+            ):
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print(
+                    "Warning: Cannot update the output_attentions and output_hidden_states parameters behavior in graph mode and the return_dict parameter is always True in that mode."
+                )
+
+            output_attentions = self.output_attentions
+            output_hidden_states = self.output_hidden_states
+            return_dict = True
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -632,7 +651,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = tf.cast(x=extended_attention_mask, dtype=embedding_output.dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = tf.math.multiply(tf.math.subtract(1.0, extended_attention_mask), -10000.0)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -830,9 +849,9 @@ class TFBertModel(TFBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         inputs = input_analysis(
@@ -848,7 +867,16 @@ class TFBertModel(TFBertPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -904,9 +932,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         labels=None,
         next_sentence_label=None,
         training=False,
@@ -942,7 +970,16 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             next_sentence_label=next_sentence_label,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1021,9 +1058,9 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -1048,7 +1085,16 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1129,9 +1175,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -1156,7 +1202,16 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1216,9 +1271,9 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         next_sentence_label=None,
         training=False,
     ):
@@ -1251,7 +1306,16 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             next_sentence_label=next_sentence_label,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1325,9 +1389,9 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -1352,7 +1416,16 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1429,9 +1502,9 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -1489,7 +1562,16 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             if inputs["inputs_embeds"] is not None
             else None
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=flat_input_ids,
             attention_mask=flat_attention_mask,
@@ -1558,9 +1640,9 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -1584,7 +1666,16 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1651,9 +1742,9 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         start_positions=None,
         end_positions=None,
         training=False,
@@ -1684,7 +1775,16 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             end_positions=end_positions,
             training=training,
         )
-        return_dict = inputs["return_dict"] if tf.executing_eagerly() else self.bert.return_dict
+
+        if tf.executing_eagerly():
+            return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        else:
+            if inputs["return_dict"] is not None:
+                # tf.print is used in order to have a proper display in graph mode. Usual logging doesn't work in that mode.
+                tf.print("Warning: The return_dict parameter is always True in graph mode.")
+
+            return_dict = True
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],

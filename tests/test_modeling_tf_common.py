@@ -523,35 +523,17 @@ class TFModelTesterMixin:
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        def check_decoder_attentions_output(config, inputs_dict, model_class):
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-<<<<<<< HEAD
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
-            self.assertEqual(model.config.output_hidden_states, False)
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
-            out_len = len(outputs)
-=======
->>>>>>> a2766f79... Review boolean handling
-
+        def check_decoder_attentions_output(outputs, model):
             if model.base_model_prefix in ["bert"]:
                 decoder_attentions = outputs.decoder_attentions
                 if (not tf.executing_eagerly() and config.output_attentions) or (
                     tf.executing_eagerly and "output_attentions" in inputs_dict and inputs_dict["output_attentions"]
                 ):
-                    self.assertEqual(config.output_hidden_states, False)
                     self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                     self.assertListEqual(
                         list(decoder_attentions[0].shape[-3:]),
@@ -562,53 +544,14 @@ class TFModelTesterMixin:
             else:
                 out_len = len(outputs)
                 self.assertEqual(out_len % 2, 0)
-<<<<<<< HEAD
                 decoder_attentions = outputs.decoder_attentions
-                self.assertEqual(model.config.output_hidden_states, False)
-=======
-                decoder_attentions = outputs[(out_len // 2) - 1]
-                self.assertEqual(config.output_hidden_states, False)
->>>>>>> a2766f79... Review boolean handling
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
                 )
 
-        def check_encoder_attentions_output(config, inputs_dict, model_class):
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-<<<<<<< HEAD
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
-            self.assertEqual(model.config.output_hidden_states, False)
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
-=======
->>>>>>> a2766f79... Review boolean handling
-
-            if model.base_model_prefix in ["bert"]:
-                attentions = outputs.attentions
-                if (not tf.executing_eagerly() and config.output_attentions) or (
-                    tf.executing_eagerly and "output_attentions" in inputs_dict and inputs_dict["output_attentions"]
-                ):
-                    self.assertEqual(config.output_hidden_states, False)
-                    self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-                    self.assertListEqual(
-                        list(attentions[0].shape[-3:]),
-                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                    )
-                else:
-                    self.assertIsNone(attentions)
-            else:
-<<<<<<< HEAD
-                self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_hidden_states, True)
-
+        def check_encoder_attentions_output(outputs):
             attentions = [
                 t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
             ]
@@ -617,28 +560,40 @@ class TFModelTesterMixin:
                 list(attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
-=======
-                attentions = outputs[-1]
-                self.assertEqual(config.output_hidden_states, False)
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["use_cache"] = False
-            check_encoder_attentions_output(config, inputs_dict, model_class)
+            config.output_hidden_states = False
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            out_len = len(outputs)
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
 
             if self.is_encoder_decoder:
-                check_decoder_attentions_output(config, inputs_dict, model_class)
+                model = model_class(config)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))
+                self.assertEqual(config.output_hidden_states, False)
+                check_decoder_attentions_output(outputs)
 
             # Check that output attentions can also be changed via the config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            check_encoder_attentions_output(config, inputs_dict, model_class)
->>>>>>> a2766f79... Review boolean handling
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            config.output_hidden_states = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            print(outputs.keys())
+            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+            self.assertEqual(model.config.output_hidden_states, True)
+            check_encoder_attentions_output(outputs)
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -650,29 +605,13 @@ class TFModelTesterMixin:
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
 
-            if model.base_model_prefix in ["bert"]:
-                hidden_states = outputs.hidden_states
-                if (not tf.executing_eagerly() and config.output_hidden_states) or (
-                    tf.executing_eagerly
-                    and "output_hidden_states" in inputs_dict
-                    and inputs_dict["output_hidden_states"]
-                ):
-                    self.assertEqual(config.output_attentions, False)
-                    self.assertEqual(hidden_states.shape[0], expected_num_layers)
-                    self.assertListEqual(
-                        list(hidden_states.shape[-2:]),
-                        [self.model_tester.seq_length, self.model_tester.hidden_size],
-                    )
-                else:
-                    self.assertIsNone(hidden_states)
-            else:
-                hidden_states = outputs[-1]
-                self.assertEqual(config.output_attentions, False)
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size],
-                )
+            hidden_states = outputs[-1]
+            self.assertEqual(config.output_attentions, False)
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.seq_length, self.model_tester.hidden_size],
+            )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -965,41 +904,24 @@ class TFModelTesterMixin:
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
+                signature = inspect.signature(model.call).parameters
+                signature_names = list(signature.keys())
+                print(signature_names)
+                # Create a dictionary holding the location of the tensors in the tuple
+                tuple_index_mapping = {0: "input_ids"}
+                for label_key in label_keys:
+                    label_key_index = signature_names.index(label_key)
+                    tuple_index_mapping[label_key_index] = label_key
+                sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
 
-                if model.base_model_prefix in ["bert"]:
-                    signature = inspect.signature(model.call).parameters
-                    signature_names = list(signature.keys())
+                # Initialize a list with their default values, update the values and convert to a tuple
+                list_input = []
 
-                    # Create a dictionary holding the location of the tensors in the tuple
-                    tuple_index_mapping = {0: "input_ids"}
-                    for label_key in label_keys:
-                        label_key_index = signature_names.index(label_key)
-                        tuple_index_mapping[label_key_index] = label_key
-                    sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
+                for name in signature_names:
+                    list_input.append(signature[name].default)
 
-                    # Initialize a list with their default values, update the values and convert to a tuple
-                    list_input = []
-
-                    for name in signature_names:
-                        list_input.append(signature[name].default)
-
-                    for index, value in sorted_tuple_index_mapping:
-                        list_input[index] = prepared_for_class[value]
-                else:
-                    signature = inspect.getfullargspec(model.call)[0]
-
-                    # Create a dictionary holding the location of the tensors in the tuple
-                    tuple_index_mapping = {1: "input_ids"}
-                    for label_key in label_keys:
-                        label_key_index = signature.index(label_key)
-                        tuple_index_mapping[label_key_index] = label_key
-                    sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
-
-                    # Initialize a list with None, update the values and convert to a tuple
-                    list_input = [None] * sorted_tuple_index_mapping[-1][0]
-                    for index, value in sorted_tuple_index_mapping:
-                        list_input[index - 1] = prepared_for_class[value]
-
+                for index, value in sorted_tuple_index_mapping:
+                    list_input[index] = prepared_for_class[value]
                 tuple_input = tuple(list_input)
 
                 # Send to model
