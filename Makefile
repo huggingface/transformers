@@ -3,13 +3,8 @@
 
 check_dirs := examples tests src utils
 
-# get modified files since the branch was made
-fork_point_sha := $(shell git merge-base --fork-point master)
-joined_dirs := $(shell echo $(check_dirs) | tr " " "|")
-modified_py_files := $(shell git diff --name-only $(fork_point_sha) | egrep '^($(joined_dirs))' | egrep '\.py$$')
-#$(info modified files are: $(modified_py_files))
-
 modified_only_fixup:
+	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if [ -n "$(modified_py_files)" ]; then \
 		echo "Checking/fixing $(modified_py_files)"; \
 		black $(modified_py_files); \
