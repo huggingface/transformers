@@ -1,9 +1,9 @@
 import os
+import subprocess
 import sys
 from argparse import ArgumentParser
 from getpass import getpass
 from typing import List, Union
-import subprocess
 
 from requests.exceptions import HTTPError
 from transformers.commands import BaseTransformersCLICommand
@@ -23,7 +23,9 @@ class UserCommands(BaseTransformersCLICommand):
         logout_parser = parser.add_parser("logout", help="Log out")
         logout_parser.set_defaults(func=lambda args: LogoutCommand(args))
         # s3_datasets (s3-based system)
-        s3_parser = parser.add_parser("s3_datasets", help="{ls, rm} Commands to interact with the files you upload on S3.")
+        s3_parser = parser.add_parser(
+            "s3_datasets", help="{ls, rm} Commands to interact with the files you upload on S3."
+        )
         s3_subparsers = s3_parser.add_subparsers(help="s3 related commands")
         ls_parser = s3_subparsers.add_parser("ls")
         ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
@@ -33,9 +35,7 @@ class UserCommands(BaseTransformersCLICommand):
         rm_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         rm_parser.set_defaults(func=lambda args: DeleteObjCommand(args))
         upload_parser = s3_subparsers.add_parser("upload", help="Upload a file to S3.")
-        upload_parser.add_argument(
-            "path", type=str, help="Local path of the folder or individual file to upload."
-        )
+        upload_parser.add_argument("path", type=str, help="Local path of the folder or individual file to upload.")
         upload_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         upload_parser.add_argument(
             "--filename", type=str, default=None, help="Optional: override individual object filename on S3."
@@ -43,22 +43,29 @@ class UserCommands(BaseTransformersCLICommand):
         upload_parser.add_argument("-y", "--yes", action="store_true", help="Optional: answer Yes to the prompt")
         upload_parser.set_defaults(func=lambda args: UploadCommand(args))
         # deprecated model upload
-        upload_parser = parser.add_parser("upload", help=(
-            "Deprecated: used to be the way to upload a model to S3."
-            " We now use a git-based system for storing models and other artifacts."
-            " Use the `repo create` command instead."
-        ))
+        upload_parser = parser.add_parser(
+            "upload",
+            help=(
+                "Deprecated: used to be the way to upload a model to S3."
+                " We now use a git-based system for storing models and other artifacts."
+                " Use the `repo create` command instead."
+            ),
+        )
         upload_parser.set_defaults(func=lambda args: DeprecatedUploadCommand(args))
 
         # new system: git-based repo system
-        repo_parser = parser.add_parser("repo", help="{create, ls-files} Commands to interact with your huggingface.co repos.")
+        repo_parser = parser.add_parser(
+            "repo", help="{create, ls-files} Commands to interact with your huggingface.co repos."
+        )
         repo_subparsers = repo_parser.add_subparsers(help="huggingface.co repos related commands")
         ls_parser = repo_subparsers.add_parser("ls-files", help="List all your files on huggingface.co")
         ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         ls_parser.set_defaults(func=lambda args: ListReposObjsCommand(args))
         repo_create_parser = repo_subparsers.add_parser("create", help="Create a new repo on huggingface.co")
         repo_create_parser.add_argument(
-            "name", type=str, help="Name for your model's repo. Will be namespaced under your username to build the model id."
+            "name",
+            type=str,
+            help="Name for your model's repo. Will be namespaced under your username to build the model id.",
         )
         repo_create_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         repo_create_parser.add_argument("-y", "--yes", action="store_true", help="Optional: answer Yes to the prompt")
@@ -103,7 +110,6 @@ def tabulate(rows: List[List[Union[str, int]]], headers: List[str]) -> str:
     for row in rows:
         lines.append(row_format.format(*row))
     return "\n".join(lines)
-
 
 
 class BaseUserCommand:
@@ -165,7 +171,6 @@ class LogoutCommand(BaseUserCommand):
         HfFolder.delete_token()
         self._api.logout(token)
         print("Successfully logged out.")
-
 
 
 class ListObjsCommand(BaseUserCommand):
@@ -237,21 +242,19 @@ class RepoCreateCommand(BaseUserCommand):
             stdout = subprocess.run(["git-lfs", "--version"], capture_output=True).stdout.decode("utf-8")
             print(ANSI.gray(stdout.strip()))
         except FileNotFoundError:
-            print(ANSI.red(
-                "Looks like you do not have git-lfs installed, please install."
-                " You can install from https://git-lfs.github.com/."
-                " Then run `git lfs install` (you only have to do this once)."
-            ))
+            print(
+                ANSI.red(
+                    "Looks like you do not have git-lfs installed, please install."
+                    " You can install from https://git-lfs.github.com/."
+                    " Then run `git lfs install` (you only have to do this once)."
+                )
+            )
         print("")
-        
+
         user, _ = self._api.whoami(token)
         namespace = self.args.organization if self.args.organization is not None else user
 
-        print(
-            "You are about to create {}".format(
-                ANSI.bold(namespace + "/" + self.args.name)
-            )
-        )
+        print("You are about to create {}".format(ANSI.bold(namespace + "/" + self.args.name)))
 
         if not self.args.yes:
             choice = input("Proceed? [Y/n] ").lower()
@@ -266,10 +269,7 @@ class RepoCreateCommand(BaseUserCommand):
             exit(1)
         print("\nYour repo now lives at:")
         print("  {}".format(ANSI.bold(url)))
-        print(
-            "\nYou can clone it locally with the command below,"
-            " and commit/push as usual."
-        )
+        print("\nYou can clone it locally with the command below," " and commit/push as usual.")
         print(f"\n  git clone {url}")
         print("")
 
@@ -278,9 +278,9 @@ class DeprecatedUploadCommand(BaseUserCommand):
     def run(self):
         print(
             ANSI.red(
-            "Deprecated: used to be the way to upload a model to S3."
-            " We now use a git-based system for storing models and other artifacts."
-            " Use the `repo create` command instead."
+                "Deprecated: used to be the way to upload a model to S3."
+                " We now use a git-based system for storing models and other artifacts."
+                " Use the `repo create` command instead."
             )
         )
         exit(1)
