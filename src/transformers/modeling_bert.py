@@ -1079,7 +1079,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            cross_attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
