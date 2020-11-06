@@ -177,10 +177,10 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
             )
-            result = {	
-                "loss": loss,	
-                "logits": logits,	
-            }	
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
