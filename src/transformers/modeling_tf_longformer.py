@@ -23,22 +23,19 @@ from transformers.activations_tf import get_tf_activation
 
 from .configuration_longformer import LongformerConfig
 from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
 )
 from .modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
-from .modeling_tf_outputs import TFMaskedLMOutput, TFQuestionAnsweringModelOutput
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
@@ -2088,7 +2085,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             )
 
         outputs = self.longformer(
-            input_ids, 
+            input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
@@ -2129,23 +2126,15 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         self.longformer = TFLongformerModel(config, name="longformer")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            1, kernel_initializer=get_initializer(config.initializer_range),
-            name="classifier"
+            1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @property
     def dummy_inputs(self):
         input_ids = tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)
         # make sure global layers are initialized
-        global_attention_mask = tf.constant(
-            [
-                [[0, 0, 0, 1], [0, 0, 0, 1]]
-            ] * 2
-        )
-        return {
-            "input_ids": input_ids,
-            "global_attention_mask": global_attention_mask
-        }
+        global_attention_mask = tf.constant([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2)
+        return {"input_ids": input_ids, "global_attention_mask": global_attention_mask}
 
     @add_start_docstrings_to_model_forward(
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
@@ -2289,8 +2278,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         self.longformer = TFLongformerModel(config=config, name="longformer")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range),
-            name="classifier"
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
