@@ -231,6 +231,7 @@ def main():
             examples[text_column_name],
             padding=padding,
             truncation=True,
+            # We use this argument because the texts in our dataset are lists of words (with a label for each word).
             is_split_into_words=True,
             return_offsets_mapping=True,
         )
@@ -240,13 +241,15 @@ def main():
             label_index = 0
             label_ids = []
             for offset in offset_mapping:
+                # We set the label for the first token of each word. Special characters will have an offset of (0, 0)
+                # so the test ignores them.
                 if offset[0] == 0 and offset[1] != 0:
-                    current_label = label_to_id[label[label_index]]
+                    label_ids.append(label_to_id[label[label_index]])
                     label_index += 1
-                if offset[0] == 0 and offset[1] == 0:
-                    label_ids.append(-100)
+                # For the other tokens in a word or special tokens, we set the label to -100 so it's automatically
+                # ignored in the loss function.
                 else:
-                    label_ids.append(current_label)
+                    label_ids.append(-100)
             labels.append(label_ids)
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
