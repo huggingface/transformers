@@ -10,11 +10,12 @@ widget:
 
 [MagBERT-NER] is a state-of-the-art NER model for Moroccan French language (Maghreb). The MagBERT-NER model was fine-tuned for NER Task based the language model for French Camembert (based on the RoBERTa architecture).
 
-For further information or requests, please go to [Typica.AI Website](https://typicasoft.io/)
+For further information or requests, please visite our website at [Typica.AI Website](https://typicasoft.io/) or send us an email at contactus@typica.ai
 
 ## How to use MagBERT-NER with HuggingFace
 
 ##### Load MagBERT-NER and its sub-word tokenizer :
+
 ```python
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 
@@ -45,11 +46,14 @@ nlp("Saad Dine El Otmani, né le 16 janvier 1956 à Inezgane, est un homme d'Ét
 
 ```
 
-```
-
 
 ## Authors 
 
-MagBert-NER was trained and evaluated by Hicham Assoudi, Ph.D.
+MagBert-NER Model was trained by Hicham Assoudi, Ph.D. 
+For any questions, comments you can contact me at assoudi@typica.ai
 
 
+## Citation
+
+If you use our work, please cite:
+Hicham Assoudi, Ph.D., MagBERT-NER: a state-of-the-art NER model for Moroccan French language (Maghreb), (2020)
