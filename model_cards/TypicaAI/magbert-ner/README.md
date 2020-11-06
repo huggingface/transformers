@@ -10,7 +10,7 @@ widget:
 
 [MagBERT-NER] is a state-of-the-art NER model for Moroccan French language (Maghreb). The MagBERT-NER model was fine-tuned for NER Task based the language model for French Camembert (based on the RoBERTa architecture).
 
-For further information or requests, please visite our website at [Typica.AI Website](https://typicasoft.io/) or send us an email at contactus@typica.ai
+For further information or requests, please visite our website at [typica.ai Website](https://typica.ai/) or send us an email at contactus@typica.ai
 
 ## How to use MagBERT-NER with HuggingFace
 
