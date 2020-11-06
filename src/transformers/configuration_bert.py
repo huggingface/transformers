@@ -96,6 +96,7 @@ class BertConfig(PretrainedConfig):
             :obj:`"relative_key"`, position embedding in Shaw et al. Self-Attention with Relative Position
             Representations, https://arxiv.org/abs/1803.02155, :obj:`"relative_key_query"`: Method 4 in Huang et al.
             Improve Transformer Models with Better Relative Position Embeddings, https://arxiv.org/abs/2009.13658
+
     Examples::
 
         >>> from transformers import BertModel, BertConfig
