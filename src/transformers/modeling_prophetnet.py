@@ -297,7 +297,8 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     @property
     def decoder_cross_attentions(self):
         warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead."
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            FutureWarning,
         )
         return self.cross_attentions
 
@@ -381,7 +382,8 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     @property
     def decoder_cross_attentions(self):
         warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead."
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            FutureWarning,
         )
         return self.cross_attentions
 

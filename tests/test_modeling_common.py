@@ -253,9 +253,7 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = (
-                    self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 5
-                )
+                correct_outlen = 5
 
                 # loss is at first position
                 if "labels" in inputs_dict:
@@ -283,9 +281,7 @@ class ModelTesterMixin:
                     list(cross_attentions[0].shape[-3:]),
                     [
                         self.model_tester.num_attention_heads,
-                        (self.model_tester.ngram + 1) * decoder_seq_length
-                        if hasattr(self.model_tester, "ngram")
-                        else decoder_seq_length,
+                        decoder_seq_length,
                         encoder_key_length,
                     ],
                 )
