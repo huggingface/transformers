@@ -66,14 +66,16 @@ class Split(Enum):
 
 
 class TokenClassificationTask:
-    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    @staticmethod
+    def read_examples_from_file(data_dir, mode: Union[Split, str]) -> List[InputExample]:
         raise NotImplementedError
 
-    def get_labels(self, path: str) -> List[str]:
+    @staticmethod
+    def get_labels(path: str) -> List[str]:
         raise NotImplementedError
 
+    @staticmethod
     def convert_examples_to_features(
-        self,
         examples: List[InputExample],
         label_list: List[str],
         max_seq_length: int,

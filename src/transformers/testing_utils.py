@@ -88,8 +88,8 @@ def is_pipeline_test(test_case):
     """
     Decorator marking a test as a pipeline test.
 
-    Pipeline tests are skipped by default and we can run only them by setting RUN_PIPELINE_TEST environment variable to
-    a truthy value and selecting the is_pipeline_test pytest mark.
+    Pipeline tests are skipped by default and we can run only them by setting RUN_PIPELINE_TESTS environment variable
+    to a truthy value and selecting the is_pipeline_test pytest mark.
 
     """
     if not _run_pipeline_tests:
@@ -295,6 +295,22 @@ def require_ray(test_case):
         return unittest.skip("test requires Ray/tune")(test_case)
     else:
         return test_case
+
+
+def get_gpu_count():
+    """
+    Return the number of available gpus (regardless of whether torch or tf is used)
+    """
+    if _torch_available:
+        import torch
+
+        return torch.cuda.device_count()
+    elif _tf_available:
+        import tensorflow as tf
+
+        return len(tf.config.list_physical_devices("GPU"))
+    else:
+        return 0
 
 
 def get_tests_dir(append_path=None):
@@ -695,6 +711,31 @@ def mockenv(**kwargs):
     return unittest.mock.patch.dict(os.environ, kwargs)
 
 
+# --- pytest conf functions --- #
+
+# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+pytest_opt_registered = {}
+
+
+def pytest_addoption_shared(parser):
+    """
+    This function is to be called from `conftest.py` via `pytest_addoption` wrapper that has to be defined there.
+
+    It allows loading both `conftest.py` files at once without causing a failure due to adding the same `pytest`
+    option.
+
+    """
+    option = "--make-reports"
+    if option not in pytest_opt_registered:
+        parser.addoption(
+            option,
+            action="store",
+            default=False,
+            help="generate report files. The value of this option is used as a prefix to report names",
+        )
+        pytest_opt_registered[option] = 1
+
+
 def pytest_terminal_summary_main(tr, id):
     """
     Generate multiple reports at the end of test suite run - each report goes into a dedicated file in the current
@@ -728,7 +769,7 @@ def pytest_terminal_summary_main(tr, id):
     dir = "reports"
     Path(dir).mkdir(parents=True, exist_ok=True)
     report_files = {
-        k: f"{dir}/report_{id}_{k}.txt"
+        k: f"{dir}/{id}_{k}.txt"
         for k in [
             "durations",
             "errors",
@@ -824,7 +865,7 @@ def pytest_terminal_summary_main(tr, id):
     config.option.tbstyle = orig_tbstyle
 
 
-# the following code deals with async io between processes
+# --- distributed testing functions --- #
 
 # adapted from https://stackoverflow.com/a/59041913/9201239
 import asyncio  # noqa
@@ -896,8 +937,10 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
 
     cmd_str = " ".join(cmd)
     if result.returncode > 0:
+        stderr = "\n".join(result.stderr)
         raise RuntimeError(
-            f"'{cmd_str}' failed with returncode {result.returncode} - see the `stderr:` messages from above for details."
+            f"'{cmd_str}' failed with returncode {result.returncode}\n\n"
+            f"The combined stderr from workers follows:\n{stderr}"
         )
 
     # check that the subprocess actually did run and produced some output, should the test rely on
