@@ -1,3 +1,6 @@
+---
+language: et
+---
 # EstBERT
 
 
@@ -36,4 +39,3 @@ Overall EstBERT performs better in parts of speech (POS), name entity recognitio
 | EstBERT      | **88.42**    | 90.38                     |**_89.39_** | 88.35                     | 89.74      | 89.04         |
 | mBERT        | 85.88         | 87.09                     | 86.51                     |**_88.47_** | 88.28      | 88.37         |
 | XLM\-RoBERTa | 87.55         |**_91.19_** | 89.34                     | 87.50                     | **90.76** | **89.10**    |
-
