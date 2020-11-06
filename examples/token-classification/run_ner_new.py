@@ -349,8 +349,6 @@ def main():
 
     return results
 
-    return results
-
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
