@@ -133,6 +133,7 @@ class TFLongformerModelTester:
     def create_and_check_longformer_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerModel(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
@@ -146,6 +147,7 @@ class TFLongformerModelTester:
     def create_and_check_longformer_model_with_global_attention_mask(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerModel(config=config)
         half_input_mask_length = shape_list(input_mask)[-1] // 2
         global_attention_mask = tf.concat(
@@ -173,6 +175,7 @@ class TFLongformerModelTester:
     def create_and_check_longformer_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerForMaskedLM(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertListEqual(shape_list(result.logits), [self.batch_size, self.seq_length, self.vocab_size])
@@ -180,6 +183,7 @@ class TFLongformerModelTester:
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerForQuestionAnswering(config=config)
         result = model(
             input_ids,
