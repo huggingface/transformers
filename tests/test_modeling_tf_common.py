@@ -528,28 +528,15 @@ class TFModelTesterMixin:
         decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        def check_decoder_attentions_output(outputs, model):
-            if model.base_model_prefix in ["bert"]:
-                decoder_attentions = outputs.decoder_attentions
-                if (not tf.executing_eagerly() and config.output_attentions) or (
-                    tf.executing_eagerly and "output_attentions" in inputs_dict and inputs_dict["output_attentions"]
-                ):
-                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                    self.assertListEqual(
-                        list(decoder_attentions[0].shape[-3:]),
-                        [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                    )
-                else:
-                    self.assertIsNone(decoder_attentions)
-            else:
-                out_len = len(outputs)
-                self.assertEqual(out_len % 2, 0)
-                decoder_attentions = outputs.decoder_attentions
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
+        def check_decoder_attentions_output(outputs):
+            out_len = len(outputs)
+            self.assertEqual(out_len % 2, 0)
+            decoder_attentions = outputs.decoder_attentions
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+            )
 
         def check_encoder_attentions_output(outputs):
             attentions = [
@@ -872,6 +859,7 @@ class TFModelTesterMixin:
 
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
         for model_class in self.all_model_classes:
             model = model_class(config)
             if getattr(model, "compute_loss", None):
@@ -906,7 +894,7 @@ class TFModelTesterMixin:
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
                 signature = inspect.signature(model.call).parameters
                 signature_names = list(signature.keys())
-                print(signature_names)
+
                 # Create a dictionary holding the location of the tensors in the tuple
                 tuple_index_mapping = {0: "input_ids"}
                 for label_key in label_keys:
@@ -925,7 +913,7 @@ class TFModelTesterMixin:
                 tuple_input = tuple(list_input)
 
                 # Send to model
-                loss = model(tuple_input)[0]
+                loss = model(tuple_input[:-1])[0]
 
                 self.assertEqual(loss.shape, [loss_size])
 

@@ -34,7 +34,7 @@ class FlaxBertModelTest(unittest.TestCase):
 
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
-                for fx_output, pt_output in zip(fx_outputs, pt_outputs.to_tuple()):
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-4)
 
     def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):

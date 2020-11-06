@@ -174,9 +174,14 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             model = DebertaForSequenceClassification(config)
             model.to(torch_device)
             model.eval()
-            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-
-            self.parent.assertListEqual(list(result.logits.size()), [self.batch_size, self.num_labels])
+            loss, logits = model(
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+            )
+            result = {	
+                "loss": loss,	
+                "logits": logits,	
+            }	
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
