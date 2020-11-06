@@ -33,7 +33,12 @@ from .file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
+from .modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from .utils import logging
 
@@ -503,6 +508,7 @@ class T5Block(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
+        return_dict=False,
     ):
 
         if past_key_value is not None:
@@ -533,7 +539,8 @@ class T5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
-        if self.is_decoder and encoder_hidden_states is not None:
+        do_cross_attention = self.is_decoder and encoder_hidden_states is not None
+        if do_cross_attention:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
             if present_key_value_state is not None:
@@ -564,7 +571,6 @@ class T5Block(nn.Module):
         hidden_states = self.layer[-1](hidden_states)
         outputs = (hidden_states,)
 
-        # Add attentions if we output them
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
@@ -743,6 +749,7 @@ class T5Stack(T5PreTrainedModel):
         present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
@@ -779,7 +786,9 @@ class T5Stack(T5PreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
+                all_attentions = all_attentions + (layer_outputs[2],)
+                if self.is_decoder:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[4 if i == 0 else 3],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -791,14 +800,21 @@ class T5Stack(T5PreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions]
+                for v in [
+                    hidden_states,
+                    present_key_value_states,
+                    all_hidden_states,
+                    all_attentions,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
-        return BaseModelOutputWithPast(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1038,6 +1054,7 @@ class T5Model(T5PreTrainedModel):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1227,6 +1244,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,

@@ -254,7 +254,7 @@ class ModelTesterMixin:
 
             if self.is_encoder_decoder:
                 correct_outlen = (
-                    self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 4
+                    self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 5
                 )
 
                 # loss is at first position
@@ -266,12 +266,22 @@ class ModelTesterMixin:
 
                 self.assertEqual(out_len, correct_outlen)
 
+                # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
+
+                # cross attentions
+                cross_attentions = outputs.cross_attentions
+                self.assertIsInstance(cross_attentions, (list, tuple))
+                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(cross_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length],
                 )
 
             # Check attention is always last and order is fine

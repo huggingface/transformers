@@ -118,12 +118,12 @@ class BaseModelOutputWithCrossAttentions(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``decoder_output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
-            Cross attentions weights after the attention softmax, used to compute the weighted average in the
-            cross-attention heads.
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -155,12 +155,12 @@ class BaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``decoder_output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
-            Cross attentions weights after the attention softmax, used to compute the weighted average in the
-            cross-attention heads.
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -198,12 +198,12 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``decoder_output_attentions=True`` and ``config.add_cross_attention=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
-            Cross attentions weights after the attention softmax, used to compute the weighted average in the
-            cross-attention heads.
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -242,6 +242,12 @@ class Seq2SeqModelOutput(ModelOutput):
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``decoder_output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
         encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -261,6 +267,7 @@ class Seq2SeqModelOutput(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -506,8 +513,8 @@ class Seq2SeqLMOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
-            Cross-attentions weights of the decoder, after the attention softmax, used to compute the weighted average
-            in the cross-attention heads.
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
         encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -620,6 +627,12 @@ class Seq2SeqSequenceClassifierOutput(ModelOutput):
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``decoder_output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
         encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -640,6 +653,7 @@ class Seq2SeqSequenceClassifierOutput(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -766,6 +780,12 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``decoder_output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
         encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -787,6 +807,7 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
