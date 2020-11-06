@@ -1333,10 +1333,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, *args, **kwargs):
 
         if args is not None and len(args) > 0:
-            if isinstance(args, str):
-                inputs = [args]
-            else:
-                inputs = args
+            inputs = list(args)
             batch_size = len(inputs)
         else:
             raise ValueError("At least one input is required.")
