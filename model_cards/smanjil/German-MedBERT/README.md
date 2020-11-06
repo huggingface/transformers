@@ -1,3 +1,7 @@
+---
+language: de
+---
+
 # German Medical BERT
 
 This is a fine-tuned model on Medical domain for German language and based on German BERT.
