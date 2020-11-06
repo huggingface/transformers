@@ -11,44 +11,40 @@ import torch
 
 from distillation import BartSummarizationDistiller, distill_main
 from finetune import SummarizationModule, main
-from test_seq2seq_examples import MBART_TINY
-from transformers import BartForConditionalGeneration, MarianMTModel
+from transformers import MarianMTModel
 from transformers.file_utils import cached_path
 from transformers.testing_utils import TestCasePlus, require_torch_gpu, slow
 from utils import load_json
 
 
-MODEL_NAME = MBART_TINY
 MARIAN_MODEL = "sshleifer/mar_enro_6_3_student"
 
 
-class TestAll(TestCasePlus):
+class TestMbartCc25Enro(TestCasePlus):
     def setUp(self):
         super().setUp()
+
         data_cached = cached_path(
-            "https://cdn-datasets.huggingface.co/translation/wmt_en_ro.tar.gz", extract_compressed_file=True
+            "https://cdn-datasets.huggingface.co/translation/wmt_en_ro-tr40k-va0.5k-te0.5k.tar.gz",
+            extract_compressed_file=True,
         )
-        self.data_dir = f"{data_cached}/wmt_en_ro"
+        self.data_dir = f"{data_cached}/wmt_en_ro-tr40k-va0.5k-te0.5k"
 
     @slow
     @require_torch_gpu
     def test_model_download(self):
         """This warms up the cache so that we can time the next test without including download time, which varies between machines."""
-        BartForConditionalGeneration.from_pretrained(MODEL_NAME)
         MarianMTModel.from_pretrained(MARIAN_MODEL)
 
     # @timeout_decorator.timeout(1200)
     @slow
     @require_torch_gpu
     def test_train_mbart_cc25_enro_script(self):
-        DEBUG = 1  # XXX
-        data_dir = self.data_dir
         env_vars_to_replace = {
-            "--fp16_opt_level=O1": "",
             "$MAX_LEN": 64,
             "$BS": 64,
             "$GAS": 1,
-            "$ENRO_DIR": data_dir,
+            "$ENRO_DIR": self.data_dir,
             "facebook/mbart-large-cc25": MARIAN_MODEL,
             # "val_check_interval=0.25": "val_check_interval=1.0",
             "--learning_rate=3e-5": "--learning_rate 3e-4",
@@ -61,8 +57,6 @@ class TestAll(TestCasePlus):
         for k, v in env_vars_to_replace.items():
             bash_script = bash_script.replace(k, str(v))
         output_dir = self.get_auto_remove_tmp_dir()
-        if DEBUG:
-            output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
 
         # bash_script = bash_script.replace("--fp16 ", "")
         args = f"""
@@ -72,7 +66,7 @@ class TestAll(TestCasePlus):
             --do_predict
             --gpus 1
             --freeze_encoder
-            --n_train 100000
+            --n_train 40000
             --n_val 500
             --n_test 500
             --fp16_opt_level O1
@@ -81,12 +75,7 @@ class TestAll(TestCasePlus):
         """.split()
         # XXX: args.gpus > 1 : handle multigpu in the future
 
-        if DEBUG:
-            args.append("--overwrite_output_dir")
-
         testargs = ["finetune.py"] + bash_script.split() + args
-        if DEBUG:
-            print(*testargs, sep="\n")
         with patch.object(sys, "argv", testargs):
             parser = argparse.ArgumentParser()
             parser = pl.Trainer.add_argparse_args(parser)
@@ -133,6 +122,8 @@ class TestAll(TestCasePlus):
             # assert len(metrics["val"]) ==  desired_n_evals
             assert len(metrics["test"]) == 1
 
+
+class TestDistilMarianNoTeacher(TestCasePlus):
     @timeout_decorator.timeout(600)
     @slow
     @require_torch_gpu
