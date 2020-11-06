@@ -86,7 +86,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def get_framework(model):
+def get_framework(model, revision: Optional[str] = None):
     """
     Select framework (TensorFlow or PyTorch) to use.
 
@@ -103,14 +103,14 @@ def get_framework(model):
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
-            model = AutoModel.from_pretrained(model)
+            model = AutoModel.from_pretrained(model, revision=revision)
         elif is_tf_available() and not is_torch_available():
-            model = TFAutoModel.from_pretrained(model)
+            model = TFAutoModel.from_pretrained(model, revision=revision)
         else:
             try:
-                model = AutoModel.from_pretrained(model)
+                model = AutoModel.from_pretrained(model, revision=revision)
             except OSError:
-                model = TFAutoModel.from_pretrained(model)
+                model = TFAutoModel.from_pretrained(model, revision=revision)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
@@ -2730,6 +2730,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
+    revision: Optional[str] = None,
     use_fast: bool = False,
     **kwargs
 ) -> Pipeline:
@@ -2784,6 +2785,10 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
             is provided.
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            When passing a task name or a string model identifier: The specific model version to use. It can be a
+            branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
+            artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
@@ -2845,17 +2850,19 @@ def pipeline(
         if isinstance(tokenizer, tuple):
             # For tuple we have (tokenizer name, {kwargs})
             use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], use_fast=use_fast, **tokenizer[1])
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
+            )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config)
+        config = AutoConfig.from_pretrained(config, revision=revision)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard)
+        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -2873,7 +2880,7 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
         if task == "translation" and model.config.task_specific_params:
             for key in model.config.task_specific_params:
                 if key.startswith("translation"):
