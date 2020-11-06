@@ -115,8 +115,8 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     args = dict(vars(chkpt["args"]))
 
-    src_lang = args["source_lang"]
-    tgt_lang = args["target_lang"]
+    src_lang = "en" # args["source_lang"]
+    tgt_lang = "el" # args["target_lang"]
 
     data_root = dirname(pytorch_dump_folder_path)
     model_dir = basename(pytorch_dump_folder_path)
@@ -143,7 +143,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     # merges_file (bpecodes)
     merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
-    fsmt_merges_file = os.path.join(fsmt_folder_path, "bpecodes")
+    fsmt_merges_file = os.path.join(fsmt_folder_path, "code")
     with open(fsmt_merges_file, encoding="utf-8") as fin:
         merges = fin.read()
     merges = re.sub(r" \d+$", "", merges, 0, re.M)  # remove frequency number
@@ -154,10 +154,32 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     # model config
     fsmt_model_config_file = os.path.join(pytorch_dump_folder_path, "config.json")
 
+    args = {
+      "activation_dropout": 0.0,
+      "attention_dropout": 0.0,
+      "decoder_embed_dim": 512,
+      "dropout": 0.1,
+      "max_source_positions": 1024,
+      "encoder_layers": 6,
+      "encoder_attention_heads": 16,
+      "encoder_ffn_embed_dim": 1024,
+      "encoder_layerdrop": 0,
+      "encoder_layers": 6,
+      "decoder_attention_heads": 16,
+      "decoder_ffn_embed_dim": 1024,
+      "decoder_layerdrop": 0,
+      "decoder_layers": 6,
+      "bos_token_id": 0,
+      "pad_token_id": 1,
+      "eos_token_id": 2,
+      "no_scale_embedding": False,
+      "share_all_embeddings": True,
+    }
+    
     # validate bpe/tokenizer config, as currently it's hardcoded to moses+fastbpe -
     # may have to modify the tokenizer if a different type is used by a future model
-    assert args["bpe"] == "fastbpe", f"need to extend tokenizer to support bpe={args['bpe']}"
-    assert args["tokenizer"] == "moses", f"need to extend tokenizer to support bpe={args['tokenizer']}"
+    #assert args["bpe"] == "fastbpe", f"need to extend tokenizer to support bpe={args['bpe']}"
+    #assert args["tokenizer"] == "moses", f"need to extend tokenizer to support bpe={args['tokenizer']}"
 
     model_conf = {
         "architectures": ["FSMTForConditionalGeneration"],
