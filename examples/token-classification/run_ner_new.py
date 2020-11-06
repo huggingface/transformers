@@ -15,7 +15,7 @@
 """
 Fine-tuning the library models for token classification.
 """
-# You can also adapt this script on your own token classification task. Pointers for this are left as comments.
+# You can also adapt this script on your own token classification task and datasets. Pointers for this are left as comments.
 
 import logging
 import os
