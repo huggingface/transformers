@@ -5,7 +5,7 @@ check_dirs := examples tests src utils
 
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
-	@if [ -n "$(modified_py_files)" ]; then \
+	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
 		black $(modified_py_files); \
 		isort $(modified_py_files); \
