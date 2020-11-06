@@ -33,7 +33,11 @@ from .file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from .modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from .modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithPastAndCrossAttentions,
+    SequenceClassifierOutputWithPast,
+)
 from .modeling_utils import (
     Conv1D,
     PreTrainedModel,
@@ -311,14 +315,14 @@ class Block(nn.Module):
             attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = hidden_states + attn_output
-            outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
+            outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
 
         feed_forward_hidden_states = self.mlp(self.ln_2(hidden_states))
         # residual connection
         hidden_states = hidden_states + feed_forward_hidden_states
 
         outputs = [hidden_states] + outputs
-        return outputs  # hidden_states, present, (cross_attentions, attentions)
+        return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -506,7 +510,7 @@ class GPT2Model(GPT2PreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
-        output_type=BaseModelOutputWithPast,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -618,7 +622,8 @@ class GPT2Model(GPT2PreTrainedModel):
         output_shape = input_shape + (hidden_states.size(-1),)
 
         presents = () if use_cache else None
-        all_attentions = () if output_attentions else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
@@ -659,7 +664,9 @@ class GPT2Model(GPT2PreTrainedModel):
                 presents = presents + (present,)
 
             if output_attentions:
-                all_attentions = all_attentions + (outputs[2],)
+                all_self_attentions = all_self_attentions + (outputs[2],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (outputs[3],)
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -669,13 +676,14 @@ class GPT2Model(GPT2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
 
-        return BaseModelOutputWithPast(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=presents,
             hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -727,7 +735,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
-        output_type=CausalLMOutputWithPast,
+        output_type=CausalLMOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -795,12 +803,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return CausalLMOutputWithPastAndCrossAttentions(
             loss=loss,
             logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+            cross_attentions=transformer_outputs.cross_attentions,
         )
 
 

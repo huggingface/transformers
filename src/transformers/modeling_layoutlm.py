@@ -24,7 +24,12 @@ from torch.nn import CrossEntropyLoss
 from .activations import ACT2FN
 from .configuration_layoutlm import LayoutLMConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, TokenClassifierOutput
+from .modeling_outputs import (
+    BaseModelOutputWithCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    MaskedLMOutput,
+    TokenClassifierOutput,
+)
 from .modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -374,7 +379,8 @@ class LayoutLMEncoder(nn.Module):
         return_dict=False,
     ):
         all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -408,15 +414,24 @@ class LayoutLMEncoder(nn.Module):
                 )
             hidden_states = layer_outputs[0]
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_cross_attentions]
+                if v is not None
+            )
+        return BaseModelOutputWithCrossAttentions(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -611,7 +626,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="layoutlm-base-uncased",
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -716,11 +731,12 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
