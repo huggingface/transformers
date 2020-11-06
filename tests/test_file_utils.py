@@ -48,7 +48,7 @@ class GetFromCacheTests(unittest.TestCase):
         metadata = filename_to_url(filepath)
         self.assertEqual(metadata, (url, f'"{PINNED_SHA1}"'))
 
-    def test_standard_object(self):
+    def test_standard_object_rev(self):
         # Same object, but different revision
         url = hf_bucket_url(MODEL_ID, filename=CONFIG_NAME, revision=REVISION_ID_ONE_SPECIFIC_COMMIT)
         filepath = get_from_cache(url, force_download=True)
