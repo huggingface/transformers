@@ -1517,6 +1517,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             proxies (:obj:`Dict[str, str], `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__`` method.
             kwargs (additional keyword arguments, `optional`):
@@ -1551,6 +1555,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -1602,7 +1607,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
-                        full_file_name = hf_bucket_url(pretrained_model_name_or_path, filename=file_name, mirror=None)
+                        full_file_name = hf_bucket_url(
+                            pretrained_model_name_or_path, filename=file_name, revision=revision, mirror=None
+                        )
 
                     vocab_files[file_id] = full_file_name
 
