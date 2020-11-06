@@ -152,7 +152,48 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 # - torch.nn.Module for the layers and
 # - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
 ####################################################
+PARALLELIZE_DOCSTRING = r"""
+    Uses a device map to distribute attention modules of the model across several devices. If no device map is given, it
+    will evenly distribute blocks across all devices.
+    Args:
+        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
+            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
+            always automatically mapped to the first device (for esoteric reasons). That means that the first
+            device should have fewer attention modules mapped to it than other devices.
 
+            For reference, the t5 models have the following number of attention modules:
+
+                - t5-small: 6
+                - t5-base: 12
+                - t5-large: 24
+                - t5-3b: 24
+                - t5-11b: 24
+
+    Example::
+        Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
+
+            model = T5ForConditionalGeneration.from_pretrained('t5-3b')
+            device_map = {0: [0, 1, 2],
+                         1: [3, 4, 5, 6, 7, 8, 9],
+                         2: [10, 11, 12, 13, 14, 15, 16],
+                         3: [17, 18, 19, 20, 21, 22, 23]}
+            model.parallelize(device_map)
+"""
+
+DEPARALLELIZE_DOCSTRING = r"""
+    Moves the model to cpu from a model parallel state.
+
+    Example::
+        On a 4 GPU machine with t5-3b:
+
+        model = T5ForConditionalGeneration.from_pretrained('t5-3b')
+        device_map = {0: [0, 1, 2],
+                     1: [3, 4, 5, 6, 7, 8, 9],
+                     2: [10, 11, 12, 13, 14, 15, 16],
+                     3: [17, 18, 19, 20, 21, 22, 23]}
+        model.parallelize(device_map) # Splits the model across several devices
+        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+"""
 
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -961,49 +1002,6 @@ T5_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-"""
-
-PARALLELIZE_DOCSTRING = r"""
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given, it
-    will evenly distribute blocks across all devices.
-    Args:
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
-            always automatically mapped to the first device (for esoteric reasons). That means that the first
-            device should have fewer attention modules mapped to it than other devices.
-
-            For reference, the t5 models have the following number of attention modules:
-
-                - t5-small: 6
-                - t5-base: 12
-                - t5-large: 24
-                - t5-3b: 24
-                - t5-11b: 24
-
-    Example::
-        Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
-
-            model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-            device_map = {0: [0, 1, 2],
-                         1: [3, 4, 5, 6, 7, 8, 9],
-                         2: [10, 11, 12, 13, 14, 15, 16],
-                         3: [17, 18, 19, 20, 21, 22, 23]}
-            model.parallelize(device_map)
-"""
-
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example::
-        On a 4 GPU machine with t5-3b:
-
-        model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-        device_map = {0: [0, 1, 2],
-                     1: [3, 4, 5, 6, 7, 8, 9],
-                     2: [10, 11, 12, 13, 14, 15, 16],
-                     3: [17, 18, 19, 20, 21, 22, 23]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
 """
 
 @add_start_docstrings(
