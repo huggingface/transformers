@@ -175,10 +175,10 @@ def main():
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
-    # (the dataset will be downloaded automatically from the datasets Hub
+    # (the dataset will be downloaded automatically from the datasets Hub).
     #
-    # For CSV/JSON files, this script will use the column called 'text' or the first column. You can easily tweak this
-    # behavior (see below)
+    # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
+    # 'text' is found. You can easily tweak this behavior (see below).
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
@@ -190,7 +190,7 @@ def main():
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
-            data_files["validation"] = data_args.train_file
+            data_files["validation"] = data_args.validation_file
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
@@ -259,14 +259,14 @@ def main():
     )
 
     if data_args.block_size <= 0:
-        block_size = tokenizer.max_len
+        block_size = tokenizer.model_max_length
     else:
-        if data_args.block_size > tokenizer.max_len:
+        if data_args.block_size > tokenizer.model_max_length:
             logger.warn(
                 f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
-                f"({tokenizer.max_len}). Using block_size={tokenizer.max_len}."
+                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
-        block_size = min(data_args.block_size, tokenizer.max_len)
+        block_size = min(data_args.block_size, tokenizer.model_max_length)
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):

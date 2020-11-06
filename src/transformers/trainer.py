@@ -729,6 +729,7 @@ class Trainer:
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
         self._logging_loss_scalar = 0
+        self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
@@ -849,7 +850,9 @@ class Trainer:
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / self.args.logging_steps
+            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (
+                self.state.global_step - self._globalstep_last_logged
+            )
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
@@ -857,6 +860,7 @@ class Trainer:
                 else self.lr_scheduler.get_lr()[0]
             )
             self._logging_loss_scalar = tr_loss_scalar
+            self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
 
@@ -1329,6 +1333,12 @@ class Trainer:
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
 
+        .. note::
+
+            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            padding in a token classification task) the predictions will be padded (on the right) to allow for
+            concatenation into one array. The padding index is -100.
+
         Returns: `NamedTuple` A namedtuple with the following keys:
 
             - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
@@ -1408,9 +1418,9 @@ class Trainer:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if logits is not None:
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, dim=0)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, dim=0)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.

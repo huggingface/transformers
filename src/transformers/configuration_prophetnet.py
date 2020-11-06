@@ -39,7 +39,7 @@ class ProphetNetConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the ProphetNET model. Defines the number of different tokens that can be represented by
             the :obj:`inputs_ids` passed when calling :class:`~transformers.ProphetNetModel`.

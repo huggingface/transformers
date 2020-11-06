@@ -272,3 +272,4 @@ conversion utilities for the following models:
     internal/pipelines_utils
     internal/tokenization_utils
     internal/trainer_utils
+    internal/generation_utils

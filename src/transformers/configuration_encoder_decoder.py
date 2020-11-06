@@ -68,7 +68,7 @@ class EncoderDecoderConfig(PretrainedConfig):
         >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained('my-model')
         >>> model = EncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
     """
-    model_type = "encoder_decoder"
+    model_type = "encoder-decoder"
     is_composition = True
 
     def __init__(self, **kwargs):
