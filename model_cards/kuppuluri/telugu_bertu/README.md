@@ -1,3 +1,6 @@
+---
+language: te
+---
 # telugu_bertu
 
 ## Model description
