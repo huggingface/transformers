@@ -14,6 +14,13 @@
 # limitations under the License.
 
 """
+IMPORTANT:
+
+This code was copied from
+https://github.com/google-research/google-research/blob/master/performer/fast_self_attention/fast_self_attention.py on
+6/11/2020. This is very new code, so it might be prone to change soon -> make sure to check the original code and
+update accordingly
+
 Core Fast Attention Module for Flax. Implementation of the approximate fast softmax and generalized attention mechanism
 leveraging structured random feature maps [RFM] techniques and low rank decomposition of the attention matrix.
 """
@@ -26,24 +33,9 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 import numpy as onp
 from absl import logging
 
-import gin
 import jax
 import jax.numpy as jnp
 from jax import lax, random
-
-
-# Nonlinear mappings encoding different attention kernels.
-gin.external_configurable(jnp.cos, "jcos")
-gin.external_configurable(jnp.sin, "jsin")
-gin.external_configurable(jnp.tanh, "jtanh")
-gin.external_configurable(jax.nn.sigmoid, "jsigmoid")
-gin.external_configurable(
-    lambda x: jax.nn.gelu(x, approximate=False), "jgelu"
-)  # Needs to be exact, although might be slower. See https://github.com/google/jax/issues/4428.
-gin.external_configurable(lambda x: x * x * (x > 0.0), "jrequ")
-gin.external_configurable(jax.nn.gelu, "jgelu")
-gin.external_configurable(jnp.exp, "jexp")
-gin.external_configurable(lambda x: x, "jidentity")
 
 
 def nonnegative_softmax_kernel_feature_creator(
@@ -188,7 +180,6 @@ def generalized_kernel_feature_creator(
     return data_prime
 
 
-@gin.configurable
 def make_fast_softmax_attention(
     qkv_dim,
     renormalize_attention=True,
@@ -250,7 +241,6 @@ def make_fast_softmax_attention(
     return attention_fn
 
 
-@gin.configurable
 def make_fast_generalized_attention(
     qkv_dim,
     renormalize_attention=True,

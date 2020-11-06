@@ -23,7 +23,7 @@ import jax.numpy as jnp
 
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings
-from .modeling_flax_performer_utills import make_fast_softmax_attention
+from .modeling_flax_performer_utils import make_fast_softmax_attention
 from .modeling_flax_utils import FlaxPreTrainedModel, gelu
 from .utils import logging
 
@@ -195,7 +195,8 @@ class FlaxPerformerAttention(nn.Module):
 
     @nn.compact
     def __call__(self, hidden_state, attention_mask):
-        fast_softmax_attention = make_fast_softmax_attention(self.head_size)
+        single_head_dim = self.head_size // self.num_heads
+        fast_softmax_attention = make_fast_softmax_attention(qkv_dim=single_head_dim)
         self_att = nn.attention.SelfAttention(
             num_heads=self.num_heads, qkv_features=self.head_size, name="self", attention_fn=fast_softmax_attention
         )(hidden_state, attention_mask)
