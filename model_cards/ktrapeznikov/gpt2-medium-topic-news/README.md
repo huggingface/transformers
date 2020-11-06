@@ -4,17 +4,6 @@ language:
 thumbnail:
 widget:
  - text: "topic: climate article:"
-tags:
-- 
--
-- 
-license: 
-datasets:
-- 
--
-metrics:
-- 
--
 ---
 
 # GPT2-medium-topic-news
@@ -50,4 +39,3 @@ print(tokenizer.decode(list(out.cpu()[0])))
 
 
 ## Training procedure
-
