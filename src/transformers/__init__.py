@@ -215,6 +215,7 @@ if is_sentencepiece_available():
     from .models.xlm_prophetnet import XLMProphetNetTokenizer
     from .models.xlm_roberta import XLMRobertaTokenizer
     from .models.xlnet import XLNetTokenizer
+    from .models.barthez import BarthezTokenizer
 else:
     from .utils.dummy_sentencepiece_objects import *
 

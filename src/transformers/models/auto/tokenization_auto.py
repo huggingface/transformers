@@ -52,6 +52,7 @@ from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BartConfig,
+    BarthezConfig,
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
@@ -92,6 +93,7 @@ from .configuration_auto import (
 
 if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
+    from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
@@ -104,6 +106,7 @@ if is_sentencepiece_available():
     from ..xlnet.tokenization_xlnet import XLNetTokenizer
 else:
     AlbertTokenizer = None
+    BarthezTokenizer = None
     BertGenerationTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
@@ -183,6 +186,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MarianConfig, (MarianTokenizer, None)),
         (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
+        (BarthezConfig, (BarthezTokenizer, None)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (BertweetTokenizer, None)),

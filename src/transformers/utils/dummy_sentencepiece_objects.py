@@ -99,3 +99,12 @@ class XLNetTokenizer:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_sentencepiece(self)
+
+
+class BarthezTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
