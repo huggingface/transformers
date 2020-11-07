@@ -30,7 +30,7 @@ class RayRetriever(RagRetriever):
         assert not self.test
         print(
             "*******************************************************************************************initializing retrieval actor")
-        assert isinstance(self.index, LegacyIndex)
+        #assert isinstance(self.index, LegacyIndex)
         self.index.init_index()
         assert self.index is not None
         self.test = True

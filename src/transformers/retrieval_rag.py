@@ -418,8 +418,8 @@ class RagRetriever:
         requires_datasets(cls)
         requires_faiss(cls)
         config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
-        #config.index_name = "legacy"
-        #config.use_dummy_dataset = False
+        config.index_name = "legacy"
+        config.use_dummy_dataset = False
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path,
                                                      config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder

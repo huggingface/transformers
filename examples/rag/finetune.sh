@@ -7,7 +7,7 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 python finetune.py \
     --data_dir nq-data \
     --output_dir outputs \
-    --model_name_or_path facebook/rag-sequence-base \
+    --model_name_or_path ./rag-seq-base \
     --model_type rag_sequence \
     --gpus 2 \
     --do_train \

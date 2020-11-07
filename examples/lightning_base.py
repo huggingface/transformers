@@ -370,7 +370,7 @@ def generic_train(
     if logging_callback is None:
         logging_callback = LoggingCallback()
 
-    train_params = {}
+    train_params = extra_train_kwargs
 
     # TODO: remove with PyTorch 1.6 since pl uses native amp
     if args.fp16:
