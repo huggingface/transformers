@@ -301,7 +301,6 @@ def create_module(args):
     args.setup_cls: str = module_cls.__name__
     print(f"using module {args.setup_cls}")
     model = module_cls(args)
-    print('Created model!')
     return model
 
 
