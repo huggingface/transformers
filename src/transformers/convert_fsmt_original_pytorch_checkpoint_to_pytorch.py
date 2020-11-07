@@ -114,7 +114,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     )
 
     args = vars(chkpt["args"]["model"])
-    
+
     src_lang = args["source_lang"]
     tgt_lang = args["target_lang"]
 
@@ -248,6 +248,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
     print(f"transformers-cli upload {model_dir}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
