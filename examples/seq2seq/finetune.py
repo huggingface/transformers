@@ -25,6 +25,7 @@ from utils import (
     assert_all_frozen,
     calculate_bleu,
     calculate_rouge,
+    check_output_dir,
     flatten_list,
     freeze_embeds,
     freeze_params,
@@ -181,7 +182,6 @@ class SummarizationModule(BaseTransformer):
         return self._generative_step(batch)
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
-
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
@@ -251,7 +251,7 @@ class SummarizationModule(BaseTransformer):
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
 
-        if self.hparams.sortish_sampler and type_path != "test":
+        if self.hparams.sortish_sampler and type_path != "test" and type_path != "val":
             sampler = dataset.make_sortish_sampler(batch_size, distributed=self.hparams.gpus > 1)
             return DataLoader(
                 dataset,
@@ -262,7 +262,7 @@ class SummarizationModule(BaseTransformer):
                 sampler=sampler,
             )
 
-        elif self.hparams.max_tokens_per_batch is not None and type_path != "test":
+        elif self.hparams.max_tokens_per_batch is not None and type_path != "test" and type_path != "val":
             batch_sampler = dataset.make_dynamic_sampler(
                 self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1
             )
@@ -329,6 +329,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
+        parser.add_argument("--overwrite_output_dir", action="store_true", default=False)
         parser.add_argument("--max_tokens_per_batch", type=int, default=None)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
@@ -373,8 +374,8 @@ class TranslationModule(SummarizationModule):
 
 def main(args, model=None) -> SummarizationModule:
     Path(args.output_dir).mkdir(exist_ok=True)
-    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+    check_output_dir(args, expected_items=3)
+
     if model is None:
         if "summarization" in args.task:
             model: SummarizationModule = SummarizationModule(args)

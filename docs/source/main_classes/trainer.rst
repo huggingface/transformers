@@ -4,7 +4,7 @@ Trainer
 The :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` classes provide an API for feature-complete
 training in most standard use cases. It's used in most of the :doc:`example scripts <../examples>`.
 
-Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`, create a 
+Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`, create a
 :class:`~transformers.TrainingArguments`/:class:`~transformers.TFTrainingArguments` to access all the points of
 customization during training.
 

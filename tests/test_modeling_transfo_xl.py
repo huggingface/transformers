@@ -17,9 +17,10 @@ import random
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
@@ -156,7 +157,7 @@ class TransfoXLModelTester:
 
 
 @require_torch
-class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
+class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel) if is_torch_available() else ()
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
@@ -204,7 +205,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
 
-    @require_multigpu
+    @require_torch_multigpu
     def test_multigpu_data_parallel_forward(self):
         # Opt-out of this test.
         pass
@@ -279,6 +280,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0])
 
 
+@require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):

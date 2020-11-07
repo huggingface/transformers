@@ -28,7 +28,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from emmental import MaskedBertConfig
 from emmental.modules import MaskedLinear
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from transformers.modeling_bert import ACT2FN, BertLayerNorm, load_tf_weights_in_bert
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
@@ -498,7 +498,7 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(MASKED_BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MASKED_BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -591,7 +591,7 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
@@ -631,7 +631,7 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
                 )  # We can specify head_mask for each layer
             head_mask = head_mask.to(
                 dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
+            )  # switch to float if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
@@ -671,7 +671,7 @@ class MaskedBertForSequenceClassification(MaskedBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MASKED_BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MASKED_BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -756,7 +756,7 @@ class MaskedBertForMultipleChoice(MaskedBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MASKED_BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MASKED_BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -846,7 +846,7 @@ class MaskedBertForTokenClassification(MaskedBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MASKED_BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MASKED_BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -932,7 +932,7 @@ class MaskedBertForQuestionAnswering(MaskedBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MASKED_BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MASKED_BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,

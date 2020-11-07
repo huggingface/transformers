@@ -21,6 +21,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -479,7 +480,7 @@ class XLNetModelTester:
 
 
 @require_torch
-class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
+class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLNetModel,

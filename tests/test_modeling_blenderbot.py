@@ -19,7 +19,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -131,6 +131,8 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 
 @unittest.skipUnless(torch_device != "cpu", "3B test too slow on CPU.")
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class Blenderbot3BIntegrationTests(unittest.TestCase):
     ckpt = "facebook/blenderbot-3B"
 
@@ -145,6 +147,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
 
         src_text = ["Sam"]
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
+
         generated_utterances = model.generate(**model_inputs, **FASTER_GEN_KWARGS)
         tgt_text = 'Sam is a great name. It means "sun" in Gaelic.'
 
@@ -154,6 +157,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         src_text = "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
 
         model_inputs = self.tokenizer([src_text], return_tensors="pt").to(torch_device)
+
         generated_ids = model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
         reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
 
@@ -185,6 +189,9 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         ]
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
+
+        # model does not have "token_type_ids"
+        model_inputs.pop("token_type_ids")
         assert isinstance(self.tokenizer, BlenderbotSmallTokenizer)
         generated_ids = self.model.generate(**model_inputs)[0]
         reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
@@ -196,10 +203,11 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
     def test_90_generation_from_short_input(self):
         model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
-        generated_utterances = self.model.generate(**model_inputs)
-        # generated_txt = self.tokenizer.decode(generated_utterances[0])
 
-        # assert generated_txt == "__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor. __end__"
+        # model does not have "token_type_ids"
+        model_inputs.pop("token_type_ids")
+        generated_utterances = self.model.generate(**model_inputs)
+
         clean_txt = self.tokenizer.decode(generated_utterances[0], **TOK_DECODE_KW)
         assert clean_txt in (
             "have you ever been to a sam club? it's a great club in the south.",

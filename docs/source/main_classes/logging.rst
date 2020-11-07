@@ -17,7 +17,7 @@ You can also use the environment variable ``TRANSFORMERS_VERBOSITY`` to override
 to one of the following: ``debug``, ``info``, ``warning``, ``error``, ``critical``. For example:
 
 .. code-block:: bash
-               
+
     TRANSFORMERS_VERBOSITY=error ./myprogram.py
 
 All the methods of this logging module are documented below, the main ones are

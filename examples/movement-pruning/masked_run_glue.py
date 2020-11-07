@@ -225,7 +225,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
         desc="Epoch",
         disable=args.local_rank not in [-1, 0],
     )
-    set_seed(args)  # Added here for reproductibility
+    set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
@@ -705,7 +705,7 @@ def main():
         "--final_lambda",
         default=0.0,
         type=float,
-        help="Regularization intensity (used in conjunction with `regulariation`.",
+        help="Regularization intensity (used in conjunction with `regularization`.",
     )
 
     parser.add_argument("--global_topk", action="store_true", help="Global TopK on the Scores.")
@@ -816,7 +816,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
-    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+    else:  # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend="nccl")

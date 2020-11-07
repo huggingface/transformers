@@ -18,12 +18,14 @@ import json
 import os
 import unittest
 
-from transformers.testing_utils import slow
-from transformers.tokenization_herbert import VOCAB_FILES_NAMES, HerbertTokenizer, HerbertTokenizerFast
+from transformers import HerbertTokenizer, HerbertTokenizerFast
+from transformers.testing_utils import get_tests_dir, require_tokenizers, slow
+from transformers.tokenization_herbert import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = HerbertTokenizer
@@ -32,6 +34,10 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
+
+        # Use a simpler test file without japanese/chinese characters
+        with open(f"{get_tests_dir()}/fixtures/sample_text_no_unicode.txt", encoding="utf-8") as f_data:
+            self._data = f_data.read().replace("\n\n", "\n").strip()
 
         vocab = [
             "<s>",

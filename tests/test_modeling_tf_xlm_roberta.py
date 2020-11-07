@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 
 if is_tf_available():
@@ -27,6 +27,8 @@ if is_tf_available():
 
 
 @require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFFlaubertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
@@ -37,7 +39,7 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
             "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int32),
         }
 
-        output = model(features)["last_hidden_state"]
+        output = model(features, return_dict=True)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
