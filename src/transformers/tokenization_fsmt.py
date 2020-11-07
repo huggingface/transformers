@@ -154,7 +154,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             File containing the vocabulary for the target language.
         merges_file (:obj:`str`):
             File containing the merges.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -185,6 +185,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         langs=None,
         src_vocab_file=None,
         tgt_vocab_file=None,
+        do_lower_case=False,
         merges_file=None,
         unk_token="<unk>",
         bos_token="<s>",
@@ -196,6 +197,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             langs=langs,
             src_vocab_file=src_vocab_file,
             tgt_vocab_file=tgt_vocab_file,
+            do_lower_case=do_lower_case,
             merges_file=merges_file,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -207,6 +209,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self.src_vocab_file = src_vocab_file
         self.tgt_vocab_file = tgt_vocab_file
         self.merges_file = merges_file
+        self.do_lower_case = do_lower_case
 
         # cache of sm.MosesPunctNormalizer instance
         self.cache_moses_punct_normalizer = dict()
@@ -350,6 +353,9 @@ class FSMTTokenizer(PreTrainedTokenizer):
         # if lang != self.src_lang:
         #     raise ValueError(f"Expected lang={self.src_lang}, but got {lang}")
         lang = self.src_lang
+
+        if self.do_lower_case:
+            text = text.lower()
 
         if bypass_tokenizer:
             text = text.split()
