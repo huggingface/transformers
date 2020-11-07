@@ -315,7 +315,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             input_ids = examples
             examples = [{"input_ids": e} for e in examples]
 
-        batch_input = self._tensorize_batch(input_ids)
+        batch_input = _collate_batch(input_ids, self.tokenizer)
 
         mask_labels = []
         for e in examples:
@@ -332,7 +332,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                     if i in ref_pos:
                         ref_tokens[i] = "##" + ref_tokens[i]
             mask_labels.append(self._whole_word_mask(ref_tokens))
-        batch_mask = self._tensorize_batch(mask_labels)
+        batch_mask = _collate_batch(mask_labels, self.tokenizer)
         inputs, labels = self.mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
