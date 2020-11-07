@@ -143,7 +143,10 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     # merges_file (bpecodes)
     merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
-    fsmt_merges_file = os.path.join(fsmt_folder_path, "bpecodes")
+    for fn in ["bpecodes", "code"]:  # older fairseq called the merges file "code"
+        fsmt_merges_file = os.path.join(fsmt_folder_path, fn)
+        if os.path.exists(fsmt_merges_file):
+            break
     with open(fsmt_merges_file, encoding="utf-8") as fin:
         merges = fin.read()
     merges = re.sub(r" \d+$", "", merges, 0, re.M)  # remove frequency number
