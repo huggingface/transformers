@@ -43,6 +43,7 @@ class BartSummarizationDistiller(SummarizationModule):
         student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
             teacher, e=hparams.student_encoder_layers, d=hparams.student_decoder_layers, save_path=save_dir
         )
+        hparams.tokenizer_name = hparams.teacher # student uses teacher's tokenizer
         if hparams.length_penalty != -1:
             student.config.length_penalty = hparams.length_penalty
         super().__init__(hparams, model=student, config=student.config)
