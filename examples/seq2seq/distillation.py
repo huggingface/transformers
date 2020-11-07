@@ -43,7 +43,7 @@ class BartSummarizationDistiller(SummarizationModule):
         
         e_layer_ids, d_layer_ids = None, None
         if hparams.student is not None:
-            student = AutoModelForSeq2SeqLM.from_pretrained(hparams.student).eval()
+            student = AutoModelForSeq2SeqLM.from_pretrained(hparams.student)
             use_task_specific_params(student, hparams.task)
         else:
             student, e_layer_ids, d_layer_ids = create_student_by_copying_alternating_layers(
