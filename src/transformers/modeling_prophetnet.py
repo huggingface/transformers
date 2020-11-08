@@ -16,6 +16,7 @@
 
 import copy
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -261,7 +262,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
 
             Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
-        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
             encoder_sequence_length, decoder_sequence_length)`.
 
@@ -288,10 +289,18 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def decoder_cross_attentions(self):
+        warnings.warn(
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            FutureWarning,
+        )
+        return self.cross_attentions
 
 
 @dataclass
@@ -337,7 +346,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
             Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
             weighted average in the
-        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
             encoder_sequence_length, decoder_sequence_length)`.
 
@@ -365,10 +374,18 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def decoder_cross_attentions(self):
+        warnings.warn(
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            FutureWarning,
+        )
+        return self.cross_attentions
 
 
 @dataclass
@@ -1651,7 +1668,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             decoder_ngram_hidden_states=decoder_outputs.hidden_states_ngram,
             decoder_attentions=decoder_outputs.attentions,
             decoder_ngram_attentions=decoder_outputs.ngram_attentions,
-            decoder_cross_attentions=decoder_outputs.cross_attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1766,7 +1783,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 decoder_ngram_hidden_states=outputs.decoder_ngram_hidden_states,
                 decoder_attentions=outputs.decoder_attentions,
                 decoder_ngram_attentions=outputs.decoder_ngram_attentions,
-                decoder_cross_attentions=outputs.decoder_cross_attentions,
+                cross_attentions=outputs.cross_attentions,
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
                 encoder_hidden_states=outputs.encoder_hidden_states,
                 encoder_attentions=outputs.encoder_attentions,
@@ -1986,6 +2003,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 hidden_states_ngram=outputs.hidden_states_ngram,
                 attentions=outputs.attentions,
                 ngram_attentions=outputs.ngram_attentions,
+                cross_attentions=outputs.cross_attentions,
             )
 
     def _compute_loss(self, logits, labels):
