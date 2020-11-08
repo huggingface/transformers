@@ -8,7 +8,7 @@ language: zh
 # Overview
 
 - **Language model**: GPT2-Medium
-- **Model size**: 1.2G 
+- **Model size**: 1.2GiB 
 - **Language**: Chinese
 - **Training data**: [wiki2019zh_corpus](https://github.com/brightmart/nlp_chinese_corpus)
 - **Source code**: [gpt2-quickly](https://github.com/mymusise/gpt2-quickly)
