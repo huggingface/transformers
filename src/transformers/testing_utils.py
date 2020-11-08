@@ -539,16 +539,16 @@ class TestCasePlus(unittest.TestCase):
     This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests
     didn't leave any data in there.
 
-    3. You can override the first two options by directly overriding the ``before`` and ``after`` args.
+    3. You can override the first two options by directly overriding the ``before`` and ``after`` args, leading to the
+       following behavior:
 
-    When ``before=True`` is passed the temporary dir will always be cleared at the beginning of the test.
+    ``before=True``: the temporary dir will always be cleared at the beginning of the test.
 
-    With ``before=False``if the temporary dir already existed and contained some files they will remain there.
+    ``before=False``: if the temporary dir already existed, any existing files will remain there.
 
-    When ``after=True`` is passed the temporary dir will always be deleted at the end of the test.
+    ``after=True``: the temporary dir will always be deleted at the end of the test.
 
-    When ``after=False`` is passed the temporary dir will always be left intact at the end of the test.
-
+    ``after=False``: the temporary dir will always be left intact at the end of the test.
 
     Note 1: In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are
     allowed if an explicit ``tmp_dir`` is used, so that by mistake no ``/tmp`` or similar important part of the

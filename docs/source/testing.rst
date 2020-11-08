@@ -720,32 +720,32 @@ Here is an example of its usage:
 
 This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
-In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless
-``after=False`` is passed to the helper function.
-
-* Create a temporary directory of my choice and delete it at the end - useful for debugging when you want to monitor a
-  specific directory:
+* Create a unique temporary dir:
 
 .. code-block:: python
 
     def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
+        tmp_dir = self.get_auto_remove_tmp_dir()
 
-* Create a temporary directory of my choice and do not delete it at the end---useful for when you want to look at the
-  temp results:
+    ``tmp_dir`` will contain the path to the created temp dir. It will be automatically removed at the end of the test.
+
+* Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
 
 .. code-block:: python
 
     def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
+        tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 
-* Create a temporary directory of my choice and ensure to delete it right away---useful for when you disabled deletion
-  in the previous test run and want to make sure the that temporary directory is empty before the new test is run:
 
-.. code-block:: python
+    This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't leave any data in there.
 
-   def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
+* You can override the first two options by directly overriding the ``before`` and ``after`` args, leading to the
+  following behavior:
+
+    - ``before=True``: the temporary dir will always be cleared at the beginning of the test.
+    - ``before=False``: if the temporary dir already existed, any existing files will remain there.
+    - ``after=True``: the temporary dir will always be deleted at the end of the test.
+    - ``after=False``: the temporary dir will always be left intact at the end of the test.
 
 .. note::
    In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are allowed if
