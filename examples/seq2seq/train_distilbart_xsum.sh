@@ -2,6 +2,7 @@
 export PYTHONPATH="../":"${PYTHONPATH}"
 python distillation.py \
   --teacher facebook/bart-large-xsum --data_dir xsum \
+  --tokenizer_name facebook/bart-large-xsum \
   --student_decoder_layers 6 --student_encoder_layers 12 \
   --freeze_encoder --freeze_embeds \
   --learning_rate=3e-4 \
